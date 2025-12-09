@@ -30,7 +30,7 @@ application/x-extension-xht=firefox.desktop
 
 [Added Associations]
 application/octet-stream=micro.desktop;
-image/png=qimgv.desktop;mpv.desktop;
+image/png=qimgv.desktop;
 audio/flac=mpv.desktop;
 image/jpeg=qimgv.desktop;
 image/vnd.microsoft.icon=qimgv.desktop;
@@ -41,7 +41,7 @@ inode/directory=pcmanfm-qt.desktop;
 application/x-bittorrent=org.qbittorrent.qBittorrent.desktop;
 x-scheme-handler/file=pcmanfm-qt.desktop;
 video/x-matroska=mpv.desktop;
-image/heif=org.gnome.gThumb.desktop;qimgv.desktop;
+image/heif=org.gnome.gThumb.desktop;
 text/x-csrc=micro.desktop;
 application/x-spss-sav=micro.desktop;
 x-scheme-handler/http=firefox.desktop;
@@ -54,3 +54,4 @@ application/x-extension-shtml=firefox.desktop;
 application/xhtml+xml=firefox.desktop;
 application/x-extension-xhtml=firefox.desktop;
 application/x-extension-xht=firefox.desktop;
+application/x-shellscript=micro.desktop;
