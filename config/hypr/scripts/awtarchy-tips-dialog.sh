@@ -83,7 +83,7 @@ if ! command -v hyprland-dialog >/dev/null 2>&1; then
 fi
 
 TITLE_MAIN="Hyprland Tips"
-TEXT_MAIN=$'Pick a category.\n\nShort labels to avoid overlap.'
+TEXT_MAIN=$'Pick a category\n'
 
 STATE="main"
 
@@ -133,7 +133,7 @@ while true; do
       ;;
 
     kernels)
-      choice="$(dialog "Kernels" "Kernel links." "linux-tkg;linux-tkg notes;CachyOS AUR;Back;Close")"
+      choice="$(dialog "Kernels" "Kernel links" "linux-tkg;linux-tkg notes;CachyOS AUR;Back;Close")"
       case "$choice" in
         "linux-tkg") open_url "$LINUX_TKG_URL" ;;
         "linux-tkg notes") open_url "$AWTARCHY_TKG_NOTES_URL" ;;
@@ -150,7 +150,7 @@ while true; do
       ;;
 
     boot)
-      choice="$(dialog "systemd-boot" "Boot resources." "ArchWiki;bootctl man;Back;Close")"
+      choice="$(dialog "systemd-boot" "Boot resources" "ArchWiki;bootctl man;Back;Close")"
       case "$choice" in
         "ArchWiki") open_url "$SYSTEMD_BOOT_WIKI_URL" ;;
         "bootctl man") open_url "$BOOTCTL_MAN_URL" ;;
@@ -161,7 +161,7 @@ while true; do
       ;;
 
     tools)
-      choice="$(dialog "Tools" "Tools links." "ProtonPlus;smtty;Back;Close")"
+      choice="$(dialog "Tools" "Tool links" "ProtonPlus;smtty;Back;Close")"
       case "$choice" in
         "ProtonPlus") open_url "$PROTONPLUS_FLATHUB_URL" ;;
         "smtty") open_url "$SMTTY_URL" ;;
@@ -172,7 +172,7 @@ while true; do
       ;;
 
     browsers)
-      choice="$(dialog "Browsers" "Browser notes." "Firefox;Brave;Mullvad;Back;Close")"
+      choice="$(dialog "Browsers" "Browser notes" "Firefox;Brave;Mullvad;Back;Close")"
       case "$choice" in
         "Firefox") open_url "$FIREFOX_NOTES_URL" ;;
         "Brave") open_url "$BRAVE_NOTES_URL" ;;
