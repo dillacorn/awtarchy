@@ -1,5 +1,3 @@
-# manual_install.md
-
 ## 🌐 Optional Browser recommendations
 You will need Firefox to use some websites and/or self-hosted web services.
 ```bash
