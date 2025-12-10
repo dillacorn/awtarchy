@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # FILE: ~/.config/hypr/scripts/awtarchy-tips-dialog.sh
 #
-# Re-enable command:
-# rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/hypr/awtarchy-tips-disabled
-#
 # Startup tips dialog with optional self-disable.
 # Uses hyprland-dialog buttons to open links.
+#
+# Re-enable command (what the dialog will show/copy):
+#   rm -f "/home/youruser/.local/state/hypr/awtarchy-tips-disabled"
+# The script builds this from the real path on your system.
 
 set -euo pipefail
 
@@ -16,8 +17,8 @@ mkdir -p "$STATE_DIR"
 
 [[ -f "$DISABLE_FILE" ]] && exit 0
 
-# Re-enable command (shown to user and copyable)
-REENABLE_CMD='rm -f "${XDG_STATE_HOME:-$HOME/.local/state}/hypr/awtarchy-tips-disabled"'
+# Re-enable command shown to user and copyable (no ShellCheck SC2016)
+REENABLE_CMD="rm -f \"$DISABLE_FILE\""
 
 # Links
 SMTTY_URL="https://github.com/dillacorn/smtty"
@@ -116,7 +117,6 @@ while true; do
       ;;
 
     disabled_notice)
-      # Keep this short to avoid layout issues.
       TEXT_D=$'Disabled on startup.\n\nRe-enable with:\n'"$REENABLE_CMD"
       choice="$(dialog "Disabled" "$TEXT_D" "Copy command;OK")"
       case "$choice" in
