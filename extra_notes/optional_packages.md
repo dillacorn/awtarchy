@@ -133,6 +133,11 @@ flatpak install flathub com.heroicgameslauncher.hgl
 
 - **Heroic Games Launcher** – Epic, GOG, Amazon
 
+### Proton Updater (ProtonPlus)
+```bash
+flatpak install flathub com.vysp3r.ProtonPlus
+```
+
 ---
 
 ## 🗨️ VoIP & Messaging
@@ -175,12 +180,10 @@ sudo pacman -S kooha
 ```bash
 flatpak install flathub com.rustdesk.RustDesk
 flatpak install flathub org.localsend.localsend_app
-flatpak install flathub net.davidotek.pupgui2
 ```
 
 - **RustDesk** – remote desktop
 - **LocalSend** – local file sharing
-- **ProtonUp-Qt** – Proton-GE manager
 
 ---
 
