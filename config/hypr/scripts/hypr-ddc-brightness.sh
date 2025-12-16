@@ -2,11 +2,6 @@
 # hypr-ddc-brightness.sh
 # Debounced DDC/CI brightness for the focused Hyprland monitor.
 #
-# Each keypress queues a delta and returns immediately (with notify showing the running total).
-# A per-connector worker applies ONE ddcutil update after:
-#   - no keypress for DEBOUNCE_MS, OR
-#   - MAX_WAIT_MS since the first press in the burst (prevents “never applies while spamming”).
-#
 # Usage:
 #   hypr-ddc-brightness.sh up [step]
 #   hypr-ddc-brightness.sh down [step]
@@ -27,6 +22,10 @@ set -euo pipefail
 
 DEBOUNCE_MS="${HYPR_DDC_DEBOUNCE_MS:-350}"
 MAX_WAIT_MS="${HYPR_DDC_MAX_WAIT_MS:-5000}"
+
+# Notify timings (ms)
+NOTIFY_PRESS_MS="${HYPR_DDC_NOTIFY_PRESS_MS:-1200}"
+NOTIFY_APPLY_MS="${HYPR_DDC_NOTIFY_APPLY_MS:-2600}"
 
 now_ms() {
   if date +%s%3N >/dev/null 2>&1; then
@@ -131,8 +130,6 @@ bus_from_cache() {
   echo "$bus"
 }
 
-# Map by EDID-ish fields from ddcutil detect --verbose (no DRM connector dependency).
-# Output: best bus number or nothing.
 bus_from_detect_by_identity() {
   local conn="$1" hypr_make="$2" hypr_model="$3" hypr_serial="$4" hypr_desc="$5"
   local hypr_make_u hypr_model_u hypr_serial_u hypr_desc_u
@@ -151,24 +148,20 @@ bus_from_detect_by_identity() {
     model_u="$(printf '%s' "$model" | tr '[:lower:]' '[:upper:]')"
     serial_u="$(printf '%s' "$serial" | tr -dc 'A-Za-z0-9' | tr '[:lower:]' '[:upper:]')"
 
-    # serial exact (best)
     if [[ -n "$hypr_serial_u" && -n "$serial_u" && "$hypr_serial_u" == "$serial_u" ]]; then
       score=$((score + 1000))
     fi
 
-    # model match / contains
     if [[ -n "$hypr_model_u" && -n "$model_u" ]]; then
       if [[ "$model_u" == "$hypr_model_u" || "$model_u" == *"$hypr_model_u"* || "$hypr_model_u" == *"$model_u"* ]]; then
         score=$((score + 250))
       fi
     fi
 
-    # description contains model
     if [[ -n "$hypr_desc_u" && -n "$model_u" && "$hypr_desc_u" == *"$model_u"* ]]; then
       score=$((score + 150))
     fi
 
-    # vendor match / contains
     if [[ -n "$hypr_make_u" && -n "$mfg_u" ]]; then
       if [[ "$hypr_make_u" == "$mfg_u" || "$hypr_make_u" == *"$mfg_u"* || "$mfg_u" == *"$hypr_make_u"* ]]; then
         score=$((score + 80))
@@ -196,7 +189,6 @@ bus_from_detect_by_identity() {
 
   [[ -n "${best_bus:-}" && "$best_score" -ge 180 ]] || return 1
 
-  # cache (TTL 7d)
   local cache_tsv="$cachedir/busmap.tsv" epoch tmp
   epoch="$(date +%s)"
   tmp="${cache_tsv}.tmp.$$"
@@ -263,11 +255,10 @@ if [[ "$MODE" == "client" ]]; then
 
   lock_release "$lock_dir"
 
-  # immediate feedback per press
   if (( new_pending >= 0 )); then
-    notify 1 650 0 "Brightness ${conn}: ${delta} (total +${new_pending})"
+    notify 1 "$NOTIFY_PRESS_MS" 0 "Brightness ${conn}: queued +${new_pending}"
   else
-    notify 1 650 0 "Brightness ${conn}: ${delta} (total ${new_pending})"
+    notify 1 "$NOTIFY_PRESS_MS" 0 "Brightness ${conn}: queued ${new_pending}"
   fi
 
   if [[ -f "$pid_file" ]]; then
@@ -322,7 +313,6 @@ while :; do
   fi
   idle_loops=0
 
-  # capture identity for mapping
   focused="$(get_focused_monitor_tsv || true)"
   hypr_make="" hypr_model="" hypr_serial="" hypr_desc=""
   if [[ -n "${focused:-}" ]]; then
@@ -331,7 +321,7 @@ while :; do
 
   bus="$(get_bus_for_focused "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc" || true)"
   if [[ -z "${bus:-}" ]]; then
-    notify 3 1600 0 "Brightness ${conn}: no DDC bus (map ${conn}=N in ${config_map})"
+    notify 3 "$NOTIFY_APPLY_MS" 0 "Brightness ${conn}: no DDC bus. Add ${conn}=N in ddcutil-bus-map.conf"
     continue
   fi
 
@@ -341,15 +331,14 @@ while :; do
   vcp="$(timeout 2 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
   read -r cur max < <(printf '%s\n' "$vcp" | parse_vcp_cur_max)
   if [[ -z "${cur:-}" ]]; then
-    notify 3 1600 0 "Brightness ${conn}: getvcp failed (bus ${bus})"
+    notify 3 "$NOTIFY_APPLY_MS" 0 "Brightness ${conn}: failed to read current brightness"
     continue
   fi
 
-  # Adaptive gain to compensate “requested 5, effective 3” monitors.
   desired_abs="${pending#-}"
   desired_abs="${desired_abs:-0}"
 
-  gain_file="$cachedir/gain_bus${bus}.milli"
+  gain_file="$cachedir/gain_${conn}.milli"
   gain_milli="$(read_uint_file "$gain_file" 1000)"
   [[ "$gain_milli" -ge 200 && "$gain_milli" -le 5000 ]] || gain_milli=1000
 
@@ -358,6 +347,8 @@ while :; do
 
   sign=1
   (( pending < 0 )) && sign=-1
+
+  before="$cur"
 
   target=$((cur + sign * send_abs))
   (( target < 0 )) && target=0
@@ -372,7 +363,9 @@ while :; do
   read -r cur2 _max2 < <(printf '%s\n' "$vcp2" | parse_vcp_cur_max)
   [[ -n "${cur2:-}" ]] || cur2="$target"
 
-  eff_abs=$(( cur2 > cur ? cur2 - cur : cur - cur2 ))
+  after="$cur2"
+
+  eff_abs=$(( after > before ? after - before : before - after ))
 
   if (( desired_abs > 0 && eff_abs > 0 )); then
     computed=$(( gain_milli * desired_abs / eff_abs ))
@@ -383,5 +376,7 @@ while :; do
   fi
 
   sent_disp=$((sign * send_abs))
-  notify 1 1400 0 "Brightness ${conn}: req ${pending}, sent ${sent_disp}, eff ${eff_abs}, now ${cur2} (bus ${bus}, gain ${gain_milli}‰)"
+
+  # Clean, human-readable notify:
+  notify 1 "$NOTIFY_APPLY_MS" 0 "Brightness ${conn}: before ${before}, sent ${sent_disp}, now ${after}"
 done
