@@ -79,7 +79,7 @@ yay -S droidcam v4l2loopback-dc-dkms obs-vkcapture
 
 **Option B** – DistroAV (alternative virtual capture):
 ```bash
-yay -S distroav-bin obs-vkcapture
+yay -S distroav obs-vkcapture
 ```
 
 Usage example:
