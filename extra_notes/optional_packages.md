@@ -50,7 +50,7 @@ PulseAudio Volume Control GUI.
 
 ### YouTube Music Desktop Client
 ```bash
-yay -S ytmdesktop
+yay -S pear-desktop-bin
 ```
 
 Unofficial YouTube Music client.
