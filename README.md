@@ -40,7 +40,7 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 | **Terminal**       | [Alacritty](https://github.com/alacritty/alacritty) |
 | **Bootloader**     | [systemd-boot](https://man.archlinux.org/man/systemd-boot.7) |
 | **Window Manager** | [Hyprland](https://github.com/hyprwm/Hyprland) ([config](https://github.com/dillacorn/awtarchy/tree/main/config/hypr)) |
-| **Kernel**         | [linux-tkg](https://github.com/Frogging-Family/linux-tkg) |
+| **Kernel**         | [linux-cachyos](https://github.com/CachyOS/linux-cachyos) |
 
 ## 🎨 Wallpaper Collections
 - [dharmx/walls](https://github.com/dharmx/walls)
