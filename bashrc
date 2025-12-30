@@ -13,7 +13,7 @@ alias grep='grep --color=auto'
 alias flatpak='flatpak --user'
 
 # Shortcut to launch Hyprland under Wayland session
-alias hypr='start-hyprland'
+alias hypr='XDG_SESSION_TYPE=wayland exec start-hyprland'
 
 # --- Environment Variables ---
 # Default editor for command line text editing
