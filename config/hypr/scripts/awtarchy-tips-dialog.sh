@@ -23,13 +23,12 @@ REENABLE_CMD="rm -f \"$DISABLE_FILE\""
 # Links
 SMTTY_URL="https://github.com/dillacorn/smtty"
 LINUX_TKG_URL="https://github.com/Frogging-Family/linux-tkg"
-AWTARCHY_TKG_NOTES_URL="https://github.com/dillacorn/awtarchy/blob/main/extra_notes/install_linux-tkg.md"
+AWTARCHY_TKG_NOTES_URL="https://github.com/dillacorn/awtarchy/blob/main/extra_notes/build%2Binstall_linux-tkg-kernal.md"
 OPTIONAL_PACKAGES_URL="https://github.com/dillacorn/awtarchy/blob/main/extra_notes/optional_packages.md"
 
-CACHYOS_KERNEL_AUR_URL="https://aur.archlinux.org/packages/linux-cachyos"
-CACHYOS_HEADERS_AUR_URL="https://aur.archlinux.org/packages/linux-cachyos-headers"
-CACHYOS_LTS_AUR_URL="https://aur.archlinux.org/packages/linux-cachyos-lts"
-CACHYOS_LTS_HEADERS_AUR_URL="https://aur.archlinux.org/packages/linux-cachyos-lts-headers"
+# CachyOS kernel install tutorial (repo docs) + your notes
+CACHYOS_LINUX_CACHYOS_URL="https://github.com/CachyOS/linux-cachyos?tab=readme-ov-file#quick-installation"
+CACHYOS_KERNEL_NOTES_URL="https://github.com/dillacorn/awtarchy/blob/main/extra_notes/install_cachy-kernal.md"
 
 SYSTEMD_BOOT_WIKI_URL="https://wiki.archlinux.org/title/Systemd-boot"
 BOOTCTL_MAN_URL="https://man.archlinux.org/man/bootctl.1.en"
@@ -133,16 +132,14 @@ while true; do
       ;;
 
     kernels)
-      choice="$(dialog "Kernels" "Kernel links" "linux-tkg;linux-tkg notes;CachyOS AUR;Back;Close")"
+      choice="$(dialog "Kernels" "Kernel links" "linux-tkg;tkg notes;Cachy;Cachy notes;Back;Close")"
       case "$choice" in
         "linux-tkg") open_url "$LINUX_TKG_URL" ;;
-        "linux-tkg notes") open_url "$AWTARCHY_TKG_NOTES_URL" ;;
-        "CachyOS AUR")
-          open_url "$CACHYOS_KERNEL_AUR_URL"
-          open_url "$CACHYOS_HEADERS_AUR_URL"
-          open_url "$CACHYOS_LTS_AUR_URL"
-          open_url "$CACHYOS_LTS_HEADERS_AUR_URL"
-          ;;
+        "tkg notes") open_url "$AWTARCHY_TKG_NOTES_URL" ;;
+
+        "Cachy") open_url "$CACHYOS_LINUX_CACHYOS_URL" ;;
+        "Cachy notes") open_url "$CACHYOS_KERNEL_NOTES_URL" ;;
+
         "Back") STATE="main" ;;
         "Close"|"" ) exit 0 ;;
         *) STATE="main" ;;
