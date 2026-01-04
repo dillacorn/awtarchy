@@ -94,7 +94,7 @@
       "disable-scroll-wraparound": true,
       "format": "{icon}",
       "format-icons": {
-      "1":"1\u202F",
+      "1":"1\u202F󰞷",
       "2":"2\u202F",
       "3":"3\u202F󰙯",
       "4":"4\u202F",
