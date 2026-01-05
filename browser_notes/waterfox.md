@@ -47,6 +47,9 @@ Some Additional Plugins:
 [`Minimalist Gruvbox by canbeardig`](https://addons.mozilla.org/firefox/downloads/file/3991777/minimalist_gruvbox-2.0.xpi)
 [`Minimalist Everforest by canbeardig`](https://addons.mozilla.org/firefox/downloads/file/4116967/minimalist_dark_and_yellow_tab-3.0.xpi)
 
+# uBlock Origin
+see [yokoffing](https://github.com/yokoffing) ["filterlists" Guidelines](https://github.com/yokoffing/filterlists?tab=readme-ov-file#recommended-filters-for-ublock-origin)
+
 # custom dns server
 
 navigate to `Privacy and security` in settings

@@ -45,6 +45,9 @@ Name:
 URL with %s in place of query
 `https://search.brave.com/search?q=%s`
 
+# uBlock Origin
+see [yokoffing](https://github.com/yokoffing) ["filterlists" Guidelines](https://github.com/yokoffing/filterlists?tab=readme-ov-file#recommended-filters-for-ublock-origin)
+
 # custom dns server
 
 navigate to `Privacy and security` in settings
