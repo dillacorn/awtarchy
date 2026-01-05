@@ -56,8 +56,8 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 
 ## 🌐 Browser Notes
 - [Firefox](browser_notes/firefox.md)
-- [Waterfox](browser_notes/waterfox.md)
 - [Brave](browser_notes/brave.md)
+- [Mullvad](browser_notes/mullvad.md)
 
 ## 📦 Optional Packages
 - [Optional Packages link](extra_notes/optional_packages.md)
