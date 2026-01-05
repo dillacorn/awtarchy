@@ -89,9 +89,6 @@ Extra extensions I can live without:
 # `picture in picture` video tip 
 - `Right-click` video `twice` and click `Picture in picture`
 
-# uBlock Origin
-see [yokoffing](https://github.com/yokoffing) ["filterlists" Guidelines](https://github.com/yokoffing/filterlists?tab=readme-ov-file#recommended-filters-for-ublock-origin)
-
 # custom dns server
 
 navigate to `Privacy and security` in settings
