@@ -56,10 +56,8 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 
 ## 🌐 Browser Notes
 - [Firefox](browser_notes/firefox.md)
-- [Firefox Privacy Forks](browser_notes/firefox_privacy_focused_forks.md)
+- [Waterfox](browser_notes/waterfox.md)
 - [Brave](browser_notes/brave.md)
-- [Ungoogled-Chromium](browser_notes/ungoogled-chromium.md)
-- [Cromite](browser_notes/cromite.md)
 
 ## 📦 Optional Packages
 - [Optional Packages link](extra_notes/optional_packages.md)
