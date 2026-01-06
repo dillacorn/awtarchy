@@ -18,6 +18,9 @@
 #
 # Optional (for system cursor file):
 #   sudo ./update.sh
+#
+# NOTE:
+# - wofi is intentionally skipped (wofi config can break wofi when replaced).
 
 set -Eeuo pipefail
 umask 022
@@ -237,7 +240,10 @@ sync_tree() {
 
   while IFS= read -r -d '' p; do
     local rel="${p#"$src_root"/}"
+
+    # Skip exact relative path under this tree
     [[ -n "$skip_rel" && "$rel" == "$skip_rel" ]] && continue
+
     local repo_rel="${repo_root_rel}/${rel}"
     local dest="${dest_root}/${rel}"
     sync_one_file "$repo_dir" "$old_commit" "$repo_rel" "$dest" "$tmpd" 644
@@ -540,10 +546,10 @@ main() {
   read -r old_commit new_commit < <(repo_ensure_and_update "$repo_dir")
   ok "Repo: ${old_commit} -> ${new_commit}"
 
-  log "Deploying managed files"
+  log "Deploying managed files (wofi skipped)"
 
   local -a CONFIG_DIRS=(
-    "hypr" "waybar" "alacritty" "wlogout" "mako" "wofi"
+    "hypr" "waybar" "alacritty" "wlogout" "mako"
     "gtk-3.0" "Kvantum" "SpeedCrunch" "fastfetch" "pcmanfm-qt" "yazi"
     "xdg-desktop-portal" "qt5ct" "qt6ct" "lsfg-vk" "wiremix" "cava" "YouTube Music"
   )
@@ -562,6 +568,9 @@ main() {
       sync_tree "$repo_dir" "$old_commit" "config/${d}" "${HOME_DIR}/.config/${d}" "$tmpd"
     fi
   done
+
+  # Explicitly skip ~/.config/wofi
+  # (Nothing to do.)
 
   sync_hyprland_conf_merged "$repo_dir" "$old_commit" "$tmpd"
 
