@@ -1,8 +1,8 @@
 # github.com/dillacorn/awtarchy/tree/main/config/wofi
 # ~/.config/wofi/config
 
-width=800
-height=600
+width=25%
+height=60%
 location=center
 columns=1
 

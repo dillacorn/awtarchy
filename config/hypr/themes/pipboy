@@ -43,7 +43,7 @@ WO_BG="#050805"
 WO_INPUT_COLOR="#a4ff47"
 WO_OUTER_BORDER="1px solid #1b281b"
 WO_OUTER_BG="#050805"
-WO_TEXT_UNSEL="#5c8a4a"
+WO_TEXT_UNSEL="#31F333"
 
 # Mako
 MKO_BG="#050805"
@@ -96,12 +96,12 @@ sed -i \
 
 # 4) Wofi
 sed -i \
-    -e "6s|.*|    border: ${WO_BORDER};|" \
-    -e "8s|.*|    background-color: ${WO_BG};|" \
-    -e "17s|.*|    color: ${WO_INPUT_COLOR};|" \
-    -e "42s|.*|    border: ${WO_OUTER_BORDER};|" \
-    -e "44s|.*|    background-color: ${WO_OUTER_BG};|" \
-    -e "71s|.*|    color: ${WO_TEXT_UNSEL};|" \
+    -e "/^window[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*border:.*;|    border: ${WO_BORDER};|" \
+    -e "/^window[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*background-color:.*;|    background-color: ${WO_BG};|" \
+    -e "/^#input[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*color:.*;|    color: ${WO_INPUT_COLOR};|" \
+    -e "/^#outer-box[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*border:.*;|    border: ${WO_OUTER_BORDER};|" \
+    -e "/^#outer-box[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*background-color:.*;|    background-color: ${WO_OUTER_BG};|" \
+    -e "/^#text/,/^[[:space:]]*}/ s|^[[:space:]]*color:.*;|    color: ${WO_TEXT_UNSEL};|" \
     "$WOFI_CSS"
 
 # 5) Mako

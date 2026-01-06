@@ -1,5 +1,5 @@
-# github.com/dillacorn/awtarchy/tree/main/config/wofi
-# ~/.config/wofi/style.css
+/* github.com/dillacorn/awtarchy/tree/main/config/wofi */
+/* ~/.config/wofi/style.css */
 
 window {
     margin: 0px;
@@ -16,13 +16,14 @@ window {
     border: none;
     color: #d0d0d0;
     font-family: "NotoSansM Nerd Font Mono", monospace;
-    font-size: 12px;
+    font-size: 14px;
     font-weight: normal;
-    background-color: none;
+    background-color: transparent;
     background: none;
     outline: none;
     border-radius: 4px;
 }
+
 #input:focus {
     border: 0px solid transparent;
     margin-bottom: 0px;
@@ -31,7 +32,7 @@ window {
 #inner-box {
     margin: 2px;
     border: 2px solid transparent;
-    color: #ebdbb2
+    color: #ebdbb2;
     font-weight: normal;
     background-color: transparent;
     border-radius: 4px;
@@ -46,7 +47,7 @@ window {
 
 #scroll {
     background-color: transparent;
-    margin-top: 2px 0px;
+    margin: 2px 0px;
     border: none;
     border-radius: 4px;
 }
@@ -55,25 +56,23 @@ window {
     margin-right: 6px;
     min-width: 16px;
     min-height: 16px;
-    max-width: 16px;
-    max-height: 16px;
 }
 
 #img:selected,
-#img:unselected {
+#img {
     margin-right: 6px;
     border-radius: 2px;
     background-color: transparent;
 }
 
 #text:selected,
-#text:unselected {
-    color: #909090;
+#text {
+    color: #ffffff;
     margin: 0px;
     border: none;
     border-radius: 4px;
     background-color: transparent;
-    font-size: 12px;
+    font-size: 14px;
     font-family: "NotoSansM Nerd Font Mono", monospace;
 }
 
