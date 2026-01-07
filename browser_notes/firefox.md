@@ -78,3 +78,17 @@ disable `Show bookmarks bar`
 vertical tabs:
 
 ![firefox_vertical_tabs_&_bar](https://raw.githubusercontent.com/dillacorn/arch-hypr-dots/main/browser_notes/firefox_vertical_tabs_&_bar.png)
+
+# Speed-up Youtube
+
+Credit to `BrenTech`
+
+Youtube video -> https://www.youtube.com/watch?v=SnjnAI8qn8A
+
+### Directions:
+
+navigate to `about:config`
+
+- set "true" `gfx.webrender.layer-compositor`
+- set "true" `media.wmf.zero-copy-nv12-textures-force-enabled`
+- set "false" `media.av1.enabled`
