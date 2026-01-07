@@ -549,7 +549,7 @@ main() {
   log "Deploying managed files (wofi skipped)"
 
   local -a CONFIG_DIRS=(
-    "hypr" "waybar" "alacritty" "wlogout" "mako"
+    "hypr" "waybar" "alacritty" "wlogout" "mako" "fuzzel"
     "gtk-3.0" "Kvantum" "SpeedCrunch" "fastfetch" "pcmanfm-qt" "yazi"
     "xdg-desktop-portal" "qt5ct" "qt6ct" "lsfg-vk" "wiremix" "cava" "YouTube Music"
   )

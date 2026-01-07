@@ -173,11 +173,11 @@
     },
 
     "custom/apps": {
-      "on-click": "~/.config/hypr/scripts/launch_handler.sh wofi 'wofi --drun'",
-      "on-click-right": "~/.config/hypr/scripts/launch_handler.sh wofi 'wofi --drun'",
-      "format": " ",
+      "on-click": "~/.config/hypr/scripts/fuzzel_toggle.sh '--anchor=top-left'",
+      "on-click-right": "~/.config/hypr/scripts/fuzzel_toggle.sh '--anchor=top-left'",
+      "format": "",
       "tooltip": true,
-      "tooltip-format": "wofi"
+      "tooltip-format": "app-launcher"
     },
 
     "custom/clock-toggle": {

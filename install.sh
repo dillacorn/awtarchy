@@ -85,6 +85,7 @@ echo -e "${COLOR_YELLOW}
 - ~/.config/waybar
 - ~/.config/alacritty
 - ~/.config/wofi
+- ~/.config/fuzzel
 - ~/.config/mako
 - ~/.config/gtk-3.0
 - ~/.config/Kvantum
@@ -197,7 +198,7 @@ done
 
 # Copy all configuration files
 echo -e "${COLOR_BLUE}Copying configuration files...${COLOR_RESET}"
-config_dirs=("hypr" "waybar" "alacritty" "wlogout" "mako" "wofi"
+config_dirs=("hypr" "waybar" "alacritty" "wlogout" "mako" "wofi" "fuzzel"
     "gtk-3.0" "Kvantum" "SpeedCrunch" "fastfetch" "pcmanfm-qt" "yazi" "xdg-desktop-portal" "qt5ct" "qt6ct" "lsfg-vk" "wiremix" "cava" "YouTube Music")
 
 for dir in "${config_dirs[@]}"; do

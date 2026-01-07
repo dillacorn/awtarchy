@@ -9,7 +9,7 @@ set -euo pipefail
 # Format: "Group Label:pkg1 pkg2 pkg3"
 # =============================================
 declare -a PKG_GROUPS=(
-    "Window Management:hyprland hyprpaper hyprlock hypridle hyprpicker hyprsunset waybar wofi swww grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk mako nwg-look"
+    "Window Management:hyprland hyprpaper hyprlock hypridle hyprpicker hyprsunset waybar wofi fuzzel swww grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk mako nwg-look"
     "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd noto-fonts-emoji"
     "Themes:papirus-icon-theme materia-gtk-theme xcursor-comix kvantum-theme-materia"
     "Terminal Apps:nano micro alacritty fastfetch btop htop curl wget git dos2unix brightnessctl ipcalc cmatrix sl asciiquarium figlet termdown espeak-ng cava man-db man-pages unzip xarchiver ncdu ddcutil"

@@ -45,6 +45,15 @@ WO_OUTER_BORDER="1px solid #1a1f24"
 WO_OUTER_BG="#0f1113"
 WO_TEXT_UNSEL="#ffffff"
 
+# Fuzzel
+FZ_BACKGROUND="0f1113ff"
+FZ_TEXT="ffffffff"
+FZ_SELECTION="1a1f24ff"
+FZ_SELECTION_TEXT="ffffffff"
+FZ_BORDER="1a1f24ff"
+FZ_MATCH="c7d9d9ff"
+FZ_SELECTION_MATCH="0f1113ff"
+
 # Mako
 MKO_BG="#0f1113"
 MKO_TEXT="#cfd6d8"
@@ -56,6 +65,7 @@ HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 WAYBAR_CSS="$HOME/.config/waybar/style.css"
 WLOGOUT_CSS="$HOME/.config/wlogout/style.css"
 WOFI_CSS="$HOME/.config/wofi/style.css"
+FUZZEL_THEME_INI="$HOME/.config/fuzzel/fuzzel.ini"
 MAKO_CONF="$HOME/.config/mako/config"
 MICRO_SETTINGS="$HOME/.config/micro/settings.json"
 ALACRITTY_CONF="$HOME/.config/alacritty/alacritty.toml"
@@ -64,13 +74,13 @@ SPEEDCRUNCH_INI="$HOME/.config/SpeedCrunch/SpeedCrunch.ini"
 ###########   APPLY CHANGES   ###########
 echo "Applying iron forge theme..."
 
-# 1) Hyprland borders
+# Hyprland borders
 sed -i \
   -e "s/^ *col\.active_border *= *.*/col.active_border = rgba(${NEW_ACTIVE_BORDER})/" \
   -e "s/^ *col\.inactive_border *= *.*/col.inactive_border = rgba(${NEW_INACTIVE_BORDER})/" \
   "$HYPR_CONF"
 
-# 2) Waybar
+# Waybar
 sed -i \
   -e "2s|.*|@define-color bg-default ${W_BG};|" \
   -e "3s|.*|@define-color bg-hover ${W_CUSTOM_HOVER_BG};|" \
@@ -84,7 +94,7 @@ sed -i \
   -e "11s|.*|@define-color color-hover ${W_HOVER};|" \
   "$WAYBAR_CSS"
 
-# 3) Wlogout
+# Wlogout
 sed -i \
   -e "4s|.*|    color: ${WL_COLOR};|" \
   -e "5s|.*|    background-color: ${WL_BG};|" \
@@ -94,7 +104,7 @@ sed -i \
   -e "27s|.*|    background-color: ${WL_BTN_FOCUS_BG};|" \
   "$WLOGOUT_CSS"
 
-# 4) Wofi
+# Wofi
 sed -i \
     -e "/^window[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*border:.*;|    border: ${WO_BORDER};|" \
     -e "/^window[[:space:]]*{/,/^[[:space:]]*}/ s|^[[:space:]]*background-color:.*;|    background-color: ${WO_BG};|" \
@@ -104,7 +114,7 @@ sed -i \
     -e "/^#text/,/^[[:space:]]*}/ s|^[[:space:]]*color:.*;|    color: ${WO_TEXT_UNSEL};|" \
     "$WOFI_CSS"
 
-# 5) Mako
+# Mako
 sed -i \
   -e "3s|.*|background-color=${MKO_BG}|" \
   -e "4s|.*|text-color=${MKO_TEXT}|" \
@@ -112,15 +122,26 @@ sed -i \
   -e "6s|.*|progress-color=over ${MKO_PROG}|" \
   "$MAKO_CONF"
 
-# 6) Micro (keep)
+# Micro (keep)
 sed -i '2s|.*|    "colorscheme": "gotham"|' "$MICRO_SETTINGS"
 
-# 7) Alacritty (keep)
+# Alacritty (keep)
 sed -i '331s|.*|  "~\/.config\/alacritty\/themes\/themes\/terafox.toml"|' "$ALACRITTY_CONF"
 
-# 8) SpeedCrunch (keep)
+# SpeedCrunch (keep)
 sed -i '5s|.*|Display\\ColorSchemeName=iron_forge|' "$SPEEDCRUNCH_INI"
 
+# Fuzzel
+sed -i \
+  -e "2s|.*|background=${FZ_BACKGROUND}|" \
+  -e "3s|.*|text=${FZ_TEXT}|" \
+  -e "4s|.*|selection=${FZ_SELECTION}|" \
+  -e "5s|.*|selection-text=${FZ_SELECTION_TEXT}|" \
+  -e "6s|.*|selection-match=${FZ_BORDER}|" \
+  -e "7s|.*|match=${FZ_MATCH}|" \
+  -e "8s|.*|border=${FZ_SELECTION_MATCH}|" \
+  "$FUZZEL_THEME_INI"
+  
 # Reload Mako
 makoctl reload
 
