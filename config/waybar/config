@@ -194,8 +194,8 @@
     "custom/clipboard": {
       "format": "",
       "tooltip": false,
-      "on-click": "~/.config/hypr/scripts/cliphist-wofi.sh &",
-      "on-click-right": "~/.config/hypr/scripts/cliphist-wofi.sh &",
+      "on-click": "~/.config/hypr/scripts/cliphist-fuzzel.sh &",
+      "on-click-right": "~/.config/hypr/scripts/cliphist-fuzzel.sh &",
       "interval": 0
     },
 
