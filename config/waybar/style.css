@@ -199,3 +199,55 @@ window#waybar.bottom { margin: 0; }
   padding: 0 6px;
   margin: 0;
 }
+
+/* === Vertical bar tweaks (left/right) === */
+window#waybar.left,
+window#waybar.right {
+  padding: 0; /* override: window#waybar { padding: 0 6px; } */
+}
+
+/* tighten common modules when vertical */
+window#waybar.left #idle_inhibitor,
+window#waybar.left #scratchpad,
+window#waybar.left #submap,
+window#waybar.left #window,
+window#waybar.left #clock,
+window#waybar.left #battery,
+window#waybar.left #backlight,
+window#waybar.left #wireplumber,
+window#waybar.left #tray,
+window#waybar.left #cpu,
+window#waybar.left #memory,
+window#waybar.left #custom-apps,
+window#waybar.left #custom-cputemp,
+window#waybar.left #custom-clipboard,
+window#waybar.left #custom-power,
+window#waybar.left #taskbar,
+window#waybar.left #custom-clock-toggle,
+window#waybar.right #idle_inhibitor,
+window#waybar.right #scratchpad,
+window#waybar.right #submap,
+window#waybar.right #window,
+window#waybar.right #clock,
+window#waybar.right #battery,
+window#waybar.right #backlight,
+window#waybar.right #wireplumber,
+window#waybar.right #tray,
+window#waybar.right #cpu,
+window#waybar.right #memory,
+window#waybar.right #custom-apps,
+window#waybar.right #custom-cputemp,
+window#waybar.right #custom-clipboard,
+window#waybar.right #custom-power,
+window#waybar.right #taskbar,
+window#waybar.right #custom-clock-toggle {
+  padding: 6px 0;
+  margin: 0;
+}
+
+/* workspaces buttons: vertical-friendly */
+window#waybar.left #workspaces button,
+window#waybar.right #workspaces button {
+  padding: 6px 0;
+}
+

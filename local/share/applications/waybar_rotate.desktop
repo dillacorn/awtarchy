@@ -1,0 +1,10 @@
+# github.com/dillacorn/awtarchy/tree/main/local/share/applications
+# ~/.local/share/applications/waybar_rotate.desktop
+
+[Desktop Entry]
+Type=Application
+Name=waybar rotate (vetical/horizontal)
+Exec=/bin/sh -c "$HOME/.config/hypr/scripts/waybar_rotate.sh"
+Icon=utilities-terminal
+Terminal=false
+Categories=Utility;
