@@ -173,8 +173,8 @@
     },
 
     "custom/apps": {
-      "on-click": "~/.config/hypr/scripts/fuzzel_toggle.sh --anchor=bottom-left --focus-loss-exit",
-      "on-click-right": "~/.config/hypr/scripts/fuzzel_toggle.sh --anchor=bottom-left",
+      "on-click": "~/.config/hypr/scripts/fuzzel_toggle.sh --anchor=top-left --focus-loss-exit",
+      "on-click-right": "~/.config/hypr/scripts/fuzzel_toggle.sh --anchor=top-left",
       "format": "",
       "tooltip": true,
       "tooltip-format": "app-launcher"
