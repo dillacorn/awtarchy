@@ -2,12 +2,20 @@
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
 # FILE: ~/.config/hypr/scripts/waybar_flip.sh
 #
-# Flips Waybar position top<->bottom, updates fuzzel anchor in launcher command(s),
-# and closes the *launcher* fuzzel instance (the one started by fuzzel_toggle.sh)
-# so it can’t stay open with an old anchor.
+# Flips Waybar position top<->bottom.
 #
-# Default restart method is pkill+nohup (no systemd dependency).
-# Optional: set USE_SYSTEMD=1 to try systemd first (auto-fallback if it fails).
+# fuzzel behavior:
+# - Waybar module "custom/apps" (the launcher button) gets:
+#     Waybar TOP    -> --anchor=top-left
+#     Waybar BOTTOM -> --anchor=bottom-left
+# - Keyboard binds (no explicit --anchor) should follow fuzzel.ini:
+#     Waybar TOP    -> anchor=top
+#     Waybar BOTTOM -> anchor=bottom
+# - If Waybar is NOT running, fuzzel.ini anchor (if present+active) is set to "center".
+# - If the user removes or comments out anchor= in fuzzel.ini, this script will NOT add it back.
+#
+# Waybar restart:
+# - Only restarts Waybar if it was already running.
 
 set -euo pipefail
 
@@ -21,12 +29,10 @@ WAYBAR_CONFIG_FALLBACK="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/config.jsonc"
 # Waybar relaunch settings (used only for pkill+nohup path)
 WAYBAR_BIN="${WAYBAR_BIN:-waybar}"
 WAYBAR_STYLE_DEFAULT="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/style.css"
-# Extra args if you need them, ex: WAYBAR_EXTRA_ARGS=( -l info )
 WAYBAR_EXTRA_ARGS=( )
 
-# Anchor that should be set when Waybar is TOP/BOTTOM
-FUZZEL_ANCHOR_FOR_WAYBAR_TOP="top-left"
-FUZZEL_ANCHOR_FOR_WAYBAR_BOTTOM="bottom-left"
+# fuzzel ini (persistent default spawn anchor for binds that don't pass --anchor)
+FUZZEL_INI_PATH="${FUZZEL_INI_PATH:-${XDG_CONFIG_HOME:-$HOME/.config}/fuzzel/fuzzel.ini}"
 
 # Close fuzzel launched by fuzzel_toggle.sh (marker is its runtime --config path)
 RUNTIME_BASE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -54,6 +60,11 @@ fi
 
 need_cmd() { command -v "$1" >/dev/null 2>&1 || { echo "waybar_flip: missing: $1" >&2; exit 127; }; }
 
+waybar_is_running() {
+  need_cmd pgrep
+  pgrep -u "$UID" -x waybar >/dev/null 2>&1
+}
+
 close_fuzzel_if_open() {
   need_cmd pgrep
   need_cmd pkill
@@ -68,7 +79,6 @@ close_fuzzel_if_open() {
     pkill -u "$UID" -x "$FUZZEL_PROC" >/dev/null 2>&1 || true
   else
     # Kill only the fuzzel instance launched by fuzzel_toggle.sh (marker in argv).
-    # Must neutralize pgrep exit code under set -e.
     local out
     out="$(pgrep -u "$UID" -x "$FUZZEL_PROC" -a 2>/dev/null || true)"
 
@@ -84,8 +94,8 @@ close_fuzzel_if_open() {
     kill $pids 2>/dev/null || true
   fi
 
-  step_ms=25
-  steps=$(( (FUZZEL_KILL_TIMEOUT_MS + step_ms - 1) / step_ms ))
+  local step_ms=25
+  local steps=$(( (FUZZEL_KILL_TIMEOUT_MS + step_ms - 1) / step_ms ))
   for _ in $(seq 1 "$steps"); do
     pgrep -u "$UID" -x "$FUZZEL_PROC" >/dev/null 2>&1 || return 0
     sleep 0.025
@@ -123,36 +133,133 @@ restart_waybar() {
   restart_waybar_pkill
 }
 
-set_fuzzel_anchor() {
+# Update ONLY the "custom/apps" module's command strings to the provided anchor.
+set_waybar_custom_apps_anchor() {
+  need_cmd awk
   local anchor="$1"
+  local tmp="${cfg}.tmp.$$"
 
-  # Handles current Waybar command style:
-  #   fuzzel_toggle.sh --anchor=bottom-left --focus-loss-exit
-  # and older styles with quoting:
-  #   fuzzel_toggle.sh '--anchor=bottom-left'
-  # plus direct fuzzel:
-  #   fuzzel --anchor=bottom-left
-  sed -i -E \
-    -e '/fuzzel_toggle\.sh|(^|[^[:alnum:]_])fuzzel([^[:alnum:]_]|$)/{
-          s/(--anchor=)[^"'\''[:space:]]+/\1'"${anchor}"'/g;
-          s/(--anchor[[:space:]]+)[^"'\''[:space:]]+/\1'"${anchor}"'/g
-        }' \
-    "$cfg"
+  awk -v a="$anchor" '
+    function sub_anchor(line,   l) {
+      l=line
+      gsub(/--anchor=[^"'\''[:space:]]+/, "--anchor=" a, l)
+      gsub(/--anchor[[:space:]]+[^"'\''[:space:]]+/, "--anchor " a, l)
+      return l
+    }
+
+    BEGIN { in_apps=0; depth=0 }
+
+    {
+      line=$0
+
+      if (!in_apps && line ~ /"custom\/apps"[[:space:]]*:[[:space:]]*{/) {
+        in_apps=1
+        depth=0
+      }
+
+      if (in_apps) {
+        if (line ~ /fuzzel_toggle\.sh/ || line ~ /(^|[^[:alnum:]_])fuzzel([^[:alnum:]_]|$)/) {
+          line=sub_anchor(line)
+        }
+
+        # naive brace depth; good enough for typical waybar configs
+        tmpc=line
+        opens=gsub(/{/,"{",tmpc)
+        closes=gsub(/}/,"}",tmpc)
+        depth += opens - closes
+        if (depth == 0) {
+          in_apps=0
+        }
+      }
+
+      print line
+    }
+  ' "$cfg" >"$tmp" && mv "$tmp" "$cfg"
 }
 
-# Close fuzzel first so it can’t stay open with old anchor.
+has_active_fuzzel_anchor_in_main() {
+  local ini="$1"
+  awk '
+    BEGIN { inmain=0; found=0 }
+    /^\[main\]$/ { inmain=1; next }
+    /^\[/        { inmain=0; next }
+    {
+      if (inmain &&
+          $0 ~ /^[[:space:]]*anchor[[:space:]]*=/ &&
+          $0 !~ /^[[:space:]]*[#;]/) { found=1; exit }
+    }
+    END { exit(found ? 0 : 1) }
+  ' "$ini"
+}
+
+set_fuzzel_ini_anchor_if_user_has_one() {
+  need_cmd awk
+  local anchor="$1"
+  local ini="$FUZZEL_INI_PATH"
+
+  [[ -f "$ini" ]] || return 0
+  has_active_fuzzel_anchor_in_main "$ini" || return 0
+
+  awk -v a="$anchor" '
+    BEGIN { inmain=0 }
+    /^\[main\]$/ { inmain=1; print; next }
+    /^\[/        { inmain=0; print; next }
+    {
+      if (inmain &&
+          $0 ~ /^[[:space:]]*anchor[[:space:]]*=/ &&
+          $0 !~ /^[[:space:]]*[#;]/) {
+        sub(/^[[:space:]]*anchor[[:space:]]*=.*/, "anchor=" a)
+        print
+        next
+      }
+      print
+    }
+  ' "$ini" >"$ini.tmp" && mv "$ini.tmp" "$ini"
+}
+
+WAYBAR_WAS_RUNNING=0
+if waybar_is_running; then
+  WAYBAR_WAS_RUNNING=1
+fi
+
+# Close launcher fuzzel first so it can’t stay open with the old anchor.
 close_fuzzel_if_open
 
-# Toggle "position": "top" <-> "position": "bottom" and apply matching fuzzel anchor.
+# Flip and compute anchors based on the NEW bar position.
 if grep -qE '^[[:space:]]*"position"[[:space:]]*:[[:space:]]*"top"' "$cfg"; then
-  sed -i -E 's/^[[:space:]]*"position"[[:space:]]*:[[:space:]]*"top"/"position": "bottom"/' "$cfg"
-  set_fuzzel_anchor "$FUZZEL_ANCHOR_FOR_WAYBAR_BOTTOM"
+  # top -> bottom
+  sed -i -E 's/^([[:space:]]*)"position"[[:space:]]*:[[:space:]]*"top"/\1"position": "bottom"/' "$cfg"
+
+  # Waybar launcher button: bottom-left
+  set_waybar_custom_apps_anchor "bottom-left"
+
+  # Binds default (fuzzel.ini): bottom, or center if waybar not running
+  if [[ "$WAYBAR_WAS_RUNNING" == "1" ]]; then
+    set_fuzzel_ini_anchor_if_user_has_one "bottom"
+  else
+    set_fuzzel_ini_anchor_if_user_has_one "center"
+  fi
+
 elif grep -qE '^[[:space:]]*"position"[[:space:]]*:[[:space:]]*"bottom"' "$cfg"; then
-  sed -i -E 's/^[[:space:]]*"position"[[:space:]]*:[[:space:]]*"bottom"/"position": "top"/' "$cfg"
-  set_fuzzel_anchor "$FUZZEL_ANCHOR_FOR_WAYBAR_TOP"
+  # bottom -> top
+  sed -i -E 's/^([[:space:]]*)"position"[[:space:]]*:[[:space:]]*"bottom"/\1"position": "top"/' "$cfg"
+
+  # Waybar launcher button: top-left
+  set_waybar_custom_apps_anchor "top-left"
+
+  # Binds default (fuzzel.ini): top, or center if waybar not running
+  if [[ "$WAYBAR_WAS_RUNNING" == "1" ]]; then
+    set_fuzzel_ini_anchor_if_user_has_one "top"
+  else
+    set_fuzzel_ini_anchor_if_user_has_one "center"
+  fi
+
 else
   echo "waybar_flip: no top-level position key found in $cfg" >&2
   exit 1
 fi
 
-restart_waybar
+# Only restart Waybar if it was already running.
+if [[ "$WAYBAR_WAS_RUNNING" == "1" ]]; then
+  restart_waybar
+fi
