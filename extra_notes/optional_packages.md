@@ -57,6 +57,15 @@ Unofficial YouTube Music client.
 
 ---
 
+## 🔊 Focus Background Noise?
+
+### Blanket Client
+```bash
+flatpak install com.rafaelmardojai.Blanket
+```
+
+---
+
 ## 🎥 Recording & Streaming
 
 ### OBS Studio
