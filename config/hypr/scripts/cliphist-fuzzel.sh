@@ -22,20 +22,18 @@ THUMB_LIMIT="${THUMB_LIMIT:-30}"
 DECODE_TIMEOUT="${DECODE_TIMEOUT:-0.70s}"
 
 # Make the fuzzel window wider/taller in a controlled way
-FUZZEL_WIDTH_CHARS="${FUZZEL_WIDTH_CHARS:-110}" # fuzzel -w/--width is in characters :contentReference[oaicite:0]{index=0}
-FUZZEL_LINES="${FUZZEL_LINES:-6}"               # fuzzel -l/--lines controls height :contentReference[oaicite:1]{index=1}
-FUZZEL_LINE_HEIGHT="${FUZZEL_LINE_HEIGHT:-128px}" # bigger rows = bigger icons :contentReference[oaicite:2]{index=2}
+FUZZEL_WIDTH_CHARS="${FUZZEL_WIDTH_CHARS:-110}"     # width in characters
+FUZZEL_LINES="${FUZZEL_LINES:-6}"                   # height in rows
+FUZZEL_LINE_HEIGHT="${FUZZEL_LINE_HEIGHT:-128px}"   # bigger rows = bigger icons
 
-# Hide the "60/60" match counter on the right (your config currently enables it)
-SHOW_MATCH_COUNTER="${SHOW_MATCH_COUNTER:-0}"   # 0=hide, 1=show
-# If we need to override match-counter without touching your real config, we use a tiny runtime config include.
+# Hide match counter (without touching your real config)
+SHOW_MATCH_COUNTER="${SHOW_MATCH_COUNTER:-0}"       # 0=hide, 1=show
 USER_FUZZEL_CFG="${USER_FUZZEL_CFG:-${XDG_CONFIG_HOME:-$HOME/.config}/fuzzel/fuzzel.ini}"
-OVERRIDE_CFG_PATH="${OVERRIDE_CFG_PATH:-}"
 
-# toggle  = if already open, close and exit
+# toggle  = if already open (script-launched), close and exit; else open
 # reopen  = if already open, close then open again
-# off     = do not try to close existing instances
-TOGGLE_MODE="${TOGGLE_MODE:-reopen}"
+# off     = never close existing; always open
+TOGGLE_MODE="${TOGGLE_MODE:-toggle}"
 
 DEBUG="${DEBUG:-0}"
 
@@ -65,6 +63,7 @@ fi
 CACHE_FILE="${CACHE_FILE:-$RUNTIME_BASE/cliphist-fuzzel.fuzzel.cache}"
 THUMB_PREFIX="${THUMB_PREFIX:-$RUNTIME_BASE/cliphist-fuzzel.thumb.}"
 LOCK_PREFIX="${LOCK_PREFIX:-$RUNTIME_BASE/cliphist-fuzzel.lock.}"
+OVERRIDE_CFG_PATH="${OVERRIDE_CFG_PATH:-$RUNTIME_BASE/cliphist-fuzzel.override.ini}"
 
 HELP="$(fuzzel --help 2>&1 || true)"
 supports() { grep -q -- "$1" <<<"$HELP"; }
@@ -90,7 +89,7 @@ supports '--config' && SUP_CONFIG=1
 supports '--counter' && SUP_COUNTER=1
 
 log "fuzzel flags: index=$SUP_INDEX no-sort=$SUP_NOSORT no-run-if-empty=$SUP_NORUNEMPTY cache=$SUP_CACHE width=$SUP_WIDTH lines=$SUP_LINES line-height=$SUP_LINEHEIGHT config=$SUP_CONFIG counter=$SUP_COUNTER"
-log "toggle_mode=$TOGGLE_MODE cache_file=$CACHE_FILE"
+log "toggle_mode=$TOGGLE_MODE cache_file=$CACHE_FILE override_cfg=$OVERRIDE_CFG_PATH"
 
 strip_id_line() { sed -E 's/^[[:space:]]*[0-9]+\t//'; }
 is_binary_row() { grep -Eiq '\[\[\s*binary' <<<"$1"; }
@@ -98,10 +97,16 @@ sha1_of() { printf '%s' "$1" | sha1sum | awk '{print $1}'; }
 
 toggle_close_existing() {
   [[ "$TOGGLE_MODE" != "off" ]] || return 0
+
+  # We only toggle-close instances launched by THIS script, identified by --cache=...
   (( SUP_CACHE == 1 )) || return 0
 
-  local pids
-  pids="$(pgrep -u "$USER" -af "fuzzel" | awk -v c="--cache=${CACHE_FILE}" 'index($0,c){print $1}')"
+  # IMPORTANT: pgrep returns exit code 1 when nothing matches.
+  # With set -e + pipefail, you must neutralize that or the script exits and never opens.
+  local out pids
+  out="$(pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true)"
+  pids="$(awk -v c="--cache=${CACHE_FILE}" 'index($0,c){print $1}' <<<"$out")"
+
   [[ -n "${pids:-}" ]] || return 0
 
   log "closing existing fuzzel instance(s): $pids"
@@ -119,14 +124,14 @@ make_thumb_png() {
   local entry="$1"
   command -v magick >/dev/null 2>&1 || return 1
 
-  local hash out lock tmp
+  local hash out lock tmp lfd
   hash="$(sha1_of "$entry")"
   out="${THUMB_PREFIX}${hash}.png"
   lock="${LOCK_PREFIX}${hash}"
 
   [[ -s "$out" ]] && { printf '%s' "$out"; return 0; }
 
-  exec {lfd}>"$lock" || true
+  exec {lfd}>"$lock"
   if ! flock -w 0.2 "$lfd"; then
     [[ -s "$out" ]] && { printf '%s' "$out"; return 0; }
     return 1
@@ -151,6 +156,7 @@ make_thumb_png() {
 mapfile -t RAW < <(cliphist list 2>/dev/null | head -n "$LIST_LIMIT" || true)
 ((${#RAW[@]} > 0)) || { log "cliphist list empty"; exit 0; }
 
+# Toggle before launching.
 toggle_close_existing
 
 menu_stream_for_index() {
@@ -168,8 +174,6 @@ menu_stream_for_index() {
   done
 }
 
-# If your config enables match-counter, kill it for this invocation by using an override config that includes yours,
-# then overrides match-counter=no. :contentReference[oaicite:3]{index=3}
 FUZZEL_ARGS=(--dmenu --prompt "$PROMPT")
 (( SUP_NORUNEMPTY == 1 )) && FUZZEL_ARGS+=(--no-run-if-empty)
 (( SUP_NOSORT == 1 )) && FUZZEL_ARGS+=(--no-sort)
@@ -179,22 +183,18 @@ FUZZEL_ARGS=(--dmenu --prompt "$PROMPT")
 (( SUP_LINEHEIGHT == 1 )) && FUZZEL_ARGS+=(--line-height="$FUZZEL_LINE_HEIGHT")
 
 if [[ "$SHOW_MATCH_COUNTER" == "1" ]]; then
-  (( SUP_COUNTER == 1 )) && FUZZEL_ARGS+=(--counter) # shows match count :contentReference[oaicite:4]{index=4}
+  (( SUP_COUNTER == 1 )) && FUZZEL_ARGS+=(--counter)
 else
   if (( SUP_CONFIG == 1 )); then
-    OVERRIDE_CFG_PATH="${OVERRIDE_CFG_PATH:-$RUNTIME_BASE/cliphist-fuzzel.override.ini}"
     {
       echo "[main]"
-      if [[ -f "$USER_FUZZEL_CFG" ]]; then
-        echo "include=$USER_FUZZEL_CFG"
-      fi
+      [[ -f "$USER_FUZZEL_CFG" ]] && echo "include=$USER_FUZZEL_CFG"
       echo "match-counter=no"
     } > "$OVERRIDE_CFG_PATH"
     FUZZEL_ARGS+=(--config="$OVERRIDE_CFG_PATH")
   fi
 fi
 
-# Prefer --index so we can display labels but decode the real RAW entry
 if (( SUP_INDEX == 1 )); then
   set +e
   IDX="$(menu_stream_for_index | fuzzel "${FUZZEL_ARGS[@]}" --index)"
@@ -210,7 +210,6 @@ if (( SUP_INDEX == 1 )); then
   exit 0
 fi
 
-# Fallback if --index is missing: show raw entries (IDs visible)
 set +e
 CHOICE="$(printf '%s\n' "${RAW[@]}" | fuzzel "${FUZZEL_ARGS[@]}")"
 rc=$?
