@@ -30,6 +30,11 @@ FUZZEL_LINE_HEIGHT="${FUZZEL_LINE_HEIGHT:-128px}"   # bigger rows = bigger icons
 SHOW_MATCH_COUNTER="${SHOW_MATCH_COUNTER:-0}"       # 0=hide, 1=show
 USER_FUZZEL_CFG="${USER_FUZZEL_CFG:-${XDG_CONFIG_HOME:-$HOME/.config}/fuzzel/fuzzel.ini}"
 
+# Waybar-aware anchoring (uses per-monitor waybar.sh state if available)
+CONF_DIR="${XDG_CONFIG_HOME:-$HOME/.config}"
+SCRIPTS_DIR="${SCRIPTS_DIR:-$CONF_DIR/hypr/scripts}"
+WAYBAR_SH="${WAYBAR_SH:-$SCRIPTS_DIR/waybar.sh}"
+
 # toggle  = if already open (script-launched), close and exit; else open
 # reopen  = if already open, close then open again
 # off     = never close existing; always open
@@ -41,6 +46,31 @@ DEBUG="${DEBUG:-0}"
 
 need() { command -v "$1" >/dev/null 2>&1 || { echo "missing dependency: $1" >&2; exit 1; }; }
 log() { [[ "$DEBUG" == "1" ]] && printf '[cliphist-fuzzel] %s\n' "$*" >&2 || true; }
+
+user_anchor_opt_in() {
+  local f="$USER_FUZZEL_CFG"
+  [[ -f "$f" ]] || return 1
+  awk '
+    BEGIN{in_main=0}
+    /^[[:space:]]*\[main\][[:space:]]*$/ {in_main=1; next}
+    /^[[:space:]]*\[/ {in_main=0}
+    in_main {
+      if ($0 ~ /^[[:space:]]*[#;]/) next
+      if ($0 ~ /^[[:space:]]*anchor[[:space:]]*=/) { found=1; exit }
+    }
+    END{ exit(found?0:1) }
+  ' "$f"
+}
+
+waybar_enabled_focused() {
+  [[ -x "$WAYBAR_SH" ]] || return 1
+  [[ "$("$WAYBAR_SH" getenabled-focused 2>/dev/null || true)" == "true" ]]
+}
+
+bar_pos_focused() {
+  [[ -x "$WAYBAR_SH" ]] || return 1
+  "$WAYBAR_SH" getpos-focused 2>/dev/null
+}
 
 need cliphist
 need fuzzel
@@ -91,18 +121,54 @@ supports '--counter' && SUP_COUNTER=1
 log "fuzzel flags: index=$SUP_INDEX no-sort=$SUP_NOSORT no-run-if-empty=$SUP_NORUNEMPTY cache=$SUP_CACHE width=$SUP_WIDTH lines=$SUP_LINES line-height=$SUP_LINEHEIGHT config=$SUP_CONFIG counter=$SUP_COUNTER"
 log "toggle_mode=$TOGGLE_MODE cache_file=$CACHE_FILE override_cfg=$OVERRIDE_CFG_PATH"
 
-strip_id_line() { sed -E 's/^[[:space:]]*[0-9]+\t//'; }
-is_binary_row() { grep -Eiq '\[\[\s*binary' <<<"$1"; }
-sha1_of() { printf '%s' "$1" | sha1sum | awk '{print $1}'; }
+strip_id_line() {
+  # cliphist lines are like:
+  #   <id>\t<content>
+  # preserve the content but remove leading "<id>\t"
+  sed -E 's/^[0-9]+\t//'
+}
+
+is_binary_row() {
+  # heuristic: if it contains "[image]" or "[binary]" (cliphist formats vary by version)
+  grep -qiE '(\[image\]|\[binary\])'
+}
+
+make_thumb_png() {
+  local raw="$1" tmp lock key png
+
+  command -v magick >/dev/null 2>&1 || return 1
+
+  key="$(printf '%s' "$raw" | sha1sum | awk '{print $1}')"
+  png="${THUMB_PREFIX}${key}.png"
+  lock="${LOCK_PREFIX}${key}.lock"
+
+  [[ -f "$png" ]] && { printf '%s' "$png"; return 0; }
+
+  exec 9>"$lock"
+  flock -n 9 || { [[ -f "$png" ]] && { printf '%s' "$png"; return 0; }; return 1; }
+
+  [[ -f "$png" ]] && { printf '%s' "$png"; return 0; }
+
+  tmp="${RUNTIME_BASE}/cliphist-fuzzel.decode.${key}.tmp"
+  rm -f -- "$tmp" 2>/dev/null || true
+
+  if timeout "$DECODE_TIMEOUT" cliphist decode <<<"$raw" >"$tmp" 2>/dev/null; then
+    if [[ -s "$tmp" ]]; then
+      if magick "$tmp" -thumbnail "${THUMB_SIZE}x${THUMB_SIZE}>" "png:$png" >/dev/null 2>&1; then
+        rm -f -- "$tmp" 2>/dev/null || true
+        printf '%s' "$png"
+        return 0
+      fi
+    fi
+  fi
+
+  rm -f -- "$tmp" 2>/dev/null || true
+  return 1
+}
 
 toggle_close_existing() {
-  [[ "$TOGGLE_MODE" != "off" ]] || return 0
+  [[ "$TOGGLE_MODE" == "off" ]] && return 0
 
-  # We only toggle-close instances launched by THIS script, identified by --cache=...
-  (( SUP_CACHE == 1 )) || return 0
-
-  # IMPORTANT: pgrep returns exit code 1 when nothing matches.
-  # With set -e + pipefail, you must neutralize that or the script exits and never opens.
   local out pids
   out="$(pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true)"
   pids="$(awk -v c="--cache=${CACHE_FILE}" 'index($0,c){print $1}' <<<"$out")"
@@ -118,39 +184,6 @@ toggle_close_existing() {
   fi
 
   sleep 0.06
-}
-
-make_thumb_png() {
-  local entry="$1"
-  command -v magick >/dev/null 2>&1 || return 1
-
-  local hash out lock tmp lfd
-  hash="$(sha1_of "$entry")"
-  out="${THUMB_PREFIX}${hash}.png"
-  lock="${LOCK_PREFIX}${hash}"
-
-  [[ -s "$out" ]] && { printf '%s' "$out"; return 0; }
-
-  exec {lfd}>"$lock"
-  if ! flock -w 0.2 "$lfd"; then
-    [[ -s "$out" ]] && { printf '%s' "$out"; return 0; }
-    return 1
-  fi
-
-  [[ -s "$out" ]] && { printf '%s' "$out"; return 0; }
-
-  tmp="${out}.tmp.$$"
-  rm -f -- "$tmp" 2>/dev/null || true
-
-  if timeout "$DECODE_TIMEOUT" cliphist decode 2>/dev/null <<<"$entry" \
-    | magick - -auto-orient -strip -thumbnail "${THUMB_SIZE}x${THUMB_SIZE}" "png:${tmp}" 2>/dev/null; then
-    mv -f -- "$tmp" "$out"
-    printf '%s' "$out"
-    return 0
-  fi
-
-  rm -f -- "$tmp" 2>/dev/null || true
-  return 1
 }
 
 mapfile -t RAW < <(cliphist list 2>/dev/null | head -n "$LIST_LIMIT" || true)
@@ -182,16 +215,29 @@ FUZZEL_ARGS=(--dmenu --prompt "$PROMPT")
 (( SUP_LINES == 1 )) && FUZZEL_ARGS+=(--lines="$FUZZEL_LINES")
 (( SUP_LINEHEIGHT == 1 )) && FUZZEL_ARGS+=(--line-height="$FUZZEL_LINE_HEIGHT")
 
-if [[ "$SHOW_MATCH_COUNTER" == "1" ]]; then
-  (( SUP_COUNTER == 1 )) && FUZZEL_ARGS+=(--counter)
-else
-  if (( SUP_CONFIG == 1 )); then
-    {
-      echo "[main]"
-      [[ -f "$USER_FUZZEL_CFG" ]] && echo "include=$USER_FUZZEL_CFG"
+# Anchor override: only when user has active anchor= in fuzzel.ini AND waybar is enabled on focused monitor.
+ANCHOR_OVERRIDE=""
+if user_anchor_opt_in && waybar_enabled_focused; then
+  pos="$(bar_pos_focused 2>/dev/null || true)"
+  case "$pos" in top|bottom|left|right) ANCHOR_OVERRIDE="$pos" ;; esac
+fi
+log "anchor_override=${ANCHOR_OVERRIDE:-<none>}"
+
+if (( SUP_CONFIG == 1 )); then
+  {
+    echo "[main]"
+    [[ -f "$USER_FUZZEL_CFG" ]] && echo "include=$USER_FUZZEL_CFG"
+    if [[ "$SHOW_MATCH_COUNTER" == "1" ]]; then
+      echo "match-counter=yes"
+    else
       echo "match-counter=no"
-    } > "$OVERRIDE_CFG_PATH"
-    FUZZEL_ARGS+=(--config="$OVERRIDE_CFG_PATH")
+    fi
+    [[ -n "$ANCHOR_OVERRIDE" ]] && echo "anchor=$ANCHOR_OVERRIDE"
+  } > "$OVERRIDE_CFG_PATH"
+  FUZZEL_ARGS+=(--config="$OVERRIDE_CFG_PATH")
+else
+  if [[ "$SHOW_MATCH_COUNTER" == "1" ]]; then
+    (( SUP_COUNTER == 1 )) && FUZZEL_ARGS+=(--counter)
   fi
 fi
 
