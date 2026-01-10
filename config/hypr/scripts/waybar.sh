@@ -2,7 +2,7 @@
 # FILE: ~/.config/hypr/scripts/waybar.sh
 #
 # Per-monitor waybar manager (one waybar process per output).
-# Toggle logic uses live PID existence (fixes "turns off but won't come back").
+# Toggle logic uses live PID existence.
 #
 # Template (strict JSON array):
 #   ~/.config/waybar/config
@@ -40,6 +40,8 @@ PER_DIR="${PER_DIR:-$BASE_DIR/per-output}"
 WAYBAR_VERTICAL_WIDTH="${WAYBAR_VERTICAL_WIDTH:-36}"
 WAYBAR_HORIZONTAL_HEIGHT_DEFAULT="${WAYBAR_HORIZONTAL_HEIGHT_DEFAULT:-28}"
 
+CPU_TEMP_V="${CPU_TEMP_V:-$CONF/waybar/scripts/cpu_temp_vertical.sh}"
+CLOCK_TOGGLE_V="${CLOCK_TOGGLE_V:-$CONF/waybar/scripts/clock_toggle_vertical.sh}"
 mkdir -p "$BASE_DIR" "$PER_DIR"
 
 safe_name() { printf '%s' "$1" | tr '/ ' '__'; }
@@ -228,12 +230,6 @@ base as $b
              | .memory.format = ($ico + "\n{}")
            else . end)
 
-        # temp: turn "<num>°<icon>" into "<icon>\n<num>°"
-        | (if .["custom/cputemp"]? then
-             .["custom/cputemp"].format = "{}"
-             | .["custom/cputemp"].exec = ($cputemp_exec + " | sed -E 's/^([0-9]+)°(.+)$/\\2\\n\\1°/'")
-           else . end)
-
         # backlight icon above percent
         | (if .backlight? then .backlight.format = "{icon}\n{percent}" else . end)
 
@@ -258,10 +254,16 @@ base as $b
              | .wireplumber["format-bluetooth-muted"] = "mute"
            else . end)
 
-        # clock: remove icon by swapping custom/clock-toggle -> built-in clock
-        | .["modules-right"] = ((.["modules-right"] // []) | map(if . == "custom/clock-toggle" then "clock" else . end))
-        | (if .["custom/clock-toggle"]? then del(.["custom/clock-toggle"]) else . end)
-        | .clock = ((.clock // {}) * { "format":"{:%H\n%M}", "tooltip": false })
+        # VERTICAL_WRAPPERS_BEGIN
+        # custom modules: run wrapper scripts that emit vertical-friendly output.
+        # cputemp wrapper emits JSON with "\n" in text, so set return-type json here.
+        | (if ($b["custom/cputemp"]? != null) then
+             .["custom/cputemp"] = ($b["custom/cputemp"] * {"exec":$cputemp_exec_v, "return-type":"json"})
+           else . end)
+        | (if ($b["custom/clock-toggle"]? != null) then
+             .["custom/clock-toggle"] = ($b["custom/clock-toggle"] * {"exec":$clock_toggle_exec_v})
+           else . end)
+        # VERTICAL_WRAPPERS_END
 
       else
         del(.width) | .height = $hheight
@@ -273,7 +275,8 @@ JQ
   jq -n \
     --arg mon "$mon" \
     --arg pos "$pos" \
-    --arg cputemp_exec "$(jq -r '.[0]["custom/cputemp"].exec // ""' "$TEMPLATE_CFG")" \
+    --arg cputemp_exec_v "$CPU_TEMP_V" \
+    --arg clock_toggle_exec_v "$CLOCK_TOGGLE_V" \
     --argjson vwidth "$WAYBAR_VERTICAL_WIDTH" \
     --argjson hdef "$WAYBAR_HORIZONTAL_HEIGHT_DEFAULT" \
     --slurpfile cfg "$TEMPLATE_CFG" \
@@ -290,7 +293,6 @@ start_mon() {
 
   gen_cfg_mon "$mon" "$pos" "$cfg"
 
-  # clear stale pidfile
   if [[ -f "$pf" ]]; then
     pid="$(cat "$pf" 2>/dev/null || true)"
     pid_alive "$pid" || rm -f "$pf"
@@ -356,14 +358,12 @@ toggle_mon() {
   local mon="${1:-}"
   [[ -n "$mon" ]] || { printf 'waybar.sh: toggle-mon <MON>\n' >&2; exit 2; }
 
-  # Decide by LIVE PID, not remembered enabled state.
   if mon_pid "$mon" >/dev/null 2>&1; then
     set_mon_enabled "$mon" false
     stop_mon "$mon"
     return 0
   fi
 
-  # If stale pidfile exists, remove it so we don't "think" it's running later.
   rm -f "$(pidfile_for "$mon")" 2>/dev/null || true
 
   set_global_enabled true
@@ -386,7 +386,6 @@ setpos_focused() {
   mon="$(focused_monitor)" || exit 1
   set_pos "$mon" "$pos"
 
-  # IMPORTANT: do NOT start bars that are currently off.
   if pid="$(mon_pid "$mon" 2>/dev/null || true)"; [[ -n "$pid" ]]; then
     stop_mon "$mon"
     start_mon "$mon"
