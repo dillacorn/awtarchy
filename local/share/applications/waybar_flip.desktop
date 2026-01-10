@@ -3,8 +3,10 @@
 
 [Desktop Entry]
 Type=Application
-Name=waybar flip (top/bottom)
-Exec=/bin/sh -c "$HOME/.config/hypr/scripts/waybar_flip.sh"
-Icon=utilities-terminal
+Name=Waybar flip (focused display)
+Comment=Flip Waybar side on the currently focused monitor
+Exec=sh -lc 'exec "$HOME/.config/hypr/scripts/waybar_flip.sh"'
+Icon=view-refresh
 Terminal=false
 Categories=Utility;
+

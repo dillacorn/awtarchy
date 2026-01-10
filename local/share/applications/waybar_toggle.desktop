@@ -3,9 +3,10 @@
 
 [Desktop Entry]
 Type=Application
-Name=waybar toggle (on/off)
-TryExec=/bin/sh
-Exec=/bin/sh -c 'if pgrep -x waybar >/dev/null; then pkill -x waybar && echo waybar_not_running > /tmp/waybar.state; else (waybar & echo waybar_running > /tmp/waybar.state); fi'
-Icon=utilities-terminal
+Name=Waybar toggle (focused display)
+Comment=Toggle Waybar on the currently focused monitor
+Exec=sh -lc 'exec "$HOME/.config/hypr/scripts/waybar_toggle.sh"'
+Icon=preferences-desktop-display
 Terminal=false
 Categories=Utility;
+

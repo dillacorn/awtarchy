@@ -3,8 +3,9 @@
 
 [Desktop Entry]
 Type=Application
-Name=waybar rotate (vetical/horizontal)
-Exec=/bin/sh -c "$HOME/.config/hypr/scripts/waybar_rotate.sh"
-Icon=utilities-terminal
+Name=Waybar rotate (focused display)
+Comment=Rotate Waybar between horizontal and vertical on the currently focused monitor
+Exec=~/.config/hypr/scripts/waybar_rotate.sh
+Icon=object-rotate-right
 Terminal=false
 Categories=Utility;
