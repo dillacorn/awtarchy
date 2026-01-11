@@ -5,10 +5,13 @@
 #
 # Anchor rules:
 # - If user passes --anchor/--anchor=..., never override.
-# - If --from-waybar is set: always compute a corner anchor based on focused monitor bar position.
+# - If --from-waybar is set: compute a corner anchor based on focused monitor bar position,
+#   but ONLY if waybar is visible on the focused monitor.
 # - Otherwise:
-#     - If fuzzel.ini has an active anchor= in [main] AND waybar is running, compute a side anchor.
-#     - If anchor= is missing/commented OR waybar is not running, do not force anchor (center/default).
+#     - If fuzzel.ini has an active anchor= in [main] AND waybar is visible on the focused monitor,
+#       compute a side anchor.
+#     - If anchor= is missing/commented OR waybar is not visible on the focused monitor,
+#       do not force anchor (your fuzzel.ini anchor applies, e.g. center).
 
 set -euo pipefail
 
@@ -38,7 +41,7 @@ usage() {
   cat <<'USAGE'
 fuzzel_toggle.sh [--from-waybar] [--focus-loss-exit] [--no-focus-loss-exit] [FUZZEL_ARGS...]
 
---from-waybar            Force anchor near bar button (corner mapping)
+--from-waybar            Force anchor near bar button (corner mapping) if waybar is visible on focused monitor
 --focus-loss-exit        Force exit-on-keyboard-focus-loss=yes for this launch
 --no-focus-loss-exit     Force exit-on-keyboard-focus-loss=no  for this launch
 
@@ -74,8 +77,32 @@ passthru_has_anchor() {
   return 1
 }
 
-waybar_running() {
-  pgrep -x waybar >/dev/null 2>&1
+# Detect if waybar is actually visible on the focused monitor by matching the
+# per-output config path in the waybar process cmdline.
+waybar_visible_on_focused_monitor() {
+  local mon safe cache cfg pid comm cmdline
+
+  [[ -x "$WAYBAR_SH" ]] || return 1
+  mon="$("$WAYBAR_SH" focused-monitor 2>/dev/null || true)"
+  [[ -n "$mon" ]] || return 1
+
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+  safe="$(printf '%s' "$mon" | tr $'/ \t' '___')"
+  cfg="${cache}/waybar/per-output/${safe}.json"
+
+  [[ -f "$cfg" ]] || return 1
+
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    [[ -r "/proc/$pid/comm" ]] || continue
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+    [[ "$comm" == "waybar" ]] || continue
+
+    cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    [[ "$cmdline" == *"$cfg"* ]] && return 0
+  done < <(pgrep -x waybar 2>/dev/null || true)
+
+  return 1
 }
 
 user_anchor_opt_in() {
@@ -123,16 +150,20 @@ ANCHOR_OVERRIDE=""
 
 if ! passthru_has_anchor; then
   if [[ "$FROM_WAYBAR" == "1" ]]; then
-    ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
+    # Only override if waybar is actually on the focused monitor.
+    if waybar_visible_on_focused_monitor; then
+      ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
+    fi
   else
-    if waybar_running && user_anchor_opt_in; then
+    # Only override if user opted-in via fuzzel.ini anchor= AND waybar is on the focused monitor.
+    if waybar_visible_on_focused_monitor && user_anchor_opt_in; then
       ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
     fi
   fi
 fi
 
 # Build runtime config without include= (portable).
-# fuzzel.ini explicitly allows reopening [main] after other sections. :contentReference[oaicite:1]{index=1}
+# fuzzel allows reopening [main] after other sections.
 {
   if [[ -f "$USER_FUZZEL_CFG" ]]; then
     cat "$USER_FUZZEL_CFG"
@@ -151,7 +182,6 @@ log "from_waybar=$FROM_WAYBAR anchor_override=${ANCHOR_OVERRIDE:-<none>} focus_l
 log "launch args: ${PASSTHRU[*]:-<none>}"
 
 if [[ "$DEBUG" != "0" ]]; then
-  # validates config syntax; exits 0 if ok, 1 otherwise :contentReference[oaicite:2]{index=2}
   if ! "$FUZZEL_BIN" --check-config --config="$RUNTIME_CFG" >/dev/null 2>&1; then
     log "config check failed (run: $FUZZEL_BIN --check-config --config=\"$RUNTIME_CFG\")"
   else

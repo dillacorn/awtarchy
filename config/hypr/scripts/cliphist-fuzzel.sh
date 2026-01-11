@@ -135,19 +135,35 @@ user_anchor_opt_in() {
   ' "$f"
 }
 
-waybar_enabled_focused() {
-  # Prefer per-monitor signal if your waybar.sh provides it.
-  if [[ -x "$WAYBAR_SH" ]]; then
-    local v
-    v="$("$WAYBAR_SH" getenabled-focused 2>/dev/null || true)"
-    [[ "$v" == "true" ]] && return 0
-    [[ "$v" == "false" ]] && return 1
-  fi
-  # Fallback: only override when waybar is actually running.
-  pgrep -x waybar >/dev/null 2>&1
+waybar_visible_on_focused_monitor() {
+  local mon safe cache cfg pid comm cmdline
+
+  [[ -x "$WAYBAR_SH" ]] || return 1
+  mon="$("$WAYBAR_SH" focused-monitor 2>/dev/null || true)"
+  [[ -n "$mon" ]] || return 1
+
+  cache="${XDG_CACHE_HOME:-$HOME/.cache}"
+  safe="$(printf '%s' "$mon" | tr '/ \t' '___')"
+  cfg="${cache}/waybar/per-output/${safe}.json"
+
+  # If we can't identify the per-output config, we can't reliably map waybar to a monitor.
+  [[ -f "$cfg" ]] || return 1
+
+  # Match waybar process by cmdline containing the per-output config path.
+  while IFS= read -r pid; do
+    [[ -n "$pid" ]] || continue
+    [[ -r "/proc/$pid/comm" ]] || continue
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+    [[ "$comm" == "waybar" ]] || continue
+
+    cmdline="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
+    [[ "$cmdline" == *"$cfg"* ]] && return 0
+  done < <(pgrep -x waybar 2>/dev/null || true)
+
+  return 1
 }
 
-bar_pos_focused() {
+bar_pos() {
   if [[ -x "$WAYBAR_SH" ]]; then
     "$WAYBAR_SH" getpos-focused 2>/dev/null || echo top
   else
@@ -240,7 +256,6 @@ fi
 
 # If ours is already open in this same instance, honor toggle/reopen immediately.
 if close_ours_and_maybe_exit; then
-  # reopen continues
   :
 fi
 
@@ -269,8 +284,8 @@ menu_stream() {
 }
 
 ANCHOR_OVERRIDE=""
-if waybar_enabled_focused && user_anchor_opt_in; then
-  ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos_focused)")"
+if waybar_visible_on_focused_monitor && user_anchor_opt_in; then
+  ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
 fi
 log "anchor_override=${ANCHOR_OVERRIDE:-<none>}"
 
