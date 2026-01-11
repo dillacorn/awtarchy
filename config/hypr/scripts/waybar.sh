@@ -2,18 +2,24 @@
 # FILE: ~/.config/hypr/scripts/waybar.sh
 #
 # Per-monitor waybar manager (one waybar process per output).
-# Toggle logic uses live PID existence.
+# Generates per-output configs from ~/.config/waybar/config (strict JSON).
 #
-# Template (strict JSON array):
-#   ~/.config/waybar/config
-# Style:
-#   ~/.config/waybar/style.css
+# Legacy-compatible commands (used by your helper scripts):
+#   start | stop | restart | status
+#   focused-monitor
+#   dump-state
+#   getpos <MON> | getpos-focused
+#   getenabled <MON> | getenabled-focused
+#   toggle-focused | toggle-mon <MON>
+#   setpos <MON> <top|bottom|left|right> | setpos-focused <top|bottom|left|right>
+#   flip-focused
+#   enable | disable
 #
-# State:
-#   ~/.cache/waybar/state.json
-# Per-monitor cfg/pid:
-#   ~/.cache/waybar/per-output/<MON>.json
-#   ~/.cache/waybar/per-output/<MON>.pid
+# Paths:
+#   Template:  ~/.config/waybar/config
+#   Style:     ~/.config/waybar/style.css
+#   State:     ~/.cache/waybar/state.json
+#   Per-out:   ~/.cache/waybar/per-output/<MON_SAFE>.json / .pid
 
 set -euo pipefail
 
@@ -40,15 +46,32 @@ PER_DIR="${PER_DIR:-$BASE_DIR/per-output}"
 WAYBAR_VERTICAL_WIDTH="${WAYBAR_VERTICAL_WIDTH:-36}"
 WAYBAR_HORIZONTAL_HEIGHT_DEFAULT="${WAYBAR_HORIZONTAL_HEIGHT_DEFAULT:-28}"
 
+# Vertical wrappers
 CPU_TEMP_V="${CPU_TEMP_V:-$CONF/waybar/scripts/cpu_temp_vertical.sh}"
 CLOCK_TOGGLE_V="${CLOCK_TOGGLE_V:-$CONF/waybar/scripts/clock_toggle_vertical.sh}"
+
 mkdir -p "$BASE_DIR" "$PER_DIR"
 
-safe_name() { printf '%s' "$1" | tr '/ ' '__'; }
-pidfile_for() { printf '%s/%s.pid' "$PER_DIR" "$(safe_name "$1")"; }
-cfgfile_for() { printf '%s/%s.json' "$PER_DIR" "$(safe_name "$1")"; }
-
 pid_alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+safe_name() { printf '%s' "$1" | tr '/ \t' '___'; }
+pid_file_for() { printf '%s/%s.pid\n' "$PER_DIR" "$(safe_name "$1")"; }
+cfg_file_for() { printf '%s/%s.json\n' "$PER_DIR" "$(safe_name "$1")"; }
+
+read_pid() {
+  local f
+  f="$(pid_file_for "$1")"
+  [[ -s "$f" ]] || return 1
+  tr -d ' \t\r\n' <"$f"
+}
+
+write_pid() {
+  local f
+  f="$(pid_file_for "$1")"
+  printf '%s\n' "$2" >"$f"
+}
+
+clear_pid() { rm -f "$(pid_file_for "$1")" 2>/dev/null || true; }
 
 monitors_json() { hyprctl monitors -j | jq -c '[.[].name]'; }
 
@@ -56,6 +79,7 @@ cursor_monitor() {
   local pos x y
   pos="$(hyprctl cursorpos 2>/dev/null || true)"
   [[ -n "$pos" ]] || return 1
+
   x="$(printf '%s' "$pos" | awk -F',' '{gsub(/[[:space:]]/,"",$1); print $1}')"
   y="$(printf '%s' "$pos" | awk -F',' '{gsub(/[[:space:]]/,"",$2); print $2}')"
   [[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ ]] || return 1
@@ -72,22 +96,34 @@ activeworkspace_monitor() {
 }
 
 focused_monitor() {
-  local m=""
+  local m
   m="$(cursor_monitor 2>/dev/null || true)"
-  [[ -n "$m" ]] && { echo "$m"; return 0; }
+  [[ -n "$m" ]] && { printf '%s
+' "$m"; return 0; }
   m="$(activeworkspace_monitor 2>/dev/null || true)"
-  [[ -n "$m" ]] && { echo "$m"; return 0; }
+  [[ -n "$m" ]] && { printf '%s
+' "$m"; return 0; }
+
+  # Fallback: first monitor (prevents binds from "doing nothing" if focus detection fails)
+  m="$(monitors_json 2>/dev/null | jq -r '.[0] // empty' 2>/dev/null || true)"
+  [[ -n "$m" ]] && { printf '%s
+' "$m"; return 0; }
+
   return 1
 }
-
 ensure_state() {
   local mons tmp
   mons="$(monitors_json)"
 
-  if [[ ! -f "$STATE_FILE" ]]; then
+  # If state exists but is invalid JSON, nuke it and regenerate.
+  if [[ -s "$STATE_FILE" ]]; then
+    jq -e '.' "$STATE_FILE" >/dev/null 2>&1 || rm -f "$STATE_FILE"
+  fi
+
+  if [[ ! -s "$STATE_FILE" ]]; then
     jq -n --argjson mons "$mons" '
       { enabled: true, monitors: ($mons | map({(.): {position:"top", enabled:true}}) | add) }
-    ' > "$STATE_FILE"
+    ' >"$STATE_FILE"
     return 0
   fi
 
@@ -104,95 +140,81 @@ ensure_state() {
           | add
         )
       }
-  ' "$STATE_FILE" > "$tmp"
+  ' "$STATE_FILE" >"$tmp"
   mv "$tmp" "$STATE_FILE"
 }
-
-global_enabled() { ensure_state; jq -r '(.enabled // true) | if . then "true" else "false" end' "$STATE_FILE"; }
+global_enabled() {
+  ensure_state
+  jq -r '(.enabled // true) | if . then "true" else "false" end' "$STATE_FILE"
+}
 
 set_global_enabled() {
   local v="${1:-}" jv
-  case "$v" in true|1|yes|on) jv=true ;; false|0|no|off) jv=false ;; *) printf 'waybar.sh: enable expects true/false\n' >&2; exit 2 ;; esac
+  case "$v" in
+    true|1|yes|on) jv=true ;;
+    false|0|no|off) jv=false ;;
+    *) printf 'waybar.sh: enable expects true/false\n' >&2; exit 2 ;;
+  esac
+
   ensure_state
-  local tmp; tmp="$(mktemp)"
-  jq --argjson v "$jv" '.enabled = $v' "$STATE_FILE" > "$tmp"
+  local tmp
+  tmp="$(mktemp)"
+  jq --argjson v "$jv" '.enabled = $v' "$STATE_FILE" >"$tmp"
   mv "$tmp" "$STATE_FILE"
 }
 
-get_pos() {
-  local mon="${1:-}"
-  [[ -n "$mon" ]] || { printf 'waybar.sh: getpos <MON>\n' >&2; exit 2; }
-  ensure_state
-  jq -r --arg m "$mon" '.monitors[$m].position // "top"' "$STATE_FILE"
-}
-
-set_pos() {
-  local mon="${1:-}" pos="${2:-}"
-  [[ -n "$mon" && -n "$pos" ]] || { printf 'waybar.sh: setpos <MON> <top|bottom|left|right>\n' >&2; exit 2; }
-  case "$pos" in top|bottom|left|right) ;; *) printf 'waybar.sh: invalid pos: %s\n' "$pos" >&2; exit 2 ;; esac
-  ensure_state
-  local tmp; tmp="$(mktemp)"
-  jq --arg m "$mon" --arg p "$pos" '.monitors[$m].position = $p' "$STATE_FILE" > "$tmp"
-  mv "$tmp" "$STATE_FILE"
-}
-
-get_mon_enabled() {
-  local mon="${1:-}"
-  [[ -n "$mon" ]] || { printf 'waybar.sh: getenabled <MON>\n' >&2; exit 2; }
+monitor_enabled() {
+  local mon="$1"
   ensure_state
   jq -r --arg m "$mon" '(.monitors[$m].enabled // true) | if . then "true" else "false" end' "$STATE_FILE"
 }
 
-set_mon_enabled() {
-  local mon="${1:-}" v="${2:-}" jv
-  [[ -n "$mon" && -n "$v" ]] || { printf 'waybar.sh: setenabled <MON> <true|false>\n' >&2; exit 2; }
-  case "$v" in true|1|yes|on) jv=true ;; false|0|no|off) jv=false ;; *) printf 'waybar.sh: setenabled expects true/false\n' >&2; exit 2 ;; esac
+set_monitor_enabled() {
+  local mon="$1" v="$2" jv
+  case "$v" in
+    true|1|yes|on) jv=true ;;
+    false|0|no|off) jv=false ;;
+    *) printf 'waybar.sh: monitor enable expects true/false\n' >&2; exit 2 ;;
+  esac
+
   ensure_state
-  local tmp; tmp="$(mktemp)"
-  jq --arg m "$mon" --argjson v "$jv" '.monitors[$m].enabled = $v' "$STATE_FILE" > "$tmp"
+  local tmp
+  tmp="$(mktemp)"
+  jq --arg m "$mon" --argjson v "$jv" '.monitors[$m].enabled = $v' "$STATE_FILE" >"$tmp"
   mv "$tmp" "$STATE_FILE"
 }
 
-mon_pid() {
-  local mon="$1" pf pid
-  pf="$(pidfile_for "$mon")"
-  [[ -f "$pf" ]] || return 1
-  pid="$(cat "$pf" 2>/dev/null || true)"
-  pid_alive "$pid" || return 1
-  printf '%s\n' "$pid"
-  return 0
+monitor_position() {
+  local mon="$1"
+  ensure_state
+  jq -r --arg m "$mon" '.monitors[$m].position // "top"' "$STATE_FILE"
 }
 
-stop_mon() {
-  local mon="$1" pf pid
-  pf="$(pidfile_for "$mon")"
-  [[ -f "$pf" ]] || return 0
-  pid="$(cat "$pf" 2>/dev/null || true)"
+set_monitor_position() {
+  local mon="$1" pos="$2"
+  case "$pos" in
+    top|bottom|left|right) ;;
+    *) printf 'waybar.sh: invalid position: %s\n' "$pos" >&2; exit 2 ;;
+  esac
 
-  if pid_alive "$pid"; then
-    log "stop $mon pid=$pid"
-    kill "$pid" 2>/dev/null || true
-    for _ in $(seq 1 60); do
-      pid_alive "$pid" || break
-      sleep 0.05
-    done
-    pid_alive "$pid" && kill -KILL "$pid" 2>/dev/null || true
-  fi
-
-  rm -f "$pf"
+  ensure_state
+  local tmp
+  tmp="$(mktemp)"
+  jq --arg m "$mon" --arg p "$pos" '.monitors[$m].position = $p' "$STATE_FILE" >"$tmp"
+  mv "$tmp" "$STATE_FILE"
 }
 
 gen_cfg_mon() {
   local mon="$1" pos="$2" out="$3"
-
-  [[ -f "$TEMPLATE_CFG" ]] || { printf 'waybar.sh: missing template: %s\n' "$TEMPLATE_CFG" >&2; exit 1; }
+  [[ -f "$TEMPLATE_CFG" ]] || { printf 'waybar.sh: missing template: %s\n' "$TEMPLATE_CFG" >&2; return 1; }
 
   jq -e '.' "$TEMPLATE_CFG" >/dev/null 2>&1 || {
     printf 'waybar.sh: template is not strict JSON (jq must parse it): %s\n' "$TEMPLATE_CFG" >&2
-    exit 1
+    return 1
   }
 
-  local jqf; jqf="$(mktemp)"
+  local jqf
+  jqf="$(mktemp)"
   cat >"$jqf" <<'JQ'
 def base:
   if ($cfg[0] | type) == "array" then $cfg[0][0] else $cfg[0] end;
@@ -200,8 +222,24 @@ def base:
 def trim: gsub("^[[:space:]]+|[[:space:]]+$";"");
 def norm: (gsub("[[:space:]]+";" ") | trim);
 def toks: (norm | split(" "));
-def firsttok: (toks | .[0]);
-def lasttok: (toks | .[-1]);
+
+def icon_from_format($fmt; $fallback):
+  ($fmt | norm) as $f
+  | ($f | toks) as $t
+  | ($t[0] // "") as $t0
+  | ($t[-1] // "") as $tL
+  | (if ($t0 | test("\\{")) then $tL else $t0 end) as $pick
+  | (if ($pick | test("\\{")) then $fallback else $pick end);
+
+def expand_one($m):
+  if $m == "cpu" then ["cpu#v_icon","cpu#v_val"]
+  elif $m == "memory" then ["memory#v_icon","memory#v_val"]
+  elif $m == "wireplumber" then ["wireplumber#v_icon","wireplumber#v_val"]
+  elif $m == "custom/cputemp" then ["custom/cputemp#v_icon","custom/cputemp#v_val"]
+  elif $m == "custom/clock-toggle" then ["custom/clock-toggle#v_icon","custom/clock-toggle#v_a","custom/clock-toggle#v_b"]
+  else [$m] end;
+
+def expand_list($arr): [ $arr[] as $m | expand_one($m)[] ];
 
 base as $b
 | ($b.height // $hdef) as $hheight
@@ -209,61 +247,68 @@ base as $b
     | .output = [$mon]
     | .position = $pos
     | if ($pos == "left" or $pos == "right") then
-        del(.height) | .width = ($b.width // $vwidth)
+        .width = $vwidth
+        | .height = 0
+        | .margin = 0
+        | .spacing = 0
 
-        # remove hyprland/window when vertical
-        | .["modules-center"] = ((.["modules-center"] // []) | map(select(. != "hyprland/window")))
+        | .["modules-center"] = []
         | (if .["hyprland/window"]? then del(.["hyprland/window"]) else . end)
 
-        # ws arrows vertical so it doesn't reserve a sideways gap
+        | .["modules-left"]  = ((.["modules-left"]  // []) | map(select(. != "custom/spacer-submap")))
+        | .["modules-right"] = ((.["modules-right"] // []) | map(select(. != "custom/spacer-submap")))
+
         | (if .["group/ws-arrows"]? then .["group/ws-arrows"].orientation = "vertical" else . end)
 
-        # cpu icon above usage
-        | (if .cpu? and .cpu.format? then
-             (.cpu.format | norm | lasttok) as $ico
-             | .cpu.format = ($ico + "\n{usage}")
+        | .["modules-right"] = expand_list(.["modules-right"] // [])
+
+        | (if .cpu? then
+             (icon_from_format((.cpu.format? // "{usage}"); "")) as $ico
+             | .["cpu#v_icon"] = (.cpu * {"format": $ico})
+             | .["cpu#v_val"]  = (.cpu * {"format": "{usage}"})
            else . end)
 
-        # memory icon above value (your format is "{} <icon>")
-        | (if .memory? and .memory.format? then
-             (.memory.format | norm | lasttok) as $ico
-             | .memory.format = ($ico + "\n{}")
+        | (if .memory? then
+             (icon_from_format((.memory.format? // "{}"); "")) as $ico
+             | .["memory#v_icon"] = (.memory * {"format": $ico})
+             | .["memory#v_val"]  = (.memory * {"format": "{}"})
            else . end)
 
-        # backlight icon above percent
-        | (if .backlight? then .backlight.format = "{icon}\n{percent}" else . end)
-
-        # battery icon above percent
-        | (if .battery? then
-             .battery.format = "{icon}\n{capacity}"
-             | (if .battery["format-charging"]? then
-                  (.battery["format-charging"] | norm | firsttok) as $ico
-                  | .battery["format-charging"] = ($ico + "\n{capacity}")
-                else . end)
-             | (if .battery["format-plugged"]? then
-                  (.battery["format-plugged"] | norm | firsttok) as $ico
-                  | .battery["format-plugged"] = ($ico + "\n{capacity}")
-                else . end)
-           else . end)
-
-        # volume: hide icon
         | (if .wireplumber? then
-             .wireplumber.format = "{volume}"
-             | .wireplumber["format-bluetooth"] = "{volume}"
-             | .wireplumber["format-muted"] = "mute"
-             | .wireplumber["format-bluetooth-muted"] = "mute"
+             .["wireplumber#v_icon"] =
+               (.wireplumber
+                 * {"format":"{icon}",
+                    "format-bluetooth":"{icon}",
+                    "format-muted":"",
+                    "format-bluetooth-muted":""})
+             | .["wireplumber#v_val"] =
+               (.wireplumber
+                 * {"format":"{volume}",
+                    "format-bluetooth":"{volume}",
+                    "format-muted":"mute",
+                    "format-bluetooth-muted":"mute"})
            else . end)
 
-        # VERTICAL_WRAPPERS_BEGIN
-        # custom modules: run wrapper scripts that emit vertical-friendly output.
-        # cputemp wrapper emits JSON with "\n" in text, so set return-type json here.
         | (if ($b["custom/cputemp"]? != null) then
-             .["custom/cputemp"] = ($b["custom/cputemp"] * {"exec":$cputemp_exec_v, "return-type":"json"})
+             .["custom/cputemp#v_icon"] =
+               ($b["custom/cputemp"] * {"exec": ($cputemp_exec_v + " icon"), "format":"{}"})
+             | .["custom/cputemp#v_val"] =
+               ($b["custom/cputemp"] * {"exec": ($cputemp_exec_v + " temp"), "format":"{}"})
            else . end)
+
         | (if ($b["custom/clock-toggle"]? != null) then
-             .["custom/clock-toggle"] = ($b["custom/clock-toggle"] * {"exec":$clock_toggle_exec_v})
+             .["custom/clock-toggle#v_icon"] =
+               ($b["custom/clock-toggle"]
+                 * {"exec": ($clock_toggle_exec_v + " icon"), "return-type":"json"})
+             | .["custom/clock-toggle#v_a"] =
+               (($b["custom/clock-toggle"]
+                  * {"exec": ($clock_toggle_exec_v + " a"), "return-type":"json"})
+                 | del(."on-click", ."on-click-right", ."on-scroll-up", ."on-scroll-down"))
+             | .["custom/clock-toggle#v_b"] =
+               (($b["custom/clock-toggle"]
+                  * {"exec": ($clock_toggle_exec_v + " b"), "return-type":"json"})
+                 | del(."on-click", ."on-click-right", ."on-scroll-up", ."on-scroll-down"))
            else . end)
-        # VERTICAL_WRAPPERS_END
 
       else
         del(.width) | .height = $hheight
@@ -280,122 +325,129 @@ JQ
     --argjson vwidth "$WAYBAR_VERTICAL_WIDTH" \
     --argjson hdef "$WAYBAR_HORIZONTAL_HEIGHT_DEFAULT" \
     --slurpfile cfg "$TEMPLATE_CFG" \
-    -f "$jqf" > "$out"
+    -f "$jqf" >"$out"
 
   rm -f "$jqf"
 }
 
-start_mon() {
-  local mon="$1" pos cfg pf pid
-  pos="$(get_pos "$mon")"
-  cfg="$(cfgfile_for "$mon")"
-  pf="$(pidfile_for "$mon")"
+start_one() {
+  local mon="$1"
+  ensure_state
 
+  [[ "$(global_enabled)" == "true" ]] || return 0
+  [[ "$(monitor_enabled "$mon")" == "true" ]] || return 0
+
+  local pid cfg pos
+  pos="$(monitor_position "$mon")"
+  cfg="$(cfg_file_for "$mon")"
   gen_cfg_mon "$mon" "$pos" "$cfg"
 
-  if [[ -f "$pf" ]]; then
-    pid="$(cat "$pf" 2>/dev/null || true)"
-    pid_alive "$pid" || rm -f "$pf"
+  pid="$(read_pid "$mon" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && pid_alive "$pid"; then
+    return 0
   fi
 
-  log "start $mon pos=$pos"
-  if [[ -f "$STYLE_CSS" ]]; then
-    nohup waybar -c "$cfg" -s "$STYLE_CSS" >/dev/null 2>&1 &
-  else
-    nohup waybar -c "$cfg" >/dev/null 2>&1 &
-  fi
+  log "starting $mon at $pos"
+  nohup waybar -c "$cfg" -s "$STYLE_CSS" >/dev/null 2>&1 &
   pid="$!"
-  echo "$pid" > "$pf"
-  disown || true
+  write_pid "$mon" "$pid"
 
-  sleep 0.15
+  sleep 0.08
   if ! pid_alive "$pid"; then
-    rm -f "$pf"
     printf 'waybar.sh: waybar crashed starting monitor %s\n' "$mon" >&2
     printf 'try:\n  waybar -c %s -s %s\n' "$cfg" "$STYLE_CSS" >&2
-    exit 1
+    clear_pid "$mon"
+    return 1
   fi
+}
+
+stop_one() {
+  local mon="$1" pid
+  pid="$(read_pid "$mon" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && pid_alive "$pid"; then
+    log "stopping $mon pid $pid"
+    kill "$pid" 2>/dev/null || true
+    sleep 0.05
+    pid_alive "$pid" && kill -9 "$pid" 2>/dev/null || true
+  fi
+  clear_pid "$mon"
 }
 
 start_all() {
-  ensure_state
-  [[ "$(global_enabled)" == "true" ]] || return 0
-
   local mons m
   mons="$(monitors_json)"
-  for m in $(jq -r '.[]' <<<"$mons"); do
-    if [[ "$(get_mon_enabled "$m")" == "true" ]]; then
-      if ! mon_pid "$m" >/dev/null 2>&1; then
-        start_mon "$m"
-      fi
-    fi
-  done
+  while read -r m; do
+    start_one "$m" || true
+  done < <(jq -r '.[]' <<<"$mons")
 }
 
 stop_all() {
-  ensure_state
   local mons m
   mons="$(monitors_json)"
-  for m in $(jq -r '.[]' <<<"$mons"); do
-    stop_mon "$m"
-  done
+  while read -r m; do
+    stop_one "$m" || true
+  done < <(jq -r '.[]' <<<"$mons")
 }
 
+restart_all() { stop_all; start_all; }
+
 status() {
-  ensure_state
-  local mons m
+  local mons m pid
   mons="$(monitors_json)"
-  for m in $(jq -r '.[]' <<<"$mons"); do
-    if mon_pid "$m" >/dev/null 2>&1; then
-      echo running
+  while read -r m; do
+    pid="$(read_pid "$m" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && pid_alive "$pid"; then
+      printf 'running\n'
       return 0
     fi
-  done
-  echo stopped
+  done < <(jq -r '.[]' <<<"$mons")
+  printf 'stopped\n'
 }
 
 toggle_mon() {
   local mon="${1:-}"
-  [[ -n "$mon" ]] || { printf 'waybar.sh: toggle-mon <MON>\n' >&2; exit 2; }
+  [[ -n "$mon" ]] || { printf 'waybar.sh: toggle-mon <MON>
+' >&2; exit 2; }
 
-  if mon_pid "$mon" >/dev/null 2>&1; then
-    set_mon_enabled "$mon" false
-    stop_mon "$mon"
+  ensure_state
+
+  # Decide toggle by ACTUAL running process, not by possibly-stale enabled flags.
+  local pid=""
+  pid="$(read_pid "$mon" 2>/dev/null || true)"
+  if [[ -n "$pid" ]] && pid_alive "$pid"; then
+    set_monitor_enabled "$mon" false
+    stop_one "$mon"
     return 0
   fi
 
-  rm -f "$(pidfile_for "$mon")" 2>/dev/null || true
-
+  clear_pid "$mon" 2>/dev/null || true
   set_global_enabled true
-  set_mon_enabled "$mon" true
-  start_mon "$mon"
+  set_monitor_enabled "$mon" true
+  start_one "$mon"
 }
-
 toggle_focused() {
   local mon
   mon="$(focused_monitor)" || { printf 'waybar.sh: cannot determine focused monitor\n' >&2; exit 1; }
   toggle_mon "$mon"
 }
 
+setpos_mon() {
+  local mon="$1" pos="$2"
+  set_monitor_position "$mon" "$pos"
+  stop_one "$mon"
+  start_one "$mon"
+}
+
 setpos_focused() {
-  local pos="${1:-}"
-  [[ -n "$pos" ]] || { printf 'waybar.sh: setpos-focused <top|bottom|left|right>\n' >&2; exit 2; }
-  case "$pos" in top|bottom|left|right) ;; *) printf 'waybar.sh: invalid pos: %s\n' "$pos" >&2; exit 2 ;; esac
-
-  local mon pid
-  mon="$(focused_monitor)" || exit 1
-  set_pos "$mon" "$pos"
-
-  if pid="$(mon_pid "$mon" 2>/dev/null || true)"; [[ -n "$pid" ]]; then
-    stop_mon "$mon"
-    start_mon "$mon"
-  fi
+  local pos="$1" mon
+  mon="$(focused_monitor)" || { printf 'waybar.sh: cannot determine focused monitor\n' >&2; exit 1; }
+  setpos_mon "$mon" "$pos"
 }
 
 flip_focused() {
   local mon cur nxt
-  mon="$(focused_monitor)" || exit 1
-  cur="$(get_pos "$mon")"
+  mon="$(focused_monitor)" || { printf 'waybar.sh: cannot determine focused monitor\n' >&2; exit 1; }
+  cur="$(monitor_position "$mon")"
   case "$cur" in
     top) nxt=bottom ;;
     bottom) nxt=top ;;
@@ -403,52 +455,84 @@ flip_focused() {
     right) nxt=left ;;
     *) nxt=bottom ;;
   esac
-  setpos_focused "$nxt"
+  setpos_mon "$mon" "$nxt"
 }
 
-case "${1:-}" in
-  start) start_all ;;
-  stop) stop_all ;;
-  restart) stop_all; start_all ;;
-  status) status ;;
+dump_state() {
+  ensure_state
+  cat "$STATE_FILE"
+}
 
-  focused-monitor) focused_monitor || true ;;
-
-  toggle-focused) toggle_focused ;;
-  toggle-mon) toggle_mon "${2:-}" ;;
-
-  getpos) get_pos "${2:-}" ;;
-  getpos-focused) get_pos "$(focused_monitor)" ;;
-  getenabled) get_mon_enabled "${2:-}" ;;
-  getenabled-focused) get_mon_enabled "$(focused_monitor)" ;;
-
-  setpos-focused) setpos_focused "${2:-}" ;;
-  flip-focused) flip_focused ;;
-
-  dump-state) ensure_state; cat "$STATE_FILE" ;;
-  *)
-    cat >&2 <<'USAGE'
+usage() {
+  cat >&2 <<'EOF'
 usage: waybar.sh <command>
 
 global:
   start | stop | restart | status
+  enable | disable
+  dump-state
 
 focused:
   focused-monitor
   toggle-focused
-  setpos-focused <top|bottom|left|right>
-  flip-focused
   getpos-focused
   getenabled-focused
+  setpos-focused <top|bottom|left|right>
+  flip-focused
 
-specific:
+per-monitor:
   toggle-mon <MON>
   getpos <MON>
   getenabled <MON>
+  setpos <MON> <top|bottom|left|right>
+EOF
+}
 
-debug:
-  dump-state
-USAGE
-    exit 2
+cmd="${1:-}"
+case "$cmd" in
+  start) start_all ;;
+  stop) stop_all ;;
+  restart) restart_all ;;
+  status) status ;;
+
+  enable) set_global_enabled true; start_all ;;
+  disable) set_global_enabled false; stop_all ;;
+
+  focused-monitor) focused_monitor || true ;;
+  dump-state) dump_state ;;
+
+  getpos)
+    [[ -n "${2:-}" ]] || { usage; exit 2; }
+    monitor_position "$2"
     ;;
+  getpos-focused)
+    mon="$(focused_monitor)" || exit 1
+    monitor_position "$mon"
+    ;;
+  getenabled)
+    [[ -n "${2:-}" ]] || { usage; exit 2; }
+    monitor_enabled "$2"
+    ;;
+  getenabled-focused)
+    mon="$(focused_monitor)" || exit 1
+    monitor_enabled "$mon"
+    ;;
+
+  toggle-focused) toggle_focused ;;
+  toggle-mon)
+    [[ -n "${2:-}" ]] || { usage; exit 2; }
+    toggle_mon "$2"
+    ;;
+  setpos)
+    [[ -n "${2:-}" && -n "${3:-}" ]] || { usage; exit 2; }
+    setpos_mon "$2" "$3"
+    ;;
+  setpos-focused)
+    [[ -n "${2:-}" ]] || { usage; exit 2; }
+    setpos_focused "$2"
+    ;;
+  flip-focused) flip_focused ;;
+
+  ""|-h|--help|help) usage; exit 0 ;;
+  *) usage; exit 2 ;;
 esac

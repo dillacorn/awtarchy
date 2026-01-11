@@ -40,15 +40,15 @@ window#waybar.bottom { margin: 0; }
 /* === Workspaces (no gaps) === */
 #workspaces {
   background: transparent;
-  margin-right: 0;     /* no gap after workspaces */
+  margin-right: 0;
   padding-right: 0;
 }
 #workspaces button {
   background: transparent;
   color: @color-default;
-  padding: 0 8px;      /* inner padding only */
+  padding: 0 8px;
   border: 0;
-  margin: 0;           /* no gaps between buttons */
+  margin: 0;
 }
 #workspaces button:hover {
   background: rgba(198, 208, 245, 0.08);
@@ -66,7 +66,7 @@ window#waybar.bottom { margin: 0; }
 #group-ws-arrows {
   background: transparent;
   padding: 0;
-  margin-left: 0;     /* sits flush against workspaces */
+  margin-left: 0;
   margin-right: 6px;
 }
 #custom-ws-hub,
@@ -203,7 +203,7 @@ window#waybar.bottom { margin: 0; }
 /* === Vertical bar tweaks (left/right) === */
 window#waybar.left,
 window#waybar.right {
-  padding: 0; /* override: window#waybar { padding: 0 6px; } */
+  padding: 0;
 }
 
 /* tighten common modules when vertical */
@@ -251,3 +251,18 @@ window#waybar.right #workspaces button {
   padding: 6px 0;
 }
 
+/* vertical fixed-width columns so icons/values visually align */
+window#waybar.left #custom-cputemp,
+window#waybar.right #custom-cputemp,
+window#waybar.left #wireplumber,
+window#waybar.right #wireplumber,
+window#waybar.left #custom-clock-toggle,
+window#waybar.right #custom-clock-toggle {
+  min-width: 36px;
+}
+
+/* tiny nudge for the thermostat glyph so it doesn't look left-biased */
+window#waybar.left #custom-cputemp,
+window#waybar.right #custom-cputemp {
+  padding-left: 1px;
+}
