@@ -3,6 +3,10 @@
 #
 # Toggle a dedicated fuzzel launcher instance (only the instance launched by this script).
 #
+# New behavior:
+# - If THIS launcher is already open -> close it and exit (toggle).
+# - If ANOTHER fuzzel is open (cliphist/select_theme/etc) -> close it, then open the launcher.
+#
 # Anchor rules:
 # - If user passes --anchor/--anchor=..., never override.
 # - If --from-waybar is set: compute a corner anchor based on focused monitor bar position,
@@ -14,6 +18,7 @@
 #       do not force anchor (your fuzzel.ini anchor applies, e.g. center).
 
 set -euo pipefail
+exec </dev/null
 
 FUZZEL_BIN="${FUZZEL_BIN:-fuzzel}"
 USER_FUZZEL_CFG="${USER_FUZZEL_CFG:-${XDG_CONFIG_HOME:-$HOME/.config}/fuzzel/fuzzel.ini}"
@@ -21,8 +26,12 @@ USER_FUZZEL_CFG="${USER_FUZZEL_CFG:-${XDG_CONFIG_HOME:-$HOME/.config}/fuzzel/fuz
 SCRIPTS_DIR="${SCRIPTS_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts}"
 WAYBAR_SH="${WAYBAR_SH:-${SCRIPTS_DIR}/waybar.sh}"
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/fuzzel-toggle"
-RUNTIME_CFG="${RUNTIME_DIR}/fuzzel-toggle.ini"
+RUNTIME_BASE="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
+RUNTIME_DIR="${RUNTIME_DIR:-$RUNTIME_BASE/fuzzel-toggle}"
+RUNTIME_CFG="${RUNTIME_CFG:-$RUNTIME_DIR/fuzzel-toggle.ini}"
+
+# If any other fuzzel is open (cliphist/select_theme/etc), kill it so app launcher can open.
+KILL_OTHER_FUZZEL="${KILL_OTHER_FUZZEL:-1}"   # 1=yes, 0=no
 
 DEFAULT_ARGS=()
 
@@ -75,6 +84,51 @@ passthru_has_anchor() {
     esac
   done
   return 1
+}
+
+kill_pids() {
+  local pids="${1:-}"
+  [[ -n "$pids" ]] || return 0
+
+  log "killing fuzzel pid(s): $pids"
+  # shellcheck disable=SC2086
+  kill $pids 2>/dev/null || true
+
+  for _ in {1..12}; do
+    local alive=0 pid
+    for pid in $pids; do
+      kill -0 "$pid" 2>/dev/null && alive=1 || true
+    done
+    [[ "$alive" == "0" ]] && break
+    sleep 0.05
+  done
+
+  local still=0 pid
+  for pid in $pids; do
+    kill -0 "$pid" 2>/dev/null && still=1 || true
+  done
+
+  if [[ "$still" == "1" ]]; then
+    log "still alive after TERM; sending KILL"
+    # shellcheck disable=SC2086
+    kill -KILL $pids 2>/dev/null || true
+    sleep 0.05
+  fi
+
+  # If no fuzzel is running, clean stale lock(s) so new instance can start.
+  if ! pgrep -u "$UID" -x fuzzel >/dev/null 2>&1; then
+    rm -f -- "$RUNTIME_BASE"/fuzzel-*.lock 2>/dev/null || true
+  fi
+}
+
+ours_pids() {
+  (pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true) \
+    | awk -v m="$RUNTIME_CFG" 'index($0,m){print $1}'
+}
+
+other_pids() {
+  (pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true) \
+    | awk -v m="$RUNTIME_CFG" '!index($0,m){print $1}'
 }
 
 # Detect if waybar is actually visible on the focused monitor by matching the
@@ -146,16 +200,27 @@ compute_anchor() {
   fi
 }
 
-ANCHOR_OVERRIDE=""
+# Toggle: if OUR instance is open, close it and exit.
+pids="$(ours_pids || true)"
+if [[ -n "${pids:-}" ]]; then
+  log "closing existing launcher instance: $pids"
+  kill_pids "$pids"
+  exit 0
+fi
 
+# If opening, kill OTHER fuzzel instances first so this launcher actually appears.
+if [[ "$KILL_OTHER_FUZZEL" == "1" ]]; then
+  opids="$(other_pids || true)"
+  [[ -n "${opids:-}" ]] && kill_pids "$opids"
+fi
+
+ANCHOR_OVERRIDE=""
 if ! passthru_has_anchor; then
   if [[ "$FROM_WAYBAR" == "1" ]]; then
-    # Only override if waybar is actually on the focused monitor.
     if waybar_visible_on_focused_monitor; then
       ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
     fi
   else
-    # Only override if user opted-in via fuzzel.ini anchor= AND waybar is on the focused monitor.
     if waybar_visible_on_focused_monitor && user_anchor_opt_in; then
       ANCHOR_OVERRIDE="$(compute_anchor "$(bar_pos)")"
     fi
@@ -163,7 +228,6 @@ if ! passthru_has_anchor; then
 fi
 
 # Build runtime config without include= (portable).
-# fuzzel allows reopening [main] after other sections.
 {
   if [[ -f "$USER_FUZZEL_CFG" ]]; then
     cat "$USER_FUZZEL_CFG"
@@ -187,29 +251,6 @@ if [[ "$DEBUG" != "0" ]]; then
   else
     log "config check ok"
   fi
-fi
-
-# Only close the instance launched by this script (matched by --config path).
-pids="$(
-  (pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true) \
-  | awk -v m="$RUNTIME_CFG" 'index($0,m){print $1}'
-)"
-
-if [[ -n "${pids:-}" ]]; then
-  log "closing existing instance: $pids"
-  # shellcheck disable=SC2086
-  kill $pids 2>/dev/null || true
-
-  for _ in {1..40}; do
-    (pgrep -u "$UID" -x fuzzel -a 2>/dev/null || true) \
-      | awk -v m="$RUNTIME_CFG" 'index($0,m){found=1} END{exit !found}' \
-      || exit 0
-    sleep 0.025
-  done
-
-  # shellcheck disable=SC2086
-  kill -KILL $pids 2>/dev/null || true
-  exit 0
 fi
 
 if [[ "$DEBUG" == "2" ]]; then
