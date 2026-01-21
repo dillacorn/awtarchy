@@ -62,6 +62,11 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 ## 📦 Optional Packages
 - [Optional Packages link](extra_notes/optional_packages.md)
 
+## ☕ Donate
+
+Built and maintained out of passion. Always FOSS. Donations appreciated.  
+[Donate via PayPal](https://www.paypal.com/donate/?business=XSNV4QP8JFY9Y&no_recurring=0&item_name=Built+and+maintained+out+of+passion.+Always+FOSS.+Donations+appreciated.+%28smtty%2C+MicLockTray%2C+awtarchy%29&currency_code=USD)
+
 
 
 
