@@ -140,9 +140,9 @@ flatpak install flathub com.heroicgameslauncher.hgl
 
 - **Heroic Games Launcher** – Epic, GOG, Amazon
 
-### Proton Updater (ProtonPlus)
+### Custom Proton Installer (easy Proton-GE install)
 ```bash
-flatpak install flathub com.vysp3r.ProtonPlus
+sudo pacman -S protonup-qt
 ```
 
 ---
