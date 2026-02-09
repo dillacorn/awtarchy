@@ -1,142 +1,238 @@
-#!/bin/bash
-# github.com/dillacorn/awtarchy/tree/main/scripts
-# install_GPU_dependencies.sh
+#!/usr/bin/env bash
+set -euo pipefail
 
-# Define colors for output
-RED='\033[1;31m'
-GREEN='\033[1;32m'
-YELLOW='\033[1;33m'
-BLUE='\033[1;34m'
-NC='\033[0m' # No Color
+ts() { date +%F_%H%M%S; }
 
-# Retry a command up to 3 times if it fails
-retry_command() {
-    local retries=3
-    local delay=2
-    local count=0
-    until "$@"; do
-        ((count++))
-        if [[ $count -ge $retries ]]; then
-            echo -e "${RED}Command failed after $retries attempts: $*${NC}"
-            return 1
-        fi
-        echo -e "${YELLOW}Retrying in $delay seconds...${NC}"
-        sleep $delay
-    done
+die(){ echo "ERROR: $*" >&2; exit 1; }
+have(){ command -v "$1" >/dev/null 2>&1; }
+
+as_root(){
+  sudo -n true 2>/dev/null || sudo -v
+  sudo "$@"
 }
 
-# Safely remove NVIDIA drivers without touching firmware files
-clean_nvidia_drivers() {
-    echo -e "${BLUE}Checking for NVIDIA drivers...${NC}"
-    local nvidia_pkgs
-    nvidia_pkgs=$(pacman -Qq | grep -E '^nvidia|^lib32-nvidia|nvidia-settings')
+backup_file(){
+  local f b
+  f="$1"
+  [[ -f "$f" ]] || return 0
+  b="${f}.bak.$(ts)"
+  as_root cp -a "$f" "$b"
+}
 
-    if [[ -n "$nvidia_pkgs" ]]; then
-        echo -e "${YELLOW}Removing NVIDIA packages...${NC}"
-        echo -e "${BLUE}Found packages:\n$nvidia_pkgs${NC}"
+bootstrap_yay(){
+  have yay && return 0
+  local tmp
+  tmp="$(mktemp -d)"
+  trap 'rm -rf "$tmp"' RETURN
+  cd "$tmp"
+  git clone https://aur.archlinux.org/yay.git
+  cd yay
+  makepkg -si --noconfirm --needed --syncdeps
+  have yay || die "Failed to install yay."
+}
 
-        IFS=$'\n' read -rd '' -a nvidia_array <<< "$nvidia_pkgs"
-        retry_command pacman -Rns --noconfirm "${nvidia_array[@]}"
+ensure_dkms_headers(){
+  local krel
+  krel="$(uname -r || true)"
+  if [[ "$krel" == *cachy* ]] || pacman -Q linux-cachyos >/dev/null 2>&1; then
+    as_root pacman -S --needed --noconfirm dkms linux-cachyos-headers
+  else
+    as_root pacman -S --needed --noconfirm dkms linux-headers
+  fi
+}
 
-        # Reinstall linux-firmware to ensure clean state (without forcing overwrites)
-        echo -e "${BLUE}Ensuring firmware is in clean state...${NC}"
-        retry_command pacman -S --noconfirm --needed linux-firmware
-    else
-        echo -e "${GREEN}No NVIDIA packages found.${NC}"
+patch_systemd_boot_modeset(){
+  local dir e
+  dir="/boot/loader/entries"
+  [[ -d "$dir" ]] || return 0
+
+  read -r -d '' perl_prog <<'PERL' || true
+if (/^\s*options\s+/) {
+  chomp;
+  if ($_ !~ /\bnvidia_drm\.modeset=1\b/) { $_ .= " nvidia_drm.modeset=1"; }
+  $_ .= "\n";
+}
+PERL
+
+  shopt -s nullglob
+  for e in "$dir"/*.conf; do
+    backup_file "$e"
+    as_root perl -i -pe "$perl_prog" "$e"
+  done
+}
+
+patch_grub_modeset(){
+  local f
+  f="/etc/default/grub"
+  [[ -f "$f" ]] || return 0
+
+  backup_file "$f"
+
+  read -r -d '' perl_prog <<'PERL' || true
+if (/^GRUB_CMDLINE_LINUX_DEFAULT=/) {
+  my ($k,$v)=split(/=/,$_,2);
+  $v =~ s/^\s*"?//; $v =~ s/"?\s*$//;
+  if ($v !~ /\bnvidia_drm\.modeset=1\b/) { $v .= " nvidia_drm.modeset=1"; }
+  $_ = $k . "=\"" . $v . "\"\n";
+}
+PERL
+
+  as_root perl -i -pe "$perl_prog" "$f"
+
+  if have grub-mkconfig; then
+    if [[ -f /boot/grub/grub.cfg ]]; then
+      as_root grub-mkconfig -o /boot/grub/grub.cfg
+    elif [[ -f /boot/grub2/grub.cfg ]]; then
+      as_root grub-mkconfig -o /boot/grub2/grub.cfg
     fi
+  fi
 }
 
-# Ensure the script is run with sudo/root privileges
-if [ "$(id -u)" -ne 0 ]; then
-    echo -e "${RED}This script must be run with sudo!${NC}"
-    exit 1
+patch_limine_modeset(){
+  local f c
+  local candidates=(
+    "/boot/limine/limine.conf"
+    "/boot/limine.conf"
+    "/boot/EFI/limine/limine.conf"
+    "/boot/limine/limine.cfg"
+    "/boot/limine.cfg"
+  )
+
+  f=""
+  for c in "${candidates[@]}"; do
+    [[ -f "$c" ]] || continue
+    f="$c"
+    break
+  done
+  [[ -n "$f" ]] || return 0
+
+  backup_file "$f"
+
+  read -r -d '' perl_prog <<'PERL' || true
+# Remove stray standalone modeset lines (common bad edit)
+s/^\s*nvidia_drm\.modeset=1\s*\n//mg;
+
+# "cmdline: ..." syntax
+if (/^\s*cmdline:\s*(.*)$/i) {
+  my $rest=$1;
+  $rest =~ s/\s+$//;
+  if ($rest !~ /\bnvidia_drm\.modeset=1\b/) {
+    $_ = "    cmdline: " . $rest . " nvidia_drm.modeset=1\n";
+  }
+}
+
+# "CMDLINE=..." syntax
+if (/^\s*(CMDLINE|KERNEL_CMDLINE)\s*=\s*(.*)$/i) {
+  my $k=$1; my $rest=$2;
+  $rest =~ s/\s+$//;
+  if ($rest !~ /\bnvidia_drm\.modeset=1\b/) {
+    $_ = $k . "=" . $rest . " nvidia_drm.modeset=1\n";
+  }
+}
+PERL
+
+  as_root perl -i -pe "$perl_prog" "$f"
+}
+
+patch_hyprland_for_nvidia(){
+  local conf
+  conf="${HOME}/.config/hypr/hyprland.conf"
+  [[ -f "$conf" ]] || return 0
+
+  cp -a "$conf" "${conf}.bak.$(ts)"
+
+  read -r -d '' perl_prog <<'PERL' || true
+s/^\s*no_hardware_cursors\s*=\s*2\s*$/no_hardware_cursors = true/m;
+
+s/^\s*#\s*env\s*=\s*__GLX_VENDOR_LIBRARY_NAME\s*,\s*nvidia\s*$/env = __GLX_VENDOR_LIBRARY_NAME,nvidia/m;
+s/^\s*#\s*env\s*=\s*LIBVA_DRIVER_NAME\s*,\s*nvidia\s*$/env = LIBVA_DRIVER_NAME,nvidia/m;
+PERL
+
+  perl -i -pe "$perl_prog" "$conf"
+
+  grep -qE '^\s*env\s*=\s*__GLX_VENDOR_LIBRARY_NAME\s*,\s*nvidia\s*$' "$conf" || \
+    printf '\n%s\n' 'env = __GLX_VENDOR_LIBRARY_NAME,nvidia' >> "$conf"
+
+  grep -qE '^\s*env\s*=\s*LIBVA_DRIVER_NAME\s*,\s*nvidia\s*$' "$conf" || \
+    printf '%s\n' 'env = LIBVA_DRIVER_NAME,nvidia' >> "$conf"
+
+  grep -qE '^\s*env\s*=\s*WLR_NO_HARDWARE_CURSORS\s*,\s*1\s*$' "$conf" || \
+    printf '%s\n' 'env = WLR_NO_HARDWARE_CURSORS,1' >> "$conf"
+}
+
+# Must NOT run as root because yay/makepkg must run as user
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  die "Run as your normal user. It will sudo when needed."
 fi
 
-# Detect if running in a virtual machine
 if systemd-detect-virt -q; then
-    echo -e "${YELLOW}Running in a virtual machine. Skipping GPU-specific configuration.${NC}"
-    exit 0
+  exit 0
 fi
 
-# Detect GPU type and apply appropriate settings for AMD, Intel, or NVIDIA users
-GPU_VENDOR=$(lspci | grep -i 'vga\|3d\|2d' | grep -i 'Radeon\|NVIDIA\|Intel\|Advanced Micro Devices')
+gpu_line="$(lspci -nn | grep -Ei 'vga|3d|2d' | head -n1 || true)"
+[[ -n "$gpu_line" ]] || die "No GPU found via lspci."
 
-echo -e "${BLUE}Detecting GPU vendor...${NC}"
+vendor="unknown"
+if echo "$gpu_line" | grep -qi nvidia; then vendor="nvidia"; fi
+if echo "$gpu_line" | grep -Eqi 'radeon|advanced micro devices|amd'; then vendor="amd"; fi
+if echo "$gpu_line" | grep -qi intel; then vendor="intel"; fi
+[[ "$vendor" != "unknown" ]] || exit 0
 
-if [ -z "$GPU_VENDOR" ]; then
-    echo -e "${RED}No AMD, NVIDIA, or Intel GPU detected. Skipping GPU-specific configuration.${NC}"
-    exit 0
+as_root pacman -Syu --noconfirm
+as_root pacman -S --needed --noconfirm \
+  mesa lib32-mesa \
+  vulkan-icd-loader lib32-vulkan-icd-loader \
+  libglvnd lib32-libglvnd \
+  git base-devel
+
+if [[ "$vendor" == "amd" ]]; then
+  as_root pacman -S --needed --noconfirm \
+    linux-firmware \
+    vulkan-radeon lib32-vulkan-radeon vulkan-tools \
+    libva-mesa-driver mesa-vdpau lib32-mesa-vdpau \
+    libva-utils || true
 fi
 
-# Update system and install core GPU dependencies
-echo -e "${BLUE}Updating system and installing GPU-specific dependencies...${NC}"
-retry_command pacman -Syu --noconfirm
-retry_command pacman -S --noconfirm lib32-mesa lib32-vulkan-icd-loader lib32-libglvnd
+if [[ "$vendor" == "intel" ]]; then
+  as_root pacman -S --needed --noconfirm \
+    vulkan-intel lib32-vulkan-intel \
+    libva-intel-driver libvdpau-va-gl \
+    libva-utils || true
+fi
 
-# AMD GPU Configuration
-if echo "$GPU_VENDOR" | grep -iq "Radeon\|Advanced Micro Devices"; then
-    echo -e "${GREEN}AMD GPU detected. Applying AMD-specific settings...${NC}"
+if [[ "$vendor" == "nvidia" ]]; then
+  need_legacy_580xx=0
+  if echo "$gpu_line" | grep -Eiq 'GTX (7[0-9]{2}|8[0-9]{2}|9[0-9]{2}|10[0-9]{2})'; then
+    need_legacy_580xx=1
+  fi
 
-    # Clean up any existing NVIDIA drivers to avoid conflicts
-    clean_nvidia_drivers
+  ensure_dkms_headers
+  as_root pacman -S --needed --noconfirm egl-wayland
 
-    # Install linux-firmware package which includes AMD firmware blobs
-    echo -e "${BLUE}Ensuring linux-firmware package is installed...${NC}"
-    retry_command pacman -S --needed --noconfirm linux-firmware
+  # remove official branches + conflicting legacy dkms branches
+  as_root pacman -Rns --noconfirm \
+    nvidia nvidia-utils lib32-nvidia-utils nvidia-settings \
+    nvidia-dkms nvidia-open nvidia-open-dkms \
+    opencl-nvidia lib32-opencl-nvidia 2>/dev/null || true
 
-    # Install Vulkan RADV driver, 32-bit Vulkan support, and tools
-    retry_command pacman -S --needed --noconfirm vulkan-radeon lib32-vulkan-radeon vulkan-tools
+  mapfile -t legacy_conflicts < <(pacman -Qq 2>/dev/null | grep -E '^nvidia-[0-9]{3}xx-dkms$' | grep -v '^nvidia-580xx-dkms$' || true)
+  if ((${#legacy_conflicts[@]})); then
+    as_root pacman -Rns --noconfirm "${legacy_conflicts[@]}" || true
+  fi
 
-    # Install AMD video decoding libraries (VA-API and VDPAU)
-    retry_command pacman -S --needed --noconfirm libva-mesa-driver mesa-vdpau lib32-mesa-vdpau
+  if [[ "$need_legacy_580xx" -eq 1 ]]; then
+    bootstrap_yay
+    yay -S --needed --noconfirm nvidia-580xx-dkms nvidia-580xx-utils lib32-nvidia-580xx-utils
+  else
+    as_root pacman -S --needed --noconfirm nvidia-open-dkms nvidia-utils lib32-nvidia-utils nvidia-settings
+  fi
 
-    # Install VA-API tools if not present
-    if ! command -v vainfo &> /dev/null; then
-        echo -e "${BLUE}Installing libva-utils for VA-API support...${NC}"
-        retry_command pacman -S --needed --noconfirm libva-utils
-    fi
+  as_root mkinitcpio -P
 
-    # Validate VA-API support
-    echo -e "${BLUE}Validating hardware acceleration (VA-API)...${NC}"
-    if ! vainfo; then
-        echo -e "${RED}VA-API not working properly.${NC}"
-        echo -e "${YELLOW}You may need to set environment variables:${NC}"
-        echo "export LIBVA_DRIVER_NAME=radeonsi"
-        echo "export VDPAU_DRIVER=radeonsi"
-    fi
+  patch_systemd_boot_modeset
+  patch_grub_modeset
+  patch_limine_modeset
+  patch_hyprland_for_nvidia
 
-# NVIDIA GPU Configuration
-elif echo "$GPU_VENDOR" | grep -iq "NVIDIA"; then
-    echo -e "${YELLOW}NVIDIA GPU detected. Applying NVIDIA-specific settings...${NC}"
-
-    # Install NVIDIA proprietary drivers if not already installed
-    if ! pacman -Qq nvidia &> /dev/null; then
-        echo -e "${BLUE}Installing NVIDIA proprietary drivers...${NC}"
-        retry_command pacman -S --noconfirm lib32-nvidia-utils nvidia nvidia-utils nvidia-settings
-
-        # Install video decoding libraries for NVIDIA
-        retry_command pacman -S --needed --noconfirm libvdpau libvdpau-va-gl
-    else
-        echo -e "${GREEN}NVIDIA proprietary drivers already installed.${NC}"
-    fi
-
-    echo -e "${YELLOW}You may need to set environment variables:${NC}"
-    echo "export LIBVA_DRIVER_NAME=vdpau"
-    echo "export VDPAU_DRIVER=nvidia"
-
-# Intel GPU Configuration
-elif echo "$GPU_VENDOR" | grep -iq "Intel"; then
-    echo -e "${YELLOW}Intel GPU detected. Applying Intel-specific settings...${NC}"
-
-    # Install Intel GPU drivers if not installed
-    if ! pacman -Qq xf86-video-intel &> /dev/null; then
-        echo -e "${BLUE}Installing Intel GPU driver...${NC}"
-        retry_command pacman -S --noconfirm xf86-video-intel libva-intel-driver libvdpau-va-gl
-    else
-        echo -e "${GREEN}Intel driver already installed.${NC}"
-    fi
-
-    echo -e "${YELLOW}You may need to set environment variables:${NC}"
-    echo "export LIBVA_DRIVER_NAME=i965"
-    echo "export VDPAU_DRIVER=va_gl"
+  echo "Reboot. Then run: nvidia-smi"
 fi
