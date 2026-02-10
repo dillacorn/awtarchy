@@ -74,11 +74,22 @@ print(tag)
 PY
 }
 
+urlencode_path_segment() {
+  python3 - "$1" <<'PY'
+import sys
+from urllib.parse import quote
+# Keep "/" unescaped (rare but possible in tags), encode everything else that could break URLs (like '#').
+print(quote(sys.argv[1], safe="/-._~"))
+PY
+}
+
 download_release_tarball() {
   local tag="$1"
   local out="$2"
-  local url="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/tags/${tag}.tar.gz"
+  local tag_enc
+  tag_enc="$(urlencode_path_segment "$tag")"
 
+  local url="https://github.com/${REPO_OWNER}/${REPO_NAME}/archive/refs/tags/${tag_enc}.tar.gz"
   curl "${CURL_ARGS[@]}" -L -o "$out" "$url" || die "Failed to download release tarball: $url"
 }
 
