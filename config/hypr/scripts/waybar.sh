@@ -48,6 +48,13 @@ CLOCK_TOGGLE_V="${CLOCK_TOGGLE_V:-$CONF/waybar/scripts/clock_toggle_vertical.sh}
 
 mkdir -p "$BASE_DIR" "$PER_DIR" "$LOG_DIR"
 
+# --------------------------
+# Per-invocation caches
+# --------------------------
+__MON_FULL_JSON=""
+__MON_NAMES_JSON=""
+__STATE_READY=0
+
 pid_alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
 proc_comm() { tr -d '\n' </proc/"$1"/comm 2>/dev/null || true; }
 
@@ -71,12 +78,17 @@ write_pid() {
 
 clear_pid() { rm -f "$(pid_file_for "$1")" 2>/dev/null || true; }
 
-pid_is_our_waybar() {
-  local pid="$1" cfg="$2" cur_wd cur_xrd pid_wd pid_xrd
+pid_cmd_has_cfg() {
+  local pid="$1" cfg="$2"
   pid_alive "$pid" || return 1
   [[ "$(proc_comm "$pid")" == "waybar" ]] || return 1
-
   tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null | grep -Fq -- " -c $cfg " || return 1
+  return 0
+}
+
+pid_is_our_waybar() {
+  local pid="$1" cfg="$2" cur_wd cur_xrd pid_wd pid_xrd
+  pid_cmd_has_cfg "$pid" "$cfg" || return 1
 
   cur_wd="${WAYLAND_DISPLAY:-}"
   if [[ -n "$cur_wd" ]]; then
@@ -91,6 +103,16 @@ pid_is_our_waybar() {
   fi
 
   return 0
+}
+
+hyprctl_json() {
+  # Guard against hyprctl hangs during relogin.
+  # timeout is standard on Arch (coreutils); fallback if missing.
+  if command -v timeout >/dev/null 2>&1; then
+    timeout 0.25 hyprctl "$@" 2>/dev/null || true
+  else
+    hyprctl "$@" 2>/dev/null || true
+  fi
 }
 
 ensure_template_json() {
@@ -219,38 +241,64 @@ PY
   }
 }
 
-monitors_json() {
+monitors_full_json() {
   local raw
   local -i attempts=40 n=0
+
+  if [[ -n "$__MON_FULL_JSON" ]]; then
+    printf '%s' "$__MON_FULL_JSON"
+    return 0
+  fi
+
   while (( n < attempts )); do
-    raw="$(hyprctl monitors -j 2>/dev/null || true)"
-    if [[ -n "$raw" ]] && jq -e 'type=="array"' >/dev/null 2>&1 <<<"$raw"; then
-      jq -c '[.[].name]' <<<"$raw"
+    raw="$(hyprctl_json monitors -j)"
+    if [[ -n "$raw" ]] && jq -e 'type=="array" and length>0' >/dev/null 2>&1 <<<"$raw"; then
+      __MON_FULL_JSON="$raw"
+      printf '%s' "$__MON_FULL_JSON"
       return 0
     fi
     sleep 0.05
     (( n++ ))
   done
-  printf '[]'
+
+  __MON_FULL_JSON='[]'
+  printf '%s' "$__MON_FULL_JSON"
+}
+
+monitors_json() {
+  local full
+  if [[ -n "$__MON_NAMES_JSON" ]]; then
+    printf '%s' "$__MON_NAMES_JSON"
+    return 0
+  fi
+
+  full="$(monitors_full_json)"
+  if jq -e 'type=="array" and length>0' >/dev/null 2>&1 <<<"$full"; then
+    __MON_NAMES_JSON="$(jq -c '[.[].name]' <<<"$full")"
+  else
+    __MON_NAMES_JSON='[]'
+  fi
+  printf '%s' "$__MON_NAMES_JSON"
 }
 
 monitor_height() {
-  local mon="$1" h
-  h="$(hyprctl monitors -j 2>/dev/null | jq -r --arg m "$mon" '.[] | select(.name==$m) | .height // empty' | head -n1)"
+  local mon="$1" full h
+  full="$(monitors_full_json)"
+  h="$(jq -r --arg m "$mon" '.[] | select(.name==$m) | .height // empty' <<<"$full" | head -n1)"
   [[ "$h" =~ ^[0-9]+$ ]] || h=0
   printf '%s\n' "$h"
 }
 
 cursor_monitor() {
   local pos x y
-  pos="$(hyprctl cursorpos 2>/dev/null || true)"
+  pos="$(hyprctl_json cursorpos)"
   [[ -n "$pos" ]] || return 1
 
   x="$(printf '%s' "$pos" | awk -F',' '{gsub(/[[:space:]]/,"",$1); print $1}')"
   y="$(printf '%s' "$pos" | awk -F',' '{gsub(/[[:space:]]/,"",$2); print $2}')"
   [[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ ]] || return 1
 
-  hyprctl monitors -j | jq -r --argjson x "$x" --argjson y "$y" '
+  hyprctl_json monitors -j | jq -r --argjson x "$x" --argjson y "$y" '
     .[]
     | select(($x >= .x) and ($x < (.x + .width)) and ($y >= .y) and ($y < (.y + .height)))
     | .name
@@ -258,7 +306,7 @@ cursor_monitor() {
 }
 
 activeworkspace_monitor() {
-  hyprctl activeworkspace -j 2>/dev/null | jq -r '.monitor // empty' | head -n1
+  hyprctl_json activeworkspace -j | jq -r '.monitor // empty' | head -n1
 }
 
 focused_monitor() {
@@ -274,7 +322,17 @@ focused_monitor() {
 
 ensure_state() {
   local mons tmp
+  if [[ "$__STATE_READY" == "1" ]]; then
+    return 0
+  fi
+
   mons="$(monitors_json)"
+
+  # If we still don't have monitors, don't touch state.
+  if ! jq -e 'type=="array" and length>0' >/dev/null 2>&1 <<<"$mons"; then
+    __STATE_READY=1
+    return 0
+  fi
 
   if [[ -s "$STATE_FILE" ]]; then
     jq -e '.' "$STATE_FILE" >/dev/null 2>&1 || rm -f "$STATE_FILE"
@@ -284,6 +342,7 @@ ensure_state() {
     jq -n --argjson mons "$mons" '
       { enabled: true, monitors: ($mons | map({(.): {position:"top", enabled:true}}) | add) }
     ' >"$STATE_FILE"
+    __STATE_READY=1
     return 0
   fi
 
@@ -302,9 +361,12 @@ ensure_state() {
       }
   ' "$STATE_FILE" >"$tmp"
   mv -f "$tmp" "$STATE_FILE"
+  __STATE_READY=1
 }
 
-global_enabled() { ensure_state; jq -r '(.enabled // true) | if . then "true" else "false" end' "$STATE_FILE"; }
+global_enabled() { ensure_state; [[ -s "$STATE_FILE" ]] && jq -r '(.enabled // true) | if . then "true" else "false" end' "$STATE_FILE" || printf 'true\n'; }
+monitor_enabled() { ensure_state; jq -r --arg m "$1" '(.monitors[$m].enabled // true) | if . then "true" else "false" end' "$STATE_FILE"; }
+monitor_position() { ensure_state; jq -r --arg m "$1" '.monitors[$m].position // "top"' "$STATE_FILE"; }
 
 set_global_enabled() {
   local v="${1:-}" jv
@@ -314,11 +376,9 @@ set_global_enabled() {
     *) printf 'waybar.sh: enable expects true/false\n' >&2; exit 2 ;;
   esac
   ensure_state
+  [[ -s "$STATE_FILE" ]] || printf '{ "enabled": true, "monitors": {} }\n' >"$STATE_FILE"
   jq --argjson v "$jv" '.enabled = $v' "$STATE_FILE" >"$STATE_FILE.tmp" && mv -f "$STATE_FILE.tmp" "$STATE_FILE"
 }
-
-monitor_enabled() { ensure_state; jq -r --arg m "$1" '(.monitors[$m].enabled // true) | if . then "true" else "false" end' "$STATE_FILE"; }
-monitor_position() { ensure_state; jq -r --arg m "$1" '.monitors[$m].position // "top"' "$STATE_FILE"; }
 
 set_monitor_enabled() {
   local mon="$1" v="$2" jv
@@ -350,7 +410,6 @@ gen_cfg_mon() {
   local jqf
   jqf="$(mktemp)"
 
-  # Vertical fix: set height to monitor height (not 0), so bar spans full screen length.
   cat >"$jqf" <<'JQ'
 def base:
   if ($cfg[0] | type) == "array" then $cfg[0][0] else $cfg[0] end;
@@ -489,7 +548,13 @@ start_one() {
     return 0
   fi
 
-  if [[ -n "$pid" ]] && pid_alive "$pid"; then
+  # If we have a stale/old waybar for this cfg, kill it.
+  if [[ -n "$pid" ]] && pid_cmd_has_cfg "$pid" "$cfg"; then
+    kill "$pid" 2>/dev/null || true
+    sleep 0.05
+    pid_alive "$pid" && kill -9 "$pid" 2>/dev/null || true
+    clear_pid "$mon"
+  elif [[ -n "$pid" ]] && pid_alive "$pid"; then
     clear_pid "$mon"
   fi
 
@@ -498,7 +563,7 @@ start_one() {
   pid="$!"
   write_pid "$mon" "$pid"
 
-  sleep 0.12
+  sleep 0.10
   if ! pid_alive "$pid"; then
     printf 'waybar.sh: waybar crashed starting monitor %s\n' "$mon" >&2
     printf 'log:\n  %s\n' "$logf" >&2
@@ -517,6 +582,10 @@ stop_one() {
     kill "$pid" 2>/dev/null || true
     sleep 0.05
     pid_alive "$pid" && kill -9 "$pid" 2>/dev/null || true
+  elif [[ -n "$pid" ]] && pid_cmd_has_cfg "$pid" "$cfg"; then
+    kill "$pid" 2>/dev/null || true
+    sleep 0.05
+    pid_alive "$pid" && kill -9 "$pid" 2>/dev/null || true
   fi
 
   clear_pid "$mon"
@@ -524,6 +593,7 @@ stop_one() {
 
 start_all() {
   local mons m
+  ensure_state
   mons="$(monitors_json)"
   while read -r m; do
     start_one "$m" || true
@@ -546,7 +616,7 @@ status() {
   while read -r m; do
     cfg="$(cfg_file_for "$m")"
     pid="$(read_pid "$m" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && pid_is_our_waybar "$pid" "$cfg"; then
+    if [[ -n "$pid" ]] && pid_cmd_has_cfg "$pid" "$cfg"; then
       printf 'running\n'
       return 0
     fi
@@ -564,7 +634,7 @@ toggle_mon() {
   cfg="$(cfg_file_for "$mon")"
   pid="$(read_pid "$mon" 2>/dev/null || true)"
 
-  if [[ -n "$pid" ]] && pid_is_our_waybar "$pid" "$cfg"; then
+  if [[ -n "$pid" ]] && pid_cmd_has_cfg "$pid" "$cfg"; then
     set_monitor_enabled "$mon" false
     stop_one "$mon"
     return 0
@@ -609,7 +679,7 @@ flip_focused() {
   setpos_mon "$mon" "$nxt"
 }
 
-dump_state() { ensure_state; cat "$STATE_FILE"; }
+dump_state() { ensure_state; [[ -s "$STATE_FILE" ]] && cat "$STATE_FILE" || true; }
 
 usage() {
   cat >&2 <<'EOF'
