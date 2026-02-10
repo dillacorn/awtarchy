@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 # ~/.config/hypr/scripts/waybar_toggle_idle.sh
 #
-# Called by hypridle on-timeout:
-# - If ANY managed waybar instance is running, stop ALL of them and write an idle marker.
-# - If none are running, do nothing and clear the marker (prevents unwanted restore).
+# hypridle on-timeout:
+# - If managed waybar is running, stop it and write an idle marker
+# - If not running, do nothing and clear marker
 
 set -euo pipefail
 
@@ -21,46 +21,44 @@ PER_DIR="${PER_DIR:-${CACHE}/waybar/per-output}"
 [[ -x "$WAYBAR_SH" ]] || { printf 'waybar_toggle_idle: missing executable: %s\n' "$WAYBAR_SH" >&2; exit 1; }
 
 pid_alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+proc_comm() { tr -d '\n' </proc/"$1"/comm 2>/dev/null || true; }
 
-any_managed_waybar_running() {
-  local pidfile pid
-  [[ -d "$PER_DIR" ]] || return 1
+# Only kill if PID is waybar AND it was launched with our per-output config (-c <cfg>)
+pid_is_our_waybar() {
+  local pid="$1" cfg="$2"
+  pid_alive "$pid" || return 1
+  [[ "$(proc_comm "$pid")" == "waybar" ]] || return 1
+  tr '\0' ' ' </proc/"$pid"/cmdline 2>/dev/null | grep -Fq -- " -c $cfg " || return 1
+  return 0
+}
 
-  shopt -s nullglob
-  for pidfile in "$PER_DIR"/*.pid; do
-    pid="$(tr -d ' \t\r\n' <"$pidfile" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && pid_alive "$pid"; then
-      return 0
-    fi
-  done
-  return 1
+manager_running() {
+  [[ "$("$WAYBAR_SH" status 2>/dev/null || true)" == "running" ]]
 }
 
 hard_stop_managed_waybar() {
-  local pidfile pid
+  local pidfile pid cfg
   [[ -d "$PER_DIR" ]] || return 0
 
   shopt -s nullglob
   for pidfile in "$PER_DIR"/*.pid; do
     pid="$(tr -d ' \t\r\n' <"$pidfile" 2>/dev/null || true)"
-    if [[ -n "$pid" ]] && pid_alive "$pid"; then
+    cfg="${pidfile%.pid}.json"
+
+    if [[ -n "$pid" ]] && [[ -f "$cfg" ]] && pid_is_our_waybar "$pid" "$cfg"; then
       kill "$pid" 2>/dev/null || true
       sleep 0.05
       pid_alive "$pid" && kill -9 "$pid" 2>/dev/null || true
     fi
+
     rm -f "$pidfile" 2>/dev/null || true
   done
 }
 
-if any_managed_waybar_running; then
+if manager_running; then
   printf 'running\n' >"$IDLE_MARKER"
-
-  # Stop via manager first (cleans state for visible monitors)
   "$WAYBAR_SH" stop || true
-
-  # Then hard-stop anything left over (covers sleep/output enumeration weirdness)
   hard_stop_managed_waybar
-
 else
   rm -f "$IDLE_MARKER" 2>/dev/null || true
 fi
