@@ -1,64 +1,53 @@
 #!/usr/bin/env bash
 # ~/.config/hypr/scripts/waybar_restore_resume.sh
 #
-# hypridle on-resume:
-# - Only restores if idle previously stopped it (marker says "running")
-# - Retries because monitors can reappear in stages after sleep
+# hypridle on-resume/unlock:
+# - If marker says "running", restore Waybar.
+# - Otherwise do nothing.
 
 set -euo pipefail
 
 CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+
 SCRIPTS_DIR="${CONF}/hypr/scripts"
 WAYBAR_SH="${WAYBAR_SH:-${SCRIPTS_DIR}/waybar.sh}"
 
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+uid="$(id -u)"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
 IDLE_MARKER="${IDLE_MARKER:-${RUNTIME_DIR}/waybar.idle_restore}"
 
-need() { command -v "$1" >/dev/null 2>&1 || { printf 'waybar_restore_resume: missing: %s\n' "$1" >&2; exit 127; }; }
-need hyprctl
-need jq
+PER_DIR="${PER_DIR:-${CACHE}/waybar/per-output}"
 
-[[ -x "$WAYBAR_SH" ]] || { printf 'waybar_restore_resume: missing executable: %s\n' "$WAYBAR_SH" >&2; exit 1; }
+[[ -x "$WAYBAR_SH" ]] || exit 0
+mkdir -p "$RUNTIME_DIR" "$PER_DIR" 2>/dev/null || true
 
-manager_running() {
-  [[ "$("$WAYBAR_SH" status 2>/dev/null || true)" == "running" ]]
+pid_alive() { [[ -n "${1:-}" ]] && kill -0 "$1" 2>/dev/null; }
+
+any_managed_waybar_running() {
+  local pidfile pid
+  [[ -d "$PER_DIR" ]] || return 1
+  shopt -s nullglob
+  for pidfile in "$PER_DIR"/*.pid; do
+    pid="$(tr -d ' \t\r\n' <"$pidfile" 2>/dev/null || true)"
+    [[ -n "$pid" ]] && [[ "$pid" =~ ^[0-9]+$ ]] && pid_alive "$pid" && return 0
+  done
+  return 1
 }
 
-wait_for_monitors_stable() {
-  local last="-1" stable="0" len
+marker="$(cat "$IDLE_MARKER" 2>/dev/null || true)"
+if [[ "$marker" == "running" ]]; then
+  if any_managed_waybar_running; then
+    rm -f "$IDLE_MARKER" 2>/dev/null || true
+    exit 0
+  fi
 
-  for ((t=0; t<120; t++)); do
-    len="$(hyprctl monitors -j 2>/dev/null | jq 'length' 2>/dev/null || echo 0)"
-
-    if [[ "$len" -ge 1 ]]; then
-      if [[ "$len" == "$last" ]]; then
-        stable=$((stable + 1))
-      else
-        stable="0"
-      fi
-      last="$len"
-
-      if [[ "$stable" -ge 5 ]]; then
-        return 0
-      fi
-    fi
-
-    sleep 0.1
+  "$WAYBAR_SH" start >/dev/null 2>&1 || true
+  for _ in 1 2 3; do
+    any_managed_waybar_running && break || true
+    sleep 0.4
+    "$WAYBAR_SH" start >/dev/null 2>&1 || true
   done
 
-  return 0
-}
-
-if [[ "$(cat "$IDLE_MARKER" 2>/dev/null || true)" == "running" ]]; then
-  wait_for_monitors_stable
-
-  "$WAYBAR_SH" start || true
-  sleep 0.25
-  "$WAYBAR_SH" start || true
-  sleep 0.25
-  "$WAYBAR_SH" start || true
-
-  if manager_running; then
-    rm -f "$IDLE_MARKER" 2>/dev/null || true
-  fi
+  any_managed_waybar_running && rm -f "$IDLE_MARKER" 2>/dev/null || true
 fi
