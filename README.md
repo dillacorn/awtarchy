@@ -38,9 +38,9 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 | **File System**    | [ext4 (separate root/home partitions)](https://man.archlinux.org/man/ext4.5.en) and/or [BTRFS](https://wiki.archlinux.org/title/Btrfs) |
 | **Repositories**   | core, extra, multilib, [AUR](https://aur.archlinux.org/), [Flathub](https://flathub.org/) |
 | **Terminal**       | [Alacritty](https://github.com/alacritty/alacritty) |
-| **Bootloader**     | [systemd-boot](https://man.archlinux.org/man/systemd-boot.7) |
+| **Bootloader**     | [systemd-boot](https://man.archlinux.org/man/systemd-boot.7) and/or [limine](https://github.com/limine-bootloader/limine) |
 | **Window Manager** | [Hyprland](https://github.com/hyprwm/Hyprland) ([config](https://github.com/dillacorn/awtarchy/tree/main/config/hypr)) |
-| **Kernel**         | [linux-cachyos](https://github.com/CachyOS/linux-cachyos) |
+| **Kernel** | [Arch Linux](https://archlinux.org/packages/core/x86_64/linux/) · [Arch Linux LTS](https://archlinux.org/packages/core/x86_64/linux-lts/) · [CachyOS kernel](https://github.com/CachyOS/linux-cachyos) |
 
 ## 🎨 Wallpaper Collections
 - [dharmx/walls](https://github.com/dharmx/walls)
