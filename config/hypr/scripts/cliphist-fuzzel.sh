@@ -84,7 +84,10 @@ strip_id_line() {
 
 is_binary_row() {
   local s="${1:-}"
-  grep -qiE '(\[image\]|\[binary\])' <<<"$s"
+  # cliphist list formats vary by version:
+  # - "[binary]" / "[image]"
+  # - "[[ binary data ... ]]" / "[[ image data ... ]]"
+  grep -qiE '(\[image\]|\[binary\]|\[\[[[:space:]]*(binary|image)[[:space:]]+data)' <<<"$s"
 }
 
 make_thumb_png() {
