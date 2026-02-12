@@ -43,6 +43,7 @@ INSTALL_SCRIPTS=(
     "install_GPU_dependencies.sh"
     "install_micro_themes.sh"
     "enable_keyring_pam.sh"
+    "install_ly.sh"
 )
 
 # Ensure the script is run with sudo
