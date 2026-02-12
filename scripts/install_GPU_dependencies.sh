@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
 set -eEuo pipefail
 
-# install_GPU_dependencies.sh
-# Arch-based GPU deps + NVIDIA driver selector.
-# Safe for install.sh running it via sudo/root:
-# - Root is allowed.
-# - User-only steps (AUR builds, Hyprland config edits) run as SUDO_USER when available.
-# Default behavior is NONFATAL (exit 0 even if something fails) so dotfiles installs won't abort.
-
 ts(){ date +%F_%H%M%S; }
 log(){ printf '%s\n' "$*"; }
 warn(){ printf 'WARN: %s\n' "$*" >&2; }
@@ -19,36 +12,33 @@ DO_UPGRADE=0
 INSTALL_LIB32=1
 INSTALL_OPENCL=0
 PATCH_HYPRLAND=1
-SET_MODESET=1
-FORCE_NVIDIA_MODE=""   # open|legacy|skip
-NO_AUR_BOOTSTRAP=0
+PATCH_BOOTLOADER=1
+ENABLE_EARLY_KMS=1
+NO_AUR=0
+
+# ERR trap (no intermediate vars -> no SC2154)
+trap '
+  if (( NONFATAL )); then
+    warn "GPU script failed (nonfatal): rc=$? line=$LINENO cmd=$BASH_COMMAND"
+    exit 0
+  fi
+  die "GPU script failed: rc=$? line=$LINENO cmd=$BASH_COMMAND"
+' ERR
 
 usage(){
   cat >&2 <<'EOF'
 Usage: install_GPU_dependencies.sh [options]
-  --fatal                  Exit non-zero on failure (default: nonfatal exit 0)
-  --upgrade                Run pacman -Syu first (default: off)
-  --no-lib32               Skip multilib/lib32 packages
-  --opencl                 Install OpenCL packages where applicable
-  --no-hyprland             Do not patch Hyprland config for NVIDIA
-  --no-modeset              Do not set nvidia_drm modeset=1
-  --force-nvidia <mode>    open|legacy|skip
-  --no-aur-bootstrap        Do not auto-install yay if no AUR helper is present
+  --fatal              Exit non-zero on failure (default: nonfatal exit 0)
+  --upgrade            Run pacman -Syu first (default: off)
+  --no-lib32           Skip lib32 packages even if multilib enabled
+  --opencl             Install OpenCL where available
+  --no-hyprland         Don't append Hyprland Nvidia env lines
+  --no-bootloader       Don't patch systemd-boot/grub/limine cmdlines
+  --no-early-kms        Don't modify mkinitcpio MODULES for early KMS
+  --no-aur              Don't attempt legacy AUR build/install
 EOF
 }
 
-on_err(){
-  local rc=$? line=${1:-?} cmd=${2:-?}
-  if (( NONFATAL )); then
-    warn "GPU script failed (nonfatal): rc=$rc line=$line cmd=$cmd"
-    warn "Dotfiles install should continue."
-    exit 0
-  fi
-  die "GPU script failed: rc=$rc line=$line cmd=$cmd"
-}
-trap 'on_err "$LINENO" "$BASH_COMMAND"' ERR
-
-# args
 while (($#)); do
   case "$1" in
     -h|--help) usage; exit 0 ;;
@@ -57,22 +47,22 @@ while (($#)); do
     --no-lib32) INSTALL_LIB32=0; shift ;;
     --opencl) INSTALL_OPENCL=1; shift ;;
     --no-hyprland) PATCH_HYPRLAND=0; shift ;;
-    --no-modeset) SET_MODESET=0; shift ;;
-    --no-aur-bootstrap) NO_AUR_BOOTSTRAP=1; shift ;;
-    --force-nvidia)
-      FORCE_NVIDIA_MODE="${2:-}"; shift 2 ;;
-    --force-nvidia=*)
-      FORCE_NVIDIA_MODE="${1#*=}"; shift ;;
+    --no-bootloader) PATCH_BOOTLOADER=0; shift ;;
+    --no-early-kms) ENABLE_EARLY_KMS=0; shift ;;
+    --no-aur) NO_AUR=1; shift ;;
     --) shift; break ;;
     *) shift ;;
   esac
 done
 
-# Who is the "real" user for user-only operations?
-# If invoked via sudo from install.sh, SUDO_USER will be set.
+# Make ShellCheck see NONFATAL as used outside trap (avoids SC2034)
+if (( NONFATAL != 0 && NONFATAL != 1 )); then
+  die "Invalid NONFATAL value: $NONFATAL"
+fi
+
 RUN_USER="${SUDO_USER:-${USER:-}}"
-if [[ "${EUID:-$(id -u)}" -eq 0 ]] && [[ "${RUN_USER:-}" == "root" ]]; then
-  RUN_USER=""
+if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
+  [[ "${RUN_USER:-}" == "root" ]] && RUN_USER=""
 fi
 
 USER_HOME="${HOME}"
@@ -84,43 +74,33 @@ fi
 as_root(){
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
-    return
+    return $?
   fi
-  if ! sudo -n true 2>/dev/null; then sudo -v; fi
+  have sudo || die "sudo required"
+  sudo -n true 2>/dev/null || sudo -v
   sudo "$@"
 }
 
 as_user(){
-  # Only needed for AUR helpers/builds and user config edits.
-  [[ -n "${RUN_USER:-}" ]] || die "No SUDO_USER detected. Run install.sh as a normal user (sudo as needed), not as root."
+  [[ -n "${RUN_USER:-}" ]] || return 1
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     if have sudo; then
       sudo -u "$RUN_USER" -H env HOME="$USER_HOME" USER="$RUN_USER" LOGNAME="$RUN_USER" "$@"
-    elif have runuser; then
-      runuser -u "$RUN_USER" -- env HOME="$USER_HOME" USER="$RUN_USER" LOGNAME="$RUN_USER" "$@"
-    else
-      die "Need sudo or runuser to run commands as $RUN_USER."
+      return $?
     fi
-  else
-    "$@"
+    if have runuser; then
+      runuser -u "$RUN_USER" -- env HOME="$USER_HOME" USER="$RUN_USER" LOGNAME="$RUN_USER" "$@"
+      return $?
+    fi
+    return 1
   fi
+  "$@"
 }
 
 backup_root_file(){
   local f="$1"
   [[ -f "$f" ]] || return 0
-  as_root cp -a "$f" "${f}.bak.$(ts)"
-}
-
-pacman_q(){ pacman -Q "$1" >/dev/null 2>&1; }
-pacman_si(){ pacman -Si "$1" >/dev/null 2>&1; }
-
-pacman_install(){
-  as_root pacman -S --needed --noconfirm "$@"
-}
-
-pacman_remove(){
-  as_root pacman -Rns --noconfirm "$@" 2>/dev/null || true
+  as_root cp -a "$f" "${f}.bak.$(ts)" || true
 }
 
 multilib_enabled(){
@@ -133,42 +113,10 @@ multilib_enabled(){
   ' /etc/pacman.conf
 }
 
-bootstrap_yay(){
-  have yay && return 0
-  have paru && return 0
-  (( NO_AUR_BOOTSTRAP )) && die "No AUR helper found (yay/paru). Install one or re-run without --no-aur-bootstrap."
+pacman_si(){ pacman -Si "$1" >/dev/null 2>&1; }
 
-  pacman_install git base-devel
-
-  # Build yay as the real user; install the built package as root (no sudo prompt inside makepkg).
-  local tmp pkg
-  tmp="$(mktemp -d)"
-  as_root chmod 0777 "$tmp" || true
-
-  as_user bash -lc "cd '$tmp' && git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -s --noconfirm --needed"
-  pkg="$(find "$tmp/yay" -maxdepth 1 -type f -name 'yay-*.pkg.tar*' ! -name '*-debug*' | head -n1 || true)"
-  [[ -n "$pkg" ]] || die "Failed to build yay package."
-  as_root pacman -U --noconfirm "$pkg"
-
-  rm -rf "$tmp"
-  have yay || die "Failed to install yay."
-}
-
-aur_install(){
-  local helper=""
-  if have paru; then helper="paru"; fi
-  if have yay; then helper="yay"; fi
-  if [[ -z "$helper" ]]; then
-    bootstrap_yay
-    helper="yay"
-  fi
-
-  # yay/paru must run as user
-  if [[ "$helper" == "paru" ]]; then
-    as_user paru -S --needed --noconfirm "$@"
-  else
-    as_user yay -S --needed --noconfirm "$@"
-  fi
+pacman_install(){
+  as_root pacman -S --needed --noconfirm "$@"
 }
 
 detect_gpu_lines(){
@@ -181,41 +129,15 @@ has_vendor(){
   grep -qiE "\[$vid:" <<<"$lines"
 }
 
-nvidia_classify_lines(){
-  # returns: modern|preturing|mixed|unknown
-  local nlines="$1"
-
-  local modern_pat='(RTX|Quadro RTX|TITAN RTX|GTX[[:space:]]*16|A[0-9]{2,4}|H[0-9]{2,4}|L[0-9]{2,4}|T4|RTX[[:space:]]*[0-9]{3,4})'
-  local pret_pat='(GTX[[:space:]]*(10|9|8|7|6|5|4)|GT[[:space:]]*[0-9]{2,4}|Quadro[[:space:]]*(P|M|K)|Tesla[[:space:]]*(P|V|M|K)|NVS|ION)'
-
-  local any_modern=0 any_pret=0
-  if grep -qiE "$modern_pat" <<<"$nlines"; then any_modern=1; fi
-  if grep -qiE "$pret_pat" <<<"$nlines"; then any_pret=1; fi
-
-  if (( any_modern && any_pret )); then printf '%s\n' "mixed"; return 0; fi
-  if (( any_modern )); then printf '%s\n' "modern"; return 0; fi
-  if (( any_pret )); then printf '%s\n' "preturing"; return 0; fi
-  printf '%s\n' "unknown"
-}
-
 detect_kernel_pkgs(){
   local all k
+  local -a out=()
   all="$(pacman -Qq 2>/dev/null || true)"
-  local out=()
-
   for k in linux linux-lts linux-zen linux-hardened linux-cachyos; do
-    grep -qx "$k" <<<"$all" && out+=("$k")
+    if grep -qx "$k" <<<"$all"; then
+      out+=("$k")
+    fi
   done
-
-  while IFS= read -r k; do
-    [[ "$k" == *-headers ]] && continue
-    [[ "$k" == linux-firmware ]] && continue
-    [[ "$k" =~ ^linux(-|$) ]] || continue
-    local seen=0 x
-    for x in "${out[@]}"; do [[ "$x" == "$k" ]] && seen=1; done
-    (( seen )) || out+=("$k")
-  done < <(grep -E '^linux([-.].+)?$' <<<"$all" || true)
-
   printf '%s\n' "${out[@]}"
 }
 
@@ -233,8 +155,9 @@ headers_for_kernel(){
 
 install_headers_for_installed_kernels(){
   pacman_install dkms
-  local -a kernels
+  local -a kernels=()
   mapfile -t kernels < <(detect_kernel_pkgs || true)
+
   if ((${#kernels[@]} == 0)); then
     pacman_install linux-headers || true
     return 0
@@ -244,63 +167,221 @@ install_headers_for_installed_kernels(){
   for k in "${kernels[@]}"; do
     hp="$(headers_for_kernel "$k")"
     if pacman_si "$hp"; then
-      pacman_install "$hp"
+      if ! pacman_install "$hp"; then
+        warn "Failed to install headers: $hp"
+      fi
     else
-      warn "Header package not found: $hp (kernel: $k)"
+      warn "Missing headers package: $hp"
     fi
   done
 }
 
-set_nvidia_modeset(){
-  (( SET_MODESET )) || return 0
+set_modeset_modprobe(){
   local f="/etc/modprobe.d/nvidia.conf"
   backup_root_file "$f"
   as_root mkdir -p /etc/modprobe.d
   as_root bash -c "printf '%s\n' 'options nvidia_drm modeset=1' > '$f'"
 }
 
-patch_hyprland_nvidia(){
+append_kparam_systemd_boot(){
+  local dir f tmp line
+  local -a dirs=(/boot/loader/entries /efi/loader/entries /boot/efi/loader/entries /boot/EFI/loader/entries)
+
+  for dir in "${dirs[@]}"; do
+    [[ -d "$dir" ]] || continue
+    shopt -s nullglob
+    for f in "$dir"/*.conf; do
+      backup_root_file "$f"
+      tmp="$(mktemp)"
+      while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:space:]]*options[[:space:]]+ ]]; then
+          if grep -q '\bnvidia_drm\.modeset=1\b' <<<"$line"; then
+            printf '%s\n' "$line" >>"$tmp"
+          else
+            printf '%s nvidia_drm.modeset=1\n' "$line" >>"$tmp"
+          fi
+        else
+          printf '%s\n' "$line" >>"$tmp"
+        fi
+      done <"$f"
+      as_root install -m 0644 "$tmp" "$f"
+      rm -f "$tmp"
+    done
+    shopt -u nullglob
+  done
+}
+
+append_kparam_grub(){
+  local f="/etc/default/grub" tmp line changed=0
+  [[ -f "$f" ]] || return 0
+
+  backup_root_file "$f"
+  tmp="$(mktemp)"
+
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^GRUB_CMDLINE_LINUX_DEFAULT= ]]; then
+      if grep -q '\bnvidia_drm\.modeset=1\b' <<<"$line"; then
+        printf '%s\n' "$line" >>"$tmp"
+      else
+        local v
+        v="${line#*=}"
+        v="${v#\"}"; v="${v%\"}"
+        v="${v} nvidia_drm.modeset=1"
+        printf 'GRUB_CMDLINE_LINUX_DEFAULT="%s"\n' "$v" >>"$tmp"
+        changed=1
+      fi
+    else
+      printf '%s\n' "$line" >>"$tmp"
+    fi
+  done <"$f"
+
+  as_root install -m 0644 "$tmp" "$f"
+  rm -f "$tmp"
+
+  if (( changed )) && have grub-mkconfig; then
+    if [[ -f /boot/grub/grub.cfg ]]; then
+      as_root grub-mkconfig -o /boot/grub/grub.cfg || true
+    elif [[ -f /boot/grub2/grub.cfg ]]; then
+      as_root grub-mkconfig -o /boot/grub2/grub.cfg || true
+    fi
+  fi
+}
+
+append_kparam_limine(){
+  local f=""
+  local -a candidates=(
+    "/boot/limine/limine.conf"
+    "/boot/limine.conf"
+    "/boot/EFI/limine/limine.conf"
+    "/boot/limine/limine.cfg"
+    "/boot/limine.cfg"
+  )
+
+  local c
+  for c in "${candidates[@]}"; do
+    if [[ -f "$c" ]]; then
+      f="$c"
+      break
+    fi
+  done
+  [[ -n "$f" ]] || return 0
+
+  backup_root_file "$f"
+
+  local tmp line
+  tmp="$(mktemp)"
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^[[:space:]]*cmdline:[[:space:]]* ]]; then
+      if grep -q '\bnvidia_drm\.modeset=1\b' <<<"$line"; then
+        printf '%s\n' "$line" >>"$tmp"
+      else
+        printf '%s nvidia_drm.modeset=1\n' "$line" >>"$tmp"
+      fi
+      continue
+    fi
+
+    if [[ "$line" =~ ^[[:space:]]*(CMDLINE|KERNEL_CMDLINE)[[:space:]]*= ]]; then
+      if grep -q '\bnvidia_drm\.modeset=1\b' <<<"$line"; then
+        printf '%s\n' "$line" >>"$tmp"
+      else
+        printf '%s nvidia_drm.modeset=1\n' "$line" >>"$tmp"
+      fi
+      continue
+    fi
+
+    printf '%s\n' "$line" >>"$tmp"
+  done <"$f"
+
+  as_root install -m 0644 "$tmp" "$f"
+  rm -f "$tmp"
+}
+
+ensure_kparam_and_modeset(){
+  set_modeset_modprobe
+  (( PATCH_BOOTLOADER )) || return 0
+  append_kparam_systemd_boot
+  append_kparam_grub
+  append_kparam_limine
+}
+
+patch_mkinitcpio_modules_for_early_kms(){
+  (( ENABLE_EARLY_KMS )) || return 0
+  local intel_present="${1:-0}"
+  local f="/etc/mkinitcpio.conf"
+  [[ -f "$f" ]] || return 0
+
+  backup_root_file "$f"
+
+  local pref=""
+  if [[ "$intel_present" == "1" ]]; then
+    pref="i915"
+  fi
+
+  local tmp line
+  tmp="$(mktemp)"
+  while IFS= read -r line; do
+    if [[ "$line" =~ ^MODULES=\( ]]; then
+      local inside
+      inside="${line#MODULES=(}"
+      inside="${inside%)}"
+      inside="$(sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//' <<<"$inside")"
+
+      local -a out=()
+      local tok
+
+      if [[ -n "$pref" ]]; then
+        if ! grep -qw "$pref" <<<"$inside"; then
+          out+=("$pref")
+        fi
+      fi
+
+      for tok in $inside; do
+        [[ -n "$tok" ]] && out+=("$tok")
+      done
+
+      for tok in nvidia nvidia_modeset nvidia_uvm nvidia_drm; do
+        if ! grep -qw "$tok" <<<"${out[*]}"; then
+          out+=("$tok")
+        fi
+      done
+
+      printf 'MODULES=(%s)\n' "${out[*]}" >>"$tmp"
+    else
+      printf '%s\n' "$line" >>"$tmp"
+    fi
+  done <"$f"
+
+  as_root install -m 0644 "$tmp" "$f"
+  rm -f "$tmp"
+}
+
+patch_hyprland_nvidia_env(){
   (( PATCH_HYPRLAND )) || return 0
-  # If we don't know the real user, skip safely.
   [[ -n "${USER_HOME:-}" ]] || return 0
 
   local conf="${USER_HOME}/.config/hypr/hyprland.conf"
   [[ -f "$conf" ]] || return 0
 
-  # backup as root or user depending on perms; simplest: copy with cp -a via root
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
-    as_root cp -a "$conf" "${conf}.bak.$(ts)"
+    as_root cp -a "$conf" "${conf}.bak.$(ts)" || true
   else
-    cp -a "$conf" "${conf}.bak.$(ts)"
+    cp -a "$conf" "${conf}.bak.$(ts)" || true
   fi
 
-  grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*LIBVA_DRIVER_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf" || \
-    printf '%s\n' 'env = LIBVA_DRIVER_NAME,nvidia' >> "$conf"
-  grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*__GLX_VENDOR_LIBRARY_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf" || \
-    printf '%s\n' 'env = __GLX_VENDOR_LIBRARY_NAME,nvidia' >> "$conf"
-  grep -qE '^[[:space:]]*cursor:no_hardware_cursors[[:space:]]*=' "$conf" || \
-    printf '%s\n' 'cursor:no_hardware_cursors = true' >> "$conf"
+  if ! grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*LIBVA_DRIVER_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf"; then
+    printf '%s\n' 'env = LIBVA_DRIVER_NAME,nvidia' >>"$conf"
+  fi
+  if ! grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*__GLX_VENDOR_LIBRARY_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf"; then
+    printf '%s\n' 'env = __GLX_VENDOR_LIBRARY_NAME,nvidia' >>"$conf"
+  fi
 }
 
-verify_nvidia(){
-  if ! have modprobe; then pacman_install kmod; fi
-  as_root modprobe -q nvidia || return 1
-  as_root modprobe -q nvidia_drm || true
-  have nvidia-smi || return 1
-  nvidia-smi -L >/dev/null 2>&1 || return 1
-  return 0
+is_modern_nvidia(){
+  local line="$1"
+  grep -qiE '(RTX|Quadro RTX|TITAN RTX|GTX[[:space:]]*16|Tesla[[:space:]]*T4|A[0-9]{2,4}|H[0-9]{2,4}|L[0-9]{2,4})' <<<"$line"
 }
 
-remove_repo_nvidia_stacks(){
-  pacman_remove \
-    nvidia nvidia-dkms nvidia-lts \
-    nvidia-open nvidia-open-dkms nvidia-lts-open \
-    nvidia-utils lib32-nvidia-utils nvidia-settings \
-    opencl-nvidia lib32-opencl-nvidia \
-    egl-wayland
-}
-
-install_common_graphics_base(){
+install_base_graphics(){
   pacman_install mesa libglvnd vulkan-icd-loader
   if (( INSTALL_LIB32 )) && multilib_enabled; then
     pacman_install lib32-mesa lib32-libglvnd lib32-vulkan-icd-loader
@@ -321,133 +402,118 @@ install_intel(){
   fi
 }
 
-install_nvidia_open_stack(){
+install_nvidia_modern_repo(){
+  local intel_present="${1:-0}"
   install_headers_for_installed_kernels
-  pacman_install egl-wayland nvidia-utils nvidia-settings
+
+  local modpkg=""
+  if pacman_si nvidia-open-dkms; then
+    modpkg="nvidia-open-dkms"
+  elif pacman_si nvidia-open; then
+    modpkg="nvidia-open"
+  elif pacman_si nvidia-dkms; then
+    modpkg="nvidia-dkms"
+  elif pacman_si nvidia; then
+    modpkg="nvidia"
+  else
+    die "No NVIDIA repo module package found."
+  fi
+
+  local -a pkgs=("$modpkg" nvidia-utils egl-wayland nvidia-settings)
   if (( INSTALL_LIB32 )) && multilib_enabled; then
-    pacman_install lib32-nvidia-utils
+    pkgs+=(lib32-nvidia-utils)
   fi
   if (( INSTALL_OPENCL )); then
-    pacman_install opencl-nvidia || true
+    pkgs+=(opencl-nvidia)
     if (( INSTALL_LIB32 )) && multilib_enabled; then
-      pacman_install lib32-opencl-nvidia || true
+      pkgs+=(lib32-opencl-nvidia)
     fi
   fi
 
-  # Arch (post-590) uses nvidia-open*; older systems may still have nvidia-dkms/nvidia.
-  if pacman_si nvidia-open-dkms; then
-    pacman_install nvidia-open-dkms
-  elif pacman_si nvidia-dkms; then
-    pacman_install nvidia-dkms
-  elif pacman_si nvidia; then
-    pacman_install nvidia
-  else
-    die "No NVIDIA repo driver package found (nvidia-open-dkms / nvidia-dkms / nvidia)."
-  fi
+  pacman_install "${pkgs[@]}"
+  command -v nvidia-smi >/dev/null 2>&1 || die "nvidia-smi missing after install (nvidia-utils did not install)."
 
-  set_nvidia_modeset
-  as_root mkinitcpio -P
-  patch_hyprland_nvidia
+  ensure_kparam_and_modeset
+  patch_mkinitcpio_modules_for_early_kms "$intel_present"
+  as_root mkinitcpio -P || true
+  patch_hyprland_nvidia_env
 }
 
-install_nvidia_legacy_branch(){
-  local branch="$1" # 580xx|470xx|390xx|340xx
+aur_build_and_install_580xx(){
+  local intel_present="${1:-0}"
+
+  (( NO_AUR )) && die "Legacy NVIDIA detected but --no-aur was set."
+  [[ -n "${RUN_USER:-}" ]] || die "Legacy NVIDIA detected but no non-root RUN_USER available for AUR build."
+
+  pacman_install git base-devel dkms
   install_headers_for_installed_kernels
-  pacman_install egl-wayland git base-devel
 
-  local pkgs=(
-    "nvidia-${branch}-dkms"
-    "nvidia-${branch}-utils"
-    "nvidia-${branch}-settings"
-  )
+  local tmp repo pkgdir
+  tmp="$(mktemp -d)"
+  as_root chmod 0777 "$tmp" 2>/dev/null || true
 
-  if (( INSTALL_LIB32 )) && multilib_enabled; then
-    pkgs+=("lib32-nvidia-${branch}-utils")
-  fi
+  repo="$tmp/nvidia-580xx-utils"
+  as_user git clone https://aur.archlinux.org/nvidia-580xx-utils.git "$repo"
+  as_user bash -lc "cd '$repo' && makepkg -s --noconfirm --needed"
 
-  if (( INSTALL_OPENCL )); then
-    pkgs+=("opencl-nvidia-${branch}" "lib32-opencl-nvidia-${branch}")
-  fi
+  pkgdir="$repo"
 
-  aur_install "${pkgs[@]}"
+  local -a built=()
+  mapfile -t built < <(find "$pkgdir" -maxdepth 1 -type f -name '*.pkg.tar*' ! -name '*-debug*' | sort)
+  ((${#built[@]})) || die "AUR build produced no packages."
 
-  set_nvidia_modeset
-  as_root mkinitcpio -P
-  patch_hyprland_nvidia
+  local -a want=()
+  local f base
+  for f in "${built[@]}"; do
+    base="$(basename "$f")"
+    case "$base" in
+      nvidia-580xx-dkms-*.pkg.tar*) want+=("$f") ;;
+      nvidia-580xx-utils-*.pkg.tar*) want+=("$f") ;;
+      nvidia-580xx-settings-*.pkg.tar*) want+=("$f") ;;
+      opencl-nvidia-580xx-*.pkg.tar*) (( INSTALL_OPENCL )) && want+=("$f") ;;
+      lib32-nvidia-580xx-utils-*.pkg.tar*) (( INSTALL_LIB32 )) && multilib_enabled && want+=("$f") ;;
+      lib32-opencl-nvidia-580xx-*.pkg.tar*) (( INSTALL_OPENCL )) && (( INSTALL_LIB32 )) && multilib_enabled && want+=("$f") ;;
+    esac
+  done
+
+  ((${#want[@]})) || die "AUR build did not produce required 580xx packages."
+  as_root pacman -U --noconfirm --needed "${want[@]}"
+
+  command -v nvidia-smi >/dev/null 2>&1 || die "nvidia-smi missing after 580xx install."
+
+  ensure_kparam_and_modeset
+  patch_mkinitcpio_modules_for_early_kms "$intel_present"
+  as_root mkinitcpio -P || true
+  patch_hyprland_nvidia_env
+
+  rm -rf "$tmp"
 }
 
-install_nvidia_best_effort(){
-  local nlines="$1"
-  local mode="$2"
+install_nvidia(){
+  local all_lines="$1"
+  local intel_present="${2:-0}"
 
-  if [[ "$mode" == "mixed" ]]; then
-    warn "Mixed NVIDIA generations detected. Skipping NVIDIA changes."
+  local nlines
+  nlines="$(grep -Ei '\[10de:' <<<"$all_lines" || true)"
+  [[ -n "$nlines" ]] || return 0
+
+  if is_modern_nvidia "$nlines"; then
+    log "NVIDIA: modern"
+    install_nvidia_modern_repo "$intel_present"
     return 0
   fi
 
-  if [[ -n "$FORCE_NVIDIA_MODE" ]]; then
-    case "$FORCE_NVIDIA_MODE" in
-      open) mode="modern" ;;
-      legacy) mode="preturing" ;;
-      skip) warn "Forced NVIDIA skip"; return 0 ;;
-      *) warn "Unknown --force-nvidia value: $FORCE_NVIDIA_MODE (ignoring)" ;;
-    esac
-  fi
-
-  local -a candidates=()
-  case "$mode" in
-    modern) candidates=(open) ;;
-    preturing) candidates=(580xx 470xx 390xx 340xx) ;;
-    unknown) candidates=(open 580xx 470xx 390xx 340xx) ;;
-    *) candidates=(open 580xx 470xx 390xx 340xx) ;;
-  esac
-
-  log "NVIDIA candidate sequence: ${candidates[*]}"
-
-  local c
-  for c in "${candidates[@]}"; do
-    log "Attempt NVIDIA install: $c"
-    remove_repo_nvidia_stacks
-
-    case "$c" in
-      open)
-        install_nvidia_open_stack
-        ;;
-      580xx|470xx|390xx|340xx)
-        install_nvidia_legacy_branch "$c"
-        ;;
-      *)
-        continue
-        ;;
-    esac
-
-    if verify_nvidia; then
-      log "NVIDIA install verified: $c"
-      return 0
-    fi
-
-    warn "NVIDIA verify failed for '$c' (may require reboot). Trying next candidate."
-  done
-
-  warn "No NVIDIA candidate verified. Leaving system as-is (nonfatal)."
-  return 0
+  log "NVIDIA: legacy"
+  aur_build_and_install_580xx "$intel_present"
 }
 
 main(){
   have pacman || exit 0
-
-  if have systemd-detect-virt && systemd-detect-virt -q; then
-    exit 0
-  fi
+  have systemd-detect-virt && systemd-detect-virt -q && exit 0
 
   local gpu_lines
   gpu_lines="$(detect_gpu_lines)"
   [[ -n "$gpu_lines" ]] || exit 0
-
-  local has_nvidia=0 has_amd=0 has_intel=0
-  has_vendor "$gpu_lines" "10de" && has_nvidia=1
-  has_vendor "$gpu_lines" "1002" && has_amd=1
-  has_vendor "$gpu_lines" "8086" && has_intel=1
 
   log "GPU(s):"
   log "$gpu_lines"
@@ -458,17 +524,18 @@ main(){
     as_root pacman -Sy --noconfirm
   fi
 
-  install_common_graphics_base
+  install_base_graphics
+
+  local has_nvidia=0 has_amd=0 has_intel=0
+  has_vendor "$gpu_lines" "10de" && has_nvidia=1
+  has_vendor "$gpu_lines" "1002" && has_amd=1
+  has_vendor "$gpu_lines" "8086" && has_intel=1
 
   (( has_amd )) && install_amd
   (( has_intel )) && install_intel
+  (( has_nvidia )) && install_nvidia "$gpu_lines" "$has_intel"
 
-  if (( has_nvidia )); then
-    local nlines mode
-    nlines="$(grep -Ei '\[10de:' <<<"$gpu_lines" || true)"
-    mode="$(nvidia_classify_lines "$nlines")"
-    install_nvidia_best_effort "$nlines" "$mode"
-  fi
+  exit 0
 }
 
 main
