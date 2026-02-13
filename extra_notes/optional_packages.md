@@ -35,6 +35,12 @@ yay -S dragon-drop
 
 Simple GUI drag-and-drop from terminal.
 
+### Image previews in "alacritty" (replaces main-line alacritty)
+
+```bash
+yay -S alacritty-graphics
+```
+
 ---
 
 ## 🔊 Audio Control
@@ -42,7 +48,7 @@ Simple GUI drag-and-drop from terminal.
 sudo pacman -S pavucontrol
 ```
 
-PulseAudio Volume Control GUI.
+PulseAudio Volume Control GUI. (wiremix is cooler IMO)
 
 ---
 
