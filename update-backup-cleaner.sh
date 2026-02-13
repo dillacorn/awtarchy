@@ -2,7 +2,9 @@
 set -Eeuo pipefail
 umask 022
 
-LOG_PREFIX="[awtarchy-backup-clean]"
+SCRIPT_NAME="update-backup-cleaner.sh"
+LOG_PREFIX="[${SCRIPT_NAME}]"
+
 log()  { printf '%s %s\n'  "$LOG_PREFIX" "$*"; }
 warn() { printf '%s WARN: %s\n' "$LOG_PREFIX" "$*" >&2; }
 die()  { printf '%s ERROR: %s\n' "$LOG_PREFIX" "$*" >&2; exit 1; }
@@ -12,9 +14,12 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing required command: $
 usage() {
   cat <<'EOF'
 Usage:
-  awtarchy-backup-clean.sh [options]
+  update-backup-cleaner.sh [options]
 
-Interactive default (TTY):
+IMPORTANT:
+  - Do NOT run with sudo. This scans under your $HOME. Running with sudo usually makes $HOME=/root.
+
+Default (interactive TTY):
   - Scans common awtarchy-managed paths under $HOME for:
       *.backup
       *.backup.YYYYMMDD-HHMMSS
@@ -32,13 +37,26 @@ Options:
 Paging config:
   - Default page size: 20
   - Change via:
-      AWTARCHY_BACKUP_CLEAN_PAGE_SIZE_DEFAULT=40 ./awtarchy-backup-clean.sh
+      AWTARCHY_BACKUP_CLEAN_PAGE_SIZE_DEFAULT=40 ./update-backup-cleaner.sh
     or press [G] in the menu (saved in ~/.config/awtarchy/backup_clean_page_size)
 
-Notes:
-  - Non-interactive stdin (pipes/CI) will not delete unless --yes.
+Examples:
+  cd ~/awtarchy
+  chmod +x ./update-backup-cleaner.sh
+  ./update-backup-cleaner.sh
+
+  ./update-backup-cleaner.sh --dry-run
 EOF
 }
+
+# Refuse sudo/root: this script is designed to run as the user who owns the backups.
+if [[ "${EUID}" -eq 0 ]]; then
+  die "Do not run this with sudo. Run as your normal user.
+Example:
+  cd ~/awtarchy
+  chmod +x ./update-backup-cleaner.sh
+  ./update-backup-cleaner.sh"
+fi
 
 # --- args ---
 DRY_RUN=0
@@ -68,6 +86,10 @@ done
 need_cmd find
 need_cmd stat
 need_cmd rm
+need_cmd sort
+need_cmd mktemp
+need_cmd head
+need_cmd tr
 if [[ -n "$ARCHIVE" ]]; then
   need_cmd tar
 fi
@@ -107,10 +129,12 @@ collect_backups() {
   done
   (( ${#roots[@]} > 0 )) || return 0
 
+  # Top-level in $HOME (dotfile backups like ~/.bashrc.backup)
   find "$HOME_DIR" -maxdepth 1 -type f "${mtime_args[@]}" \
     \( -name '*.backup' -o -regextype posix-extended -regex "$regex_stamp" \) \
     -print 2>/dev/null || true
 
+  # Managed subtrees
   for r in "${roots[@]}"; do
     [[ "$r" == "$HOME_DIR" ]] && continue
     find "$r" -type f "${mtime_args[@]}" \
@@ -481,7 +505,7 @@ while :; do
       prompt_find
       ;;
     [dD])
-      DEL_LIST=()
+      declare -a DEL_LIST=()
       keep_count=0
 
       for f in "${ALL_FILES[@]}"; do
