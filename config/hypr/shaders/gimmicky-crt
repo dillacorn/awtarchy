@@ -1,0 +1,204 @@
+#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+out vec4 FragColor;
+
+uniform sampler2D tex;
+
+/*
+CRT "gimmick" (readable, not blown out). Static: no time-based wobble.
+
+Defaults:
+- Curvature ON (0.004)
+- Vertical RGB grille lines ON (MASK_MODE=1)
+
+Tweak only these:
+- CURVATURE:            0.002 subtle | 0.004 default | 0.010 heavy
+- SCANLINE_STRENGTH:    0.08 subtle  | 0.12 default  | 0.18 intense
+- SCANLINE_SHARPNESS:   1.6 subtle  | 2.2 default   | 3.0 intense (thinner/darker)
+- MASK_STRENGTH:        0.04 subtle | 0.085 default | 0.14 intense (vertical lines)
+- MASK_SOFTNESS:        0.22 crisp  | 0.34 default  | 0.55 softer/less obvious
+- BLOOM_STRENGTH:       0.05 subtle | 0.10 default  | 0.16 glow
+- BLEED_STRENGTH:       0.00 off    | 0.05 default  | 0.10 smear
+*/
+
+#define CURVATURE            0.004   // subtle: 0.002 | default: 0.004 | heavy: 0.010
+#define CHROMA_ABERRATION    0.00010 // subtle: 0.00005 | default: 0.00010 | heavy: 0.00016
+
+#define SCANLINE_STRENGTH    0.120   // subtle: 0.085 | default: 0.120 | intense: 0.180
+#define SCANLINE_SHARPNESS   2.20    // subtle: 1.60  | default: 2.20  | intense: 3.00
+#define SCANLINE_COMPENSATE  1       // 1 = keep average brightness closer to neutral
+
+#define MASK_MODE            1       // 0=off, 1=RGB triad grille (vertical lines), 2=dot mask
+#define MASK_STRENGTH        0.085   // subtle: 0.04 | default: 0.085 | intense: 0.14
+#define MASK_SOFTNESS        0.34    // crisp: 0.22 | default: 0.34  | softer: 0.55
+#define MASK_FADE_START      0.55    // fade mask in shadows (higher = less visible in darks)
+#define MASK_FADE_END        0.95
+
+#define BLOOM_STRENGTH       0.10    // subtle: 0.05 | default: 0.10 | glow: 0.16
+#define BLEED_STRENGTH       0.05    // off: 0.00 | default: 0.05 | smear: 0.10
+
+#define GRAIN_STRENGTH       0.004   // subtle: 0.002 | default: 0.004 | heavy: 0.010
+#define BLUR_MIX             0.06    // 0.00–0.12 (too high kills readability)
+#define CONTRAST             1.05    // subtle: 1.02 | default: 1.05 | punchy: 1.10
+#define SATURATION           1.04    // 1.00–1.10
+
+#define VIGNETTE_AMT         0.14    // subtle: 0.06 | default: 0.14 | heavy: 0.24
+#define VIGNETTE_POWER       1.80    // 1.3–2.4
+
+float hash12(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+vec2 curve(vec2 uv) {
+    uv = uv * 2.0 - 1.0;
+    uv *= 1.0 + (uv.yx * uv.yx) * CURVATURE;
+    return uv * 0.5 + 0.5;
+}
+
+float scanline(vec2 uv, vec2 res) {
+    float y = uv.y * res.y;
+    float s = 0.5 + 0.5 * cos(6.2831853 * y);      // 0..1
+    float dark = pow(1.0 - s, SCANLINE_SHARPNESS); // 0..1
+    float m = 1.0 - SCANLINE_STRENGTH * dark;
+
+#if SCANLINE_COMPENSATE
+    m *= 1.0 / (1.0 - 0.5 * SCANLINE_STRENGTH);
+#endif
+    return m;
+}
+
+float vignette(vec2 uv) {
+    vec2 p = uv - 0.5;
+    float r = dot(p, p);
+    return pow(clamp(1.0 - r * 2.2, 0.0, 1.0), VIGNETTE_POWER);
+}
+
+vec3 applySaturation(vec3 c, float s) {
+    float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    return mix(vec3(l), c, s);
+}
+
+vec3 bloom5(vec2 uv, vec2 res) {
+    vec2 o = vec2(1.0) / res;
+    vec3 c = texture(tex, uv).rgb;
+    c += texture(tex, uv + vec2( o.x, 0.0)).rgb;
+    c += texture(tex, uv + vec2(-o.x, 0.0)).rgb;
+    c += texture(tex, uv + vec2(0.0,  o.y)).rgb;
+    c += texture(tex, uv + vec2(0.0, -o.y)).rgb;
+    return c / 5.0;
+}
+
+vec3 blur9(vec2 uv, vec2 res) {
+    vec2 o = vec2(1.0) / res;
+    vec3 sum = vec3(0.0);
+    sum += texture(tex, uv + vec2(-o.x, -o.y)).rgb;
+    sum += texture(tex, uv + vec2( 0.0, -o.y)).rgb;
+    sum += texture(tex, uv + vec2( o.x, -o.y)).rgb;
+    sum += texture(tex, uv + vec2(-o.x,  0.0)).rgb;
+    sum += texture(tex, uv).rgb;
+    sum += texture(tex, uv + vec2( o.x,  0.0)).rgb;
+    sum += texture(tex, uv + vec2(-o.x,  o.y)).rgb;
+    sum += texture(tex, uv + vec2( 0.0,  o.y)).rgb;
+    sum += texture(tex, uv + vec2( o.x,  o.y)).rgb;
+    return sum / 9.0;
+}
+
+vec3 maskOverlay(vec2 uv, vec2 res, float luma) {
+    float fade = smoothstep(MASK_FADE_START, MASK_FADE_END, luma);
+    float a = MASK_STRENGTH * fade;
+
+#if MASK_MODE == 0
+    return vec3(1.0);
+#elif MASK_MODE == 1
+    // RGB triad grille (vertical structure)
+    float x = uv.x * res.x;
+    float tri = mod(floor(x), 3.0);
+    vec3 m = vec3(1.0);
+
+    // soften intensity slightly to avoid harsh “striping”
+    float aa = a * (1.0 - 0.35 * MASK_SOFTNESS);
+
+    if (tri < 0.5)      m = vec3(1.0 + aa, 1.0 - 0.5*aa, 1.0 - 0.5*aa);
+    else if (tri < 1.5) m = vec3(1.0 - 0.5*aa, 1.0 + aa, 1.0 - 0.5*aa);
+    else                m = vec3(1.0 - 0.5*aa, 1.0 - 0.5*aa, 1.0 + aa);
+
+    return m;
+#else
+    // dot mask fallback
+    float px = uv.x * res.x;
+    float py = uv.y * res.y;
+    float sx = sin(px * 3.14159265);
+    float sy = sin(py * 3.14159265);
+    float d = sx * sy;                // -1..1
+    float dots = 0.5 + 0.5 * d;        // 0..1
+    dots = pow(dots, 1.0 / max(MASK_SOFTNESS, 0.05));
+    float m = mix(1.0, 0.90 + 0.20 * dots, a);
+    return vec3(m);
+#endif
+}
+
+void main() {
+    ivec2 ts = textureSize(tex, 0);
+    vec2 res = vec2(max(ts.x, 1), max(ts.y, 1));
+
+    vec2 uv = curve(v_texcoord);
+
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        FragColor = vec4(0.0);
+        return;
+    }
+
+    // chroma aberration (static)
+    vec3 col;
+    col.r = texture(tex, uv + vec2( CHROMA_ABERRATION, 0.0)).r;
+    col.g = texture(tex, uv).g;
+    col.b = texture(tex, uv - vec2( CHROMA_ABERRATION, 0.0)).b;
+
+    float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+
+    // scanlines
+    col *= scanline(uv, res);
+
+    // mild horizontal bleed (static)
+    if (BLEED_STRENGTH > 0.0) {
+        vec2 o = vec2(1.0) / res;
+        vec3 smear = texture(tex, uv).rgb;
+        smear += texture(tex, uv + vec2( o.x * 1.5, 0.0)).rgb;
+        smear += texture(tex, uv - vec2( o.x * 1.5, 0.0)).rgb;
+        smear /= 3.0;
+        col = mix(col, smear, BLEED_STRENGTH);
+    }
+
+    // vertical grille lines (default on)
+    col *= maskOverlay(uv, res, luma);
+
+    // bloom/glow
+    if (BLOOM_STRENGTH > 0.0) {
+        vec3 b = bloom5(uv, res);
+        col += (b - col) * BLOOM_STRENGTH;
+    }
+
+    // grain (static)
+    float g = hash12(floor(uv * res)) - 0.5;
+    col += g * GRAIN_STRENGTH;
+
+    // slight softness
+    if (BLUR_MIX > 0.0) {
+        col = mix(col, blur9(uv, res), BLUR_MIX);
+    }
+
+    // contrast + saturation
+    col = (col - 0.5) * CONTRAST + 0.5;
+    col = applySaturation(col, SATURATION);
+
+    // vignette
+    if (VIGNETTE_AMT > 0.0) {
+        col *= mix(1.0, vignette(uv), VIGNETTE_AMT);
+    }
+
+    FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}

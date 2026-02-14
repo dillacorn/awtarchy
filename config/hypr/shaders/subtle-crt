@@ -1,0 +1,159 @@
+#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+out vec4 FragColor;
+
+uniform sampler2D tex;
+
+/*
+CRT-lite (static, no time-based motion). Notes next to knobs include subtle→intense ranges.
+
+Vertical “lines between pixels” = GRILLE_* (vertical mask/grille).
+Horizontal scanlines = SCANLINE_*.
+
+Tuning intent:
+- Reduce visible vertical structure: lower GRILLE_STRENGTH, raise GRILLE_SOFTNESS, raise GRILLE_FADE_START.
+- Increase “CRT clarity” feel: raise SCANLINE_STRENGTH and/or SCANLINE_SHARPNESS. Keep SCANLINE_COMPENSATE=1 to avoid dimming.
+*/
+
+#define CURVATURE            0.004   // subtle: 0.000–0.004 | normal: 0.005–0.010 | intense: 0.012–0.020+ (fish-eye)
+
+#define SCANLINE_STRENGTH    0.085   // subtle: 0.050–0.075 | normal: 0.080–0.110 | intense: 0.120–0.170
+#define SCANLINE_SHARPNESS   1.9     // subtle: 1.20–1.70  | normal: 1.80–2.30  | intense: 2.40–3.10 (thinner/darker lines)
+#define SCANLINE_COMPENSATE  1       // 1 = keep avg brightness closer to neutral | 0 = allow overall dimming
+
+#define GRILLE_STRENGTH      0.035   // OFF: 0.000 | subtle: 0.010–0.025 | normal: 0.030–0.050 | intense: 0.055–0.080
+#define GRILLE_SOFTNESS      0.33    // subtle lines: 0.22–0.30 | normal: 0.31–0.40 | very soft: 0.41–0.55 (higher = less visible vertical structure)
+#define GRILLE_FADE_START    0.78    // fade begins at luma; earlier fade: 0.55–0.70 | normal: 0.72–0.82 | late fade: 0.84–0.92 (higher = grille mostly only in bright areas)
+#define GRILLE_FADE_END      0.98    // fade ends at luma; 0.92–0.97 stronger fade | 0.98–1.00 keeps grille into highlights
+
+#define CONVERGENCE          0.00005 // OFF: 0.00000 | subtle: 0.00002–0.00005 | normal: 0.00006–0.00010 | intense: 0.00012–0.00020
+
+#define BLOOM_STRENGTH       0.04    // OFF: 0.00 | subtle: 0.02–0.05 | normal: 0.06–0.10 | intense: 0.12–0.20
+#define GRAIN_STRENGTH       0.006   // OFF: 0.000 | subtle: 0.003–0.008 | normal: 0.010–0.018 | intense: 0.020–0.040
+#define BLUR_MIX             0.10    // OFF: 0.00 | subtle: 0.06–0.12 | normal: 0.14–0.22 | intense: 0.25–0.40 (softens text fast)
+#define CONTRAST             1.02    // neutral: 1.00 | subtle: 1.01–1.04 | normal: 1.05–1.10 | intense: 1.12–1.25
+
+#define VIGNETTE_AMT         0.0     // OFF: 0.00 | subtle: 0.04–0.10 | normal: 0.12–0.22 | intense: 0.25–0.45
+#define VIGNETTE_POWER       1.35    // subtle: 1.10–1.35 | normal: 1.40–1.80 | intense: 1.90–2.60
+
+float hash12(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+vec2 curve(vec2 uv) {
+    uv = uv * 2.0 - 1.0;
+    uv *= 1.0 + (uv.yx * uv.yx) * CURVATURE;
+    return uv * 0.5 + 0.5;
+}
+
+float wrapDist(float a, float b) {
+    float d = abs(a - b);
+    return min(d, 1.0 - d);
+}
+
+// Strong scanlines without turning into a dim overlay.
+// SCANLINE_COMPENSATE keeps the average closer to 1.0.
+float scanline(vec2 uv, vec2 res) {
+    float y = uv.y * res.y;
+    float s = 0.5 + 0.5 * cos(6.2831853 * y);      // 0..1
+    float dark = pow(1.0 - s, SCANLINE_SHARPNESS); // 0..1
+    float m = 1.0 - SCANLINE_STRENGTH * dark;
+
+#if SCANLINE_COMPENSATE
+    m *= 1.0 / (1.0 - 0.5 * SCANLINE_STRENGTH);
+#endif
+    return m;
+}
+
+// Softer triad grille, plus luma fade so it doesn't read as vertical “pixel lines”.
+vec3 grille(vec2 uv, vec2 res, float luma) {
+    float p = fract((uv.x * res.x) / 3.0); // one triad per 3 pixels
+
+    float dr = wrapDist(p, 0.0);
+    float dg = wrapDist(p, 1.0 / 3.0);
+    float db = wrapDist(p, 2.0 / 3.0);
+
+    float w = GRILLE_SOFTNESS;
+    vec3 g = exp(-vec3(dr * dr, dg * dg, db * db) / (2.0 * w * w));
+    g /= max(g.r + g.g + g.b, 1e-6);
+
+    vec3 mask = g * 3.0; // mean ~ 1.0
+
+    float fade = smoothstep(GRILLE_FADE_START, GRILLE_FADE_END, luma);
+    float a = GRILLE_STRENGTH * fade;
+    return mix(vec3(1.0), mask, a);
+}
+
+vec3 bloom4(vec2 uv, vec2 res) {
+    vec2 o = vec2(1.0) / res;
+    vec3 sum = vec3(0.0);
+    sum += texture(tex, uv + vec2( o.x, 0.0)).rgb;
+    sum += texture(tex, uv + vec2(-o.x, 0.0)).rgb;
+    sum += texture(tex, uv + vec2(0.0,  o.y)).rgb;
+    sum += texture(tex, uv + vec2(0.0, -o.y)).rgb;
+    return sum * 0.25;
+}
+
+vec3 blur9(vec2 uv, vec2 res) {
+    vec2 o = vec2(1.0) / res;
+    vec3 sum = vec3(0.0);
+    sum += texture(tex, uv + vec2(-o.x, -o.y)).rgb;
+    sum += texture(tex, uv + vec2( 0.0, -o.y)).rgb;
+    sum += texture(tex, uv + vec2( o.x, -o.y)).rgb;
+    sum += texture(tex, uv + vec2(-o.x,  0.0)).rgb;
+    sum += texture(tex, uv).rgb;
+    sum += texture(tex, uv + vec2( o.x,  0.0)).rgb;
+    sum += texture(tex, uv + vec2(-o.x,  o.y)).rgb;
+    sum += texture(tex, uv + vec2( 0.0,  o.y)).rgb;
+    sum += texture(tex, uv + vec2( o.x,  o.y)).rgb;
+    return sum / 9.0;
+}
+
+float vignette(vec2 uv) {
+    vec2 p = uv - 0.5;
+    float r = dot(p, p) * 2.0;
+    return pow(clamp(1.0 - r, 0.0, 1.0), VIGNETTE_POWER);
+}
+
+void main() {
+    ivec2 ts = textureSize(tex, 0);
+    vec2 res = vec2(max(ts.x, 1), max(ts.y, 1));
+
+    vec2 uv = curve(v_texcoord);
+
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        FragColor = vec4(0.0);
+        return;
+    }
+
+    vec3 base = texture(tex, uv).rgb;
+
+    // static chroma convergence
+    vec3 col;
+    col.r = texture(tex, uv + vec2(CONVERGENCE, 0.0)).r;
+    col.g = base.g;
+    col.b = texture(tex, uv - vec2(CONVERGENCE, 0.0)).b;
+
+    float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+
+    // core CRT cues
+    col *= scanline(uv, res);
+    col *= grille(uv, res, luma);
+
+    // optional extras
+    if (BLOOM_STRENGTH > 0.0) col += bloom4(uv, res) * BLOOM_STRENGTH;
+
+    float g = hash12(floor(uv * res)) - 0.5;
+    col += g * GRAIN_STRENGTH;
+
+    col = mix(col, blur9(uv, res), BLUR_MIX);
+    col = (col - 0.5) * CONTRAST + 0.5;
+
+    if (VIGNETTE_AMT > 0.0) col *= mix(1.0, vignette(uv), VIGNETTE_AMT);
+
+    FragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
