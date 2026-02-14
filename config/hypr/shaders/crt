@@ -1,0 +1,138 @@
+#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+out vec4 FragColor;
+
+uniform sampler2D tex;
+uniform float time;
+
+#define CURVATURE            0.035
+#define SCANLINE_STRENGTH    0.1
+#define SCANLINE_SOFTNESS    3.0
+#define VERTICAL_JITTER      3.5
+#define BEAM_WIDTH           0.3
+#define GRILLE_STRENGTH      0.25
+#define CONVERGENCE_BASE     0.00005
+#define CONVERGENCE_DRIFT    1.0
+#define PHOSPHOR_PERSISTENCE 0.38
+#define PHOSPHOR_GLOW        0.02
+#define GRAIN_STRENGTH       0.015
+#define NOISE_SPEED          75.0
+#define SHIMMER_STRENGTH     0.00035
+#define HPHASE_NOISE         0.00015
+#define VDRIFT_STRENGTH      0.000
+#define CRT_GAMMA            1.0
+#define CONTRAST             1.2
+#define BLUR_STRENGTH        0.0006
+#define BLOOM_STRENGTH       0.35
+#define HORIZONTAL_JITTER    0.00012
+
+float hash(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+float noise1D(float x) {
+    float i = floor(x);
+    float f = fract(x);
+    float a = hash(vec2(i, 0.0));
+    float b = hash(vec2(i + 1.0, 0.0));
+    return mix(a, b, f);
+}
+
+float crtNoise(vec2 uv) {
+    float t = time * NOISE_SPEED;
+    float line = uv.y * 1440.0;
+    float band = noise1D(line * 0.6 + t);
+    float grain = hash(floor(uv * vec2(2560.0, 1440.0)) + t);
+    return mix(grain, band, 0.6);
+}
+
+vec2 curve(vec2 uv) {
+    uv = uv * 2.0 - 1.0;
+    uv *= 1.0 + (uv.yx * uv.yx) * CURVATURE;
+    return uv * 0.5 + 0.5;
+}
+
+float scanline(vec2 uv) {
+    float y = uv.y * 1440.0;
+    float jitter = noise1D(y * 0.25 + time * 12.0) * VERTICAL_JITTER;
+    float beam = exp(-pow(fract(y + jitter) - 0.5, 2.0) / SCANLINE_SOFTNESS);
+    return mix(1.0, beam, SCANLINE_STRENGTH);
+}
+
+vec3 apertureGrille(vec2 uv) {
+    float x = uv.x * 2560.0;
+    float stripe = mod(floor(x), 3.0);
+    vec3 mask = vec3(0.85);
+    if (stripe == 0.0) mask.r = 1.25;
+    else if (stripe == 1.0) mask.g = 1.25;
+    else mask.b = 1.25;
+    return mix(vec3(1.0), mask, GRILLE_STRENGTH);
+}
+
+vec3 bloom(vec2 uv) {
+    vec3 sum = vec3(0.0);
+    float o = 1.0 / 900.0;
+    sum += texture(tex, uv + vec2( o, 0.0)).rgb;
+    sum += texture(tex, uv + vec2(-o, 0.0)).rgb;
+    sum += texture(tex, uv + vec2(0.0,  o)).rgb;
+    sum += texture(tex, uv + vec2(0.0, -o)).rgb;
+    return sum * 0.25;
+}
+
+vec3 phosphor(vec2 uv, vec3 c) {
+    float flicker = 0.97 + 0.03 * sin(time * 120.0 + uv.y * 900.0);
+    vec3 glow = bloom(uv) * PHOSPHOR_GLOW;
+    return mix(c, (c + glow) * flicker, PHOSPHOR_PERSISTENCE);
+}
+
+vec3 blur(vec2 uv) {
+    vec3 sum = vec3(0.0);
+    float o = BLUR_STRENGTH;
+    sum += texture(tex, uv + vec2(-o, -o)).rgb;
+    sum += texture(tex, uv + vec2( 0.0, -o)).rgb;
+    sum += texture(tex, uv + vec2( o, -o)).rgb;
+    sum += texture(tex, uv + vec2(-o,  0.0)).rgb;
+    sum += texture(tex, uv).rgb;
+    sum += texture(tex, uv + vec2( o,  0.0)).rgb;
+    sum += texture(tex, uv + vec2(-o,  o)).rgb;
+    sum += texture(tex, uv + vec2( 0.0,  o)).rgb;
+    sum += texture(tex, uv + vec2( o,  o)).rgb;
+    return sum / 9.0;
+}
+
+void main() {
+    vec2 uv = curve(v_texcoord);
+    uv.y += sin(time * 1.7) * VDRIFT_STRENGTH;
+    uv.x += noise1D(uv.y * 120.0 + time * 10.0) * HPHASE_NOISE;
+    uv.x += (hash(vec2(floor(time * 120.0), 0.0)) - 0.5) * 2.0 * HORIZONTAL_JITTER;
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+        FragColor = vec4(0.0);
+        return;
+    }
+    vec3 base = texture(tex, uv).rgb;
+    base = pow(base, vec3(CRT_GAMMA));
+    float luma = dot(base, vec3(0.2126, 0.7152, 0.0722));
+    float shimmer = noise1D(uv.y * 800.0 + time * 60.0) * SHIMMER_STRENGTH * luma;
+    vec3 color = vec3(
+        texture(tex, uv + vec2(CONVERGENCE_BASE + shimmer, 0.0)).r,
+        base.g,
+        texture(tex, uv - vec2(CONVERGENCE_BASE + shimmer, 0.0)).b
+    );
+    color *= scanline(uv);
+    color *= apertureGrille(uv);
+    color = color * mix(1.0, luma, BEAM_WIDTH);
+    color += bloom(uv) * BLOOM_STRENGTH;
+    color = phosphor(uv, color);
+    color = (color - 0.5) * CONTRAST + 0.5;
+    float n = crtNoise(uv) - 0.5;
+    color += n * GRAIN_STRENGTH * (0.4 + luma);
+    color = mix(color, blur(uv), 0.28);
+    color = clamp(color, 0.0, 1.4);
+    float d = distance(uv, vec2(0.5));
+    color *= smoothstep(0.92, 0.85, d);
+    FragColor = vec4(color, 1.0);
+}

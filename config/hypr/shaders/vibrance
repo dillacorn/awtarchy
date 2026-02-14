@@ -1,0 +1,27 @@
+#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+uniform sampler2D tex;
+
+layout(location = 0) out vec4 fragColor;
+
+/*
+ * Vibrancy strength
+ * 0.0  = no change
+ * 0.2–0.4 = subtle
+ * 0.6+ = aggressive
+ */
+#define VIBRANCE 0.60
+
+void main() {
+    vec4 color = texture(tex, v_texcoord);
+
+    float luma = dot(color.rgb, vec3(0.2126, 0.7152, 0.0722));
+    float saturation = length(color.rgb - vec3(luma));
+
+    float vibrance = VIBRANCE * (1.0 - saturation);
+    vec3 result = mix(vec3(luma), color.rgb, 1.0 + vibrance);
+
+    fragColor = vec4(result, color.a);
+}
