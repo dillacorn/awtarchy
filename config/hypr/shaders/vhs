@@ -1,0 +1,132 @@
+#version 300 es
+precision highp float;
+
+uniform sampler2D tex;
+uniform float time;
+
+in vec2 v_texcoord;
+out vec4 fragColor;
+
+/*
+  TUNING (safe defaults)
+  - EFFECT_MIX:     0.0 = off, 1.0 = full effect (readability dies above ~0.6)
+  - CHROMA:         color separation
+  - WOBBLE/DRIFT:   geometry wobble
+  - GRAIN/FLICKER:  noise + brightness flicker
+  - SCANLINE/MASK:  CRT line + shadow mask strength
+  - VIGNETTE:       edge darkening
+  - GLITCH:         occasional colored glitch line
+*/
+#define EFFECT_MIX  0.20
+#define CHROMA      0.0012
+#define WOBBLE      0.0025
+#define DRIFT       0.0010
+#define GRAIN       0.035
+#define FLICKER     0.015
+#define SCANLINE    0.030
+#define MASK        0.020
+#define VIGNETTE    0.10
+#define GLITCH      0.12
+#define GAMMA_CRUSH 1.03
+
+float hash21(vec2 p) {
+    return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453);
+}
+
+float noise2d(vec2 p) {
+    vec2 i = floor(p);
+    vec2 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+
+    float a = hash21(i);
+    float b = hash21(i + vec2(1.0, 0.0));
+    float c = hash21(i + vec2(0.0, 1.0));
+    float d = hash21(i + vec2(1.0, 1.0));
+
+    return mix(mix(a, b, f.x), mix(c, d, f.x), f.y);
+}
+
+float fbm(vec2 p) {
+    float v = 0.0;
+    float a = 0.5;
+    for (int i = 0; i < 5; i++) {
+        v += a * noise2d(p);
+        p *= 2.0;
+        a *= 0.5;
+    }
+    return v;
+}
+
+void main() {
+    vec2 res = vec2(textureSize(tex, 0));
+    vec2 uv0 = clamp(v_texcoord, vec2(0.0), vec2(1.0));
+    vec3 src = texture(tex, uv0).rgb;
+
+    vec2 uv = uv0;
+
+    float t = time * 0.8;
+
+    // gentler drift + wobble
+    float drift = sin(t * 0.3) * DRIFT;
+    float wobble = fbm(vec2(uv.y * 3.0, t * 0.4)) * WOBBLE;
+    uv.x += wobble + drift;
+
+    // tiny horizontal line jitter
+    float line = sin(uv.y * res.y * 1.3 + t * 20.0);
+    uv.x += line * 0.00035;
+
+    // small scan shift
+    float scanShift = sin(uv.y * res.y * 0.25) * 0.00045;
+    uv.x += scanShift;
+
+    // chroma separation
+    float c = CHROMA + sin(t * 2.0) * (CHROMA * 0.35);
+
+    vec2 uvR = clamp(uv + vec2(c, 0.0), vec2(0.0), vec2(1.0));
+    vec2 uvG = clamp(uv,             vec2(0.0), vec2(1.0));
+    vec2 uvB = clamp(uv - vec2(c, 0.0), vec2(0.0), vec2(1.0));
+
+    vec3 col;
+    col.r = texture(tex, uvR).r;
+    col.g = texture(tex, uvG).g;
+    col.b = texture(tex, uvB).b;
+
+    // light color bleed
+    float bleed = fbm(vec2(uv.y * 8.0, t * 1.2)) * 0.0018;
+    col.r += texture(tex, clamp(uv - vec2(bleed, 0.0), vec2(0.0), vec2(1.0))).r * 0.06;
+    col.b += texture(tex, clamp(uv + vec2(bleed, 0.0), vec2(0.0), vec2(1.0))).b * 0.06;
+
+    // light flicker (multiplicative, but small)
+    float flicker = hash21(vec2(t, uv.y)) * FLICKER;
+    col *= 1.0 - flicker;
+
+    // grain (additive, small)
+    float grain = hash21(uv * res + time * 60.0);
+    grain = mix(grain, hash21(uv * res * 0.5), 0.5);
+    col += (grain - 0.5) * GRAIN;
+
+    // scanlines + mask (gentle)
+    float scanline = sin(uv.y * res.y * 1.2);
+    col *= 1.0 - SCANLINE + SCANLINE * (0.5 + 0.5 * scanline);
+
+    float mask = sin(uv.x * res.x * 3.1415);
+    col *= 1.0 - MASK + MASK * (0.5 + 0.5 * mask);
+
+    // very light vignette
+    vec2 vig = uv - 0.5;
+    float v = 1.0 - dot(vig, vig) * 1.2;
+    v = mix(1.0, clamp(v, 0.0, 1.0), VIGNETTE);
+    col *= v;
+
+    // rare subtle glitch line
+    float glitchLine = step(0.9975, hash21(vec2(floor(uv.y * 400.0), floor(t * 2.0))));
+    col += glitchLine * GLITCH * vec3(0.25, -0.15, 0.20);
+
+    // mild gamma crush (was killing readability before)
+    col = pow(max(col, 0.0), vec3(GAMMA_CRUSH));
+
+    // preserve readability: mix effect back into original
+    vec3 outCol = mix(src, col, EFFECT_MIX);
+
+    fragColor = vec4(outCol, 1.0);
+}

@@ -12,7 +12,7 @@ layout(location = 0) out vec4 fragColor;
  * 0.2–0.4 = subtle
  * 0.6+ = aggressive
  */
-#define VIBRANCE 0.60
+#define VIBRANCE 0.35
 
 void main() {
     vec4 color = texture(tex, v_texcoord);
