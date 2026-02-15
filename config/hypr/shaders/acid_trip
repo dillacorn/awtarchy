@@ -1,0 +1,105 @@
+#version 300 es
+precision highp float;
+
+in vec2 v_texcoord;
+uniform sampler2D tex;
+uniform float time;
+
+layout(location = 0) out vec4 fragColor;
+
+/*
+USABLE "color vomit" (no tiling, no mirror, no repeats)
+
+Your “4 desktops on one monitor” was from the mirror/wrap sampling.
+This version hard-clamps UVs and adds only small, smooth warps.
+
+If you want motion: `decoration { debug { damage_tracking = 0 } }`
+
+Knobs:
+- INTENSITY:   0.10–0.45
+- READABILITY: 0.70–0.90
+- WARP_MAG:    0.0003–0.0020
+- RAINBOW:     0.10–0.45
+- CHROMA:      0.0000–0.0008
+*/
+
+#define INTENSITY   0.45
+#define READABILITY 0.82
+
+#define WARP_MAG    0.0020
+#define RAINBOW     0.45
+#define CHROMA      0.00045
+
+#define SPEED       0.75
+
+float hash12(vec2 p) {
+    p = fract(p * vec2(123.34, 456.21));
+    p += dot(p, p + 45.32);
+    return fract(p.x * p.y);
+}
+
+vec2 clampUV(vec2 uv) {
+    // keep a tiny guard band to avoid sampling undefined edges
+    return clamp(uv, vec2(0.001), vec2(0.999));
+}
+
+vec3 sample_chroma(vec2 uv, float amt, float t) {
+    if (amt <= 0.0) return texture(tex, uv).rgb;
+
+    float a = 6.2831853 * (0.07 * sin(t * 0.7) + 0.05 * sin(t * 0.19 + uv.y * 1.2));
+    vec2 dir = vec2(cos(a), sin(a));
+    vec2 o = dir * amt;
+
+    vec3 col;
+    col.r = texture(tex, clampUV(uv + o)).r;
+    col.g = texture(tex, uv).g;
+    col.b = texture(tex, clampUV(uv - o)).b;
+    return col;
+}
+
+void main() {
+    float t = time * SPEED;
+
+    vec2 uv = v_texcoord;
+    vec2 p = uv - 0.5;
+    float r = length(p);
+
+    // small, smooth offset field (no wrap/mirror)
+    float mag = WARP_MAG * INTENSITY * (0.35 + 0.65 * r);
+
+    vec2 off;
+    off.x = sin(t * 0.90 + p.y * 10.0) + 0.35 * sin(t * 1.30 + p.y * 17.0);
+    off.y = sin(t * 1.05 + p.x *  9.0) + 0.35 * sin(t * 0.80 + p.x * 15.0);
+
+    vec2 wuv = clampUV(uv + off * mag);
+
+    vec3 base = sample_chroma(wuv, CHROMA * INTENSITY, t);
+
+    // colorful field that does NOT depend on atan() (no seam)
+    float f1 = dot(p, vec2(11.0, 7.0));
+    float f2 = dot(p, vec2(-9.0, 13.0));
+    float f3 = dot(p, vec2(5.0, -10.0));
+
+    vec3 vomit = 0.5 + 0.5 * sin(vec3(f1, f2, f3)
+        + vec3(0.0, 2.094, 4.188)
+        + t * vec3(1.00, 1.28, 1.55)
+    );
+
+    // light banding + grain
+    float bands = 0.35 * sin(wuv.y * 26.0 + t * 1.6) * sin(wuv.x * 18.0 - t * 1.2);
+    vomit += 0.05 * INTENSITY * vec3(bands, -bands, 0.25 * sin(bands + t));
+    vomit = clamp(vomit, 0.0, 1.0);
+
+    // screen-ish blend (keeps detail)
+    float vamt = clamp(RAINBOW * INTENSITY, 0.0, 0.65);
+    vec3 screenish = 1.0 - (1.0 - base) * (1.0 - vomit);
+    vec3 col = mix(base, screenish, vamt);
+
+    float n = hash12(floor(wuv * 700.0) + floor(t * 12.0)) - 0.5;
+    col += n * (0.010 * INTENSITY);
+
+    // keep it usable
+    col = mix(col, base, clamp(READABILITY, 0.0, 1.0));
+
+    fragColor = vec4(clamp(col, 0.0, 1.0), 1.0);
+}
