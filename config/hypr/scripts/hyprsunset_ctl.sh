@@ -2,20 +2,21 @@
 set -euo pipefail
 
 # Hyprsunset controller with:
-# - toggle on/off
+# - toggle on/off (OFF = identity)
 # - +/- step adjustments
-# - internal "offset from neutral" state so it never resumes a previous temp
+# - persistent "last temperature" so toggle OFF -> ON restores the previous temp
 # - mako notifications via notify-send
 
 STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hyprsunset"
-STATE_FILE="$STATE_DIR/offset"
+OFFSET_FILE="$STATE_DIR/offset"       # offset from BASE_K (for compatibility + status)
+TEMP_FILE="$STATE_DIR/last_temp"      # last absolute temperature (K)
+ENABLED_FILE="$STATE_DIR/enabled"     # fallback when JSON/jq isn't available: 1=on, 0=off
 mkdir -p "$STATE_DIR"
 
 # Neutral daylight baseline.
 BASE_K=6500
 
-# When toggling ON from OFF, start here (offset from BASE_K).
-# Negative = warmer (lower temp). Example: 6500-1500 = 5000K.
+# Used only when there is no prior saved state.
 DEFAULT_ON_OFFSET=-1500
 
 STEP=500
@@ -29,52 +30,115 @@ notify() {
 
 have_jq() { command -v jq >/dev/null 2>&1; }
 
-# Best-effort: return "true" / "false" / "unknown"
-get_identity_state() {
-  if have_jq; then
-    if hyprctl -j hyprsunset >/dev/null 2>&1; then
-      local v
-      v="$(hyprctl -j hyprsunset | jq -r '(.identity // "unknown")' 2>/dev/null || true)"
+read_int_file() {
+  local file="$1" def="$2" v=""
+  if [[ -f "$file" ]]; then
+    v="$(<"$file")"
+    if [[ "$v" =~ ^-?[0-9]+$ ]]; then
       printf '%s\n' "$v"
       return 0
+    fi
+  fi
+  printf '%s\n' "$def"
+}
+
+write_int_file() {
+  local file="$1" v="$2"
+  printf '%s\n' "$v" >"$file"
+}
+
+clamp_temp() {
+  local t="$1"
+  if (( t < 1000 )); then t=1000; fi
+  if (( t > 20000 )); then t=20000; fi
+  printf '%s\n' "$t"
+}
+
+# Best-effort: return "true" / "false" / "unknown"
+get_identity_state() {
+  if have_jq && hyprctl -j hyprsunset >/dev/null 2>&1; then
+    # Some hyprctl -j outputs have a noisy prefix line; strip anything before the first '{'
+    local json
+    json="$(hyprctl -j hyprsunset 2>/dev/null | sed -n '0,/{/s/^[^{]*//;/{/,$p' || true)"
+    if [[ -n "$json" ]]; then
+      local v
+      v="$(jq -r '(.identity // "unknown")' <<<"$json" 2>/dev/null || true)"
+      [[ -n "$v" ]] && { printf '%s\n' "$v"; return 0; }
     fi
   fi
   printf '%s\n' "unknown"
 }
 
-read_offset() {
-  if [[ -f "$STATE_FILE" ]]; then
-    local v
-    v="$(<"$STATE_FILE")"
-    [[ "$v" =~ ^-?[0-9]+$ ]] && printf '%s\n' "$v" && return 0
-  fi
-  printf '0\n'
+# Fallback when identity is unknown
+is_enabled_fallback() {
+  local e
+  e="$(read_int_file "$ENABLED_FILE" 0)"
+  [[ "$e" == "1" ]]
 }
 
-write_offset() {
-  printf '%s\n' "$1" >"$STATE_FILE"
+is_off_best_effort() {
+  local id
+  id="$(get_identity_state)"
+  if [[ "$id" == "true" ]]; then
+    return 0
+  elif [[ "$id" == "false" ]]; then
+    return 1
+  fi
+
+  # unknown -> use saved enabled state
+  if is_enabled_fallback; then
+    return 1
+  fi
+  return 0
+}
+
+get_last_temp() {
+  local t
+  t="$(read_int_file "$TEMP_FILE" 0)"
+  if (( t >= 1000 && t <= 20000 )); then
+    clamp_temp "$t"
+    return 0
+  fi
+
+  # Back-compat: derive temp from offset if temp file doesn't exist yet
+  local off
+  off="$(read_int_file "$OFFSET_FILE" "$DEFAULT_ON_OFFSET")"
+  t=$(( BASE_K + off ))
+  clamp_temp "$t"
+}
+
+apply_temp() {
+  local target
+  target="$(clamp_temp "$1")"
+
+  hyprctl hyprsunset temperature "$target" >/dev/null
+
+  # Persist state for restore
+  write_int_file "$TEMP_FILE" "$target"
+  write_int_file "$OFFSET_FILE" "$(( target - BASE_K ))"
+  write_int_file "$ENABLED_FILE" 1
+
+  notify "Temp: ${target}K (offset $(( target - BASE_K )))"
 }
 
 apply_offset() {
   local offset="$1"
-  local target=$(( BASE_K + offset ))
-
-  # Clamp to sane range; adjust if you want.
-  if (( target < 1000 )); then target=1000; fi
-  if (( target > 20000 )); then target=20000; fi
-
-  hyprctl hyprsunset temperature "$target" >/dev/null
-  notify "Temp: ${target}K (offset ${offset})"
+  apply_temp "$(( BASE_K + offset ))"
 }
 
 set_off() {
   hyprctl hyprsunset identity >/dev/null
-  write_offset 0
+  write_int_file "$ENABLED_FILE" 0
   notify "Off (identity)"
 }
 
+set_on_restore() {
+  local t
+  t="$(get_last_temp)"
+  apply_temp "$t"
+}
+
 set_on_default() {
-  write_offset "$DEFAULT_ON_OFFSET"
   apply_offset "$DEFAULT_ON_OFFSET"
 }
 
@@ -83,12 +147,12 @@ usage() {
 Usage: hyprsunset_ctl.sh <cmd>
 
 Commands:
-  toggle         Toggle night light on/off (uses identity for off)
-  up             Increase temperature by STEP (colder) from BASE, using internal offset
-  down           Decrease temperature by STEP (warmer) from BASE, using internal offset
-  off            Force off (identity) and reset offset to 0
-  on             Force on to DEFAULT_ON_OFFSET
-  status         Print offset + best-effort identity state
+  toggle         Toggle night light on/off (OFF = identity). Toggle ON restores last saved temperature.
+  up             Increase temperature by STEP (colder). If OFF, starts from last saved temperature.
+  down           Decrease temperature by STEP (warmer). If OFF, starts from last saved temperature.
+  off            Force off (identity). Preserves last saved temperature for restore.
+  on             Force on to DEFAULT_ON_OFFSET (overwrites saved temperature).
+  status         Print last temp/offset + best-effort identity/enabled state
 
 Edit in script:
   BASE_K, DEFAULT_ON_OFFSET, STEP
@@ -98,47 +162,23 @@ EOF
 cmd="${1:-}"
 case "$cmd" in
   toggle)
-    id="$(get_identity_state)"
-    if [[ "$id" == "true" ]]; then
-      set_on_default
-    elif [[ "$id" == "false" ]]; then
-      set_off
+    if is_off_best_effort; then
+      set_on_restore
     else
-      # Fallback heuristic: offset==0 means "probably off"
-      offset="$(read_offset)"
-      if [[ "$offset" == "0" ]]; then
-        set_on_default
-      else
-        set_off
-      fi
+      set_off
     fi
     ;;
 
   up)
-    off="$(get_identity_state)"
-    offset="$(read_offset)"
-
-    # If currently off/identity, start from 0 offset (BASE) then apply step.
-    if [[ "$off" == "true" ]]; then
-      offset=0
-    fi
-
-    offset=$(( offset + STEP ))
-    write_offset "$offset"
-    apply_offset "$offset"
+    t="$(get_last_temp)"
+    t=$(( t + STEP ))
+    apply_temp "$t"
     ;;
 
   down)
-    off="$(get_identity_state)"
-    offset="$(read_offset)"
-
-    if [[ "$off" == "true" ]]; then
-      offset=0
-    fi
-
-    offset=$(( offset - STEP ))
-    write_offset "$offset"
-    apply_offset "$offset"
+    t="$(get_last_temp)"
+    t=$(( t - STEP ))
+    apply_temp "$t"
     ;;
 
   off)
@@ -150,9 +190,11 @@ case "$cmd" in
     ;;
 
   status)
-    offset="$(read_offset)"
+    t="$(get_last_temp)"
+    off="$(( t - BASE_K ))"
     id="$(get_identity_state)"
-    printf 'offset=%s\nidentity=%s\n' "$offset" "$id"
+    en="$(read_int_file "$ENABLED_FILE" 0)"
+    printf 'temp=%sK\noffset=%s\nidentity=%s\nenabled=%s\n' "$t" "$off" "$id" "$en"
     ;;
 
   ""|-h|--help|help)
