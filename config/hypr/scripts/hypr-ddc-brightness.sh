@@ -218,7 +218,7 @@ bus_from_detect_by_identity() {
     if [[ -n "$hypr_make_u" && -n "$mfg_u" ]]; then
       if [[ "$hypr_make_u" == "$mfg_u" || "$hypr_make_u" == *"$mfg_u"* || "$mfg_u" == *"$hypr_make_u"* ]]; then
         score=$((score + 80))
-      fi
+    fi
     fi
 
     if (( score > best_score )); then
@@ -309,12 +309,17 @@ must_read_brightness() {
   printf '%s\n' "$out"
 }
 
+notify_level() {
+  local conn="$1" cur="$2" max="$3"
+  notify "$NOTIFY_MS" "Brightness $conn" "${cur}/${max}" "hypr-ddc-$conn"
+}
+
 set_brightness_abs() {
   local conn="$1" make="$2" model="$3" serial="$4" desc="$5" target="$6"
-  local out cur max bus before after vcp2 applied
+  local out cur max bus after vcp2
+
   out="$(must_read_brightness "$conn" "$make" "$model" "$serial" "$desc")"
   read -r cur max bus <<<"$out"
-  before="$cur"
 
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
@@ -331,8 +336,7 @@ set_brightness_abs() {
   read -r after _ < <(printf '%s\n' "$vcp2" | parse_vcp_any)
   [[ -n "${after:-}" ]] || after="$target"
 
-  applied=$(( after - before ))
-  notify "$NOTIFY_MS" "Brightness $conn" "before ${before}, set ${target}, applied ${applied}, now ${after}/${max}" "hypr-ddc-$conn"
+  notify_level "$conn" "$after" "$max"
 }
 
 # ---------- status/set (non-worker) ----------
@@ -454,8 +458,6 @@ while :; do
     continue
   fi
 
-  before="$cur"
-
   target=$((cur + pending))
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
@@ -469,6 +471,5 @@ while :; do
   read -r after _ < <(printf '%s\n' "$vcp2" | parse_vcp_any)
   [[ -n "${after:-}" ]] || after="$target"
 
-  applied=$(( after - before ))
-  notify "$NOTIFY_MS" "Brightness $conn" "before ${before}, requested ${pending}, applied ${applied}, now ${after}/${max}" "hypr-ddc-$conn"
+  notify_level "$conn" "$after" "$max"
 done
