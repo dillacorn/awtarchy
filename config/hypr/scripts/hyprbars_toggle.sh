@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# ~/.config/hypr/scripts/hyprbars-toggle.sh
+# github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
+# ~/.config/hypr/scripts/hyprbars_toggle.sh
 #
 # Toggle hyprbars via hyprpm in a floating Alacritty.
 # If hyprbars isn't available yet, offer to add the official Hyprland plugins repo via hyprpm.

@@ -4,7 +4,7 @@
 [Desktop Entry]
 Type=Application
 Name=Themes (Hyprland)
-Exec=/bin/sh -c "$HOME/.config/hypr/scripts/select_theme.sh"
+Exec=/bin/sh -c "$HOME/.config/hypr/scripts/theme_select.sh"
 Icon=utilities-terminal
 Terminal=false
 Categories=Utility;

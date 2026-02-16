@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
-# ~/.config/hypr/scripts/workspace-mix.sh
+# ~/.config/hypr/scripts/workspace_mix.sh
 # 
 # PURPOSE:
 #   - Mix windows from selected Hyprland workspaces into a temporary workspace named by MIX_NAME

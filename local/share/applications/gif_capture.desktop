@@ -4,7 +4,7 @@
 [Desktop Entry]
 Type=Application
 Name=gif (record)
-Exec=/bin/sh -c "$HOME/.config/hypr/scripts/gif.sh"
+Exec=/bin/sh -c "$HOME/.config/hypr/scripts/gif_capture.sh"
 Icon=utilities-terminal
 Terminal=false
 Categories=Utility;

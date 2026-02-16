@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
-# ~/.config/hypr/scripts/wlogout-toggle.sh
+# ~/.config/hypr/scripts/wlogout_toggle.sh
 # 
 # Toggle wlogout and warn if Caps Lock is active.
 

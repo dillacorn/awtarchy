@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
-# ~/.config/hypr/scripts/screenshot_output.sh
+# ~/.config/hypr/scripts/screenshot_display.sh
 
 set -euo pipefail
 
@@ -17,7 +17,7 @@ mkdir -p "$out_dir"
 # only clear our own prior notification (from this script) if it exists
 cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy"
 mkdir -p "$cache_dir"
-nid_file="$cache_dir/screenshot_output.nid"
+nid_file="$cache_dir/screenshot_display.nid"
 : "${MAKO_CLEAR_DELAY:=0.08}"
 
 if [[ -f "$nid_file" ]]; then

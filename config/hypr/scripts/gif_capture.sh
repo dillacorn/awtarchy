@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
-# ~/.config/hypr/scripts/gifs.sh
+# ~/.config/hypr/scripts/gif_capture.sh
 
 set -euo pipefail
 

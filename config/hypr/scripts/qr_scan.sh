@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# ~/.config/hypr/scripts/qr-scan.sh
+# github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
+# ~/.config/hypr/scripts/qr_scan.sh
 # Single-instance guarded, but releases lock before wl-copy (wl-copy may fork).
 
 set -euo pipefail

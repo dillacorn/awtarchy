@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
-# FILE: ~/.config/hypr/scripts/select_theme.sh
+# FILE: ~/.config/hypr/scripts/theme_select.sh
 #
 # Theme picker.
 # - Uses fuzzel if available, otherwise wofi.
