@@ -7,26 +7,18 @@
 #   hypr-ddc-brightness.sh down [step]
 #   hypr-ddc-brightness.sh status
 #   hypr-ddc-brightness.sh set <absolute_value>
-#
-# Optional mapping (recommended):
-#   ~/.config/hypr/ddcutil-bus-map.conf
-#     DP-3=5
-#     HDMI-A-1=6
-#
-# Debounce:
-#   HYPR_DDC_DEBOUNCE_MS=350   (default)
-#   HYPR_DDC_MAX_WAIT_MS=5000  (default)
-#
-# Notifications:
-#   HYPR_DDC_NOTIFY=1          (default on)
-#   HYPR_DDC_NOTIFY_MS=2600    (default)
 
 set -euo pipefail
 
-DEBOUNCE_MS="${HYPR_DDC_DEBOUNCE_MS:-350}"
-MAX_WAIT_MS="${HYPR_DDC_MAX_WAIT_MS:-5000}"
+DEBOUNCE_MS="${HYPR_DDC_DEBOUNCE_MS:-160}"
+MAX_WAIT_MS="${HYPR_DDC_MAX_WAIT_MS:-3500}"
 
-NOTIFY_MS="${HYPR_DDC_NOTIFY_MS:-2600}"
+NOTIFY_MS="${HYPR_DDC_NOTIFY_MS:-1800}"
+
+GET_TIMEOUT="${HYPR_DDC_GET_TIMEOUT:-3}"
+SET_TIMEOUT="${HYPR_DDC_SET_TIMEOUT:-3}"
+
+STATE_TTL_MS="${HYPR_DDC_STATE_TTL_MS:-30000}"
 
 now_ms() {
   if date +%s%3N >/dev/null 2>&1; then
@@ -93,7 +85,6 @@ get_focused_monitor_tsv() {
 }
 
 parse_vcp_any() {
-  # Returns: "<cur> <max>" from almost any ddcutil getvcp output
   awk '
     {
       n=0
@@ -108,10 +99,10 @@ parse_vcp_any() {
   '
 }
 
-# ---------- args ----------
 MODE="client"
 WORKER_CONN=""
 cmd="${1:-}"
+
 case "$cmd" in
   --worker)
     MODE="worker"
@@ -151,14 +142,35 @@ need_cmd jq
 need_cmd ddcutil
 need_cmd timeout
 
-# ---------- paths ----------
 uid="$(id -u)"
 rundir="${XDG_RUNTIME_DIR:-/tmp}/hypr-ddc-brightness-${uid}"
 cachedir="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-ddc-brightness"
 config_map="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/ddcutil-bus-map.conf"
 mkdir -p "$rundir" "$cachedir"
 
-# ---------- mapping ----------
+state_path_for_conn() { printf '%s/state_%s.tsv\n' "$cachedir" "$1"; }
+
+read_state() {
+  local conn="$1" sf
+  sf="$(state_path_for_conn "$conn")"
+  [[ -r "$sf" ]] || return 1
+  awk 'NF>=3 {print $1, $2, $3; exit}' "$sf" 2>/dev/null
+}
+
+write_state() {
+  local conn="$1" cur="$2" max="$3" ts sf tmp
+  ts="$(now_ms)"
+  sf="$(state_path_for_conn "$conn")"
+  tmp="${sf}.tmp.$$"
+  printf '%s\t%s\t%s\n' "$cur" "$max" "$ts" >"$tmp"
+  mv -f "$tmp" "$sf"
+}
+
+notify_level() {
+  local conn="$1" cur="$2" max="$3"
+  notify "$NOTIFY_MS" "Brightness $conn" "${cur}/${max}" "hypr-ddc-$conn"
+}
+
 bus_from_config_map() {
   local conn="$1"
   [[ -f "$config_map" ]] || return 1
@@ -218,7 +230,7 @@ bus_from_detect_by_identity() {
     if [[ -n "$hypr_make_u" && -n "$mfg_u" ]]; then
       if [[ "$hypr_make_u" == "$mfg_u" || "$hypr_make_u" == *"$mfg_u"* || "$mfg_u" == *"$hypr_make_u"* ]]; then
         score=$((score + 80))
-    fi
+      fi
     fi
 
     if (( score > best_score )); then
@@ -265,18 +277,44 @@ get_bus_for_conn() {
   bus_from_detect_by_identity "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc"
 }
 
-build_ddc_array() {
+build_ddc_base_cmd() {
   local bus="$1"
-  local -n _out="$2"
-  local -a extra
-  _out=(ddcutil)
+  local -a ddc_cmd=(ddcutil)
+  local -a extra=()
+
+  if [[ -n "${HYPR_DDC_SLEEP_MULTIPLIER:-}" ]]; then
+    ddc_cmd+=(--sleep-multiplier "$HYPR_DDC_SLEEP_MULTIPLIER")
+  fi
+  if [[ "${HYPR_DDC_DISABLE_DYNAMIC_SLEEP:-0}" == "1" ]]; then
+    ddc_cmd+=(--disable-dynamic-sleep)
+  fi
+  if [[ "${HYPR_DDC_NODETECT:-0}" == "1" ]]; then
+    ddc_cmd+=(--nodetect)
+  fi
 
   if [[ -n "${DDCUTIL_BUS:-}" ]]; then
     read -r -a extra <<<"$DDCUTIL_BUS"
-    _out+=("${extra[@]}")
+    ddc_cmd+=("${extra[@]}")
   else
-    _out+=(--bus "$bus")
+    ddc_cmd+=(--bus "$bus")
   fi
+
+  printf '%s\0' "${ddc_cmd[@]}"
+}
+
+build_ddc_safe_cmd() {
+  local bus="$1"
+  local -a ddc_cmd=(ddcutil)
+  local -a extra=()
+
+  if [[ -n "${DDCUTIL_BUS:-}" ]]; then
+    read -r -a extra <<<"$DDCUTIL_BUS"
+    ddc_cmd+=("${extra[@]}")
+  else
+    ddc_cmd+=(--bus "$bus")
+  fi
+
+  printf '%s\0' "${ddc_cmd[@]}"
 }
 
 must_focused_info() {
@@ -286,65 +324,52 @@ must_focused_info() {
   printf '%s\n' "$line"
 }
 
-read_brightness() {
-  local conn="$1" make="$2" model="$3" serial="$4" desc="$5"
-  local bus vcp cur max
-  bus="$(get_bus_for_conn "$conn" "$make" "$model" "$serial" "$desc" || true)"
-  [[ -n "${bus:-}" ]] || return 2
+ddc_get_curmax() {
+  local bus="$1"
+  local -a ddc=()
+  local vcp cur max
 
-  declare -a ddc
-  build_ddc_array "$bus" ddc
-
-  vcp="$(timeout 2 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
+  mapfile -d '' -t ddc < <(build_ddc_base_cmd "$bus")
+  vcp="$(timeout "$GET_TIMEOUT" "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
   read -r cur max < <(printf '%s\n' "$vcp" | parse_vcp_any)
-  [[ -n "${cur:-}" && -n "${max:-}" ]] || return 3
-  printf '%s %s %s\n' "$cur" "$max" "$bus"
-}
-
-must_read_brightness() {
-  local conn="$1" make="$2" model="$3" serial="$4" desc="$5"
-  local out
-  out="$(read_brightness "$conn" "$make" "$model" "$serial" "$desc" || true)"
-  [[ -n "${out:-}" ]] || { echo "hypr-ddc-brightness: failed to read brightness for ${conn}" >&2; exit 1; }
-  printf '%s\n' "$out"
-}
-
-notify_level() {
-  local conn="$1" cur="$2" max="$3"
-  notify "$NOTIFY_MS" "Brightness $conn" "${cur}/${max}" "hypr-ddc-$conn"
-}
-
-set_brightness_abs() {
-  local conn="$1" make="$2" model="$3" serial="$4" desc="$5" target="$6"
-  local out cur max bus after vcp2
-
-  out="$(must_read_brightness "$conn" "$make" "$model" "$serial" "$desc")"
-  read -r cur max bus <<<"$out"
-
-  (( target < 0 )) && target=0
-  (( target > max )) && target="$max"
-
-  declare -a ddc
-  build_ddc_array "$bus" ddc
-
-  if ! timeout 3 "${ddc[@]}" setvcp 0x10 "$target" >/dev/null 2>&1; then
-    sleep 0.20
-    timeout 3 "${ddc[@]}" setvcp 0x10 "$target" >/dev/null 2>&1 || true
+  if [[ -n "${cur:-}" && -n "${max:-}" ]]; then
+    printf '%s %s\n' "$cur" "$max"
+    return 0
   fi
 
-  vcp2="$(timeout 2 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
-  read -r after _ < <(printf '%s\n' "$vcp2" | parse_vcp_any)
-  [[ -n "${after:-}" ]] || after="$target"
-
-  notify_level "$conn" "$after" "$max"
+  mapfile -d '' -t ddc < <(build_ddc_safe_cmd "$bus")
+  vcp="$(timeout 5 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
+  read -r cur max < <(printf '%s\n' "$vcp" | parse_vcp_any)
+  [[ -n "${cur:-}" && -n "${max:-}" ]] || return 1
+  printf '%s %s\n' "$cur" "$max"
 }
 
-# ---------- status/set (non-worker) ----------
+ddc_set_abs_fast() {
+  local bus="$1" target="$2"
+  local -a ddc=()
+
+  mapfile -d '' -t ddc < <(build_ddc_base_cmd "$bus")
+  if timeout "$SET_TIMEOUT" "${ddc[@]}" --noverify setvcp 0x10 "$target" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  mapfile -d '' -t ddc < <(build_ddc_safe_cmd "$bus")
+  timeout 5 "${ddc[@]}" setvcp 0x10 "$target" >/dev/null 2>&1
+}
+
 if [[ "$MODE" == "client" && "$cmd" == "status" ]]; then
   focused_line="$(must_focused_info)"
   IFS=$'\t' read -r conn make model serial desc <<<"$focused_line"
-  out="$(must_read_brightness "$conn" "$make" "$model" "$serial" "$desc")"
-  read -r cur max bus <<<"$out"
+
+  bus="$(get_bus_for_conn "$conn" "$make" "$model" "$serial" "$desc" || true)"
+  [[ -n "${bus:-}" ]] || { echo "hypr-ddc-brightness: no bus for $conn" >&2; exit 1; }
+
+  if ! read -r cur max < <(ddc_get_curmax "$bus"); then
+    echo "hypr-ddc-brightness: getvcp failed" >&2
+    exit 1
+  fi
+
+  write_state "$conn" "$cur" "$max"
   printf 'conn=%s\ncur=%s\nmax=%s\nbus=%s\n' "$conn" "$cur" "$max" "$bus"
   exit 0
 fi
@@ -352,11 +377,35 @@ fi
 if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
   focused_line="$(must_focused_info)"
   IFS=$'\t' read -r conn make model serial desc <<<"$focused_line"
-  set_brightness_abs "$conn" "$make" "$model" "$serial" "$desc" "$set_value"
+
+  bus="$(get_bus_for_conn "$conn" "$make" "$model" "$serial" "$desc" || true)"
+  [[ -n "${bus:-}" ]] || { echo "hypr-ddc-brightness: no bus for $conn" >&2; exit 1; }
+
+  max=""
+  if st="$(read_state "$conn" 2>/dev/null || true)"; then
+    read -r _cur max _ts <<<"$st"
+  fi
+  if [[ -z "${max:-}" || ! "$max" =~ ^[0-9]+$ || "$max" -le 0 ]]; then
+    if ! read -r _cur max < <(ddc_get_curmax "$bus"); then
+      echo "hypr-ddc-brightness: getvcp failed" >&2
+      exit 1
+    fi
+  fi
+
+  target="$set_value"
+  (( target < 0 )) && target=0
+  (( target > max )) && target="$max"
+
+  if ! ddc_set_abs_fast "$bus" "$target"; then
+    echo "hypr-ddc-brightness: setvcp failed" >&2
+    exit 1
+  fi
+
+  write_state "$conn" "$target" "$max"
+  notify_level "$conn" "$target" "$max"
   exit 0
 fi
 
-# ---------- client (up/down debounced) ----------
 if [[ "$MODE" == "client" ]]; then
   focused_line="$(must_focused_info)"
   IFS=$'\t' read -r conn _make _model _serial _desc <<<"$focused_line"
@@ -396,7 +445,6 @@ if [[ "$MODE" == "client" ]]; then
   exit 0
 fi
 
-# ---------- worker ----------
 conn="$WORKER_CONN"
 pending_file="$rundir/pending_${conn}.txt"
 last_file="$rundir/last_${conn}.txt"
@@ -410,7 +458,7 @@ idle_loops=0
 
 while :; do
   while :; do
-    sleep 0.08
+    sleep 0.05
     now="$(now_ms)"
     last="$(read_uint_file "$last_file" 0)"
     first="$(read_uint_file "$first_file" 0)"
@@ -444,32 +492,39 @@ while :; do
 
   bus="$(get_bus_for_conn "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc" || true)"
   if [[ -z "${bus:-}" ]]; then
-    notify "$NOTIFY_MS" "Brightness $conn" "no DDC bus. Add ${conn}=N in ddcutil-bus-map.conf" "hypr-ddc-$conn"
+    notify "$NOTIFY_MS" "Brightness $conn" "no DDC bus" "hypr-ddc-$conn"
     continue
   fi
 
-  declare -a ddc
-  build_ddc_array "$bus" ddc
+  cur="" max="" ts=""
+  if st="$(read_state "$conn" 2>/dev/null || true)"; then
+    read -r cur max ts <<<"$st"
+  fi
 
-  vcp="$(timeout 2 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
-  read -r cur max < <(printf '%s\n' "$vcp" | parse_vcp_any)
-  if [[ -z "${cur:-}" || -z "${max:-}" ]]; then
-    notify "$NOTIFY_MS" "Brightness $conn" "failed to read current brightness" "hypr-ddc-$conn"
-    continue
+  now="$(now_ms)"
+  need_sync=1
+  if [[ -n "${cur:-}" && -n "${max:-}" && "$cur" =~ ^[0-9]+$ && "$max" =~ ^[0-9]+$ && "$max" -gt 0 && "$ts" =~ ^[0-9]+$ ]]; then
+    age=$((now - ts))
+    (( age <= STATE_TTL_MS )) && need_sync=0
+  fi
+
+  if (( need_sync == 1 )); then
+    if ! read -r cur max < <(ddc_get_curmax "$bus"); then
+      notify "$NOTIFY_MS" "Brightness $conn" "getvcp failed" "hypr-ddc-$conn"
+      continue
+    fi
+    write_state "$conn" "$cur" "$max"
   fi
 
   target=$((cur + pending))
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
 
-  if ! timeout 3 "${ddc[@]}" setvcp 0x10 "$target" >/dev/null 2>&1; then
-    sleep 0.20
-    timeout 3 "${ddc[@]}" setvcp 0x10 "$target" >/dev/null 2>&1 || true
+  if ! ddc_set_abs_fast "$bus" "$target"; then
+    notify "$NOTIFY_MS" "Brightness $conn" "setvcp failed" "hypr-ddc-$conn"
+    continue
   fi
 
-  vcp2="$(timeout 2 "${ddc[@]}" getvcp 0x10 2>/dev/null || true)"
-  read -r after _ < <(printf '%s\n' "$vcp2" | parse_vcp_any)
-  [[ -n "${after:-}" ]] || after="$target"
-
-  notify_level "$conn" "$after" "$max"
+  write_state "$conn" "$target" "$max"
+  notify_level "$conn" "$target" "$max"
 done
