@@ -53,6 +53,15 @@ Some Additional Plugins:
 # uBlock Origin
 see [yokoffing](https://github.com/yokoffing) ["filterlists" Guidelines](https://github.com/yokoffing/filterlists?tab=readme-ov-file#recommended-filters-for-ublock-origin)
 
+# config
+
+navigate to: `about:config`
+
+change these flags:
+* middlemouse.paste: `false`
+* privacy.fingerprintingProtection: `true`
+* ui.key.menuAccessKeyFocuses: `false`
+
 # custom dns server
 
 navigate to `Privacy and security` in settings

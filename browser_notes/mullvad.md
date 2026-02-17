@@ -17,6 +17,7 @@ navigate to: `about:config`
 change these flags:
 * middlemouse.paste: `false`
 * privacy.fingerprintingProtection: `true`
+* ui.key.menuAccessKeyFocuses: `false`
 
 # themes
 
