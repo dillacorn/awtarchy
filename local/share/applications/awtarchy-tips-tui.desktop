@@ -1,0 +1,12 @@
+# github.com/dillacorn/awtarchy/tree/main/local/share/applications
+# ~/.local/share/applications/awtarchy-tips-tui.desktop
+
+[Desktop Entry]
+Type=Application
+Name=awtarchy tips
+Comment=awtarchy tips TUI
+Exec=sh -lc "$HOME/.config/hypr/scripts/awtarchy-tips-tui.sh"
+Terminal=false
+Icon=utilities-terminal
+Categories=Utility;System;
+StartupNotify=true
