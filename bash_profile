@@ -22,7 +22,6 @@ add_random_fun_message() {
     "cacafire"
     "cmatrix"
     "aafire"
-    "sl"
     "asciiquarium"
     "figlet TTY is cool"
     "termdown 10"

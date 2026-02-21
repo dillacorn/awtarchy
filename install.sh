@@ -54,17 +54,18 @@ fi
 
 retry_command() {
     local retries=3 count=0
+    local exit_code
     until "$@"; do
         exit_code=$?
         ((count++))
         echo -e "${COLOR_RED}Attempt $count/$retries failed for command:${COLOR_RESET}"
         printf "'%s' " "$@"; echo
-        if [ $count -lt $retries ]; then
+        if [ "$count" -lt "$retries" ]; then
             echo -e "${COLOR_RED}Retrying...${COLOR_RESET}"
             sleep 2
         else
             echo -e "${COLOR_RED}Command failed after $retries attempts. Exiting.${COLOR_RESET}"
-            return $exit_code
+            return "$exit_code"
         fi
     done
 }
@@ -73,7 +74,10 @@ create_directory() {
     local dir="$1"
     if [ ! -d "$dir" ]; then
         echo -e "${COLOR_YELLOW}Creating missing directory: ${COLOR_CYAN}$dir${COLOR_RESET}"
-        retry_command mkdir -p "$dir" || { echo -e "${COLOR_RED}Failed to create directory ${COLOR_CYAN}$dir${COLOR_RESET}. Exiting.${COLOR_RESET}"; exit 1; }
+        retry_command mkdir -p "$dir" || {
+            echo -e "${COLOR_RED}Failed to create directory ${COLOR_CYAN}$dir${COLOR_RESET}. Exiting.${COLOR_RESET}"
+            exit 1
+        }
     fi
     retry_command chown "$SUDO_USER:$SUDO_USER" "$dir"
     retry_command chmod 755 "$dir"
@@ -163,13 +167,13 @@ cd "$REPO_DIR/scripts" || exit 1
 for script in "${INSTALL_SCRIPTS[@]}"; do
     echo -e "${COLOR_BLUE}Running ${COLOR_CYAN}$script${COLOR_RESET}...${COLOR_RESET}"
     chmod +x "$script"
-    
+
     # Special handling for GPU script in VMs
     if [[ "$script" == "install_GPU_dependencies.sh" ]] && systemd-detect-virt --quiet; then
         echo -e "${COLOR_YELLOW}Skipping GPU script in virtual machine${COLOR_RESET}"
         continue
     fi
-    
+
     retry_command "./$script" || { echo -e "${COLOR_RED}$script failed!${COLOR_RESET}"; exit 1; }
     read -r -p "Press Enter to continue..."
 done
@@ -217,8 +221,18 @@ retry_command cp "$REPO_DIR/Xresources" "$HOME_DIR/.Xresources"
 retry_command cp "$REPO_DIR/config/mimeapps.list" "$HOME_DIR/.config/"
 retry_command cp "$REPO_DIR/config/gamemode.ini" "$HOME_DIR/.config/"
 retry_command cp "$REPO_DIR/local/share/nwg-look/gsettings" "$HOME_DIR/.local/share/nwg-look/"
-retry_command chown "$SUDO_USER:$SUDO_USER" "$HOME_DIR/.local/share/nwg-look/gsettings"
-retry_command chmod 644 "$HOME_DIR/.local/share/nwg-look/gsettings"
+
+retry_command chown "$SUDO_USER:$SUDO_USER" \
+    "$HOME_DIR/.Xresources" \
+    "$HOME_DIR/.config/mimeapps.list" \
+    "$HOME_DIR/.config/gamemode.ini" \
+    "$HOME_DIR/.local/share/nwg-look/gsettings"
+
+retry_command chmod 644 \
+    "$HOME_DIR/.Xresources" \
+    "$HOME_DIR/.config/mimeapps.list" \
+    "$HOME_DIR/.config/gamemode.ini" \
+    "$HOME_DIR/.local/share/nwg-look/gsettings"
 
 # SpeedCrunch color schemes
 retry_command cp "$REPO_DIR/local/share/SpeedCrunch/color-schemes/"*.json "$HOME_DIR/.local/share/SpeedCrunch/color-schemes/"
@@ -228,24 +242,42 @@ retry_command chmod 644 "$HOME_DIR/.local/share/SpeedCrunch/color-schemes/"*.jso
 # Desktop entries
 create_directory "$HOME_DIR/.local/share/applications"
 retry_command cp -r "$REPO_DIR/local/share/applications/." "$HOME_DIR/.local/share/applications"
+retry_command chown -R "$SUDO_USER:$SUDO_USER" "$HOME_DIR/.local/share/applications"
+find "$HOME_DIR/.local/share/applications" -type d -exec chmod 755 {} +
+find "$HOME_DIR/.local/share/applications" -type f -exec chmod 644 {} +
 
 # Cursor theme
 create_directory "$HOME_DIR/.local/share/icons/ComixCursors-White"
 retry_command cp -r /usr/share/icons/ComixCursors-White/* "$HOME_DIR/.local/share/icons/ComixCursors-White/"
+retry_command chown -R "$SUDO_USER:$SUDO_USER" "$HOME_DIR/.local/share/icons/ComixCursors-White"
+find "$HOME_DIR/.local/share/icons/ComixCursors-White" -type d -exec chmod 755 {} +
+find "$HOME_DIR/.local/share/icons/ComixCursors-White" -type f -exec chmod 644 {} +
 
 # System-wide cursor
 cat > /usr/share/icons/default/index.theme <<EOF
 [Icon Theme]
 Inherits=ComixCursors-White
 EOF
+chmod 644 /usr/share/icons/default/index.theme
 
-# Flatpak cursor
-command -v flatpak &>/dev/null && flatpak override --user --env=GTK_CURSOR_THEME=ComixCursors-White
+# Flatpak cursor (apply to target user, not root)
+if command -v flatpak &>/dev/null; then
+    sudo -u "$SUDO_USER" flatpak override --user --env=GTK_CURSOR_THEME=ComixCursors-White || true
+fi
 
 # Wallpaper setup
 create_directory "$HOME_DIR/Pictures/wallpapers"
 create_directory "$HOME_DIR/Pictures/Screenshots"
-retry_command cp "$REPO_DIR/awtarchy_geology.png" "$HOME_DIR/Pictures/wallpapers/"
+retry_command cp \
+    "$REPO_DIR/awtarchy_geology.png" \
+    "$REPO_DIR/awtarchy_space.png" \
+    "$HOME_DIR/Pictures/wallpapers/"
+retry_command chown "$SUDO_USER:$SUDO_USER" \
+    "$HOME_DIR/Pictures/wallpapers/awtarchy_geology.png" \
+    "$HOME_DIR/Pictures/wallpapers/awtarchy_space.png"
+retry_command chmod 644 \
+    "$HOME_DIR/Pictures/wallpapers/awtarchy_geology.png" \
+    "$HOME_DIR/Pictures/wallpapers/awtarchy_space.png"
 
 # Final permissions
 find "$HOME_DIR/.config" -type d -exec chmod 755 {} +
