@@ -183,8 +183,8 @@
       "interval": 0
     },
     "custom/power": {
-      "on-click": "~/.config/hypr/scripts/wlogout-toggle.sh &",
-      "on-click-right": "~/.config/hypr/scripts/wlogout-toggle.sh &",
+      "on-click": "~/.config/hypr/scripts/wlogout_toggle.sh &",
+      "on-click-right": "~/.config/hypr/scripts/wlogout_toggle.sh &",
       "format": "",
       "tooltip": true,
       "tooltip-format": "wlogout"
