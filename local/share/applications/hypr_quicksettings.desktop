@@ -1,0 +1,10 @@
+# github.com/dillacorn/awtarchy/tree/main/local/share/applications
+# ~/.local/share/applications/hypr_quicksettings.desktop
+
+[Desktop Entry]
+Type=Application
+Terminal=false
+Name=hypr_quicksettings
+Icon=utilities-terminal
+Exec=/bin/sh -lc 'exec alacritty --class hypr_quicksettings,hypr_quicksettings --title hypr_quicksettings -e "$HOME/.config/hypr/scripts/hypr_quicksettings.sh"'
+StartupWMClass=hypr_quicksettings
