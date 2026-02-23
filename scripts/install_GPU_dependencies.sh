@@ -14,7 +14,7 @@ IFS=$'\n\t'
 #     * modprobe:  options nvidia_drm modeset=1
 #     * bootloader cmdline: nvidia-drm.modeset=1 (adds if missing)
 # - Rebuilds initramfs (mkinitcpio/dracut)
-# - Patches Hyprland config env for NVIDIA (best-effort)
+# - Patches Hyprland config NVIDIA env lines (best-effort; no cursor no_hardware_cursors edits)
 
 ts(){ date +%F_%H%M%S; }
 log(){ printf '%s\n' "$*"; }
@@ -36,9 +36,9 @@ KPARAM_B="nvidia_drm.modeset=1" # accepted if user already has it, but we add hy
 usage(){
   cat >&2 <<'EOF'
 Usage: install_GPU_dependencies.sh [options]
-  --upgrade                 pacman -Syu (default: off)
-  --no-lib32                skip lib32 packages
-  --opencl                  attempt OpenCL packages
+  --upgrade                  pacman -Syu (default: off)
+  --no-lib32                 skip lib32 packages
+  --opencl                   attempt OpenCL packages
   --no-bootloader-patch      do not patch systemd-boot/grub/limine cmdline
   --no-modprobe-modeset      do not write /etc/modprobe.d/nvidia-drm.conf
   --no-blacklist-nouveau     do not write /etc/modprobe.d/blacklist-nouveau.conf
@@ -435,6 +435,40 @@ rebuild_initramfs(){
   warn "No mkinitcpio/dracut found; skipping initramfs rebuild."
 }
 
+# Uncomment/enable a specific Hyprland env line if present commented, otherwise append it.
+ensure_hypr_env_active(){
+  local conf key val tmp
+  conf="$1"
+  key="$2"
+  val="$3"
+
+  # Already active
+  if grep -qE "^[[:space:]]*env[[:space:]]*=[[:space:]]*${key}[[:space:]]*,[[:space:]]*${val}([[:space:]]*#.*)?[[:space:]]*$" "$conf"; then
+    return 0
+  fi
+
+  # Uncomment the first matching commented line (preserve trailing comment text)
+  if grep -qE "^[[:space:]]*#[[:space:]]*env[[:space:]]*=[[:space:]]*${key}[[:space:]]*,[[:space:]]*${val}([[:space:]]*#.*)?[[:space:]]*$" "$conf"; then
+    tmp="$(mktemp)"
+    awk -v key="$key" -v val="$val" '
+      BEGIN { done=0 }
+      {
+        if (!done && $0 ~ "^[[:space:]]*#[[:space:]]*env[[:space:]]*=[[:space:]]*" key "[[:space:]]*,[[:space:]]*" val "([[:space:]]*#.*)?[[:space:]]*$") {
+          sub(/^[[:space:]]*#[[:space:]]*/, "", $0)
+          done=1
+        }
+        print
+      }
+    ' "$conf" >"$tmp"
+    cat "$tmp" >"$conf"
+    rm -f "$tmp"
+    return 0
+  fi
+
+  # Missing entirely: append canonical line
+  printf '%s\n' "env = ${key},${val}" >>"$conf"
+}
+
 patch_hyprland_env_nvidia(){
   local conf
   conf="${USER_HOME}/.config/hypr/hyprland.conf"
@@ -442,14 +476,11 @@ patch_hyprland_env_nvidia(){
 
   cp -a "$conf" "${conf}.bak.$(ts)"
 
-  grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*LIBVA_DRIVER_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf" || \
-    printf '%s\n' 'env = LIBVA_DRIVER_NAME,nvidia' >>"$conf"
+  ensure_hypr_env_active "$conf" "__GLX_VENDOR_LIBRARY_NAME" "nvidia"
+  ensure_hypr_env_active "$conf" "LIBVA_DRIVER_NAME" "nvidia"
+  ensure_hypr_env_active "$conf" "GBM_BACKEND" "nvidia-drm"
 
-  grep -qE '^[[:space:]]*env[[:space:]]*=[[:space:]]*__GLX_VENDOR_LIBRARY_NAME[[:space:]]*,[[:space:]]*nvidia[[:space:]]*$' "$conf" || \
-    printf '%s\n' 'env = __GLX_VENDOR_LIBRARY_NAME,nvidia' >>"$conf"
-
-  grep -qE '^[[:space:]]*cursor:no_hardware_cursors[[:space:]]*=' "$conf" || \
-    printf '%s\n' 'cursor:no_hardware_cursors = true' >>"$conf"
+  # Intentionally do not modify cursor:no_hardware_cursors.
 }
 
 # ---------- base GPU stacks ----------
