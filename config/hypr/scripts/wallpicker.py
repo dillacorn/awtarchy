@@ -159,26 +159,26 @@ def ensure_thumb(item: WallItem) -> None:
                 im = im.convert("RGB")
 
             contained = ImageOps.contain(im, (THUMB_W, THUMB_H), method=Image.Resampling.LANCZOS)
-            canvas = Image.new("RGB", (THUMB_W, THUMB_H), (17, 22, 29))
+            canvas = Image.new("RGB", (THUMB_W, THUMB_H), (0, 0, 0))
             x = (THUMB_W - contained.width) // 2
             y = (THUMB_H - contained.height) // 2
             canvas.paste(contained, (x, y))
             canvas.save(item.thumb_path, "JPEG", quality=88, optimize=True)
     except Exception:
-        Image.new("RGB", (THUMB_W, THUMB_H), (28, 28, 28)).save(
+        Image.new("RGB", (THUMB_W, THUMB_H), (0, 0, 0)).save(
             item.thumb_path, "JPEG", quality=80, optimize=True
         )
 
 
 def placeholder_pixmap(size: QSize, text: str = "Loading") -> QPixmap:
     pm = QPixmap(size)
-    pm.fill(QColor("#14181d"))
+    pm.fill(QColor("#000000"))
     p = QPainter(pm)
-    p.setPen(QPen(QColor("#3c4758"), 2))
+    p.setPen(QPen(QColor("#262626"), 2))
     p.drawRect(1, 1, size.width() - 2, size.height() - 2)
     p.drawLine(0, 0, size.width(), size.height())
     p.drawLine(size.width(), 0, 0, size.height())
-    p.setPen(QColor("#b6c0cd"))
+    p.setPen(QColor("#bfbfbf"))
     p.drawText(pm.rect(), Qt.AlignmentFlag.AlignCenter, text)
     p.end()
     return pm
@@ -381,58 +381,63 @@ class MainWindow(QMainWindow):
 
         self.setStyleSheet("""
         QWidget {
-            background: #0c0f13;
-            color: #d7dde7;
+            background: #000000;
+            color: #e6e6e6;
         }
         QListWidget {
-            background: #0f1319;
-            border: 1px solid #252d38;
+            background: #000000;
+            border: 1px solid #1a1a1a;
             border-radius: 8px;
-            selection-background-color: #1a2432;
-            selection-color: #edf3ff;
+            selection-background-color: #0f0f0f;
+            selection-color: #ffffff;
             outline: none;
         }
         QListWidget::item {
-            background: #11161d;
-            border: 1px solid #2a313c;
+            background: #050505;
+            border: 1px solid #181818;
             border-radius: 6px;
             margin: 2px;
             padding: 4px;
         }
         QListWidget::item:selected {
-            border: 1px solid #6aa3ff;
-            background: #162131;
+            border: 1px solid #6a6a6a;
+            background: #101010;
         }
         QFrame#BottomPanel {
-            background: #10141b;
-            border: 1px solid #252d38;
+            background: #030303;
+            border: 1px solid #1a1a1a;
             border-radius: 8px;
         }
         QLineEdit, QComboBox {
-            background: #0f1319;
-            border: 1px solid #303846;
+            background: #050505;
+            border: 1px solid #242424;
             border-radius: 6px;
             padding: 5px 7px;
-            color: #d7dde7;
+            color: #e6e6e6;
+            selection-background-color: #1a1a1a;
+            selection-color: #ffffff;
         }
         QComboBox::drop-down { border: none; width: 18px; }
         QPushButton {
-            background: #151b23;
-            border: 1px solid #344052;
+            background: #080808;
+            border: 1px solid #2a2a2a;
             border-radius: 6px;
             padding: 6px 10px;
-            color: #d7dde7;
+            color: #e6e6e6;
         }
-        QPushButton:hover { background: #1a2330; border-color: #465971; }
-        QPushButton:disabled { background: #11151c; color: #6d7685; border-color: #2a313c; }
-        QLabel#Subtle { color: #9ba8ba; }
-        QCheckBox { spacing: 8px; }
+        QPushButton:hover { background: #101010; border-color: #3a3a3a; }
+        QPushButton:pressed { background: #151515; }
+        QPushButton:disabled { background: #050505; color: #7a7a7a; border-color: #1d1d1d; }
+        QLabel#Subtle { color: #a0a0a0; }
+        QCheckBox { spacing: 8px; color: #dcdcdc; }
         QCheckBox::indicator { width: 14px; height: 14px; }
-        QCheckBox::indicator:unchecked { border: 1px solid #4b5564; background: #0f1319; }
-        QCheckBox::indicator:checked { border: 1px solid #6aa3ff; background: #274d80; }
-        QScrollBar:vertical { background:#0d1014; width:12px; margin:2px; border-radius:6px; }
-        QScrollBar::handle:vertical { background:#2a3442; min-height:24px; border-radius:6px; }
+        QCheckBox::indicator:unchecked { border: 1px solid #4a4a4a; background: #050505; }
+        QCheckBox::indicator:checked { border: 1px solid #7a7a7a; background: #222222; }
+        QScrollBar:vertical { background:#000000; width:12px; margin:2px; border-radius:6px; }
+        QScrollBar::handle:vertical { background:#222222; min-height:24px; border-radius:6px; }
+        QScrollBar::handle:vertical:hover { background:#303030; }
         QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height:0px; }
+        QToolTip { background:#050505; color:#e6e6e6; border:1px solid #2a2a2a; }
         """)
 
     def status(self, msg: str) -> None:
