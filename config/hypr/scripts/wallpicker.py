@@ -10,6 +10,8 @@ from __future__ import annotations
 # - Backend selector: swww or hyprpaper
 # - Per-display or all displays
 # - Random button
+# - Single-click thumbnail apply
+# - Save/restore user settings (manual "Save Settings" button)
 # - Stable Wayland app_id/class: "wallpicker" (for Hyprland window rules)
 # - Auto-creates ~/.local/share/applications/wallpicker.desktop to avoid portal warning
 #
@@ -53,6 +55,9 @@ APP_ID = "wallpicker"
 
 DEFAULT_DIR = Path.home() / "Pictures" / "wallpapers"
 CACHE_DIR = Path.home() / ".cache" / "wallpicker" / "thumbs"
+CONFIG_DIR = Path.home() / ".config" / "wallpicker"
+SETTINGS_FILE = CONFIG_DIR / "settings.json"
+SETTINGS_VERSION = 1
 DESKTOP_FILE = Path.home() / ".local" / "share" / "applications" / f"{APP_ID}.desktop"
 
 THUMB_W = 240
@@ -74,6 +79,9 @@ DEFAULTS = {
     "swww_transition_fps": "30",
     "swww_filter": "Lanczos3",
     "hyprpaper_mode": "cover",
+    "recursive": True,
+    "folder": str(DEFAULT_DIR),
+    "display": ALL_DISPLAYS,
 }
 
 
@@ -188,6 +196,7 @@ class MainWindow(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
         CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
         self.items: list[WallItem] = []
         self.filtered: list[WallItem] = []
@@ -195,11 +204,14 @@ class MainWindow(QMainWindow):
         self.path_to_widget: dict[Path, QListWidgetItem] = {}
         self.pending: list[WallItem] = []
 
+        self._saved_display_preference = DEFAULTS["display"]
+
         self.thumb_timer = QTimer(self)
         self.thumb_timer.timeout.connect(self._thumb_tick)
 
         self._build_ui()
         self._theme()
+        self.load_saved_settings()
         self.refresh_displays()
         self.scan()
 
@@ -292,8 +304,7 @@ class MainWindow(QMainWindow):
         self.hyprpaper_mode_combo.addItems(["cover", "contain", "fill", "tile"])
         self.hyprpaper_mode_combo.setCurrentText(DEFAULTS["hyprpaper_mode"])
 
-        self.btn_apply = QPushButton("Apply")
-        self.btn_apply.setEnabled(False)
+        self.btn_save_settings = QPushButton("Save Settings")
         btn_random = QPushButton("Random")
         btn_open = QPushButton("Open Dir")
 
@@ -323,7 +334,7 @@ class MainWindow(QMainWindow):
         row2.addStretch(1)
         row2.addWidget(btn_open)
         row2.addWidget(btn_random)
-        row2.addWidget(self.btn_apply)
+        row2.addWidget(self.btn_save_settings)
 
         bv.addLayout(row2)
 
@@ -346,11 +357,11 @@ class MainWindow(QMainWindow):
         self.search_edit.textChanged.connect(self.apply_filter)
         btn_open.clicked.connect(self.open_dir)
         btn_random.clicked.connect(self.apply_random)
-        self.btn_apply.clicked.connect(self.apply_selected)
+        self.btn_save_settings.clicked.connect(self.save_settings)
         self.backend_combo.currentTextChanged.connect(self.on_backend_changed)
 
         self.grid.currentItemChanged.connect(self.on_selection_changed)
-        self.grid.itemDoubleClicked.connect(lambda _i: self.apply_selected())
+        self.grid.itemClicked.connect(lambda _i: self.apply_selected())
 
         # Shortcuts
         a_refresh = QAction(self)
@@ -367,6 +378,11 @@ class MainWindow(QMainWindow):
         a_random.setShortcut("Ctrl+R")
         a_random.triggered.connect(self.apply_random)
         self.addAction(a_random)
+
+        a_save = QAction(self)
+        a_save.setShortcut("Ctrl+S")
+        a_save.triggered.connect(self.save_settings)
+        self.addAction(a_save)
 
         self.on_backend_changed(self.backend_combo.currentText())
 
@@ -442,8 +458,104 @@ class MainWindow(QMainWindow):
 
     def status(self, msg: str) -> None:
         self.status_label.setText(msg)
-        # Keep UI responsive during large scans/thumb generation
         QApplication.processEvents()
+
+    # ---------- settings ----------
+    def _set_combo_text_if_present(self, combo: QComboBox, value: str) -> None:
+        if not value:
+            return
+        idx = combo.findText(value)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+
+    def _settings_payload(self) -> dict:
+        return {
+            "version": SETTINGS_VERSION,
+            "folder": self.folder_edit.text().strip() or str(DEFAULT_DIR),
+            "recursive": bool(self.recursive_check.isChecked()),
+            "backend": self.backend_combo.currentText().strip() or DEFAULTS["backend"],
+            "display": self.display_combo.currentText().strip() or ALL_DISPLAYS,
+            "swww_resize": self.resize_combo.currentText().strip() or DEFAULTS["swww_resize"],
+            "swww_transition_type": self.transition_combo.currentText().strip() or DEFAULTS["swww_transition_type"],
+            "swww_transition_duration": self.duration_edit.text().strip() or DEFAULTS["swww_transition_duration"],
+            "swww_transition_fps": self.fps_edit.text().strip() or DEFAULTS["swww_transition_fps"],
+            "swww_filter": self.filter_combo.currentText().strip() or DEFAULTS["swww_filter"],
+            "hyprpaper_mode": self.hyprpaper_mode_combo.currentText().strip() or DEFAULTS["hyprpaper_mode"],
+        }
+
+    def load_saved_settings(self) -> None:
+        if not SETTINGS_FILE.exists():
+            return
+
+        try:
+            raw = SETTINGS_FILE.read_text(encoding="utf-8")
+            data = json.loads(raw)
+            if not isinstance(data, dict):
+                raise ValueError("settings file is not a JSON object")
+        except Exception as e:
+            self.status(f"Settings load failed: {e}")
+            return
+
+        controls = [
+            self.recursive_check,
+            self.backend_combo,
+            self.resize_combo,
+            self.transition_combo,
+            self.filter_combo,
+            self.hyprpaper_mode_combo,
+        ]
+        for w in controls:
+            w.blockSignals(True)
+
+        try:
+            folder = str(data.get("folder", DEFAULTS["folder"])).strip()
+            if folder:
+                self.folder_edit.setText(folder)
+
+            self.recursive_check.setChecked(bool(data.get("recursive", DEFAULTS["recursive"])))
+
+            self._set_combo_text_if_present(self.backend_combo, str(data.get("backend", DEFAULTS["backend"])))
+            self._set_combo_text_if_present(self.resize_combo, str(data.get("swww_resize", DEFAULTS["swww_resize"])))
+            self._set_combo_text_if_present(
+                self.transition_combo,
+                str(data.get("swww_transition_type", DEFAULTS["swww_transition_type"])),
+            )
+            self.duration_edit.setText(str(data.get("swww_transition_duration", DEFAULTS["swww_transition_duration"])))
+            self.fps_edit.setText(str(data.get("swww_transition_fps", DEFAULTS["swww_transition_fps"])))
+            self._set_combo_text_if_present(self.filter_combo, str(data.get("swww_filter", DEFAULTS["swww_filter"])))
+            self._set_combo_text_if_present(
+                self.hyprpaper_mode_combo,
+                str(data.get("hyprpaper_mode", DEFAULTS["hyprpaper_mode"])),
+            )
+
+            saved_display = str(data.get("display", DEFAULTS["display"])).strip() or ALL_DISPLAYS
+            self._saved_display_preference = saved_display
+        finally:
+            for w in controls:
+                w.blockSignals(False)
+
+        self.on_backend_changed(self.backend_combo.currentText())
+        self.status(f"Loaded settings from {SETTINGS_FILE}")
+
+    def save_settings(self) -> None:
+        payload = self._settings_payload()
+        self._saved_display_preference = str(payload.get("display", ALL_DISPLAYS))
+
+        try:
+            SETTINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = SETTINGS_FILE.with_suffix(".json.tmp")
+            tmp_path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+            tmp_path.replace(SETTINGS_FILE)
+            try:
+                SETTINGS_FILE.chmod(0o644)
+            except Exception:
+                pass
+        except Exception as e:
+            QMessageBox.critical(self, APP_NAME, f"Failed to save settings:\n{e}")
+            self.status("Save settings failed")
+            return
+
+        self.status(f"Saved settings -> {SETTINGS_FILE}")
 
     def on_backend_changed(self, backend: str) -> None:
         use_swww = backend == "swww"
@@ -508,10 +620,15 @@ class MainWindow(QMainWindow):
             except Exception:
                 pass
 
-        cur = self.display_combo.currentText()
+        current_text = self.display_combo.currentText().strip()
+        preferred = current_text or self._saved_display_preference or ALL_DISPLAYS
+
         self.display_combo.clear()
         self.display_combo.addItems(names)
-        idx = self.display_combo.findText(cur)
+
+        idx = self.display_combo.findText(preferred)
+        if idx < 0 and self._saved_display_preference:
+            idx = self.display_combo.findText(self._saved_display_preference)
         self.display_combo.setCurrentIndex(idx if idx >= 0 else 0)
 
     def available_output_names(self) -> list[str]:
@@ -543,7 +660,6 @@ class MainWindow(QMainWindow):
         self.path_to_item.clear()
         self.path_to_widget.clear()
         self.grid.clear()
-        self.btn_apply.setEnabled(False)
         self.selection_label.setText("No selection")
 
         self.status(f"Scanning {folder} ...")
@@ -588,7 +704,6 @@ class MainWindow(QMainWindow):
         self.pending.clear()
         self.path_to_widget.clear()
         self.grid.clear()
-        self.btn_apply.setEnabled(False)
         self.selection_label.setText("No selection")
 
         if not self.filtered:
@@ -654,17 +769,14 @@ class MainWindow(QMainWindow):
 
     def on_selection_changed(self, current, _previous) -> None:
         if current is None:
-            self.btn_apply.setEnabled(False)
             self.selection_label.setText("No selection")
             return
 
         p = current.data(Qt.ItemDataRole.UserRole)
         if not p:
-            self.btn_apply.setEnabled(False)
             self.selection_label.setText("No selection")
             return
 
-        self.btn_apply.setEnabled(True)
         self.selection_label.setText(str(p))
 
     # ---------- swww backend ----------
