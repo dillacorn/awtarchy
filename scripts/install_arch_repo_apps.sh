@@ -13,7 +13,7 @@ declare -a PKG_GROUPS=(
     "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd noto-fonts-emoji"
     "Themes:papirus-icon-theme materia-gtk-theme xcursor-comix kvantum-theme-materia"
     "Terminal Apps:nano micro alacritty fastfetch btop htop curl wget git dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet termdown espeak-ng cava man-db man-pages unzip xarchiver ncdu ddcutil"
-    "Utilities:polkit-gnome gnome-keyring networkmanager network-manager-applet bluez bluez-utils blueman wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom"
+    "Utilities:polkit-gnome gnome-keyring networkmanager network-manager-applet bluez bluez-utils blueman wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom pyside6 python python-pillow"
     "Multimedia:ffmpeg avahi mpv cheese exiv2 zathura zathura-pdf-mupdf mousai"
     "Development:base-devel archlinux-keyring clang ninja go rust virt-manager qemu qemu-hw-usb-host virt-viewer vde2 libguestfs dmidecode gamemode gamescope nftables swtpm"
     "Network Tools:firefox wireguard-tools wireplumber openssh iptables systemd-resolvconf bridge-utils qemu-guest-agent dnsmasq dhcpcd inetutils openbsd-netcat"

@@ -10,7 +10,6 @@ set -euo pipefail
 PACKAGES_AUR=(
   # Utilities
   wlogout
-  waytrogen-bin
   qimgv-git
 )
 
