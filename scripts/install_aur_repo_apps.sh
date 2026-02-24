@@ -11,6 +11,7 @@ PACKAGES_AUR=(
   # Utilities
   wlogout
   qimgv-git
+  alacritty-graphics
 )
 
 # ──────────────────────────────────────────────────────────────────────────────

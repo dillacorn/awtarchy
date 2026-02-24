@@ -16,6 +16,10 @@ IFS=$'\n\t'
 # - count line renamed to total/shown
 # - startup never restores previous find filter
 
+# Arch deps (repo): 
+#    sudo pacman -S --needed imagemagick libsixel swww jq xdg-utils   # libsixel provides img2sixel
+# Optional backend (repo): sudo pacman -S --needed hyprpaper
+
 APP_NAME="wallpicker"
 APP_ID="wallpicker"
 
