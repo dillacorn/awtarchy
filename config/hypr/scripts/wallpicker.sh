@@ -321,6 +321,15 @@ sanitize_text() {
   printf '%s' "$s"
 }
 
+normalize_query() {
+  local s
+  s="$(sanitize_text "$1")"
+  # trim leading/trailing whitespace
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
 pad_trunc() {
   local s="$1" w="$2"
   s="$(sanitize_text "$s")"
@@ -981,8 +990,8 @@ scan_wallpapers() {
 build_filtered() {
   local q p b d
   FILES=()
-  q="${FILTER_QUERY,,}"
-
+  q="$(normalize_query "$FILTER_QUERY")"
+  q="${q,,}"
   if [[ -z "$q" ]]; then
     FILES=("${ALL_FILES[@]}")
   else
@@ -1645,16 +1654,19 @@ read_key() {
 }
 
 prompt_line() {
-  local prompt="$1" current="${2:-}" input lines
+  local prompt="$1" current="${2:-}" input lines tty
   lines="$(term_lines)"
+  tty="/dev/tty"
+  [[ -w "$tty" ]] || tty="$(tty 2>/dev/null || printf '%s' /dev/tty)"
 
   tty_raw_off
-  printf '\e[?25h'
-  ui_goto "$lines" 1
-  ui_clear_line
-  printf '%s' "$prompt"
-  read -r input || input="$current"
-  printf '\e[?25l'
+  printf '\e[?25h' >"$tty"
+  printf '\e[%d;%dH' "$lines" 1 >"$tty"
+  printf '\e[2K' >"$tty"
+  printf '%s' "$prompt" >"$tty"
+  IFS= read -r input || input="$current"
+  input="${input//$'\r'/}"
+  printf '\e[?25l' >"$tty"
   tty_raw_on
   printf '%s' "$input"
 }
@@ -1788,7 +1800,7 @@ open_dir() {
 do_find_prompt() {
   local v
   v="$(prompt_line "Find (empty clears): " "$FILTER_QUERY")"
-  FILTER_QUERY="$v"
+  FILTER_QUERY="$(normalize_query "$v")"
   build_filtered
   if (( ${#FILES[@]} > 0 )); then SEL=0; fi
   msg "Find updated"
