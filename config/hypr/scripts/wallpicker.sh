@@ -52,7 +52,7 @@ HYPERPAPER_MODE="cover"         # cover | contain | center
 : "${WALLPICKER_ALT_SCREEN:=0}"
 : "${WALLPICKER_NO_SIXEL:=0}"
 : "${WALLPICKER_DEBUG:=0}"
-: "${WALLPICKER_FORCE_ENCODER:=}"  # chafa|img2sixel|magick
+: "${WALLPICKER_FORCE_ENCODER:=}"  # chafa|img2sixel|magick|kitty
 : "${WALLPICKER_PREWARM_VISIBLE_PAGE:=0}"  # 0=off (faster startup), 1=warm visible page before draw
 : "${WALLPICKER_SORT_SCAN:=1}"           # 1=stable sort, 0=faster unsorted scan
 
@@ -86,6 +86,7 @@ CACHE_DIR="${HOME}/.cache/${APP_ID}"
 THUMB_CACHE_DIR="${CACHE_DIR}/thumbs"
 STATE_FILE="${CONFIG_DIR}/state.conf"
 DEBUG_LOG="${CACHE_DIR}/debug.log"
+KITTY_ERR_LOG="${CACHE_DIR}/kitty.err.log"
 
 mkdir -p "${CONFIG_DIR}" "${THUMB_CACHE_DIR}" "${CACHE_DIR}"
 
@@ -103,12 +104,21 @@ SEL=0
 RUNNING=1
 UI_ACTIVE=0
 
+RESUME_LAST=0               # --resume (start where you last were)
+START_AT=""                 # --start-at N (1-based)
+LAST_SEL=0                  # persisted selection index
+LAST_FOCUS=""              # persisted last focused wallpaper path
+LAST_APPLIED=""            # persisted last applied wallpaper path
+
+
 GRID_COLS=1
 GRID_ROWS=1
 PAGE_SIZE=1
 
 SIXEL_ENCODER=""
 SIXEL_ENCODER_LABEL=""
+PREVIEW_MODE="sixel"              # sixel | kitty | disabled
+KITTY_TRANSFER_MODE="detect"      # detect | file | memory | stream
 TTY_STTY_SAVED=""
 LAST_ENCODER_ERR=""
 
@@ -130,6 +140,72 @@ debug() {
   return 0
 }
 
+is_kitty_term() {
+  [[ -n "${KITTY_WINDOW_ID:-}" ]] && return 0
+  [[ "${TERM:-}" == "xterm-kitty" ]] && return 0
+  [[ "${TERM:-}" == *kitty* ]] && return 0
+  return 1
+}
+
+kitty_icat_help_has() {
+  local needle="$1"
+  have kitty || return 1
+  kitty +kitten icat --help 2>/dev/null | grep -q -- "$needle"
+}
+
+kitty_detect_transfer_mode() {
+  # Default conservative mode; only upgrade if --detect-support exists and succeeds.
+  KITTY_TRANSFER_MODE="file"
+  have kitty || return 1
+
+  if ! kitty_icat_help_has -- "--detect-support"; then
+    return 0
+  fi
+
+  local out rc tok
+  out="$(kitty +kitten icat --detect-support 2>&1)"
+  rc=$?
+  (( rc == 0 )) || return 1
+
+  tok="$(printf '%s\n' "$out" | tr '\r' '\n' | awk '{for(i=1;i<=NF;i++) if($i ~ /^(file|memory|stream)$/){print $i; exit}}')"
+  case "${tok:-}" in
+    file|memory|stream) KITTY_TRANSFER_MODE="$tok" ;;
+    *) KITTY_TRANSFER_MODE="file" ;;
+  esac
+  return 0
+}
+
+kitty_clear_images() {
+  have kitty || return 0
+  : >"$KITTY_ERR_LOG" 2>/dev/null || true
+  # Must go to stdout (escape codes). Only stderr is logged.
+  kitty +kitten icat --clear </dev/null 2>>"$KITTY_ERR_LOG" || true
+  return 0
+}
+
+kitty_draw_png_at() {
+  local png="$1" col_1b="$2" row_1b="$3" left top place
+  have kitty || return 1
+  [[ -s "$png" ]] || return 1
+
+  left=$(( col_1b - 1 ))
+  top=$(( row_1b - 1 ))
+  place="${THUMB_CH_W}x${THUMB_CH_H}@${left}x${top}"
+
+  # IMPORTANT: never redirect stdout; that's the image protocol output.
+  if kitty_icat_help_has -- "--transfer-mode"; then
+    kitty +kitten icat --place "$place" --scale-up --transfer-mode "${KITTY_TRANSFER_MODE:-file}" -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
+  fi
+  kitty +kitten icat --place "$place" --scale-up -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
+  kitty +kitten icat --place "$place" -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
+
+  LAST_ENCODER_ERR="$(tail -n 1 "$KITTY_ERR_LOG" 2>/dev/null | tr -d '\r' | head -c 180)"
+  [[ -n "$LAST_ENCODER_ERR" ]] || LAST_ENCODER_ERR="kitty icat failed"
+  return 1
+}
+
+
+
 run_quiet_hup_safe() {
   # Let apply commands survive terminal/window close (SIGHUP) during fast external toggles.
   if have nohup; then
@@ -138,6 +214,70 @@ run_quiet_hup_safe() {
     "$@" </dev/null >/dev/null 2>&1
   fi
 }
+
+update_focus_state() {
+  if (( ${#FILES[@]} == 0 )); then
+    LAST_SEL=0
+    LAST_FOCUS=""
+    return 0
+  fi
+  SEL="$(clamp_int "$SEL" 0 "$(( ${#FILES[@]} - 1 ))")"
+  LAST_SEL="$SEL"
+  LAST_FOCUS="${FILES[$SEL]}"
+  return 0
+}
+
+_find_idx_by_path_or_unique_base() {
+  local target="$1" base i match=-1 hits=0
+  [[ -n "$target" ]] || return 1
+
+  for i in "${!FILES[@]}"; do
+    [[ "${FILES[$i]}" == "$target" ]] || continue
+    printf '%d' "$i"
+    return 0
+  done
+
+  base="$(basename -- "$target")"
+  for i in "${!FILES[@]}"; do
+    [[ "$(basename -- "${FILES[$i]}")" == "$base" ]] || continue
+    match="$i"
+    hits=$(( hits + 1 ))
+  done
+
+  (( hits == 1 )) || return 1
+  printf '%d' "$match"
+  return 0
+}
+
+resume_focus_last() {
+  local idx
+
+  if (( ${#FILES[@]} == 0 )); then
+    return 1
+  fi
+
+  idx="$(_find_idx_by_path_or_unique_base "${LAST_FOCUS:-}" 2>/dev/null || true)"
+  if [[ -n "$idx" ]]; then
+    SEL="$idx"
+
+  update_focus_state || true
+    return 0
+  fi
+
+  idx="$(_find_idx_by_path_or_unique_base "${LAST_APPLIED:-}" 2>/dev/null || true)"
+  if [[ -n "$idx" ]]; then
+    SEL="$idx"
+    return 0
+  fi
+
+  if [[ "${LAST_SEL:-0}" =~ ^[0-9]+$ ]]; then
+    SEL="$(clamp_int "$LAST_SEL" 0 "$(( ${#FILES[@]} - 1 ))")"
+    return 0
+  fi
+
+  return 1
+}
+
 
 die() {
   printf 'wallpicker.sh: %s\n' "$*" >&2
@@ -248,7 +388,19 @@ detect_sixel_encoder() {
   if [[ "${WALLPICKER_NO_SIXEL}" == "1" ]]; then
     SIXEL_ENCODER=""
     SIXEL_ENCODER_LABEL="disabled"
+    PREVIEW_MODE="disabled"
     return 0
+  fi
+
+  # Prefer kitty image protocol when running inside kitty (unless user forced a SIXEL encoder).
+  if [[ "${WALLPICKER_FORCE_ENCODER}" == "kitty" ]] || { [[ -z "${WALLPICKER_FORCE_ENCODER}" ]] && is_kitty_term; }; then
+    if have kitty && kitty_detect_transfer_mode; then
+      SIXEL_ENCODER="kitty"
+      SIXEL_ENCODER_LABEL="kitty(icat:${KITTY_TRANSFER_MODE})"
+      PREVIEW_MODE="kitty"
+      return 0
+    fi
+    LAST_ENCODER_ERR="kitty image protocol not supported (fallback to SIXEL)"
   fi
 
   if [[ -n "${WALLPICKER_FORCE_ENCODER}" ]]; then
@@ -257,6 +409,8 @@ detect_sixel_encoder() {
         if have chafa; then
           SIXEL_ENCODER="chafa"
           SIXEL_ENCODER_LABEL="chafa"
+          PREVIEW_MODE="sixel"
+          PREVIEW_MODE="sixel"
           return 0
         fi
         ;;
@@ -264,6 +418,8 @@ detect_sixel_encoder() {
         if have img2sixel; then
           SIXEL_ENCODER="img2sixel"
           SIXEL_ENCODER_LABEL="img2sixel(-7)"
+      PREVIEW_MODE="sixel"
+          PREVIEW_MODE="sixel"
           return 0
         fi
         ;;
@@ -271,8 +427,13 @@ detect_sixel_encoder() {
         if have magick && magick -list format 2>/dev/null | grep -qiE '^[[:space:]]*SIXEL'; then
           SIXEL_ENCODER="magick"
           SIXEL_ENCODER_LABEL="magick(SIXEL)"
+          PREVIEW_MODE="sixel"
+          PREVIEW_MODE="sixel"
           return 0
         fi
+        ;;
+      kitty)
+        # handled above
         ;;
     esac
   fi
@@ -281,23 +442,31 @@ detect_sixel_encoder() {
   if have img2sixel; then
     SIXEL_ENCODER="img2sixel"
     SIXEL_ENCODER_LABEL="img2sixel(-7)"
+      PREVIEW_MODE="sixel"
+    PREVIEW_MODE="sixel"
     return 0
   fi
 
   if have chafa; then
     SIXEL_ENCODER="chafa"
     SIXEL_ENCODER_LABEL="chafa"
+          PREVIEW_MODE="sixel"
+    PREVIEW_MODE="sixel"
     return 0
   fi
 
   if have magick && magick -list format 2>/dev/null | grep -qiE '^[[:space:]]*SIXEL'; then
     SIXEL_ENCODER="magick"
     SIXEL_ENCODER_LABEL="magick(SIXEL)"
+          PREVIEW_MODE="sixel"
+    PREVIEW_MODE="sixel"
     return 0
   fi
 
   SIXEL_ENCODER=""
   SIXEL_ENCODER_LABEL="none"
+  PREVIEW_MODE="disabled"
+  PREVIEW_MODE="disabled"
   return 1
 }
 
@@ -472,6 +641,11 @@ ensure_thumb_assets() {
   fi
 
   if [[ "${WALLPICKER_NO_SIXEL}" == "1" ]]; then
+    printf '%s\n\n' "$png"
+    return 0
+  fi
+
+  if [[ "${PREVIEW_MODE}" == "kitty" ]]; then
     printf '%s\n\n' "$png"
     return 0
   fi
@@ -679,14 +853,55 @@ apply_with_hyprpaper() {
 }
 
 apply_selected() {
-  local img
+  local img rc
   if (( ${#FILES[@]} == 0 )); then msg "No wallpapers to apply"; return 1; fi
+
+  update_focus_state || true
   img="${FILES[$SEL]}"
+
+  rc=1
   case "$BACKEND" in
-    swww) apply_with_swww "$img" ;;
-    hyprpaper) apply_with_hyprpaper "$img" ;;
+    swww) apply_with_swww "$img"; rc=$? ;;
+    hyprpaper) apply_with_hyprpaper "$img"; rc=$? ;;
     *) msg "Invalid backend: $BACKEND"; return 1 ;;
   esac
+
+  if (( rc == 0 )); then
+    LAST_APPLIED="$img"
+    update_focus_state || true
+    save_state || true
+  fi
+
+  return "$rc"
+}
+
+
+resume_focus_last_applied() {
+  local target base i match=-1 hits=0
+  target="${LAST_APPLIED:-}"
+  [[ -n "$target" ]] || return 1
+
+  # Exact path match
+  for i in "${!FILES[@]}"; do
+    [[ "${FILES[$i]}" == "$target" ]] || continue
+    SEL="$i"
+    return 0
+  done
+
+  # Fallback: unique basename match
+  base="$(basename -- "$target")"
+  for i in "${!FILES[@]}"; do
+    [[ "$(basename -- "${FILES[$i]}")" == "$base" ]] || continue
+    match="$i"
+    hits=$(( hits + 1 ))
+  done
+
+  if (( hits == 1 )); then
+    SEL="$match"
+    return 0
+  fi
+
+  return 1
 }
 
 # ---------- persistence ----------
@@ -703,6 +918,9 @@ save_state() {
     printf 'SWWW_TRANSITION_FPS=%q\n' "$SWWW_TRANSITION_FPS"
     printf 'SWWW_FILTER=%q\n' "$SWWW_FILTER"
     printf 'HYPERPAPER_MODE=%q\n' "$HYPERPAPER_MODE"
+    printf 'LAST_SEL=%q\n' "${LAST_SEL:-0}"
+    printf 'LAST_FOCUS=%q\n' "${LAST_FOCUS:-}"
+    printf 'LAST_APPLIED=%q\n' "${LAST_APPLIED:-}"
   } > "${STATE_FILE}.tmp.$$"
   mv -f -- "${STATE_FILE}.tmp.$$" "$STATE_FILE"
 }
@@ -719,6 +937,15 @@ load_state() {
 
   # QoL: never restore previous filter on startup
   FILTER_QUERY=""
+
+  [[ "${LAST_SEL:-0}" =~ ^[0-9]+$ ]] || LAST_SEL=0
+  : "${LAST_FOCUS:=}"
+  : "${LAST_APPLIED:=}"
+
+  # scrub broken older state that may have literal wrapping quotes
+  HYPERPAPER_MODE="${HYPERPAPER_MODE%\"}"; HYPERPAPER_MODE="${HYPERPAPER_MODE#\"}"
+  LAST_FOCUS="${LAST_FOCUS%\"}"; LAST_FOCUS="${LAST_FOCUS#\"}"
+  LAST_APPLIED="${LAST_APPLIED%\"}"; LAST_APPLIED="${LAST_APPLIED#\"}"
 }
 
 # ---------- scan / filter ----------
@@ -789,6 +1016,14 @@ refresh_action() {
   # QoL: refresh clears active find filter and rebuilds full list
   FILTER_QUERY=""
   scan_wallpapers || true
+  if (( RESUME_LAST == 1 )); then
+    if [[ -n "${START_AT}" ]]; then
+      SEL=$(( START_AT - 1 ))
+    else
+      resume_focus_last || true
+    fi
+    update_focus_state || true
+  fi
   if (( ${#FILES[@]} > 0 )); then
     SEL="$(clamp_int "$SEL" 0 "$(( ${#FILES[@]} - 1 ))")"
   else
@@ -822,7 +1057,8 @@ ui_enter() {
   if [[ "${WALLPICKER_ALT_SCREEN}" == "1" ]]; then printf '\e[?1049h'; fi
   printf '\e[?25l'
   printf '\e[2J\e[H'
-  sixel_mode_enter
+  if [[ "${PREVIEW_MODE}" == "sixel" ]]; then sixel_mode_enter; fi
+  if [[ "${PREVIEW_MODE}" == "kitty" ]]; then kitty_clear_images; fi
   mouse_enable
   tty_raw_on
   UI_ACTIVE=1
@@ -832,7 +1068,8 @@ ui_leave() {
   if (( UI_ACTIVE == 0 )); then return 0; fi
   tty_raw_off
   mouse_disable
-  sixel_mode_leave
+  if [[ "${PREVIEW_MODE}" == "kitty" ]]; then kitty_clear_images; fi
+  if [[ "${PREVIEW_MODE}" == "sixel" ]]; then sixel_mode_leave; fi
   printf '\e[0m'
   printf '\e[?25h'
   if [[ "${WALLPICKER_ALT_SCREEN}" == "1" ]]; then printf '\e[?1049l'; fi
@@ -977,7 +1214,7 @@ draw_status_bars() {
   ui_color_reset
 
   status_tail="$(sanitize_text "$STATUS_MSG")"
-  if [[ "${WALLPICKER_DEBUG}" == "1" && -n "$LAST_ENCODER_ERR" ]]; then
+  if [[ -n "$LAST_ENCODER_ERR" && ( "${WALLPICKER_DEBUG}" == "1" || "${PREVIEW_MODE}" == "kitty" ) ]]; then
     status_tail+=" | encerr=$(sanitize_text "$LAST_ENCODER_ERR")"
   fi
 
@@ -1015,7 +1252,7 @@ clear_tile_region() {
 
 draw_tile() {
   local abs_idx="$1" page_start="$2"
-  local rel gr gc x y p assets six base name_line idx_line label_row1 label_row2
+  local rel gr gc x y p assets png six base name_line idx_line label_row1 label_row2
   local -a thumb_paths=()
 
   rel=$(( abs_idx - page_start ))
@@ -1039,6 +1276,7 @@ draw_tile() {
   six=""
   if assets="$(ensure_thumb_assets "$p" 2>>"$DEBUG_LOG")"; then
     mapfile -t thumb_paths <<< "$assets"
+    png="${thumb_paths[0]:-}"
     six="${thumb_paths[1]:-}"
   fi
 
@@ -1047,6 +1285,18 @@ draw_tile() {
     ui_dim
     printf '%-*.*s' "$THUMB_CH_W" "$THUMB_CH_W" "[preview disabled]"
     ui_color_reset
+  elif [[ "${PREVIEW_MODE}" == "kitty" ]]; then
+    if [[ -n "${png:-}" && -s "${png:-}" ]]; then
+      kitty_draw_png_at "$png" "$x" "$y" || {
+        ui_dim
+        printf '%-*.*s' "$THUMB_CH_W" "$THUMB_CH_W" "[no preview]"
+        ui_color_reset
+      }
+    else
+      ui_dim
+      printf '%-*.*s' "$THUMB_CH_W" "$THUMB_CH_W" "[no preview]"
+      ui_color_reset
+    fi
   elif [[ -n "$six" && -s "$six" ]]; then
     cat -- "$six" 2>/dev/null || true
   else
@@ -1089,6 +1339,8 @@ draw_help() {
 draw_full_ui() {
   local page_start page_end last i
   calc_grid
+
+  if [[ \"${PREVIEW_MODE}\" == \"kitty\" ]]; then kitty_clear_images; fi
   ui_clear
   draw_status_bars
 
@@ -1420,6 +1672,7 @@ move_sel_delta() {
   if (( ${#FILES[@]} == 0 )); then return 0; fi
   SEL=$(( SEL + delta ))
   SEL="$(clamp_int "$SEL" 0 "$(( ${#FILES[@]} - 1 ))")"
+  update_focus_state || true
 }
 
 move_sel_grid() {
@@ -1427,6 +1680,7 @@ move_sel_grid() {
   if (( ${#FILES[@]} == 0 )); then return 0; fi
   new=$(( SEL + dx + dy * GRID_COLS ))
   SEL="$(clamp_int "$new" 0 "$(( ${#FILES[@]} - 1 ))")"
+  update_focus_state || true
 }
 
 cycle_backend() {
@@ -1616,12 +1870,14 @@ toggle_recursive() {
 
 # ---------- traps ----------
 cleanup() {
+  update_focus_state || true
+  save_state || true
   ui_leave || true
   if [[ "${CLEAR_ON_EXIT:-0}" == "1" ]]; then
     printf '\e[2J\e[H'
   fi
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT INT TERM HUP
 
 on_winch() {
   msg "Resized"
@@ -1651,8 +1907,11 @@ Options:
   -o, --output NAME       Target display name or "All displays"
   --no-sixel              Disable image previews (UI only)
   --alt-screen            Use alternate screen buffer
-  --force-encoder NAME    chafa | img2sixel | magick
+  --force-encoder NAME    chafa | img2sixel | magick | kitty
   -h, --help              Show help
+  --resume                Start at last saved selection
+  --start-at N            Start at selection index N (1-based)
+
 USAGEEOF
 }
 
@@ -1695,6 +1954,17 @@ parse_args() {
         WALLPICKER_FORCE_ENCODER="$2"
         shift 2
         ;;
+      --resume)
+        RESUME_LAST=1
+        shift
+        ;;
+      --start-at)
+        [[ $# -ge 2 ]] || die "Missing value for $1"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "--start-at expects an integer (1-based)"
+        START_AT="$2"
+        RESUME_LAST=1
+        shift 2
+        ;;
       -h|--help)
         usage
         exit 0
@@ -1715,6 +1985,16 @@ main() {
   parse_args "$@"
 
   [[ "$BACKEND" == "swww" || "$BACKEND" == "hyprpaper" ]] || BACKEND="swww"
+
+  # Start position policy (default: start at 1st item)
+  if [[ -n "${START_AT}" ]]; then
+    # user supplies 1-based index
+    SEL=$(( START_AT - 1 ))
+  elif (( RESUME_LAST == 1 )); then
+    SEL="${LAST_SEL:-0}"
+  else
+    SEL=0
+  fi
 
   preflight_tty_checks
   check_runtime_requirements || exit 1
