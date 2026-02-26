@@ -6,15 +6,18 @@ IFS=$'\n\t'
 # - Safe when called from a root-run install.sh (sudo)
 # - Detects AMD/Intel/NVIDIA and installs correct Vulkan stack
 # - NVIDIA:
-#   - Uses nvidia-open* from official repos for modern GPUs (RTX/GTX16/Turing+)
+#   - Uses nvidia-open* from official repos for modern GPUs (Turing+/RTX/GTX16 and newer)
 #   - Uses AUR legacy branches when NVIDIA legacy page indicates (470/390/340)
-#   - Uses 580xx (AUR) for pre-Turing-but-not-legacy-page GPUs (Pascal/Maxwell/Volta)
+#   - Uses 580xx (AUR) for Pascal/Maxwell/Volta class GPUs (per Arch 590 transition notice)
 # - Removes conflicting NVIDIA packages before switching
 # - Ensures modeset:
 #     * modprobe:  options nvidia_drm modeset=1
 #     * bootloader cmdline: nvidia-drm.modeset=1 (adds if missing)
 # - Rebuilds initramfs (mkinitcpio/dracut)
 # - Patches Hyprland config NVIDIA env lines (best-effort; no cursor no_hardware_cursors edits)
+# - Dry-run/testing:
+#     * --dry-run/--test prints a plan + every command that would run, without changing the system
+#     * --nvidia/--amd/--intel forces a GPU path (useful for testing without hardware detection)
 
 ts(){ date +%F_%H%M%S; }
 log(){ printf '%s\n' "$*"; }
@@ -30,6 +33,10 @@ WRITE_MODPROBE_MODESET=1
 WRITE_BLACKLIST_NOUVEAU=1
 PATCH_MKINITCPIO_MODULES=1
 
+DRY_RUN=0
+FORCE_GPU=""
+NVIDIA_TOUCHED=0
+
 KPARAM_A="nvidia-drm.modeset=1"
 KPARAM_B="nvidia_drm.modeset=1" # accepted if user already has it, but we add hyphen form
 
@@ -39,6 +46,10 @@ Usage: install_GPU_dependencies.sh [options]
   --upgrade                  pacman -Syu (default: off)
   --no-lib32                 skip lib32 packages
   --opencl                   attempt OpenCL packages
+  --dry-run, --test          print plan + actions; do not install/remove/write/rebuild
+  --nvidia                   force NVIDIA path (skips lspci detection + legacy branch lookup)
+  --amd                      force AMD path (skips lspci detection)
+  --intel                    force Intel path (skips lspci detection)
   --no-bootloader-patch      do not patch systemd-boot/grub/limine cmdline
   --no-modprobe-modeset      do not write /etc/modprobe.d/nvidia-drm.conf
   --no-blacklist-nouveau     do not write /etc/modprobe.d/blacklist-nouveau.conf
@@ -52,6 +63,10 @@ while (($#)); do
     --upgrade) DO_UPGRADE=1; shift ;;
     --no-lib32) INSTALL_LIB32=0; shift ;;
     --opencl) INSTALL_OPENCL=1; shift ;;
+    --dry-run|--test) DRY_RUN=1; shift ;;
+    --nvidia) FORCE_GPU="nvidia"; shift ;;
+    --amd) FORCE_GPU="amd"; shift ;;
+    --intel) FORCE_GPU="intel"; shift ;;
     --no-bootloader-patch) PATCH_BOOTLOADERS=0; shift ;;
     --no-modprobe-modeset) WRITE_MODPROBE_MODESET=0; shift ;;
     --no-blacklist-nouveau) WRITE_BLACKLIST_NOUVEAU=0; shift ;;
@@ -59,6 +74,12 @@ while (($#)); do
     *) warn "Ignoring unknown arg: $1"; shift ;;
   esac
 done
+
+print_cmd(){
+  printf 'DRY-RUN: '
+  printf '%q ' "$@"
+  printf '\n'
+}
 
 # ---------- privilege + user context ----------
 EUID_NOW="${EUID:-$(id -u)}"
@@ -87,6 +108,10 @@ USER_HOME="$(getent passwd "$RUN_USER" | awk -F: '{print $6}')"
 [[ -n "$USER_HOME" ]] || die "Unable to determine HOME for user: $RUN_USER"
 
 as_root(){
+  if (( DRY_RUN )); then
+    print_cmd "$@"
+    return 0
+  fi
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     "$@"
   else
@@ -97,6 +122,12 @@ as_root(){
 }
 
 as_user(){
+  if (( DRY_RUN )); then
+    printf 'DRY-RUN: (as_user %s) ' "${RUN_USER:-?}"
+    printf '%q ' "$@"
+    printf '\n'
+    return 0
+  fi
   if [[ "${EUID:-$(id -u)}" -eq 0 ]]; then
     have sudo || die "sudo not found (needed to run as $RUN_USER)"
     sudo -u "$RUN_USER" -H env HOME="$USER_HOME" USER="$RUN_USER" LOGNAME="$RUN_USER" "$@"
@@ -126,12 +157,25 @@ pacman_install(){
   as_root pacman -S --needed --noconfirm "$@"
 }
 
+pacman_remove(){
+  as_root pacman -Rns --noconfirm "$@"
+}
+
 ensure_tools(){
   pacman_install git base-devel curl pciutils
 }
 
 detect_gpu_lines(){
-  have lspci || pacman_install pciutils
+  if [[ -n "${FORCE_GPU:-}" ]]; then
+    return 0
+  fi
+  if ! have lspci; then
+    if (( DRY_RUN )); then
+      warn "lspci not found; in dry-run, use --nvidia/--amd/--intel for deterministic testing."
+      return 0
+    fi
+    pacman_install pciutils
+  fi
   lspci -nn | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true
 }
 
@@ -146,11 +190,12 @@ extract_pci_ids_for_vendor(){
 }
 
 # ---------- AUR helper bootstrap ----------
-have_aur_helper(){
-  have yay || have paru
-}
-
 bootstrap_yay(){
+  if (( DRY_RUN )); then
+    log "DRY-RUN: would bootstrap yay (AUR helper) if needed"
+    return 0
+  fi
+
   have yay && return 0
   have paru && return 0
 
@@ -172,6 +217,10 @@ bootstrap_yay(){
 }
 
 aur_install(){
+  if (( DRY_RUN )); then
+    log "DRY-RUN: would AUR install: $*"
+    return 0
+  fi
   if have paru; then
     as_user paru -S --needed --noconfirm "$@"
     return 0
@@ -184,9 +233,26 @@ aur_install(){
   as_user yay -S --needed --noconfirm "$@"
 }
 
-# ---------- kernel headers for dkms ----------
+# ---------- kernel detection (Arch + Cachy variants) ----------
 detect_kernel_pkgs(){
-  pacman -Qq 2>/dev/null | grep -E '^linux($|-lts$|-zen$|-hardened$|-cachyos$)' | sort -u || true
+  # Prefer real installed kernel pkgbases from /usr/lib/modules (works for Cachy variants, custom kernels).
+  local -a bases=()
+  if [[ -d /usr/lib/modules ]]; then
+    local f b
+    shopt -s nullglob
+    for f in /usr/lib/modules/*/pkgbase; do
+      [[ -f "$f" ]] || continue
+      b="$(<"$f")"
+      [[ -n "$b" ]] && bases+=("$b")
+    done
+    shopt -u nullglob
+  fi
+  if ((${#bases[@]})); then
+    printf '%s\n' "${bases[@]}" | sort -u
+    return 0
+  fi
+  # Fallback: best-effort via installed package names
+  pacman -Qq 2>/dev/null | grep -E '^linux($|-lts$|-zen$|-hardened$|-cachyos($|-.*$))' | sort -u || true
 }
 
 headers_for_kernel(){
@@ -203,7 +269,9 @@ headers_for_kernel(){
 }
 
 install_headers_for_installed_kernels(){
-  pacman_install dkms
+  local want_dkms="${1:-1}"
+  (( want_dkms )) && pacman_install dkms
+
   local -a kernels=()
   mapfile -t kernels < <(detect_kernel_pkgs)
 
@@ -223,16 +291,61 @@ install_headers_for_installed_kernels(){
   done
 }
 
+try_install_linux_firmware_nvidia(){
+  # Only installs if the package exists in enabled repos (safe on vanilla Arch).
+  if pacman -Si linux-firmware-nvidia >/dev/null 2>&1; then
+    pacman_install linux-firmware-nvidia || true
+  fi
+}
+
+kernel_pkgbases_counts(){
+  # prints: "<cachy_count> <other_count>"
+  local cc=0 oc=0 k
+  while IFS= read -r k; do
+    [[ -n "$k" ]] || continue
+    if [[ "$k" == linux-cachyos* ]]; then
+      ((cc++))
+    else
+      ((oc++))
+    fi
+  done < <(detect_kernel_pkgs)
+  printf '%s %s\n' "$cc" "$oc"
+}
+
+cachyos_prebuilt_nvidia_open_pkgs(){
+  # If Cachy repos are enabled and per-kernel packages exist for every installed Cachy kernel,
+  # return the list. Otherwise return non-zero to trigger DKMS fallback.
+  local -a kernels=()
+  mapfile -t kernels < <(detect_kernel_pkgs | awk '/^linux-cachyos/ {print}')
+  ((${#kernels[@]})) || return 1
+
+  local -a pkgs=()
+  local k p
+  for k in "${kernels[@]}"; do
+    p="${k}-nvidia-open"
+    pacman -Si "$p" >/dev/null 2>&1 || return 1
+    pkgs+=("$p")
+  done
+  printf '%s\n' "${pkgs[@]}"
+}
+
 # ---------- NVIDIA conflict removal ----------
+nvidia_conflict_regex(){
+  # Used for both listing and removal.
+  printf '%s' '^(nvidia|nvidia-lts|nvidia-dkms|nvidia-open|nvidia-open-lts|nvidia-open-dkms|nvidia-lts-open|nvidia-utils|lib32-nvidia-utils|nvidia-settings|egl-wayland|opencl-nvidia|lib32-opencl-nvidia|libva-nvidia-driver|linux-cachyos[^[:space:]]*-nvidia-open|linux-cachyos[^[:space:]]*-nvidia|nvidia-[0-9]{3}xx.*|lib32-nvidia-[0-9]{3}xx.*|opencl-nvidia-[0-9]{3}xx.*|lib32-opencl-nvidia-[0-9]{3}xx.*)$'
+}
+
+list_installed_nvidia_packages(){
+  local re
+  re="$(nvidia_conflict_regex)"
+  pacman -Qq 2>/dev/null | grep -E "$re" | sort -u || true
+}
+
 remove_all_nvidia_packages(){
   local -a pkgs=()
-  mapfile -t pkgs < <(
-    pacman -Qq 2>/dev/null | grep -E \
-      '^(nvidia|nvidia-open|nvidia-dkms|nvidia-open-dkms|nvidia-lts|nvidia-lts-open|nvidia-utils|lib32-nvidia-utils|nvidia-settings|egl-wayland|opencl-nvidia|lib32-opencl-nvidia|libva-nvidia-driver|nvidia-[0-9]{3}xx.*|lib32-nvidia-[0-9]{3}xx.*|opencl-nvidia-[0-9]{3}xx.*|lib32-opencl-nvidia-[0-9]{3}xx.*)$' \
-      || true
-  )
+  mapfile -t pkgs < <(list_installed_nvidia_packages)
   ((${#pkgs[@]})) || return 0
-  as_root pacman -Rns --noconfirm "${pkgs[@]}"
+  pacman_remove "${pkgs[@]}"
 }
 
 # ---------- modeset configuration ----------
@@ -424,6 +537,10 @@ patch_mkinitcpio_modules(){
 }
 
 rebuild_initramfs(){
+  if (( DRY_RUN )); then
+    log "DRY-RUN: would rebuild initramfs (mkinitcpio/dracut)"
+    return 0
+  fi
   if have mkinitcpio; then
     as_root mkinitcpio -P
     return 0
@@ -442,12 +559,10 @@ ensure_hypr_env_active(){
   key="$2"
   val="$3"
 
-  # Already active
   if grep -qE "^[[:space:]]*env[[:space:]]*=[[:space:]]*${key}[[:space:]]*,[[:space:]]*${val}([[:space:]]*#.*)?[[:space:]]*$" "$conf"; then
     return 0
   fi
 
-  # Uncomment the first matching commented line (preserve trailing comment text)
   if grep -qE "^[[:space:]]*#[[:space:]]*env[[:space:]]*=[[:space:]]*${key}[[:space:]]*,[[:space:]]*${val}([[:space:]]*#.*)?[[:space:]]*$" "$conf"; then
     tmp="$(mktemp)"
     awk -v key="$key" -v val="$val" '
@@ -465,7 +580,6 @@ ensure_hypr_env_active(){
     return 0
   fi
 
-  # Missing entirely: append canonical line
   printf '%s\n' "env = ${key},${val}" >>"$conf"
 }
 
@@ -474,13 +588,15 @@ patch_hyprland_env_nvidia(){
   conf="${USER_HOME}/.config/hypr/hyprland.conf"
   [[ -f "$conf" ]] || return 0
 
-  cp -a "$conf" "${conf}.bak.$(ts)"
+  if (( DRY_RUN )); then
+    log "DRY-RUN: would patch Hyprland NVIDIA env lines in: $conf"
+    return 0
+  fi
 
+  cp -a "$conf" "${conf}.bak.$(ts)"
   ensure_hypr_env_active "$conf" "__GLX_VENDOR_LIBRARY_NAME" "nvidia"
   ensure_hypr_env_active "$conf" "LIBVA_DRIVER_NAME" "nvidia"
   ensure_hypr_env_active "$conf" "GBM_BACKEND" "nvidia-drm"
-
-  # Intentionally do not modify cursor:no_hardware_cursors.
 }
 
 # ---------- base GPU stacks ----------
@@ -536,14 +652,12 @@ nvidia_model_lines(){
 }
 
 is_modern_nvidia(){
-  # Turing+ / RTX / GTX16 / Quadro RTX etc
   local s
   s="$1"
   grep -qiE '(RTX|Quadro RTX|TITAN RTX|GTX[[:space:]]*16|RTX[[:space:]]*[0-9]{3,4}|A[0-9]{2,4}|H[0-9]{2,4}|L[0-9]{2,4})' <<<"$s"
 }
 
 is_preturing_nvidia(){
-  # Pascal/Maxwell/Volta style naming (best-effort)
   local s
   s="$1"
   grep -qiE '(GTX[[:space:]]*(10|9|8|7)|Quadro[[:space:]]*(P|M|K)|Tesla[[:space:]]*(P|V|M|K)|NVS|ION)' <<<"$s"
@@ -552,35 +666,94 @@ is_preturing_nvidia(){
 select_open_pkg(){
   local -a kernels=()
   mapfile -t kernels < <(detect_kernel_pkgs)
+  ((${#kernels[@]})) || die "Unable to detect installed kernels."
 
-  if pacman -Si nvidia-open-dkms >/dev/null 2>&1; then
-    if ((${#kernels[@]} != 1)); then
-      printf '%s\n' "nvidia-open-dkms"
-      return 0
-    fi
-    case "${kernels[0]}" in
-      linux)
-        if pacman -Si nvidia-open >/dev/null 2>&1; then printf '%s\n' "nvidia-open"; return 0; fi
-        ;;
-      linux-lts)
-        if pacman -Si nvidia-lts-open >/dev/null 2>&1; then printf '%s\n' "nvidia-lts-open"; return 0; fi
-        ;;
-    esac
+  local cc oc
+  read -r cc oc < <(kernel_pkgbases_counts)
+
+  # Mixed Cachy + non-Cachy kernels: avoid module-provider conflicts; prefer DKMS.
+  if (( cc>0 && oc>0 )); then
+    pacman -Si nvidia-open-dkms >/dev/null 2>&1 || die "Mixed Cachy/non-Cachy kernels detected but nvidia-open-dkms not available."
     printf '%s\n' "nvidia-open-dkms"
     return 0
   fi
 
+  # Multiple kernels installed: prefer DKMS so one module provider covers all.
+  if ((${#kernels[@]} != 1)); then
+    pacman -Si nvidia-open-dkms >/dev/null 2>&1 || die "Multiple kernels installed but nvidia-open-dkms not available."
+    printf '%s\n' "nvidia-open-dkms"
+    return 0
+  fi
+
+  case "${kernels[0]}" in
+    linux)
+      if pacman -Si nvidia-open >/dev/null 2>&1; then printf '%s\n' "nvidia-open"; return 0; fi
+      ;;
+    linux-lts)
+      if pacman -Si nvidia-open-lts >/dev/null 2>&1; then printf '%s\n' "nvidia-open-lts"; return 0; fi
+      if pacman -Si nvidia-lts-open >/dev/null 2>&1; then printf '%s\n' "nvidia-lts-open"; return 0; fi
+      ;;
+    *)
+      if pacman -Si nvidia-open-dkms >/dev/null 2>&1; then printf '%s\n' "nvidia-open-dkms"; return 0; fi
+      ;;
+  esac
+
+  if pacman -Si nvidia-open-dkms >/dev/null 2>&1; then printf '%s\n' "nvidia-open-dkms"; return 0; fi
   if pacman -Si nvidia-open >/dev/null 2>&1; then printf '%s\n' "nvidia-open"; return 0; fi
-  if pacman -Si nvidia-lts-open >/dev/null 2>&1; then printf '%s\n' "nvidia-lts-open"; return 0; fi
-  die "No nvidia-open packages found in repos."
+  die "No nvidia-open packages found in enabled repos."
+}
+
+nvidia_open_install_plan(){
+  # Prints a human plan to stdout:
+  #   STRATEGY=<...>
+  #   INSTALL=<pkg...>
+  #   NEED_HEADERS=<0|1>
+  local cc oc
+  read -r cc oc < <(kernel_pkgbases_counts)
+
+  if (( cc>0 && oc==0 )); then
+    local -a prebuilt=()
+    if mapfile -t prebuilt < <(cachyos_prebuilt_nvidia_open_pkgs 2>/dev/null); then
+      if ((${#prebuilt[@]})); then
+        printf 'STRATEGY=cachy-prebuilt\n'
+        printf 'NEED_HEADERS=0\n'
+        printf 'INSTALL=%s\n' "${prebuilt[*]}"
+        return 0
+      fi
+    fi
+    printf 'STRATEGY=cachy-dkms-fallback\n'
+  fi
+
+  local modpkg
+  modpkg="$(select_open_pkg)"
+  printf 'STRATEGY=arch-open\n'
+  printf 'NEED_HEADERS=%s\n' "$([[ "$modpkg" == *-dkms ]] && echo 1 || echo 0)"
+  printf 'INSTALL=%s\n' "$modpkg"
 }
 
 install_nvidia_open_stack(){
-  install_headers_for_installed_kernels
-  local modpkg
-  modpkg="$(select_open_pkg)"
+  local plan strategy need_headers install_line
+  plan="$(nvidia_open_install_plan)"
+  strategy="$(awk -F= '$1=="STRATEGY"{print $2}' <<<"$plan")"
+  need_headers="$(awk -F= '$1=="NEED_HEADERS"{print $2}' <<<"$plan")"
+  install_line="$(awk -F= '$1=="INSTALL"{print $2}' <<<"$plan")"
 
-  pacman_install "$modpkg" nvidia-utils nvidia-settings egl-wayland
+  log "NVIDIA open strategy: $strategy"
+
+  if [[ "$strategy" == "cachy-prebuilt" ]]; then
+    local -a prebuilt=()
+    # shellcheck disable=SC2206
+    prebuilt=($install_line)
+    pacman_install "${prebuilt[@]}" nvidia-utils nvidia-settings egl-wayland
+    try_install_linux_firmware_nvidia
+  else
+    local modpkg
+    modpkg="$install_line"
+    install_headers_for_installed_kernels "$need_headers"
+    pacman_install "$modpkg" nvidia-utils nvidia-settings egl-wayland
+    try_install_linux_firmware_nvidia
+  fi
+
   if (( INSTALL_LIB32 )) && multilib_enabled; then
     pacman_install lib32-nvidia-utils
   fi
@@ -593,7 +766,7 @@ install_nvidia_open_stack(){
 }
 
 install_nvidia_580xx_stack(){
-  install_headers_for_installed_kernels
+  install_headers_for_installed_kernels 1
   ensure_tools
   bootstrap_yay
 
@@ -611,10 +784,9 @@ install_nvidia_580xx_stack(){
 }
 
 install_nvidia_legacy_branch(){
-  # branch: 470|390|340
   local branch
   branch="$1"
-  install_headers_for_installed_kernels
+  install_headers_for_installed_kernels 1
   ensure_tools
   bootstrap_yay
 
@@ -636,6 +808,25 @@ install_nvidia_legacy_branch(){
   pacman_install egl-wayland
 }
 
+verify_nvidia_module_for_running_kernel(){
+  local kver pb
+  kver="$(uname -r)"
+  pb=""
+  [[ -f "/usr/lib/modules/${kver}/pkgbase" ]] && pb="$(<"/usr/lib/modules/${kver}/pkgbase")"
+
+  if have modinfo; then
+    if ! modinfo -k "$kver" nvidia >/dev/null 2>&1; then
+      if [[ -n "$pb" ]]; then
+        warn "nvidia kernel module not found for running kernel: $kver (pkgbase: $pb)"
+      else
+        warn "nvidia kernel module not found for running kernel: $kver"
+      fi
+      return 1
+    fi
+  fi
+  return 0
+}
+
 configure_nvidia(){
   write_blacklist_nouveau
   write_modprobe_modeset
@@ -644,9 +835,74 @@ configure_nvidia(){
   rebuild_initramfs
   patch_hyprland_env_nvidia
 
+  if (( DRY_RUN )); then
+    log "DRY-RUN: would verify nvidia-smi + running-kernel module presence"
+    return 0
+  fi
+
   command -v nvidia-smi >/dev/null 2>&1 || die "nvidia-smi not present after install (nvidia-utils or legacy utils missing)."
+  verify_nvidia_module_for_running_kernel || true
 }
 
+nvidia_plan_report(){
+  log "---- DRY-RUN PLAN (NVIDIA) ----"
+  local -a kernels=()
+  mapfile -t kernels < <(detect_kernel_pkgs)
+  if ((${#kernels[@]})); then
+    log "Installed kernel pkgbases: ${kernels[*]}"
+  else
+    log "Installed kernel pkgbases: (none detected)"
+  fi
+
+  local cc oc
+  read -r cc oc < <(kernel_pkgbases_counts)
+  log "Kernel mix: cachy=${cc} other=${oc}"
+
+  local -a installed=()
+  mapfile -t installed < <(list_installed_nvidia_packages)
+  if ((${#installed[@]})); then
+    log "Installed NVIDIA-related packages that would be removed:"
+    printf '  %s\n' "${installed[@]}"
+  else
+    log "Installed NVIDIA-related packages that would be removed: (none)"
+  fi
+
+  local plan strategy need_headers install_line
+  plan="$(nvidia_open_install_plan)"
+  strategy="$(awk -F= '$1=="STRATEGY"{print $2}' <<<"$plan")"
+  need_headers="$(awk -F= '$1=="NEED_HEADERS"{print $2}' <<<"$plan")"
+  install_line="$(awk -F= '$1=="INSTALL"{print $2}' <<<"$plan")"
+
+  log "Selected NVIDIA module strategy: $strategy"
+  if [[ "$strategy" == "cachy-prebuilt" ]]; then
+    log "Would install prebuilt per-kernel module packages: $install_line"
+  else
+    log "Would install module package: $install_line"
+    log "Would install kernel headers + dkms: $need_headers"
+  fi
+
+  log "Would install userspace: nvidia-utils nvidia-settings egl-wayland"
+  if (( INSTALL_LIB32 )) && multilib_enabled; then
+    log "Would install 32-bit userspace: lib32-nvidia-utils"
+  fi
+  if (( INSTALL_OPENCL )); then
+    log "Would install OpenCL: opencl-nvidia (and lib32-opencl-nvidia if multilib enabled)"
+  fi
+
+  if pacman -Si linux-firmware-nvidia >/dev/null 2>&1; then
+    log "Would install firmware: linux-firmware-nvidia"
+  fi
+
+  log "Would write nouveau blacklist: $WRITE_BLACKLIST_NOUVEAU"
+  log "Would write nvidia_drm modeset modprobe: $WRITE_MODPROBE_MODESET"
+  log "Would patch bootloader cmdline: $PATCH_BOOTLOADERS (adds: $KPARAM_A)"
+  log "Would patch mkinitcpio MODULES: $PATCH_MKINITCPIO_MODULES (adds early nvidia modules)"
+  log "Would rebuild initramfs: yes (mkinitcpio/dracut if present)"
+  log "Would patch Hyprland NVIDIA env lines: yes (if hyprland.conf exists)"
+  log "---- END PLAN ----"
+}
+
+# NVIDIA auto path (with legacy lookup)
 install_nvidia_auto(){
   local gpu_lines
   gpu_lines="$1"
@@ -661,9 +917,27 @@ install_nvidia_auto(){
   log "NVIDIA detected: ${ids[*]}"
   [[ -n "$models" ]] && log "$models"
 
+  if (( DRY_RUN )); then
+    # Dry-run should not curl/download the legacy page; print the decision tree + open strategy plan.
+    local class="unknown"
+    if is_modern_nvidia "$models"; then
+      class="modern (Turing+/RTX/GTX16+)"
+    elif is_preturing_nvidia "$models"; then
+      class="older (Pascal/Maxwell/Volta-style naming)"
+    fi
+
+    log "DRY-RUN: NVIDIA classification (from model string): $class"
+    log "DRY-RUN: would check NVIDIA legacy GPU list for PCI IDs to select 470/390/340 if applicable"
+    log "DRY-RUN: if not legacy-branch, then:"
+    log "  - modern -> install nvidia-open* (Arch/Cachy strategy below)"
+    log "  - older  -> install nvidia-580xx-dkms stack from AUR"
+    nvidia_plan_report
+    return 0
+  fi
+
   remove_all_nvidia_packages
 
-  local html tmp branch=""
+  local tmp branch=""
   tmp="$(mktemp)"
   if fetch_nvidia_legacy_html "$tmp"; then
     local id b
@@ -689,23 +963,31 @@ install_nvidia_auto(){
   fi
 
   if is_modern_nvidia "$models"; then
-    log "NVIDIA modern path: nvidia-open* (repos)"
+    log "NVIDIA modern path: nvidia-open*"
     install_nvidia_open_stack
     configure_nvidia
     return 0
   fi
 
   if is_preturing_nvidia "$models"; then
-    log "NVIDIA pre-Turing path: 580xx (AUR)"
+    log "NVIDIA older path: 580xx (AUR)"
     install_nvidia_580xx_stack
     configure_nvidia
     return 0
   fi
 
-  # Unknown naming: try open first, then fail loudly if nvidia-smi missing.
   log "NVIDIA unknown model naming: trying nvidia-open* first"
   install_nvidia_open_stack
   configure_nvidia
+}
+
+# ---------- base plan output ----------
+dry_run_banner(){
+  log "DRY-RUN: enabled. No changes will be made."
+  log "Options: upgrade=$DO_UPGRADE lib32=$INSTALL_LIB32 opencl=$INSTALL_OPENCL bootloader_patch=$PATCH_BOOTLOADERS modprobe_modeset=$WRITE_MODPROBE_MODESET blacklist_nouveau=$WRITE_BLACKLIST_NOUVEAU mkinitcpio_modules=$PATCH_MKINITCPIO_MODULES"
+  if [[ -n "${FORCE_GPU:-}" ]]; then
+    log "Forced GPU path: $FORCE_GPU"
+  fi
 }
 
 main(){
@@ -716,6 +998,10 @@ main(){
 
   have pacman || exit 0
 
+  if (( DRY_RUN )); then
+    dry_run_banner
+  fi
+
   if (( DO_UPGRADE )); then
     as_root pacman -Syu --noconfirm
   else
@@ -723,6 +1009,36 @@ main(){
   fi
 
   install_common_base
+
+  if [[ -n "${FORCE_GPU:-}" ]]; then
+    case "$FORCE_GPU" in
+      nvidia)
+        NVIDIA_TOUCHED=1
+        if (( DRY_RUN )); then
+          nvidia_plan_report
+        fi
+        remove_all_nvidia_packages
+        install_nvidia_open_stack
+        configure_nvidia
+        ;;
+      amd)
+        install_amd
+        ;;
+      intel)
+        install_intel
+        ;;
+      *)
+        die "Unknown --gpu override: $FORCE_GPU"
+        ;;
+    esac
+
+    if (( NVIDIA_TOUCHED )); then
+      log "GPU install complete. Reboot recommended after NVIDIA changes."
+    else
+      log "GPU install complete."
+    fi
+    exit 0
+  fi
 
   local lines
   lines="$(detect_gpu_lines)"
@@ -738,9 +1054,16 @@ main(){
 
   [[ -n "$amd_ids" ]] && install_amd
   [[ -n "$intel_ids" ]] && install_intel
-  [[ -n "$nvidia_ids" ]] && install_nvidia_auto "$lines"
+  if [[ -n "$nvidia_ids" ]]; then
+    NVIDIA_TOUCHED=1
+    install_nvidia_auto "$lines"
+  fi
 
-  log "GPU install complete. Reboot recommended after NVIDIA changes."
+  if (( NVIDIA_TOUCHED )); then
+    log "GPU install complete. Reboot recommended after NVIDIA changes."
+  else
+    log "GPU install complete."
+  fi
 }
 
 main
