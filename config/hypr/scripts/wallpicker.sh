@@ -118,7 +118,6 @@ PAGE_SIZE=1
 SIXEL_ENCODER=""
 SIXEL_ENCODER_LABEL=""
 PREVIEW_MODE="sixel"              # sixel | kitty | disabled
-KITTY_TRANSFER_MODE="detect"      # detect | file | memory | stream
 TTY_STTY_SAVED=""
 LAST_ENCODER_ERR=""
 
@@ -153,56 +152,65 @@ kitty_icat_help_has() {
   kitty +kitten icat --help 2>/dev/null | grep -q -- "$needle"
 }
 
-kitty_detect_transfer_mode() {
-  # Default conservative mode; only upgrade if --detect-support exists and succeeds.
-  KITTY_TRANSFER_MODE="file"
-  have kitty || return 1
 
-  if ! kitty_icat_help_has -- "--detect-support"; then
-    return 0
+kitty_passthrough_mode() {
+  # kitty supports: detect|none|tmux (your version errors on 'auto')
+  kitty_icat_help_has -- "--passthrough" || { printf ''; return 0; }
+  if [[ -n "${TMUX:-}" ]]; then
+    printf 'tmux'
+  else
+    printf 'detect'
   fi
-
-  local out rc tok
-  out="$(kitty +kitten icat --detect-support 2>&1)"
-  rc=$?
-  (( rc == 0 )) || return 1
-
-  tok="$(printf '%s\n' "$out" | tr '\r' '\n' | awk '{for(i=1;i<=NF;i++) if($i ~ /^(file|memory|stream)$/){print $i; exit}}')"
-  case "${tok:-}" in
-    file|memory|stream) KITTY_TRANSFER_MODE="$tok" ;;
-    *) KITTY_TRANSFER_MODE="file" ;;
-  esac
   return 0
 }
-
 kitty_clear_images() {
-  have kitty || return 0
+  command -v kitty >/dev/null 2>&1 || return 0
   : >"$KITTY_ERR_LOG" 2>/dev/null || true
-  # Must go to stdout (escape codes). Only stderr is logged.
-  kitty +kitten icat --clear </dev/null 2>>"$KITTY_ERR_LOG" || true
+
+  local pm
+  pm="$(kitty_passthrough_mode)"
+
+  # Critical: --stdin=no prevents icat from treating non-tty stdin as an image.
+  # Never redirect stdout (it carries the graphics protocol output).
+  if [[ -n "$pm" ]]; then
+    kitty +kitten icat --stdin=no --passthrough "$pm" --clear 2>>"$KITTY_ERR_LOG" || true
+  else
+    kitty +kitten icat --stdin=no --clear 2>>"$KITTY_ERR_LOG" || true
+  fi
   return 0
 }
-
 kitty_draw_png_at() {
-  local png="$1" col_1b="$2" row_1b="$3" left top place
-  have kitty || return 1
+  local png="$1" col_1b="${2:-1}" row_1b="${3:-1}" left top place pm
+  command -v kitty >/dev/null 2>&1 || return 1
+  [[ -n "${png:-}" ]] || return 1
+
+  # If caller accidentally passed a multi-line string (png + six), keep only the first line.
+  png="${png%%$'\n'*}"
+  png="${png%%$'\r'*}"
+
   [[ -s "$png" ]] || return 1
+  kitty_icat_help_has -- "--place" || { LAST_ENCODER_ERR="kitty icat missing --place"; return 1; }
 
   left=$(( col_1b - 1 ))
   top=$(( row_1b - 1 ))
   place="${THUMB_CH_W}x${THUMB_CH_H}@${left}x${top}"
 
-  # IMPORTANT: never redirect stdout; that's the image protocol output.
-  if kitty_icat_help_has -- "--transfer-mode"; then
-    kitty +kitten icat --place "$place" --scale-up --transfer-mode "${KITTY_TRANSFER_MODE:-file}" -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
-  fi
-  kitty +kitten icat --place "$place" --scale-up -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
-  kitty +kitten icat --place "$place" -- "$png" </dev/null 2>>"$KITTY_ERR_LOG" && return 0
+  : >"$KITTY_ERR_LOG" 2>/dev/null || true
+  pm="$(kitty_passthrough_mode)"
 
-  LAST_ENCODER_ERR="$(tail -n 1 "$KITTY_ERR_LOG" 2>/dev/null | tr -d '\r' | head -c 180)"
+  # Critical: --stdin=no. Do not redirect stdout.
+  if [[ -n "$pm" ]]; then
+    kitty +kitten icat --stdin=no --passthrough "$pm" --place "$place" --scale-up -- "$png" 2>>"$KITTY_ERR_LOG" && return 0
+  else
+    kitty +kitten icat --stdin=no --place "$place" --scale-up -- "$png" 2>>"$KITTY_ERR_LOG" && return 0
+  fi
+
+  LAST_ENCODER_ERR="$(tail -n 1 "$KITTY_ERR_LOG" 2>/dev/null | tr -d '\r' | head -c 200)"
   [[ -n "$LAST_ENCODER_ERR" ]] || LAST_ENCODER_ERR="kitty icat failed"
   return 1
 }
+
+
 
 
 
@@ -392,16 +400,14 @@ detect_sixel_encoder() {
     return 0
   fi
 
-  # Prefer kitty image protocol when running inside kitty (unless user forced a SIXEL encoder).
-  if [[ "${WALLPICKER_FORCE_ENCODER}" == "kitty" ]] || { [[ -z "${WALLPICKER_FORCE_ENCODER}" ]] && is_kitty_term; }; then
-    if have kitty && kitty_detect_transfer_mode; then
-      SIXEL_ENCODER="kitty"
-      SIXEL_ENCODER_LABEL="kitty(icat:${KITTY_TRANSFER_MODE})"
-      PREVIEW_MODE="kitty"
-      return 0
-    fi
-    LAST_ENCODER_ERR="kitty image protocol not supported (fallback to SIXEL)"
+  if is_kitty_term && kitty_icat_help_has -- "--place"; then
+    SIXEL_ENCODER="kitty"
+    SIXEL_ENCODER_LABEL="kitty(icat)"
+    PREVIEW_MODE="kitty"
+    return 0
   fi
+
+  PREVIEW_MODE="sixel"
 
   if [[ -n "${WALLPICKER_FORCE_ENCODER}" ]]; then
     case "${WALLPICKER_FORCE_ENCODER}" in
@@ -409,8 +415,6 @@ detect_sixel_encoder() {
         if have chafa; then
           SIXEL_ENCODER="chafa"
           SIXEL_ENCODER_LABEL="chafa"
-          PREVIEW_MODE="sixel"
-          PREVIEW_MODE="sixel"
           return 0
         fi
         ;;
@@ -418,8 +422,6 @@ detect_sixel_encoder() {
         if have img2sixel; then
           SIXEL_ENCODER="img2sixel"
           SIXEL_ENCODER_LABEL="img2sixel(-7)"
-      PREVIEW_MODE="sixel"
-          PREVIEW_MODE="sixel"
           return 0
         fi
         ;;
@@ -427,48 +429,37 @@ detect_sixel_encoder() {
         if have magick && magick -list format 2>/dev/null | grep -qiE '^[[:space:]]*SIXEL'; then
           SIXEL_ENCODER="magick"
           SIXEL_ENCODER_LABEL="magick(SIXEL)"
-          PREVIEW_MODE="sixel"
-          PREVIEW_MODE="sixel"
           return 0
         fi
-        ;;
-      kitty)
-        # handled above
         ;;
     esac
   fi
 
-  # Prefer img2sixel first for alacritty-graphics SIXEL.
   if have img2sixel; then
     SIXEL_ENCODER="img2sixel"
     SIXEL_ENCODER_LABEL="img2sixel(-7)"
-      PREVIEW_MODE="sixel"
-    PREVIEW_MODE="sixel"
     return 0
   fi
 
   if have chafa; then
     SIXEL_ENCODER="chafa"
     SIXEL_ENCODER_LABEL="chafa"
-          PREVIEW_MODE="sixel"
-    PREVIEW_MODE="sixel"
     return 0
   fi
 
   if have magick && magick -list format 2>/dev/null | grep -qiE '^[[:space:]]*SIXEL'; then
     SIXEL_ENCODER="magick"
     SIXEL_ENCODER_LABEL="magick(SIXEL)"
-          PREVIEW_MODE="sixel"
-    PREVIEW_MODE="sixel"
     return 0
   fi
 
   SIXEL_ENCODER=""
   SIXEL_ENCODER_LABEL="none"
   PREVIEW_MODE="disabled"
-  PREVIEW_MODE="disabled"
   return 1
 }
+
+
 
 print_requirements_help() {
   cat >&2 <<'REQEOF'
@@ -1339,6 +1330,7 @@ draw_help() {
 draw_full_ui() {
   local page_start page_end last i
   calc_grid
+  if [[ "${PREVIEW_MODE}" == "kitty" ]]; then kitty_clear_images; fi
 
   if [[ \"${PREVIEW_MODE}\" == \"kitty\" ]]; then kitty_clear_images; fi
   ui_clear
