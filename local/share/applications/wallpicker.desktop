@@ -1,0 +1,12 @@
+# github.com/dillacorn/awtarchy/tree/main/local/share/applications
+# ~/.local/share/applications/wallpicker.desktop
+
+[Desktop Entry]
+Type=Application
+Name=wallpicker
+Comment=Minimal wallpaper picker for Hyprland
+Exec=sh -lc 'alacritty --class wallpicker -e ~/.config/hypr/scripts/wallpicker.sh --resume'
+Icon=preferences-desktop-wallpaper
+Terminal=false
+Categories=Utility;Graphics;
+StartupNotify=true
