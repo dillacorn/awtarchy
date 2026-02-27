@@ -85,6 +85,8 @@ CONFIG_DIR="${HOME}/.config/${APP_ID}"
 CACHE_DIR="${HOME}/.cache/${APP_ID}"
 THUMB_CACHE_DIR="${CACHE_DIR}/thumbs"
 STATE_FILE="${CONFIG_DIR}/state.conf"
+BACKEND_STATE_FILE="${CONFIG_DIR}/backend_state.tsv"
+
 DEBUG_LOG="${CACHE_DIR}/debug.log"
 KITTY_ERR_LOG="${CACHE_DIR}/kitty.err.log"
 
@@ -128,9 +130,101 @@ LAST_GRID_ROWS=0
 
 declare -A HASH_CACHE=()
 
+BACKEND_STATE_BACKEND=""
+declare -A BACKEND_STATE_MAP=()
+
 # ---------- helpers ----------
 msg() { STATUS_MSG="$*"; }
 have() { command -v "$1" >/dev/null 2>&1; }
+
+backend_state_read() {
+  BACKEND_STATE_BACKEND=""
+  BACKEND_STATE_MAP=()
+  [[ -f "$BACKEND_STATE_FILE" ]] || return 0
+  local k v
+  while IFS=$'\t' read -r k v; do
+    [[ -z "${k:-}" ]] && continue
+    if [[ "$k" == "backend" ]]; then
+      BACKEND_STATE_BACKEND="$v"
+      continue
+    fi
+    BACKEND_STATE_MAP["$k"]="$v"
+  done < "$BACKEND_STATE_FILE"
+  return 0
+}
+
+backend_state_write() {
+  local backend="$1" tmp
+  mkdir -p -- "$CONFIG_DIR"
+  tmp="${BACKEND_STATE_FILE}.tmp.$$"
+  {
+    printf 'backend\t%s\n' "$backend"
+    for k in "${!BACKEND_STATE_MAP[@]}"; do
+      printf '%s\t%s\n' "$k" "${BACKEND_STATE_MAP[$k]}"
+    done | LC_ALL=C sort
+  } > "$tmp"
+  mv -f -- "$tmp" "$BACKEND_STATE_FILE"
+}
+
+backend_state_set_outputs() {
+  local backend="$1" img="$2"; shift 2
+  backend_state_read
+  local out
+  for out in "$@"; do
+    BACKEND_STATE_MAP["$out"]="$img"
+  done
+  backend_state_write "$backend"
+}
+
+backend_state_set_backend_only() {
+  local backend="$1"
+  backend_state_read
+  backend_state_write "$backend"
+}
+
+is_hyprpaper_running() {
+  if have pgrep; then
+    pgrep -x hyprpaper >/dev/null 2>&1
+  elif have pidof; then
+    pidof hyprpaper >/dev/null 2>&1
+  else
+    ps -C hyprpaper >/dev/null 2>&1
+  fi
+}
+
+kill_hyprpaper_if_running() {
+  is_hyprpaper_running || return 0
+  if have pkill; then
+    pkill -x hyprpaper >/dev/null 2>&1 || true
+  elif have killall; then
+    killall hyprpaper >/dev/null 2>&1 || true
+  fi
+  return 0
+}
+
+takeover_hyprpaper_to_swww() {
+  # Kill hyprpaper and reapply the last-known per-output wallpapers via swww.
+  backend_state_read
+  [[ "$BACKEND_STATE_BACKEND" == "hyprpaper" ]] || { kill_hyprpaper_if_running; return 0; }
+  ensure_swww_daemon || { kill_hyprpaper_if_running; return 0; }
+  kill_hyprpaper_if_running
+
+  local out img
+  for out in "${!BACKEND_STATE_MAP[@]}"; do
+    img="${BACKEND_STATE_MAP[$out]}"
+    [[ -n "$img" && -f "$img" ]] || continue
+    run_quiet_hup_safe swww img \
+      --outputs "$out" \
+      --resize "$SWWW_RESIZE" \
+      --transition-type "$SWWW_TRANSITION_TYPE" \
+      --transition-duration "$SWWW_TRANSITION_DURATION" \
+      --transition-fps "$SWWW_TRANSITION_FPS" \
+      --filter "$SWWW_FILTER" \
+      -- "$img" || true
+  done
+  backend_state_set_backend_only "swww" || true
+  return 0
+}
 
 debug() {
   if [[ "${WALLPICKER_DEBUG}" == "1" ]]; then
@@ -222,6 +316,80 @@ run_quiet_hup_safe() {
     "$@" </dev/null >/dev/null 2>&1
   fi
 }
+
+hyprpaper_ctl() {
+  # Usage: hyprpaper_ctl <seconds> <hyprpaper-subcmd...>
+  local sec="$1"
+  shift
+
+  if have timeout; then
+    timeout -k 0.25s "${sec}s" hyprctl hyprpaper "$@" </dev/null >/dev/null 2>&1
+    return $?
+  fi
+
+  hyprctl hyprpaper "$@" </dev/null >/dev/null 2>&1 &
+  local pid=$!
+
+  (
+    sleep "$sec"
+    kill -TERM "$pid" 2>/dev/null || true
+    sleep 0.25
+    kill -KILL "$pid" 2>/dev/null || true
+  ) &
+  local killer=$!
+
+  wait "$pid" 2>/dev/null
+  local rc=$?
+  kill "$killer" 2>/dev/null || true
+  wait "$killer" 2>/dev/null || true
+  return "$rc"
+}
+
+
+run_with_timeout() {
+  # Usage: run_with_timeout <seconds> <cmd...>
+  local sec="$1"
+  shift
+  if have timeout; then
+    timeout "${sec}s" "$@"
+    return $?
+  fi
+
+  "$@" &
+  local pid=$!
+  local killer
+
+  (
+    sleep "$sec"
+    if kill -0 "$pid" 2>/dev/null; then
+      kill "$pid" 2>/dev/null || true
+      sleep 0.5
+      kill -0 "$pid" 2>/dev/null && kill -KILL "$pid" 2>/dev/null || true
+    fi
+  ) &
+  killer=$!
+
+  wait "$pid" 2>/dev/null
+  local rc=$?
+
+  kill "$killer" 2>/dev/null || true
+  wait "$killer" 2>/dev/null || true
+  return "$rc"
+}
+
+hyprctl_quiet() {
+  # Usage: hyprctl_quiet <seconds> <hyprctl args...>
+  local sec="$1"
+  shift
+  run_with_timeout "$sec" hyprctl "$@" </dev/null >/dev/null 2>&1
+}
+
+restart_hyprpaper() {
+  if have pkill; then pkill -x hyprpaper >/dev/null 2>&1 || true; fi
+  if have killall; then killall hyprpaper >/dev/null 2>&1 || true; fi
+  (nohup hyprpaper >/dev/null 2>&1 &) || true
+}
+
 
 update_focus_state() {
   if (( ${#FILES[@]} == 0 )); then
@@ -795,19 +963,23 @@ ensure_swww_daemon() {
 
 ensure_hyprpaper_running() {
   local i
-  if hyprctl hyprpaper listactive >/dev/null 2>&1; then return 0; fi
   if ! have hyprpaper; then msg "hyprpaper not installed"; return 1; fi
+  is_hyprpaper_running && return 0
   (nohup hyprpaper >/dev/null 2>&1 &) || true
-  for i in {1..20}; do
-    if hyprctl hyprpaper listactive >/dev/null 2>&1; then return 0; fi
-    sleep 0.2
+  for i in {1..40}; do
+    is_hyprpaper_running && return 0
+    sleep 0.1
   done
-  msg "hyprpaper IPC not ready"
+  msg "hyprpaper did not start"
   return 1
 }
 
 apply_with_swww() {
   local img="$1" outputs_csv
+
+  # If hyprpaper is running, it will sit on top of swww. Kill it before applying.
+  kill_hyprpaper_if_running
+
   resolve_target_outputs
   if (( ${#TARGET_OUTPUTS[@]} == 0 )); then msg "No outputs detected"; return 1; fi
   ensure_swww_daemon || return 1
@@ -821,6 +993,7 @@ apply_with_swww() {
       --transition-fps "$SWWW_TRANSITION_FPS" \
       --filter "$SWWW_FILTER" \
       -- "$img"; then
+    backend_state_set_outputs "swww" "$img" "${TARGET_OUTPUTS[@]}" || true
     msg "Applied via swww -> $(basename -- "$img")"
     return 0
   fi
@@ -829,25 +1002,32 @@ apply_with_swww() {
 }
 
 apply_with_hyprpaper() {
-  local img="$1" out
+  local img="$1" out arg ext t
+
+  ext="${img##*.}"; ext="${ext,,}"
+  if [[ "$ext" == "gif" ]]; then
+    msg "hyprpaper: GIF not supported"
+    return 1
+  fi
+
   resolve_target_outputs
   if (( ${#TARGET_OUTPUTS[@]} == 0 )); then msg "No outputs detected"; return 1; fi
   ensure_hyprpaper_running || return 1
 
-  if ! run_quiet_hup_safe hyprctl hyprpaper preload "$img"; then
-    msg "hyprpaper preload failed"
-    return 1
-  fi
-
+  t="${HYPERPAPER_TIMEOUT:-3}"
   for out in "${TARGET_OUTPUTS[@]}"; do
-    if ! run_quiet_hup_safe hyprctl hyprpaper wallpaper "${out},${img},${HYPERPAPER_MODE}"; then
-      if ! run_quiet_hup_safe hyprctl hyprpaper wallpaper "${out},${img}"; then
+    # hyprpaper expects: "mon, path, fit_mode" (note spaces after commas)
+    arg="${out}, ${img}, ${HYPERPAPER_MODE}"
+    if ! hyprpaper_ctl "$t" wallpaper "$arg"; then
+      arg="${out}, ${img}"
+      if ! hyprpaper_ctl "$t" wallpaper "$arg"; then
         msg "hyprpaper apply failed on ${out}"
         return 1
       fi
     fi
   done
 
+  backend_state_set_outputs "hyprpaper" "$img" "${TARGET_OUTPUTS[@]}" || true
   msg "Applied via hyprpaper -> $(basename -- "$img")"
   return 0
 }
@@ -1654,19 +1834,19 @@ read_key() {
 }
 
 prompt_line() {
-  local prompt="$1" current="${2:-}" input lines tty
+  local prompt="$1" current="${2:-}" input lines
   lines="$(term_lines)"
-  tty="/dev/tty"
-  [[ -w "$tty" ]] || tty="$(tty 2>/dev/null || printf '%s' /dev/tty)"
 
   tty_raw_off
-  printf '\e[?25h' >"$tty"
-  printf '\e[%d;%dH' "$lines" 1 >"$tty"
-  printf '\e[2K' >"$tty"
-  printf '%s' "$prompt" >"$tty"
+  printf '\e[?25h' >&2
+  ui_goto "$lines" 1 >&2
+  ui_clear_line >&2
+  printf '%s' "$prompt" >&2
   IFS= read -r input || input="$current"
   input="${input//$'\r'/}"
-  printf '\e[?25l' >"$tty"
+  input="${input#"${input%%[![:space:]]*}"}"
+  input="${input%"${input##*[![:space:]]}"}"
+  printf '\e[?25l' >&2
   tty_raw_on
   printf '%s' "$input"
 }
@@ -1688,8 +1868,14 @@ move_sel_grid() {
 }
 
 cycle_backend() {
+  local prev="$BACKEND"
   if [[ "$BACKEND" == "swww" ]]; then BACKEND="hyprpaper"; else BACKEND="swww"; fi
   save_state
+
+  if [[ "$prev" == "hyprpaper" && "$BACKEND" == "swww" ]]; then
+    takeover_hyprpaper_to_swww
+  fi
+
   msg "Backend: $BACKEND"
   NEED_FULL_REDRAW=1
 }
