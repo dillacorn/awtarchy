@@ -1845,6 +1845,19 @@ read_key() {
   rest+="$c1"
 
   if [[ "$c1" != "[" ]]; then
+    # SS3 (ESC O <x>) keys in application-cursor mode: map common keys to CSI.
+    if [[ "$c1" == "O" ]]; then
+      if IFS= read -rsn1 -t 0.03 c2; then
+        case "$c2" in
+          A|B|C|D|H|F|P|Q|R|S)
+            printf '%s' "${key}[$c2"
+            return 0
+            ;;
+        esac
+        printf '%s' "$key$rest$c2"
+        return 0
+      fi
+    fi
     # Not CSI; return whatever arrived.
     printf '%s' "$key$rest"
     return 0
@@ -2310,6 +2323,30 @@ main() {
         ;;
       $'\e[D'|h)
         move_sel_delta -1
+        moved=1
+        ;;
+      $'\e[5~')
+        # PgUp: move 6 previews up
+        move_sel_delta -6
+        moved=1
+        ;;
+      $'\e[6~')
+        # PgDn: move 6 previews down
+        move_sel_delta 6
+        moved=1
+        ;;
+      $'\e[H'|$'\e[1~')
+        # Home: top of list
+        if (( ${#FILES[@]} > 0 )); then
+          SEL=0
+        fi
+        moved=1
+        ;;
+      $'\e[F'|$'\e[4~')
+        # End: end of list
+        if (( ${#FILES[@]} > 0 )); then
+          SEL=$(( ${#FILES[@]} - 1 ))
+        fi
         moved=1
         ;;
       r)
