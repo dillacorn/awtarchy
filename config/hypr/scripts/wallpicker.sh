@@ -107,6 +107,7 @@ STATUS_MSG="Starting..."
 SEL=0
 RUNNING=1
 UI_ACTIVE=0
+HYPERPAPER_JUST_STARTED=0
 
 RESUME_LAST=0               # --resume (start where you last were)
 START_AT=""                 # --start-at N (1-based)
@@ -983,7 +984,11 @@ ensure_swww_daemon() {
 ensure_hyprpaper_running() {
   local i
   if ! have hyprpaper; then msg "hyprpaper not installed"; return 1; fi
-  is_hyprpaper_running && return 0
+  if is_hyprpaper_running; then
+    HYPERPAPER_JUST_STARTED=0
+    return 0
+  fi
+  HYPERPAPER_JUST_STARTED=1
   (nohup hyprpaper >/dev/null 2>&1 &) || true
   for i in {1..40}; do
     is_hyprpaper_running && return 0
@@ -1034,17 +1039,46 @@ apply_with_hyprpaper() {
   ensure_hyprpaper_running || return 1
 
   t="${HYPERPAPER_TIMEOUT:-3}"
+  local max_tries try ok ctl_t t_fast
+
+  # hyprpaper can take a moment to accept hyprctl requests right after launch.
+  # When switching to hyprpaper backend, retry quickly so the first click applies.
+  t_fast="${HYPERPAPER_STARTUP_TIMEOUT:-0.4}"
+  max_tries=1
+  if (( HYPERPAPER_JUST_STARTED == 1 )); then
+    max_tries=8
+  fi
+
   for out in "${TARGET_OUTPUTS[@]}"; do
-    # hyprpaper expects: "mon, path, fit_mode" (note spaces after commas)
-    arg="${out}, ${img}, ${HYPERPAPER_MODE}"
-    if ! hyprpaper_ctl "$t" wallpaper "$arg"; then
-      arg="${out}, ${img}"
-      if ! hyprpaper_ctl "$t" wallpaper "$arg"; then
-        msg "hyprpaper apply failed on ${out}"
-        return 1
+    ok=0
+    try=0
+    while (( try < max_tries )); do
+      ctl_t="$t"
+      if (( HYPERPAPER_JUST_STARTED == 1 && try < max_tries - 1 )); then
+        ctl_t="$t_fast"
       fi
+      # hyprpaper expects: "mon, path, fit_mode" (note spaces after commas)
+      arg="${out}, ${img}, ${HYPERPAPER_MODE}"
+      if hyprpaper_ctl "$ctl_t" wallpaper "$arg"; then
+        ok=1
+        break
+      fi
+      arg="${out}, ${img}"
+      if hyprpaper_ctl "$ctl_t" wallpaper "$arg"; then
+        ok=1
+        break
+      fi
+      (( try++ ))
+      sleep 0.1
+    done
+
+    if (( ok == 0 )); then
+      msg "hyprpaper apply failed on ${out}"
+      return 1
     fi
   done
+
+  HYPERPAPER_JUST_STARTED=0
 
   backend_state_set_outputs "hyprpaper" "$img" "${TARGET_OUTPUTS[@]}" || true
   msg "Applied via hyprpaper -> $(basename -- "$img")"
