@@ -9,6 +9,8 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────────────
 PACKAGES_AUR=(
   # Utilities
+  smtty
+  awtwall
   wlogout
   qimgv-git
   alacritty-graphics
