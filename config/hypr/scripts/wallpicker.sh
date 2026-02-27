@@ -52,6 +52,8 @@ HYPERPAPER_MODE="cover"         # cover | contain | center
 : "${WALLPICKER_ALT_SCREEN:=0}"
 : "${WALLPICKER_NO_SIXEL:=0}"
 : "${WALLPICKER_DEBUG:=0}"
+: "${WALLPICKER_INPUT_POLL_S:=0.20}"  # seconds; enables resize refresh without keypress
+: "${WALLPICKER_RESIZE_RESCAN:=0}"   # 1=run full refresh_action on resize (clears find + rescans)
 : "${WALLPICKER_FORCE_ENCODER:=}"  # chafa|img2sixel|magick|kitty
 : "${WALLPICKER_PREWARM_VISIBLE_PAGE:=0}"  # 0=off (faster startup), 1=warm visible page before draw
 : "${WALLPICKER_SORT_SCAN:=1}"           # 1=stable sort, 0=faster unsorted scan
@@ -116,6 +118,10 @@ LAST_APPLIED=""            # persisted last applied wallpaper path
 GRID_COLS=1
 GRID_ROWS=1
 PAGE_SIZE=1
+
+TERM_COLS_LAST=0
+TERM_LINES_LAST=0
+RESIZE_PENDING=0
 
 SIXEL_ENCODER=""
 SIXEL_ENCODER_LABEL=""
@@ -462,6 +468,19 @@ die() {
 
 term_cols() { tput cols 2>/dev/null || printf '120'; }
 term_lines() { tput lines 2>/dev/null || printf '40'; }
+
+detect_term_resize() {
+  local cols lines
+  cols="$(term_cols)"
+  lines="$(term_lines)"
+  if (( cols != TERM_COLS_LAST || lines != TERM_LINES_LAST )); then
+    TERM_COLS_LAST="$cols"
+    TERM_LINES_LAST="$lines"
+    RESIZE_PENDING=1
+    NEED_FULL_REDRAW=1
+  fi
+  return 0
+}
 
 preflight_tty_checks() {
   [[ -t 0 && -t 1 ]] || die "Run this script in an interactive terminal."
@@ -1773,7 +1792,9 @@ handle_mouse_event() {
 # ---------- input ----------
 read_key() {
   local key c1 c2 rest ch i
-  IFS= read -rsn1 key || return 1
+  if ! IFS= read -rsn1 -t "${WALLPICKER_INPUT_POLL_S}" key; then
+    return 1
+  fi
 
   if [[ "$key" != $'\x1b' ]]; then
     printf '%s' "$key"
@@ -2070,7 +2091,7 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 on_winch() {
-  msg "Resized"
+  RESIZE_PENDING=1
   NEED_FULL_REDRAW=1
 }
 trap on_winch WINCH
@@ -2197,11 +2218,22 @@ main() {
   debug "term=${TERM:-unset} encoder=${SIXEL_ENCODER_LABEL} files=${#FILES[@]}"
   NEED_FULL_REDRAW=1
 
+  TERM_COLS_LAST="$(term_cols)"
+  TERM_LINES_LAST="$(term_lines)"
+
   while (( RUNNING == 1 )); do
+    detect_term_resize || true
+    if (( RESIZE_PENDING == 1 )); then
+      RESIZE_PENDING=0
+      if [[ "${WALLPICKER_RESIZE_RESCAN}" == "1" ]]; then
+        refresh_action
+      else
+        NEED_FULL_REDRAW=1
+      fi
+    fi
+
     if (( NEED_FULL_REDRAW == 1 )); then
       draw_full_ui
-    else
-      draw_status_bars
     fi
 
     key="$(read_key || true)"
