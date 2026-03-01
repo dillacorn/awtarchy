@@ -12,7 +12,7 @@ CMD_TIMEOUT="${HYPR_SETTINGS_TIMEOUT:-6}"
 TITLE="Hypr Quick Settings"
 TERM_CLASS="hypr-quicksettings"
 
-MENU_ITEMS=("Brightness" "Night Light" "Vibrance")
+MENU_ITEMS=("Brightness" "Night Light" "Vibrance" "sched-ext" "Stop sched-ext")
 SEL=0
 MSG=""
 
@@ -24,6 +24,21 @@ SUN_IDENTITY="unknown"
 SUN_ENABLED="0"
 VIB_VAL="N/A"
 VIB_ENABLED="?"
+
+SCHED_EXT_ITEMS=(
+  "scx_beerland"
+  "scx_bpfland"
+  "scx_cosmos"
+  "scx_flash"
+  "scx_lavd"
+  "scx_p2dq"
+  "scx_tickless"
+  "scx_rustland"
+  "scx_rusty"
+)
+SCHED_EXT_RUNNING="off"
+SCHED_EXT_MODE=""
+SCHED_EXT_ENABLED="0"
 
 cleanup() {
   printf '\033[?25h\033[0m\033[2J\033[H'
@@ -164,10 +179,56 @@ refresh_vibrance() {
   fi
 }
 
+refresh_sched_ext() {
+  local out rc=0 lowered sched mode
+  SCHED_EXT_RUNNING="off"
+  SCHED_EXT_MODE=""
+  SCHED_EXT_ENABLED="0"
+
+  if ! have_cmd scxctl; then
+    return
+  fi
+
+  out="$(run_capture scxctl get)" || rc=$?
+  if (( rc != 0 )) || [[ -z "$out" ]]; then
+    return
+  fi
+
+  lowered=$(printf '%s' "$out" | tr '[:upper:]' '[:lower:]')
+  if [[ "$lowered" == *'no scx scheduler running'* ]]; then
+    return
+  fi
+
+  shopt -s nocasematch
+  if [[ "$out" =~ ^running[[:space:]]+(.+)[[:space:]]+in[[:space:]]+(.+)[[:space:]]+mode$ ]]; then
+    sched="${BASH_REMATCH[1]}"
+    mode="${BASH_REMATCH[2]}"
+  elif [[ "$out" =~ ^running[[:space:]]+(.+)$ ]]; then
+    sched="${BASH_REMATCH[1]}"
+    mode=""
+  else
+    shopt -u nocasematch
+    return
+  fi
+  shopt -u nocasematch
+
+  sched=${sched#scx_}
+  sched=${sched#SCX_}
+  sched=${sched,,}
+  if [[ -n "$sched" ]]; then
+    SCHED_EXT_RUNNING="scx_${sched}"
+    SCHED_EXT_ENABLED="1"
+  fi
+  if [[ -n "$mode" ]]; then
+    SCHED_EXT_MODE="${mode,,}"
+  fi
+}
+
 refresh_all() {
   refresh_brightness
   refresh_sunset
   refresh_vibrance
+  refresh_sched_ext
 }
 
 format_brightness() {
@@ -198,6 +259,18 @@ format_vibrance() {
   esac
 }
 
+format_sched_ext() {
+  if [[ "$SCHED_EXT_ENABLED" == "1" ]]; then
+    if [[ -n "$SCHED_EXT_MODE" ]]; then
+      printf "running '%s' (%s)" "$SCHED_EXT_RUNNING" "$SCHED_EXT_MODE"
+    else
+      printf "running '%s'" "$SCHED_EXT_RUNNING"
+    fi
+  else
+    printf 'off'
+  fi
+}
+
 draw_ui() {
   local i label value line cols
   cols=$(tput cols 2>/dev/null || printf '80')
@@ -212,10 +285,12 @@ draw_ui() {
       Brightness) value="$(format_brightness)" ;;
       'Night Light') value="$(format_sunset)" ;;
       Vibrance) value="$(format_vibrance)" ;;
+      'sched-ext') value="$(format_sched_ext)" ;;
+      'Stop sched-ext') value='restore default scheduler' ;;
       *) value='' ;;
     esac
 
-    printf -v line '%-11s %s' "$label" "$value"
+    printf -v line '%-15s %s' "$label" "$value"
     if (( i == SEL )); then
       printf '\033[7m> %s\033[0m\n' "$line"
     else
@@ -257,6 +332,185 @@ move_sel_down() {
   if (( SEL >= ${#MENU_ITEMS[@]} )); then
     SEL=0
   fi
+}
+
+hypr_notify() {
+  local msg="$1"
+  local color="${2:-rgb(ff6b6b)}"
+  if have_cmd hyprctl; then
+    run_quiet hyprctl notify -1 7000 "$color" "$msg"
+  fi
+}
+
+have_pkg_any() {
+  if ! have_cmd pacman; then
+    return 1
+  fi
+  local pkg
+  for pkg in "$@"; do
+    if pacman -Q "$pkg" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+sched_ext_deps_ok() {
+  local have_scheds=1 have_tools=1
+
+  if have_cmd pacman; then
+    have_scheds=1
+    have_tools=1
+    have_pkg_any scx-scheds scx-scheds-git && have_scheds=0
+    have_pkg_any scx-tools scx-tools-git && have_tools=0
+    if (( have_scheds == 0 && have_tools == 0 )); then
+      return 0
+    fi
+  else
+    if have_cmd scxctl; then
+      return 0
+    fi
+  fi
+
+  hypr_notify 'scx-scheds scx-tools both need to be installed'
+  hypr_notify 'Run: sudo pacman -S scx-scheds scx-tools' 'rgb(f6c177)'
+  MSG='sched-ext: missing scx-scheds/scx-tools'
+  return 1
+}
+
+sched_ext_mode_for() {
+  case "$1" in
+    scx_cosmos|scx_flash|scx_lavd|scx_p2dq|scx_tickless)
+      printf 'gaming'
+      ;;
+    *)
+      printf 'auto'
+      ;;
+  esac
+}
+
+sched_ext_switch_or_start() {
+  local sched_full="$1" sched_short mode verb
+  sched_short="${sched_full#scx_}"
+  mode="$(sched_ext_mode_for "$sched_full")"
+
+  if [[ "$SCHED_EXT_ENABLED" == "1" ]]; then
+    verb='switch'
+  else
+    verb='start'
+  fi
+
+  if run_quiet scxctl "$verb" --sched "$sched_short" --mode "$mode"; then
+    refresh_sched_ext
+    MSG="sched-ext: ${sched_full} (${mode})"
+    return 0
+  fi
+
+  if run_quiet scxctl "$verb" --sched "$sched_short"; then
+    refresh_sched_ext
+    MSG="sched-ext: ${sched_full}"
+    return 0
+  fi
+
+  refresh_sched_ext
+  MSG='sched-ext: failed'
+  return 1
+}
+
+sched_ext_stop() {
+  if ! sched_ext_deps_ok; then
+    return 1
+  fi
+
+  if [[ "$SCHED_EXT_ENABLED" != "1" ]]; then
+    MSG='sched-ext: already off'
+    return 0
+  fi
+
+  if run_quiet scxctl stop; then
+    refresh_sched_ext
+    MSG='sched-ext: stopped'
+    return 0
+  fi
+
+  refresh_sched_ext
+  MSG='sched-ext: stop failed'
+  return 1
+}
+
+draw_sched_ext_menu() {
+  local idx="$1" i label line cols
+  cols=$(tput cols 2>/dev/null || printf '80')
+
+  printf '[2J[H[?25l'
+  printf '%s
+' "$TITLE"
+  printf '%s
+
+' 'sched-ext picker   Up/Down: select   Space/Enter: apply   q/Esc: back'
+
+  for i in "${!SCHED_EXT_ITEMS[@]}"; do
+    label="${SCHED_EXT_ITEMS[$i]}"
+    line="$label"
+    if [[ "$label" == "$SCHED_EXT_RUNNING" ]]; then
+      line+="  [running]"
+    fi
+    if (( i == idx )); then
+      printf '[7m> %s[0m
+' "$line"
+    else
+      printf '  %s
+' "$line"
+    fi
+  done
+
+  printf '
+'
+  printf '%.*s' "$cols" 'Selecting a scheduler uses gaming mode where supported, otherwise auto.'
+}
+
+sched_ext_menu() {
+  local idx=0 key current i
+
+  current="$SCHED_EXT_RUNNING"
+  for i in "${!SCHED_EXT_ITEMS[@]}"; do
+    if [[ "${SCHED_EXT_ITEMS[$i]}" == "$current" ]]; then
+      idx=$i
+      break
+    fi
+  done
+
+  while true; do
+    draw_sched_ext_menu "$idx"
+    key="$(read_key)" || break
+
+    case "$key" in
+      q|Q|$'\e')
+        break
+        ;;
+      $'\e[A'|k)
+        (( idx-- )) || true
+        if (( idx < 0 )); then
+          idx=$((${#SCHED_EXT_ITEMS[@]} - 1))
+        fi
+        ;;
+      $'\e[B'|j)
+        (( idx++ )) || true
+        if (( idx >= ${#SCHED_EXT_ITEMS[@]} )); then
+          idx=0
+        fi
+        ;;
+      $' '|$'
+'|$'
+')
+        if ! sched_ext_deps_ok; then
+          break
+        fi
+        sched_ext_switch_or_start "${SCHED_EXT_ITEMS[$idx]}"
+        break
+        ;;
+    esac
+  done
 }
 
 brightness_set_abs() {
@@ -340,6 +594,13 @@ do_action() {
         MSG='vibrance: failed'
         refresh_vibrance
       fi
+      ;;
+    'sched-ext')
+      sched_ext_menu
+      refresh_sched_ext
+      ;;
+    'Stop sched-ext')
+      sched_ext_stop
       ;;
   esac
 }
