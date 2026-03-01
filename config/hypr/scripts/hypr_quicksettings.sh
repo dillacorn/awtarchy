@@ -179,17 +179,169 @@ refresh_vibrance() {
   fi
 }
 
+hypr_notify() {
+  local msg="$1"
+  local color="${2:-rgb(ff6b6b)}"
+  if have_cmd hyprctl; then
+    run_quiet hyprctl notify -1 7000 "$color" "$msg"
+  fi
+}
+
+have_pkg_any() {
+  if ! have_cmd pacman; then
+    return 1
+  fi
+  local pkg
+  for pkg in "$@"; do
+    if pacman -Q "$pkg" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+sudo_can_run_scxctl_noninteractive() {
+  (( EUID == 0 )) && return 0
+  have_cmd sudo || return 1
+  sudo -n /usr/bin/scxctl list >/dev/null 2>&1
+}
+
+sudoers_included() {
+  if (( EUID == 0 )); then
+    grep -Eq '^[[:space:]]*(@includedir|#includedir)[[:space:]]+/etc/sudoers\.d([[:space:]]|$)' /etc/sudoers
+    return $?
+  fi
+  sudo grep -Eq '^[[:space:]]*(@includedir|#includedir)[[:space:]]+/etc/sudoers\.d([[:space:]]|$)' /etc/sudoers
+}
+
+ensure_scxctl_nopasswd_rule() {
+  local user sudoers_name sudoers_target tmpfile
+
+  (( EUID == 0 )) && return 0
+
+  if sudo_can_run_scxctl_noninteractive; then
+    return 0
+  fi
+
+  if ! have_cmd sudo || ! have_cmd visudo; then
+    MSG='sched-ext: sudo and visudo required'
+    return 1
+  fi
+
+  user="$(id -un)"
+  sudoers_name="90-hypr-quicksettings-scxctl-${user}"
+  sudoers_target="/etc/sudoers.d/${sudoers_name}"
+
+  printf '\033[2J\033[H'
+  printf '%s\n\n' "$TITLE"
+  printf 'sched-ext needs one sudo prompt to allow passwordless scxctl later.\n\n'
+
+  if ! sudo -v; then
+    MSG='sched-ext: sudo auth failed'
+    return 1
+  fi
+
+  if sudo test -f "$sudoers_target" && sudo_can_run_scxctl_noninteractive; then
+    return 0
+  fi
+
+  if ! sudoers_included; then
+    MSG='sched-ext: /etc/sudoers.d not included'
+    return 1
+  fi
+
+  tmpfile="$(mktemp)"
+  printf '%s ALL=(root) NOPASSWD: /usr/bin/scxctl\n' "$user" > "$tmpfile"
+
+  if ! visudo -c -f "$tmpfile" >/dev/null 2>&1; then
+    rm -f "$tmpfile"
+    MSG='sched-ext: sudoers validation failed'
+    return 1
+  fi
+
+  if ! sudo install -m 440 "$tmpfile" "$sudoers_target"; then
+    rm -f "$tmpfile"
+    MSG='sched-ext: failed to install sudoers rule'
+    return 1
+  fi
+
+  rm -f "$tmpfile"
+
+  if ! sudo_can_run_scxctl_noninteractive; then
+    MSG='sched-ext: sudoers rule installed but unusable'
+    return 1
+  fi
+
+  MSG='sched-ext: scxctl sudo setup complete'
+  return 0
+}
+
+scxctl_run_quiet() {
+  if (( EUID == 0 )); then
+    run_quiet /usr/bin/scxctl "$@"
+    return $?
+  fi
+
+  if sudo_can_run_scxctl_noninteractive || ensure_scxctl_nopasswd_rule; then
+    run_quiet sudo -n /usr/bin/scxctl "$@"
+    return $?
+  fi
+
+  return 1
+}
+
+scxctl_run_capture() {
+  local out rc=0
+
+  if (( EUID == 0 )); then
+    out="$(run_capture /usr/bin/scxctl "$@")" || rc=$?
+    printf '%s' "$out"
+    return "$rc"
+  fi
+
+  if ! sudo_can_run_scxctl_noninteractive; then
+    return 1
+  fi
+
+  out="$(run_capture sudo -n /usr/bin/scxctl "$@")" || rc=$?
+  printf '%s' "$out"
+  return "$rc"
+}
+
+sched_ext_deps_ok() {
+  local have_scheds=1 have_tools=1
+
+  if have_cmd pacman; then
+    have_scheds=1
+    have_tools=1
+    have_pkg_any scx-scheds scx-scheds-git && have_scheds=0
+    have_pkg_any scx-tools scx-tools-git && have_tools=0
+    if (( have_scheds == 0 && have_tools == 0 )); then
+      return 0
+    fi
+  else
+    if have_cmd scxctl; then
+      return 0
+    fi
+  fi
+
+  hypr_notify 'scx-scheds scx-tools both need to be installed'
+  hypr_notify 'Run: sudo pacman -S scx-scheds scx-tools' 'rgb(f6c177)'
+  MSG='sched-ext: missing scx-scheds/scx-tools'
+  return 1
+}
+
 refresh_sched_ext() {
   local out rc=0 lowered sched mode
-  SCHED_EXT_RUNNING="off"
-  SCHED_EXT_MODE=""
-  SCHED_EXT_ENABLED="0"
+  SCHED_EXT_RUNNING='off'
+  SCHED_EXT_MODE=''
+  SCHED_EXT_ENABLED='0'
 
   if ! have_cmd scxctl; then
     return
   fi
 
-  out="$(run_capture scxctl get)" || rc=$?
+  out="$(scxctl_run_capture get)" || rc=$?
   if (( rc != 0 )) || [[ -z "$out" ]]; then
     return
   fi
@@ -205,7 +357,7 @@ refresh_sched_ext() {
     mode="${BASH_REMATCH[2]}"
   elif [[ "$out" =~ ^running[[:space:]]+(.+)$ ]]; then
     sched="${BASH_REMATCH[1]}"
-    mode=""
+    mode=''
   else
     shopt -u nocasematch
     return
@@ -217,7 +369,7 @@ refresh_sched_ext() {
   sched=${sched,,}
   if [[ -n "$sched" ]]; then
     SCHED_EXT_RUNNING="scx_${sched}"
-    SCHED_EXT_ENABLED="1"
+    SCHED_EXT_ENABLED='1'
   fi
   if [[ -n "$mode" ]]; then
     SCHED_EXT_MODE="${mode,,}"
@@ -241,7 +393,7 @@ format_sunset() {
     true) onoff='off' ;;
     false) onoff='on' ;;
     *)
-      if [[ "$SUN_ENABLED" == "1" ]]; then
+      if [[ "$SUN_ENABLED" == '1' ]]; then
         onoff='on'
       else
         onoff='off'
@@ -260,7 +412,7 @@ format_vibrance() {
 }
 
 format_sched_ext() {
-  if [[ "$SCHED_EXT_ENABLED" == "1" ]]; then
+  if [[ "$SCHED_EXT_ENABLED" == '1' ]]; then
     if [[ -n "$SCHED_EXT_MODE" ]]; then
       printf "running '%s' (%s)" "$SCHED_EXT_RUNNING" "$SCHED_EXT_MODE"
     else
@@ -334,50 +486,6 @@ move_sel_down() {
   fi
 }
 
-hypr_notify() {
-  local msg="$1"
-  local color="${2:-rgb(ff6b6b)}"
-  if have_cmd hyprctl; then
-    run_quiet hyprctl notify -1 7000 "$color" "$msg"
-  fi
-}
-
-have_pkg_any() {
-  if ! have_cmd pacman; then
-    return 1
-  fi
-  local pkg
-  for pkg in "$@"; do
-    if pacman -Q "$pkg" >/dev/null 2>&1; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-sched_ext_deps_ok() {
-  local have_scheds=1 have_tools=1
-
-  if have_cmd pacman; then
-    have_scheds=1
-    have_tools=1
-    have_pkg_any scx-scheds scx-scheds-git && have_scheds=0
-    have_pkg_any scx-tools scx-tools-git && have_tools=0
-    if (( have_scheds == 0 && have_tools == 0 )); then
-      return 0
-    fi
-  else
-    if have_cmd scxctl; then
-      return 0
-    fi
-  fi
-
-  hypr_notify 'scx-scheds scx-tools both need to be installed'
-  hypr_notify 'Run: sudo pacman -S scx-scheds scx-tools' 'rgb(f6c177)'
-  MSG='sched-ext: missing scx-scheds/scx-tools'
-  return 1
-}
-
 sched_ext_mode_for() {
   case "$1" in
     scx_cosmos|scx_flash|scx_lavd|scx_p2dq|scx_tickless)
@@ -394,19 +502,19 @@ sched_ext_switch_or_start() {
   sched_short="${sched_full#scx_}"
   mode="$(sched_ext_mode_for "$sched_full")"
 
-  if [[ "$SCHED_EXT_ENABLED" == "1" ]]; then
+  if [[ "$SCHED_EXT_ENABLED" == '1' ]]; then
     verb='switch'
   else
     verb='start'
   fi
 
-  if run_quiet scxctl "$verb" --sched "$sched_short" --mode "$mode"; then
+  if scxctl_run_quiet "$verb" --sched "$sched_short" --mode "$mode"; then
     refresh_sched_ext
     MSG="sched-ext: ${sched_full} (${mode})"
     return 0
   fi
 
-  if run_quiet scxctl "$verb" --sched "$sched_short"; then
+  if scxctl_run_quiet "$verb" --sched "$sched_short"; then
     refresh_sched_ext
     MSG="sched-ext: ${sched_full}"
     return 0
@@ -422,12 +530,12 @@ sched_ext_stop() {
     return 1
   fi
 
-  if [[ "$SCHED_EXT_ENABLED" != "1" ]]; then
+  if [[ "$SCHED_EXT_ENABLED" != '1' ]]; then
     MSG='sched-ext: already off'
     return 0
   fi
 
-  if run_quiet scxctl stop; then
+  if scxctl_run_quiet stop; then
     refresh_sched_ext
     MSG='sched-ext: stopped'
     return 0
@@ -442,12 +550,9 @@ draw_sched_ext_menu() {
   local idx="$1" i label line cols
   cols=$(tput cols 2>/dev/null || printf '80')
 
-  printf '[2J[H[?25l'
-  printf '%s
-' "$TITLE"
-  printf '%s
-
-' 'sched-ext picker   Up/Down: select   Space/Enter: apply   q/Esc: back'
+  printf '\033[2J\033[H\033[?25l'
+  printf '%s\n' "$TITLE"
+  printf '%s\n\n' 'sched-ext picker   Up/Down: select   Space/Enter: apply   q/Esc: back'
 
   for i in "${!SCHED_EXT_ITEMS[@]}"; do
     label="${SCHED_EXT_ITEMS[$i]}"
@@ -456,16 +561,13 @@ draw_sched_ext_menu() {
       line+="  [running]"
     fi
     if (( i == idx )); then
-      printf '[7m> %s[0m
-' "$line"
+      printf '\033[7m> %s\033[0m\n' "$line"
     else
-      printf '  %s
-' "$line"
+      printf '  %s\n' "$line"
     fi
   done
 
-  printf '
-'
+  printf '\n'
   printf '%.*s' "$cols" 'Selecting a scheduler uses gaming mode where supported, otherwise auto.'
 }
 
@@ -500,9 +602,7 @@ sched_ext_menu() {
           idx=0
         fi
         ;;
-      $' '|$'
-'|$'
-')
+      $' '|$'\n'|$'\r')
         if ! sched_ext_deps_ok; then
           break
         fi
