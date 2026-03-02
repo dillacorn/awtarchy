@@ -15,6 +15,7 @@ TERM_CLASS="hypr-quicksettings"
 MENU_ITEMS=("Brightness" "Night Light" "Vibrance" "sched-ext" "Stop sched-ext")
 SEL=0
 MSG=""
+SHOULD_QUIT=0
 
 BR_CONN="N/A"
 BR_CUR="N/A"
@@ -39,6 +40,11 @@ SCHED_EXT_ITEMS=(
 SCHED_EXT_RUNNING="off"
 SCHED_EXT_MODE=""
 SCHED_EXT_ENABLED="0"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/hypr_quicksettings"
+SCHED_EXT_STATE_FILE="${STATE_DIR}/sched_ext_state.sh"
+declare -A SCHED_EXT_PROFILE_MAP=()
+declare -A SCHED_EXT_CUSTOM_ARGS_MAP=()
+declare -A SCHED_EXT_LAVD_AUTOPOWER_MAP=()
 
 cleanup() {
   printf '\033[?25h\033[0m\033[2J\033[H'
@@ -383,6 +389,310 @@ refresh_all() {
   refresh_sched_ext
 }
 
+trim_spaces() {
+  local s="$1"
+  s="${s#"${s%%[![:space:]]*}"}"
+  s="${s%"${s##*[![:space:]]}"}"
+  printf '%s' "$s"
+}
+
+sched_ext_state_init_defaults() {
+  local sched
+  for sched in "${SCHED_EXT_ITEMS[@]}"; do
+    [[ -v SCHED_EXT_PROFILE_MAP["$sched"] ]] || SCHED_EXT_PROFILE_MAP["$sched"]='Default'
+    [[ -v SCHED_EXT_CUSTOM_ARGS_MAP["$sched"] ]] || SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]=''
+    [[ -v SCHED_EXT_LAVD_AUTOPOWER_MAP["$sched"] ]] || SCHED_EXT_LAVD_AUTOPOWER_MAP["$sched"]='0'
+  done
+}
+
+sched_ext_state_load() {
+  sched_ext_state_init_defaults
+  if [[ -f "$SCHED_EXT_STATE_FILE" ]]; then
+    # shellcheck disable=SC1090
+    source "$SCHED_EXT_STATE_FILE"
+    sched_ext_state_init_defaults
+  fi
+}
+
+sched_ext_state_save() {
+  local tmpfile
+  mkdir -p "$STATE_DIR"
+  tmpfile="$(mktemp)"
+  {
+    printf '#!/usr/bin/env bash
+'
+    declare -p SCHED_EXT_PROFILE_MAP
+    declare -p SCHED_EXT_CUSTOM_ARGS_MAP
+    declare -p SCHED_EXT_LAVD_AUTOPOWER_MAP
+  } > "$tmpfile"
+  install -m 600 "$tmpfile" "$SCHED_EXT_STATE_FILE"
+  rm -f "$tmpfile"
+}
+
+sched_ext_profiles_for() {
+  case "$1" in
+    scx_bpfland)
+      printf '%s
+' 'Default' 'Low Latency' 'Power Save' 'Server'
+      ;;
+    scx_cosmos)
+      printf '%s
+' 'Default' 'Auto' 'Gaming' 'Power Save' 'Low Latency' 'Server'
+      ;;
+    scx_flash)
+      printf '%s
+' 'Default' 'Low Latency' 'Gaming' 'Power Save' 'Server'
+      ;;
+    scx_lavd)
+      printf '%s
+' 'Default' 'Performance' 'Power Save'
+      ;;
+    scx_p2dq)
+      printf '%s
+' 'Default' 'Gaming' 'Low Latency' 'Power Save' 'Server'
+      ;;
+    scx_tickless)
+      printf '%s
+' 'Default' 'Gaming' 'Power Save' 'Low Latency' 'Server'
+      ;;
+    *)
+      printf '%s
+' 'Default'
+      ;;
+  esac
+}
+
+sched_ext_profile_index() {
+  local sched="$1" needle="$2" idx=0 item
+  while IFS= read -r item; do
+    if [[ "$item" == "$needle" ]]; then
+      printf '%s' "$idx"
+      return 0
+    fi
+    (( idx++ )) || true
+  done < <(sched_ext_profiles_for "$sched")
+  printf '0'
+}
+
+sched_ext_has_extra_profiles() {
+  local sched="$1"
+  local -a profiles=()
+  mapfile -t profiles < <(sched_ext_profiles_for "$sched")
+  (( ${#profiles[@]} > 1 ))
+}
+
+sched_ext_profile_cycle() {
+  local sched="$1" dir="$2" current idx count next
+  local -a profiles=()
+  mapfile -t profiles < <(sched_ext_profiles_for "$sched")
+  count=${#profiles[@]}
+  (( count > 1 )) || return 0
+  current="${SCHED_EXT_PROFILE_MAP[$sched]:-Default}"
+  idx="$(sched_ext_profile_index "$sched" "$current")"
+  next=$(( idx + dir ))
+  if (( next < 0 )); then
+    next=$(( count - 1 ))
+  elif (( next >= count )); then
+    next=0
+  fi
+  SCHED_EXT_PROFILE_MAP["$sched"]="${profiles[$next]}"
+  sched_ext_state_save
+}
+
+sched_ext_flags_for_profile() {
+  local sched="$1" profile="$2"
+  case "$sched:$profile" in
+    scx_bpfland:Low\ Latency) printf '%s' '-m,performance,-w' ;;
+    scx_bpfland:Power\ Save) printf '%s' '-s,20000,-m,powersave,-I,100,-t,100' ;;
+    scx_bpfland:Server) printf '%s' '-s,20000,-S' ;;
+
+    scx_cosmos:Auto) printf '%s' '-s,20000,-d,-c,0,-p,0' ;;
+    scx_cosmos:Gaming) printf '%s' '-c,0,-p,0' ;;
+    scx_cosmos:Power\ Save) printf '%s' '-m,powersave,-d,-p,5000' ;;
+    scx_cosmos:Low\ Latency) printf '%s' '-m,performance,-c,0,-p,0,-w' ;;
+    scx_cosmos:Server) printf '%s' '-s,20000' ;;
+
+    scx_flash:Low\ Latency) printf '%s' '-m,performance,-w,-C,0' ;;
+    scx_flash:Gaming) printf '%s' '-m,all' ;;
+    scx_flash:Power\ Save) printf '%s' '-m,powersave,-I,10000,-t,10000,-s,10000,-S,1000' ;;
+    scx_flash:Server) printf '%s' '-m,all,-s,20000,-S,1000,-I,-1,-D,-L' ;;
+
+    scx_lavd:Performance) printf '%s' '--performance' ;;
+    scx_lavd:Power\ Save) printf '%s' '--powersave' ;;
+
+    scx_p2dq:Gaming) printf '%s' '--task-slice,true,-f,--sched-mode,performance' ;;
+    scx_p2dq:Low\ Latency) printf '%s' '-y,-f,--task-slice,true' ;;
+    scx_p2dq:Power\ Save) printf '%s' '--sched-mode,efficiency' ;;
+    scx_p2dq:Server) printf '%s' '--keep-running' ;;
+
+    scx_tickless:Gaming) printf '%s' '-f,5000,-s,5000' ;;
+    scx_tickless:Power\ Save) printf '%s' '-f,50' ;;
+    scx_tickless:Low\ Latency) printf '%s' '-f,5000,-s,1000' ;;
+    scx_tickless:Server) printf '%s' '-f,100' ;;
+
+    *) printf '%s' '' ;;
+  esac
+}
+
+sched_ext_normalize_args() {
+  local raw="$1" out
+  raw="${raw//$'
+'/ }"
+  raw="$(trim_spaces "$raw")"
+  if [[ -z "$raw" ]]; then
+    printf '%s' ''
+    return 0
+  fi
+  if [[ "$raw" == *','* ]]; then
+    out="$(printf '%s' "$raw" | sed -E 's/[[:space:]]*,[[:space:]]*/,/g; s/,+/,/g; s/^,+//; s/,+$//')"
+  else
+    out="$(printf '%s' "$raw" | sed -E 's/[[:space:]]+/,/g; s/,+/,/g; s/^,+//; s/,+$//')"
+  fi
+  printf '%s' "$out"
+}
+
+sched_ext_effective_args() {
+  local sched="$1" profile preset custom combined autopower
+  profile="${SCHED_EXT_PROFILE_MAP[$sched]:-Default}"
+  preset="$(sched_ext_flags_for_profile "$sched" "$profile")"
+  custom="$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+  combined="$preset"
+
+  if [[ "$sched" == 'scx_lavd' ]] && [[ "${SCHED_EXT_LAVD_AUTOPOWER_MAP[$sched]:-0}" == '1' ]]; then
+    autopower='--autopower'
+    if [[ -n "$combined" ]]; then
+      combined+=",${autopower}"
+    else
+      combined="$autopower"
+    fi
+  fi
+
+  if [[ -n "$custom" ]]; then
+    if [[ -n "$combined" ]]; then
+      combined+=",${custom}"
+    else
+      combined="$custom"
+    fi
+  fi
+
+  printf '%s' "$combined"
+}
+
+sched_ext_config_summary() {
+  local sched="$1" profile custom summary
+  profile="${SCHED_EXT_PROFILE_MAP[$sched]:-Default}"
+  custom="$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+  summary="$profile"
+  if [[ "$sched" == 'scx_lavd' ]] && [[ "${SCHED_EXT_LAVD_AUTOPOWER_MAP[$sched]:-0}" == '1' ]]; then
+    summary+='+autopower'
+  fi
+  if [[ -n "$custom" ]]; then
+    summary+='+custom'
+  fi
+  printf '%s' "$summary"
+}
+
+sched_ext_reset_config() {
+  local sched="$1"
+  SCHED_EXT_PROFILE_MAP["$sched"]='Default'
+  SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]=''
+  SCHED_EXT_LAVD_AUTOPOWER_MAP["$sched"]='0'
+  sched_ext_state_save
+}
+
+prompt_text() {
+  local prompt="$1" default="$2" input
+  printf '[2J[H'
+  printf '%s
+
+' "$TITLE"
+  printf '%s
+' "$prompt"
+  printf 'Current [%s]
+> ' "$default"
+  IFS= read -r input || true
+  if [[ -z "$input" ]]; then
+    REPLY="$default"
+  else
+    REPLY="$input"
+  fi
+}
+
+sched_ext_show_help() {
+  local sched="$1" out rc=0 key lines cols height offset end i
+  local -a help_lines=()
+
+  if ! have_cmd "$sched"; then
+    MSG="sched-ext: ${sched} not installed"
+    return 1
+  fi
+
+  if command -v timeout >/dev/null 2>&1; then
+    out="$(timeout "${CMD_TIMEOUT}" "$sched" --help 2>&1)" || rc=$?
+  else
+    out="$("$sched" --help 2>&1)" || rc=$?
+  fi
+  if [[ -z "$out" ]]; then
+    if (( rc != 0 )); then
+      MSG="sched-ext: ${sched} --help failed"
+      return 1
+    fi
+    out="No help output from ${sched} --help"
+  fi
+
+  mapfile -t help_lines < <(printf '%s
+' "$out")
+  lines=$(tput lines 2>/dev/null || printf '24')
+  cols=$(tput cols 2>/dev/null || printf '80')
+  height=$(( lines - 5 ))
+  (( height < 8 )) && height=8
+  offset=0
+
+  while true; do
+    printf '[2J[H[?25l'
+    printf '%s
+' "$TITLE"
+    printf 'Local help: %s   j/k or arrows scroll   PgUp/PgDn jump   q: quit   b/Esc: back\n\n' "$sched"
+    end=$(( offset + height ))
+    if (( end > ${#help_lines[@]} )); then
+      end=${#help_lines[@]}
+    fi
+    for (( i=offset; i<end; i++ )); do
+      printf '%.*s
+' "$cols" "${help_lines[$i]}"
+    done
+    key="$(read_key)" || break
+    case "$key" in
+      q|Q)
+        SHOULD_QUIT=1
+        return 0
+        ;;
+      b|B|$'\e')
+        break
+        ;;
+      $'\e[A'|k)
+        (( offset-- )) || true
+        (( offset < 0 )) && offset=0
+        ;;
+      $'\e[B'|j)
+        if (( offset + height < ${#help_lines[@]} )); then
+          (( offset++ )) || true
+        fi
+        ;;
+      $'\e[5'|$'\e[5~')
+        offset=$(( offset - height ))
+        (( offset < 0 )) && offset=0
+        ;;
+      $'\e[6'|$'\e[6~')
+        offset=$(( offset + height ))
+        if (( offset > ${#help_lines[@]} - 1 )); then
+          offset=$(( ${#help_lines[@]} > height ? ${#help_lines[@]} - height : 0 ))
+        fi
+        ;;
+    esac
+  done
+}
+
 format_brightness() {
   printf '%s %s/%s' "$BR_CONN" "$BR_CUR" "$BR_MAX"
 }
@@ -429,7 +739,7 @@ draw_ui() {
 
   printf '\033[2J\033[H\033[?25l'
   printf '%s\n' "$TITLE"
-  printf '%s\n\n' 'Up/Down: select   Left/Right: adjust   Space: toggle/edit   Enter: also works   r: refresh   q: quit'
+  printf '%s\n\n' 'Up/Down: select   Left/Right: adjust   Space: toggle/edit   r: refresh   q: quit'
 
   for i in "${!MENU_ITEMS[@]}"; do
     label=${MENU_ITEMS[$i]}
@@ -486,21 +796,11 @@ move_sel_down() {
   fi
 }
 
-sched_ext_mode_for() {
-  case "$1" in
-    scx_cosmos|scx_flash|scx_lavd|scx_p2dq|scx_tickless)
-      printf 'gaming'
-      ;;
-    *)
-      printf 'auto'
-      ;;
-  esac
-}
-
 sched_ext_switch_or_start() {
-  local sched_full="$1" sched_short mode verb
+  local sched_full="$1" sched_short verb args summary
   sched_short="${sched_full#scx_}"
-  mode="$(sched_ext_mode_for "$sched_full")"
+  args="$(sched_ext_effective_args "$sched_full")"
+  summary="$(sched_ext_config_summary "$sched_full")"
 
   if [[ "$SCHED_EXT_ENABLED" == '1' ]]; then
     verb='switch'
@@ -508,16 +808,18 @@ sched_ext_switch_or_start() {
     verb='start'
   fi
 
-  if scxctl_run_quiet "$verb" --sched "$sched_short" --mode "$mode"; then
-    refresh_sched_ext
-    MSG="sched-ext: ${sched_full} (${mode})"
-    return 0
-  fi
-
-  if scxctl_run_quiet "$verb" --sched "$sched_short"; then
-    refresh_sched_ext
-    MSG="sched-ext: ${sched_full}"
-    return 0
+  if [[ -n "$args" ]]; then
+    if scxctl_run_quiet "$verb" --sched "$sched_short" --args "$args"; then
+      refresh_sched_ext
+      MSG="sched-ext: ${sched_full} [${summary}]"
+      return 0
+    fi
+  else
+    if scxctl_run_quiet "$verb" --sched "$sched_short"; then
+      refresh_sched_ext
+      MSG="sched-ext: ${sched_full} [${summary}]"
+      return 0
+    fi
   fi
 
   refresh_sched_ext
@@ -547,28 +849,176 @@ sched_ext_stop() {
 }
 
 draw_sched_ext_menu() {
-  local idx="$1" i label line cols
+  local idx="$1" i label line cols summary
   cols=$(tput cols 2>/dev/null || printf '80')
 
-  printf '\033[2J\033[H\033[?25l'
-  printf '%s\n' "$TITLE"
-  printf '%s\n\n' 'sched-ext picker   Up/Down: select   Space/Enter: apply   q/Esc: back'
+  printf '[2J[H[?25l'
+  printf '%s
+' "$TITLE"
+  printf '%s\n\n' 'sched-ext picker   Up/Down: select   Space: apply   e: edit   h: help   q: quit   b/Esc: back'
 
   for i in "${!SCHED_EXT_ITEMS[@]}"; do
     label="${SCHED_EXT_ITEMS[$i]}"
-    line="$label"
+    summary="$(sched_ext_config_summary "$label")"
+    line="$label  [${summary}]"
     if [[ "$label" == "$SCHED_EXT_RUNNING" ]]; then
       line+="  [running]"
     fi
     if (( i == idx )); then
-      printf '\033[7m> %s\033[0m\n' "$line"
+      printf '[7m> %s[0m
+' "$line"
     else
-      printf '  %s\n' "$line"
+      printf '  %s
+' "$line"
     fi
   done
 
-  printf '\n'
-  printf '%.*s' "$cols" 'Selecting a scheduler uses gaming mode where supported, otherwise auto.'
+  printf '
+'
+  printf '%.*s
+' "$cols" 'Preset flags come from the current CachyOS sched-ext guide. Custom args are appended via scxctl --args.'
+  printf '%.*s' "$cols" 'Custom args may be comma-separated or space-separated. Press h for local scheduler help.'
+}
+
+draw_sched_ext_editor() {
+  local sched="$1" idx="$2" cols profile custom autopower effective
+  local -a entries=()
+  cols=$(tput cols 2>/dev/null || printf '80')
+  profile="${SCHED_EXT_PROFILE_MAP[$sched]:-Default}"
+  custom="$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+  autopower='off'
+  [[ "${SCHED_EXT_LAVD_AUTOPOWER_MAP[$sched]:-0}" == '1' ]] && autopower='on'
+  effective="$(sched_ext_effective_args "$sched")"
+
+  if sched_ext_has_extra_profiles "$sched"; then
+    entries+=("Profile: ${profile}")
+  else
+    entries+=("Profile: none available")
+  fi
+  entries+=("Custom args: ${custom:-<none>}")
+  if [[ "$sched" == 'scx_lavd' ]]; then
+    entries+=("Autopower: ${autopower}")
+  fi
+  entries+=("View local --help")
+  entries+=("Reset saved config")
+  entries+=("Back")
+
+  printf '[2J[H[?25l'
+  printf '%s
+' "$TITLE"
+  printf 'sched-ext editor: %s
+' "$sched"
+  printf '%s\n\n' 'Up/Down: select   Left/Right: change/toggle   Space: apply/toggle   e: edit custom args   h: help   q: quit   b/Esc: back'
+
+  local i line
+  for i in "${!entries[@]}"; do
+    line="${entries[$i]}"
+    if (( i == idx )); then
+      printf '[7m> %s[0m
+' "$line"
+    else
+      printf '  %s
+' "$line"
+    fi
+  done
+
+  printf '
+'
+  printf '%.*s
+' "$cols" "Effective args: ${effective:-<none>}"
+  printf '%.*s' "$cols" 'Use custom args for any scheduler-specific flags not covered by the preset profiles.'
+}
+
+sched_ext_toggle_lavd_autopower() {
+  local sched="$1"
+  if [[ "${SCHED_EXT_LAVD_AUTOPOWER_MAP[$sched]:-0}" == '1' ]]; then
+    SCHED_EXT_LAVD_AUTOPOWER_MAP["$sched"]='0'
+  else
+    SCHED_EXT_LAVD_AUTOPOWER_MAP["$sched"]='1'
+  fi
+  sched_ext_state_save
+}
+
+sched_ext_edit_menu() {
+  local sched="$1" idx=0 key count help_idx reset_idx back_idx
+  if [[ "$sched" == 'scx_lavd' ]]; then
+    count=6
+    help_idx=3
+  else
+    count=5
+    help_idx=2
+  fi
+  reset_idx=$(( help_idx + 1 ))
+  back_idx=$(( help_idx + 2 ))
+
+  while true; do
+    draw_sched_ext_editor "$sched" "$idx"
+    key="$(read_key)" || break
+    case "$key" in
+      q|Q)
+        SHOULD_QUIT=1
+        return 0
+        ;;
+      b|B|$'\e')
+        break
+        ;;
+      $'\e[A'|k)
+        (( idx-- )) || true
+        if (( idx < 0 )); then
+          idx=$(( count - 1 ))
+        fi
+        ;;
+      $'\e[B'|j)
+        (( idx++ )) || true
+        if (( idx >= count )); then
+          idx=0
+        fi
+        ;;
+      $'\e[D')
+        if (( idx == 0 )); then
+          sched_ext_profile_cycle "$sched" -1
+        elif [[ "$sched" == 'scx_lavd' ]] && (( idx == 2 )); then
+          sched_ext_toggle_lavd_autopower "$sched"
+        fi
+        ;;
+      $'\e[C')
+        if (( idx == 0 )); then
+          sched_ext_profile_cycle "$sched" 1
+        elif [[ "$sched" == 'scx_lavd' ]] && (( idx == 2 )); then
+          sched_ext_toggle_lavd_autopower "$sched"
+        fi
+        ;;
+      $' ')
+        if (( idx == 0 )); then
+          sched_ext_profile_cycle "$sched" 1
+        elif (( idx == 1 )); then
+          prompt_text 'Enter custom scxctl args. Comma-separated is preferred. Blank clears them.' "$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+          SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]="$(sched_ext_normalize_args "$REPLY")"
+          sched_ext_state_save
+        elif [[ "$sched" == 'scx_lavd' ]] && (( idx == 2 )); then
+          sched_ext_toggle_lavd_autopower "$sched"
+        elif (( idx == help_idx )); then
+          sched_ext_show_help "$sched"
+          (( SHOULD_QUIT == 1 )) && return 0
+        elif (( idx == reset_idx )); then
+          sched_ext_reset_config "$sched"
+          MSG="sched-ext: reset ${sched} config"
+        elif (( idx == back_idx )); then
+          break
+        fi
+        ;;
+      e|E)
+        if (( idx == 1 )); then
+          prompt_text 'Enter custom scxctl args. Comma-separated is preferred. Blank clears them.' "$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+          SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]="$(sched_ext_normalize_args "$REPLY")"
+          sched_ext_state_save
+        fi
+        ;;
+      h|H)
+        sched_ext_show_help "$sched"
+        ;;
+    esac
+  done
 }
 
 sched_ext_menu() {
@@ -587,7 +1037,11 @@ sched_ext_menu() {
     key="$(read_key)" || break
 
     case "$key" in
-      q|Q|$'\e')
+      q|Q)
+        SHOULD_QUIT=1
+        return 0
+        ;;
+      b|B|$'\e')
         break
         ;;
       $'\e[A'|k)
@@ -602,12 +1056,20 @@ sched_ext_menu() {
           idx=0
         fi
         ;;
-      $' '|$'\n'|$'\r')
+      $' ')
         if ! sched_ext_deps_ok; then
           break
         fi
         sched_ext_switch_or_start "${SCHED_EXT_ITEMS[$idx]}"
         break
+        ;;
+      e|E)
+        sched_ext_edit_menu "${SCHED_EXT_ITEMS[$idx]}"
+        (( SHOULD_QUIT == 1 )) && return 0
+        ;;
+      h|H)
+        sched_ext_show_help "${SCHED_EXT_ITEMS[$idx]}"
+        (( SHOULD_QUIT == 1 )) && return 0
         ;;
     esac
   done
@@ -697,6 +1159,7 @@ do_action() {
       ;;
     'sched-ext')
       sched_ext_menu
+      (( SHOULD_QUIT == 1 )) && return
       refresh_sched_ext
       ;;
     'Stop sched-ext')
@@ -756,6 +1219,7 @@ do_right() {
 ui_loop() {
   trap cleanup EXIT INT TERM
   require_files || exit 1
+  sched_ext_state_load
   refresh_all
 
   while true; do
@@ -772,8 +1236,11 @@ ui_loop() {
       $'\e[B'|j) move_sel_down ;;
       $'\e[D'|h) do_left ;;
       $'\e[C'|l) do_right ;;
-      $'\n'|$'\r') do_action ;;
     esac
+
+    if (( SHOULD_QUIT == 1 )); then
+      break
+    fi
   done
 }
 
