@@ -619,8 +619,9 @@ prompt_text() {
 }
 
 sched_ext_show_help() {
-  local sched="$1" out rc=0 key lines cols height offset end i
-  local -a help_lines=()
+  local sched="$1" out rc=0 key rest lines cols view_cols height offset end i max_offset total_lines
+  local line
+  local -a help_lines=() view_lines=()
 
   if ! have_cmd "$sched"; then
     MSG="sched-ext: ${sched} not installed"
@@ -640,60 +641,97 @@ sched_ext_show_help() {
     out="No help output from ${sched} --help"
   fi
 
-  mapfile -t help_lines < <(printf '%s
-' "$out")
-  lines=$(tput lines 2>/dev/null || printf '24')
-  cols=$(tput cols 2>/dev/null || printf '80')
-  height=$(( lines - 5 ))
-  (( height < 8 )) && height=8
+  mapfile -t help_lines < <(printf '%s\n' "$out")
   offset=0
+  printf '\033[?1000h\033[?1006h'
 
   while true; do
-    printf '[2J[H[?25l'
-    printf '%s
-' "$TITLE"
-    printf 'Local help: %s   j/k or arrows scroll   PgUp/PgDn jump   q: quit   b/Esc: back\n\n' "$sched"
-    end=$(( offset + height ))
-    if (( end > ${#help_lines[@]} )); then
-      end=${#help_lines[@]}
-    fi
-    for (( i=offset; i<end; i++ )); do
-      printf '%.*s
-' "$cols" "${help_lines[$i]}"
+    lines=$(tput lines 2>/dev/null || printf '24')
+    cols=$(tput cols 2>/dev/null || printf '80')
+    height=$(( lines - 6 ))
+    (( height < 8 )) && height=8
+    view_cols=$(( cols > 2 ? cols - 1 : 1 ))
+
+    view_lines=()
+    for line in "${help_lines[@]}"; do
+      if [[ -z "$line" ]]; then
+        view_lines+=("")
+        continue
+      fi
+      while (( ${#line} > view_cols )); do
+        view_lines+=("${line:0:view_cols}")
+        line=${line:view_cols}
+      done
+      view_lines+=("$line")
     done
-    key="$(read_key)" || break
+
+    total_lines=${#view_lines[@]}
+    max_offset=$(( total_lines > height ? total_lines - height : 0 ))
+    (( offset > max_offset )) && offset=$max_offset
+    end=$(( offset + height ))
+    (( end > total_lines )) && end=$total_lines
+
+    printf '\033[2J\033[H\033[?25l'
+    printf '%s\n' "$TITLE"
+    printf 'Local help: %s   mouse wheel/arrows scroll   PgUp/PgDn jump   q: quit   b/Esc: back\n' "$sched"
+    printf 'Showing %d-%d of %d\n\n' "$(( total_lines == 0 ? 0 : offset + 1 ))" "$end" "$total_lines"
+    for (( i=offset; i<end; i++ )); do
+      printf '%s\n' "${view_lines[$i]}"
+    done
+
+    IFS= read -rsN1 key || break
+    if [[ "$key" == $'\e' ]]; then
+      while IFS= read -rsN1 -t 0.02 rest; do
+        key+="$rest"
+        case "$key" in
+          $'\e[A'|$'\e[B'|$'\e[5~'|$'\e[6~'|$'\e[H'|$'\e[F'|$'\e[1~'|$'\e[4~'|$'\eOH'|$'\eOF')
+            break
+            ;;
+        esac
+        if [[ "$key" == $'\e[<'* ]] && [[ "$rest" == 'M' || "$rest" == 'm' ]]; then
+          break
+        fi
+      done
+    fi
+
     case "$key" in
       q|Q)
+        printf '\033[?1000l\033[?1006l'
         SHOULD_QUIT=1
         return 0
         ;;
       b|B|$'\e')
         break
         ;;
-      $'\e[A'|k)
+      $'\e[A'|k|$'\e[<64;'*M|$'\e[<64;'*m)
         (( offset-- )) || true
         (( offset < 0 )) && offset=0
         ;;
-      $'\e[B'|j)
-        if (( offset + height < ${#help_lines[@]} )); then
-          (( offset++ )) || true
-        fi
+      $'\e[B'|j|$'\e[<65;'*M|$'\e[<65;'*m)
+        (( offset < max_offset )) && (( offset++ )) || true
         ;;
-      $'\e[5'|$'\e[5~')
+      $'\e[5~')
         offset=$(( offset - height ))
         (( offset < 0 )) && offset=0
         ;;
-      $'\e[6'|$'\e[6~')
+      $'\e[6~')
         offset=$(( offset + height ))
-        if (( offset > ${#help_lines[@]} - 1 )); then
-          offset=$(( ${#help_lines[@]} > height ? ${#help_lines[@]} - height : 0 ))
-        fi
+        (( offset > max_offset )) && offset=$max_offset
+        ;;
+      $'\e[H'|$'\e[1~'|$'\eOH')
+        offset=0
+        ;;
+      $'\e[F'|$'\e[4~'|$'\eOF')
+        offset=$max_offset
         ;;
     esac
   done
+
+  printf '\033[?1000l\033[?1006l'
 }
 
 format_brightness() {
+
   printf '%s %s/%s' "$BR_CONN" "$BR_CUR" "$BR_MAX"
 }
 
@@ -1016,6 +1054,9 @@ sched_ext_edit_menu() {
         ;;
       h|H)
         sched_ext_show_help "$sched"
+        if (( SHOULD_QUIT == 1 )); then
+          return 0
+        fi
         ;;
     esac
   done
@@ -1231,7 +1272,12 @@ ui_loop() {
     case "$key" in
       q|Q) break ;;
       r|R) refresh_all ;;
-      $' ') do_action ;;
+      $' ')
+        do_action
+        if (( SHOULD_QUIT == 1 )); then
+          break
+        fi
+        ;;
       $'\e[A'|k) move_sel_up ;;
       $'\e[B'|j) move_sel_down ;;
       $'\e[D'|h) do_left ;;
