@@ -103,7 +103,6 @@ echo -e "${COLOR_YELLOW}
 - ~/.config/qt6ct
 - ~/.config/xdg-desktop-portal
 - ~/.config/lsfg-vk
-- ~/.config/YouTube Music
 - ~/.config/wiremix
 - ~/.config/cava
 - ~/.Xresources
@@ -204,7 +203,7 @@ done
 # Copy all configuration files
 echo -e "${COLOR_BLUE}Copying configuration files...${COLOR_RESET}"
 config_dirs=("hypr" "waybar" "alacritty" "wlogout" "mako" "wofi" "fuzzel"
-    "gtk-3.0" "Kvantum" "SpeedCrunch" "fastfetch" "pcmanfm-qt" "yazi" "xdg-desktop-portal" "qt5ct" "qt6ct" "lsfg-vk" "wiremix" "cava" "YouTube Music")
+    "gtk-3.0" "Kvantum" "SpeedCrunch" "fastfetch" "pcmanfm-qt" "yazi" "xdg-desktop-portal" "qt5ct" "qt6ct" "lsfg-vk" "wiremix" "cava")
 
 for dir in "${config_dirs[@]}"; do
     retry_command cp -r "$REPO_DIR/config/$dir" "$HOME_DIR/.config/" || exit 1
