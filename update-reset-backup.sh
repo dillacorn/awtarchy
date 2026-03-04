@@ -321,7 +321,30 @@ PY
 pkg_installed_pacman() {
   local pkg="$1"
   command -v pacman >/dev/null 2>&1 || return 1
-  pacman -Qq "$pkg" >/dev/null 2>&1
+  pacman -Qq "$pkg" >/dev/null 2>&1 && return 0
+  pkg_equivalent_installed_pacman "$pkg"
+}
+
+pkg_equivalent_installed_pacman() {
+  local pkg="$1"
+  command -v pacman >/dev/null 2>&1 || return 1
+
+  local -a equivalents=()
+  case "$pkg" in
+    alacritty|alacritty-graphics)
+      equivalents=(alacritty alacritty-graphics)
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  local alt=""
+  for alt in "${equivalents[@]}"; do
+    pacman -Qq "$alt" >/dev/null 2>&1 && return 0
+  done
+
+  return 1
 }
 
 flatpak_app_installed_any_scope() {
