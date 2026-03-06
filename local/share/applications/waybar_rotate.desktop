@@ -5,7 +5,7 @@
 Type=Application
 Name=Waybar rotate (focused display)
 Comment=Rotate Waybar between horizontal and vertical on the currently focused monitor
-Exec=~/.config/hypr/scripts/waybar_rotate.sh
+Exec=sh -lc 'exec "$HOME/.config/hypr/scripts/waybar_rotate.sh"'
 Icon=object-rotate-right
 Terminal=false
 Categories=Utility;
