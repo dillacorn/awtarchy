@@ -28,10 +28,10 @@ have(){ command -v "$1" >/dev/null 2>&1; }
 DO_UPGRADE=0
 INSTALL_LIB32=1
 INSTALL_OPENCL=0
-PATCH_BOOTLOADERS=1
+PATCH_BOOTLOADERS=0
 WRITE_MODPROBE_MODESET=1
 WRITE_BLACKLIST_NOUVEAU=1
-PATCH_MKINITCPIO_MODULES=1
+PATCH_MKINITCPIO_MODULES=0
 
 DRY_RUN=0
 FORCE_GPU=""
@@ -310,6 +310,13 @@ kernel_pkgbases_counts(){
     fi
   done < <(detect_kernel_pkgs)
   printf '%s %s\n' "$cc" "$oc"
+}
+
+
+nvidia_should_defer_boot_integration(){
+  local cc oc
+  read -r cc oc < <(kernel_pkgbases_counts)
+  (( cc == 0 && oc > 0 ))
 }
 
 cachyos_prebuilt_nvidia_open_pkgs(){
@@ -685,6 +692,15 @@ select_open_pkg(){
     return 0
   fi
 
+  # No Cachy kernel installed yet: prefer DKMS so adding Cachy later does not
+  # leave early NVIDIA module expectations tied to a single non-Cachy kernel.
+  if (( cc == 0 )); then
+    if pacman -Si nvidia-open-dkms >/dev/null 2>&1; then
+      printf '%s\n' "nvidia-open-dkms"
+      return 0
+    fi
+  fi
+
   case "${kernels[0]}" in
     linux)
       if pacman -Si nvidia-open >/dev/null 2>&1; then printf '%s\n' "nvidia-open"; return 0; fi
@@ -827,12 +843,21 @@ verify_nvidia_module_for_running_kernel(){
   return 0
 }
 
-configure_nvidia(){
-  write_blacklist_nouveau
-  write_modprobe_modeset
+configure_nvidia_boot_integration(){
+  if nvidia_should_defer_boot_integration; then
+    warn "No Cachy kernel detected yet. Deferring NVIDIA bootloader/mkinitcpio/initramfs changes so a later-installed Cachy kernel can generate its initramfs cleanly."
+    return 0
+  fi
+
   patch_bootloaders
   patch_mkinitcpio_modules
   rebuild_initramfs
+}
+
+configure_nvidia(){
+  write_blacklist_nouveau
+  write_modprobe_modeset
+  configure_nvidia_boot_integration
   patch_hyprland_env_nvidia
 
   if (( DRY_RUN )); then
@@ -895,9 +920,13 @@ nvidia_plan_report(){
 
   log "Would write nouveau blacklist: $WRITE_BLACKLIST_NOUVEAU"
   log "Would write nvidia_drm modeset modprobe: $WRITE_MODPROBE_MODESET"
-  log "Would patch bootloader cmdline: $PATCH_BOOTLOADERS (adds: $KPARAM_A)"
-  log "Would patch mkinitcpio MODULES: $PATCH_MKINITCPIO_MODULES (adds early nvidia modules)"
-  log "Would rebuild initramfs: yes (mkinitcpio/dracut if present)"
+  if nvidia_should_defer_boot_integration; then
+    log "Would defer bootloader/mkinitcpio/initramfs changes until a Cachy kernel is installed"
+  else
+    log "Would patch bootloader cmdline: $PATCH_BOOTLOADERS (adds: $KPARAM_A)"
+    log "Would patch mkinitcpio MODULES: $PATCH_MKINITCPIO_MODULES (adds early nvidia modules)"
+    log "Would rebuild initramfs: yes (mkinitcpio/dracut if present)"
+  fi
   log "Would patch Hyprland NVIDIA env lines: yes (if hyprland.conf exists)"
   log "---- END PLAN ----"
 }

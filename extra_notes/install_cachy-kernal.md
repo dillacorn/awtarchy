@@ -40,3 +40,26 @@ Boot menu tip: highlight an entry and press **d** to set it as the default (pers
 
 [1]: https://github.com/CachyOS/linux-cachyos?utm_source=chatgpt.com#quick-installation "CachyOS/linux-cachyos: Archlinux Kernel based on ..."
 [2]: https://man7.org/linux/man-pages/man7/systemd-boot.7.html "systemd-boot(7) - Linux manual page"
+
+## NVIDIA NOTICE!
+
+If awtarchy was installed before CachyOS repos and kernel were added, rerun `install_GPU_dependencies.sh` after `linux-cachyos` is installed.
+
+```bash
+./awtarchy/scripts/install_GPU_dependencies.sh
+```
+
+Why this matters:
+- early NVIDIA module injection into `mkinitcpio.conf` before Cachy exists can make the later Cachy initramfs generation fail
+- when that happens, systemd-boot may show:
+  `Error preparing initrd: Not found`
+- the actual missing file is usually `/boot/initramfs-linux-cachyos.img`
+
+Safer order for NVIDIA users:
+1. Install awtarchy.
+2. Add CachyOS repos.
+3. Install `linux-cachyos` and `linux-cachyos-headers`.
+4. Reboot once into the Cachy kernel.
+5. Run awtarchy `install_GPU_dependencies.sh` again so NVIDIA kernel integration is applied against the final installed kernel layout.
+
+If using the patched awtarchy GPU script, the first awtarchy install will defer NVIDIA bootloader and mkinitcpio changes until a Cachy kernel is already present.
