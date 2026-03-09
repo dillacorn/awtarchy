@@ -63,7 +63,13 @@ awtarchy targets users who prefer TTY login and direct shell interaction. It ass
 - [Optional Packages link](extra_notes/optional_packages.md)
 
 ## License
-This project is licensed under the [MIT License](https://github.com/dillacorn/awtarchy/blob/main/LICENSE)
+This project is licensed under the [MIT License](https://github.com/dillacorn/awtarchy/blob/main/LICENSE).
+
+### Legal Notice
+This project is a general-purpose open-source utility that runs locally on the
+user’s system. It does not provide a hosted service and does not collect user
+data. Users are responsible for complying with laws and regulations in their
+own jurisdiction when using this software.
 
 ## ☕ Donate
 
