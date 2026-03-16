@@ -25,6 +25,10 @@ SELF_PATH="$(readlink -f "$0")"
 RUN_USER="${SUDO_USER:-${USER:-$(id -un)}}"
 SUDOERS_FILE="/etc/sudoers.d/usb_refresh_fixer-${RUN_USER}"
 
+# Coordination file for optional helpers such as waybar_ready_sound.sh.
+# Contents: PID of the active refresh process.
+ACTIVE_LOCK_FILE="/tmp/usb_refresh_fixer.${RUN_USER}.active"
+
 log() { printf '[usb_refresh_fixer] %s\n' "$*" >&2; }
 die() { log "ERROR: $*"; exit 1; }
 
@@ -70,6 +74,29 @@ install_self_sudoers() {
     rm -f "$tmp"
 
     log "installed sudoers rule for ${RUN_USER}"
+}
+
+refresh_lock_begin() {
+    printf '%s\n' "$$" > "$ACTIVE_LOCK_FILE"
+}
+
+refresh_lock_end() {
+    local cur=""
+    [[ -e "$ACTIVE_LOCK_FILE" ]] || return 0
+    cur="$(cat "$ACTIVE_LOCK_FILE" 2>/dev/null || true)"
+    if [[ "$cur" == "$$" ]]; then
+        rm -f "$ACTIVE_LOCK_FILE"
+    fi
+}
+
+run_with_refresh_lock() {
+    refresh_lock_begin
+    trap 'refresh_lock_end' EXIT INT TERM HUP
+    "$@"
+    local rc=$?
+    refresh_lock_end
+    trap - EXIT INT TERM HUP
+    return "$rc"
 }
 
 find_device_sysfs_by_id() {
@@ -284,15 +311,15 @@ main() {
             ;;
         refresh)
             [[ $# -eq 2 ]] || { usage; exit 1; }
-            cmd_refresh "$2"
+            run_with_refresh_lock cmd_refresh "$2"
             ;;
         refresh-all)
             [[ $# -eq 1 ]] || { usage; exit 1; }
-            cmd_refresh_all
+            run_with_refresh_lock cmd_refresh_all
             ;;
         *)
             if [[ $# -eq 0 ]]; then
-                cmd_refresh_all
+                run_with_refresh_lock cmd_refresh_all
             else
                 usage
                 exit 1
