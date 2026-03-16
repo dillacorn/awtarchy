@@ -54,7 +54,8 @@ install_self_sudoers() {
     [[ ${EUID:-$(id -u)} -eq 0 ]] || die "install_self_sudoers requires root"
     [[ "$RUN_USER" != "root" ]] || return 0
 
-    local rule tmp
+    local rule
+    local tmp
     rule="${RUN_USER} ALL=(root) NOPASSWD: ${SELF_PATH}"
 
     if [[ -r "$SUDOERS_FILE" ]] && grep -Fxq "$rule" "$SUDOERS_FILE"; then
@@ -62,12 +63,11 @@ install_self_sudoers() {
     fi
 
     tmp="$(mktemp)"
-    trap 'rm -f "$tmp"' RETURN
-
     printf '%s\n' "$rule" > "$tmp"
     chmod 0440 "$tmp"
     visudo -cf "$tmp" >/dev/null
     install -Dm440 "$tmp" "$SUDOERS_FILE"
+    rm -f "$tmp"
 
     log "installed sudoers rule for ${RUN_USER}"
 }
