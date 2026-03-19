@@ -5,12 +5,14 @@ set -euo pipefail
 #
 # Purpose:
 #   Wait for Waybar, optionally wait through a separate usb_refresh_fixer.sh run,
-#   then wait for audio to settle and play a sound once.
+#   then play a sound once on the current default sink.
 #
 # Design:
 #   - Does NOT call usb_refresh_fixer.sh itself.
 #   - If usb_refresh_fixer.sh is not used, this still works normally.
-#   - If usb_refresh_fixer.sh is used at boot, this waits for its activity lock.
+#   - If usb_refresh_fixer.sh refresh-audio-default <name> is used at boot,
+#     this waits for its activity lock to clear, then plays on the new default sink.
+#   - Does NOT save or restore any previous sink.
 #
 # Tunables:
 #   WAIT_WAYBAR_SECS          total wait for Waybar visibility
@@ -19,7 +21,6 @@ set -euo pipefail
 #   WAIT_AUDIO_SECS           total wait for audio/default-sink readiness
 #   AUDIO_POLL_SECS           audio polling interval
 #   QUIET_POLLS               refresh lock must be absent this many polls in a row
-#   STABLE_POLLS              default sink must stay stable this many polls in a row
 #   SOUND_FILE                file to play
 #   USB_REFRESH_LOCK_FILE     override lock path if needed
 
@@ -27,10 +28,9 @@ WAIT_WAYBAR_SECS="${WAIT_WAYBAR_SECS:-30}"
 WAYBAR_POLL_SECS="${WAYBAR_POLL_SECS:-0.05}"
 
 REFRESH_DETECT_WINDOW_SECS="${REFRESH_DETECT_WINDOW_SECS:-8}"
-WAIT_AUDIO_SECS="${WAIT_AUDIO_SECS:-60}"
-AUDIO_POLL_SECS="${AUDIO_POLL_SECS:-0.20}"
-QUIET_POLLS="${QUIET_POLLS:-8}"
-STABLE_POLLS="${STABLE_POLLS:-8}"
+WAIT_AUDIO_SECS="${WAIT_AUDIO_SECS:-20}"
+AUDIO_POLL_SECS="${AUDIO_POLL_SECS:-0.10}"
+QUIET_POLLS="${QUIET_POLLS:-2}"
 
 SOUND_FILE="${SOUND_FILE:-$HOME/.config/hypr/sounds/awtarchy-login.mp3}"
 USB_REFRESH_LOCK_FILE="${USB_REFRESH_LOCK_FILE:-/tmp/usb_refresh_fixer.$(id -un).active}"
@@ -83,15 +83,6 @@ default_sink_name() {
     '
 }
 
-default_sink_desc() {
-    have wpctl || return 1
-
-    wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk -F'"' '
-        /node\.description =/ { print $2; found=1; exit }
-        /node\.nick =/        { if (!found) print $2; found=1; exit }
-    '
-}
-
 default_sink_is_real() {
     local sink
     sink="$(default_sink_name || true)"
@@ -141,119 +132,6 @@ wait_for_optional_refresh_cycle() {
     return 1
 }
 
-find_sink_id_by_name() {
-    local want="$1"
-    [[ -n "$want" ]] || return 1
-    have jq || return 1
-    have pw-dump || return 1
-
-    pw-dump 2>/dev/null | jq -r --arg want "$want" '
-        .[]
-        | select(.type == "PipeWire:Interface:Node")
-        | select(.info.props["media.class"] == "Audio/Sink")
-        | select(.info.props["node.name"] == $want)
-        | .id
-    ' | head -n1
-}
-
-find_sink_id_by_desc() {
-    local want="$1"
-    [[ -n "$want" ]] || return 1
-    have jq || return 1
-    have pw-dump || return 1
-
-    pw-dump 2>/dev/null | jq -r --arg want "$want" '
-        .[]
-        | select(.type == "PipeWire:Interface:Node")
-        | select(.info.props["media.class"] == "Audio/Sink")
-        | select(
-            .info.props["node.description"] == $want
-            or .info.props["node.nick"] == $want
-        )
-        | .id
-    ' | head -n1
-}
-
-wait_for_saved_sink_back_and_restore() {
-    local saved_name="$1"
-    local saved_desc="$2"
-    local end id="" cur="" last="" count=0
-
-    have wpctl || return 1
-    end=$(( $(date +%s) + WAIT_AUDIO_SECS ))
-
-    while (( $(date +%s) < end )); do
-        id=""
-
-        if [[ -n "$saved_name" ]]; then
-            id="$(find_sink_id_by_name "$saved_name" || true)"
-        fi
-
-        if [[ -z "$id" && -n "$saved_desc" ]]; then
-            id="$(find_sink_id_by_desc "$saved_desc" || true)"
-        fi
-
-        if [[ -n "$id" ]]; then
-            wpctl set-default "$id" >/dev/null 2>&1 || true
-
-            if [[ -n "$saved_name" ]]; then
-                cur="$(default_sink_name || true)"
-            else
-                cur="$(default_sink_desc || true)"
-            fi
-
-            if [[ -n "$cur" && "$cur" == "${saved_name:-$saved_desc}" ]]; then
-                if [[ "$cur" == "$last" ]]; then
-                    ((count++))
-                else
-                    last="$cur"
-                    count=1
-                fi
-
-                if (( count >= STABLE_POLLS )); then
-                    return 0
-                fi
-            else
-                last=""
-                count=0
-            fi
-        fi
-
-        sleep "$AUDIO_POLL_SECS"
-    done
-
-    return 1
-}
-
-wait_for_stable_real_default_sink() {
-    local end last="" cur="" count=0
-    end=$(( $(date +%s) + WAIT_AUDIO_SECS ))
-
-    while (( $(date +%s) < end )); do
-        cur="$(default_sink_name || true)"
-
-        if [[ -n "$cur" && "$cur" != "auto_null" ]]; then
-            if [[ "$cur" == "$last" ]]; then
-                ((count++))
-            else
-                last="$cur"
-                count=1
-            fi
-
-            if (( count >= STABLE_POLLS )); then
-                return 0
-            fi
-        else
-            last=""
-            count=0
-        fi
-
-        sleep "$AUDIO_POLL_SECS"
-    done
-
-    return 1
-}
-
 try_play() {
     [[ -f "$SOUND_FILE" ]] || return 1
     have pw-play || return 1
@@ -275,27 +153,13 @@ play_with_retry() {
 }
 
 main() {
-    local saved_name="" saved_desc=""
-
     if have flock; then
         exec 9>"$SCRIPT_LOCK_FILE"
         flock -n 9 || exit 0
     fi
 
     wait_for_waybar_visible || exit 0
-
-    if default_sink_is_real; then
-        saved_name="$(default_sink_name || true)"
-        saved_desc="$(default_sink_desc || true)"
-    fi
-
     wait_for_optional_refresh_cycle || exit 0
-
-    if (( REFRESH_WAS_SEEN == 1 )) && [[ -n "$saved_name$saved_desc" ]]; then
-        wait_for_saved_sink_back_and_restore "$saved_name" "$saved_desc" || true
-    fi
-
-    wait_for_stable_real_default_sink || exit 0
     play_with_retry || exit 0
 }
 

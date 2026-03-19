@@ -265,6 +265,20 @@ audio_prereqs_ok() {
     user_session_cmd true >/dev/null 2>&1 || return 1
 }
 
+wait_for_audio_prereqs() {
+    local end
+    end=$(( $(date +%s) + AUDIO_WAIT_SECS ))
+
+    while (( $(date +%s) < end )); do
+        if audio_prereqs_ok; then
+            return 0
+        fi
+        sleep "$AUDIO_POLL_SECS"
+    done
+
+    return 1
+}
+
 audio_default_sink_name() {
     user_session_cmd wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk -F'"' '
         /node\.name =/        { print $2; found=1; exit }
@@ -277,6 +291,55 @@ audio_default_sink_name() {
             }
         }
     '
+}
+
+audio_sink_name_from_id() {
+    local id="$1"
+    [[ -n "$id" ]] || return 1
+
+    user_session_cmd wpctl inspect "$id" 2>/dev/null | awk -F'"' '
+        /node\.name =/        { print $2; found=1; exit }
+        /node\.nick =/        { if (nick == "") nick=$2 }
+        /node\.description =/ { if (desc == "") desc=$2 }
+        END {
+            if (!found) {
+                if (nick != "") print nick
+                else if (desc != "") print desc
+            }
+        }
+    '
+}
+
+audio_default_sink_matches_name() {
+    local name="$1"
+    local want="${EXPECTED_ID,,}"
+
+    [[ -n "$name" ]] || return 1
+    [[ -n "$want" ]] || return 1
+
+    user_session_cmd pw-dump 2>/dev/null | jq -e -r --arg name "$name" --arg expected_id "$want" '
+        def norm: ascii_downcase;
+        def split_id: $expected_id | split(":");
+        .[]
+        | select(.type == "PipeWire:Interface:Node")
+        | select(.info.props["media.class"] == "Audio/Sink")
+        | select(
+            (.info.props["node.name"] == $name)
+            or (.info.props["node.description"] == $name)
+            or (.info.props["node.nick"] == $name)
+        )
+        | select(
+            (
+                (((.info.props["device.vendor.id"] // "") | norm) == (split_id[0]))
+                and
+                (((.info.props["device.product.id"] // "") | norm) == (split_id[1]))
+            )
+            or
+            ((((.info.props["device.vendor.id"] // "") | norm) + ":" + ((.info.props["device.product.id"] // "") | norm)) == $expected_id)
+            or
+            (((.info.props["device.bus-id"] // "") | norm) | contains($expected_id))
+        )
+    ' >/dev/null
 }
 
 audio_find_sink_id_for_name() {
@@ -378,34 +441,52 @@ cmd_refresh() {
 
 cmd_audio_default() {
     local name="$1"
-    local id=""
-    local end current="" last="" count=0
+    local id="" target_name="" current="" last="" count=0
+    local end
 
-    audio_prereqs_ok || die "audio restore prerequisites missing: need sudo, wpctl, pw-dump, jq, and a live user session bus"
     load_config "$name"
+    wait_for_audio_prereqs || die "audio restore prerequisites missing after waiting: need sudo, wpctl, pw-dump, jq, and a live user session bus"
 
     end=$(( $(date +%s) + AUDIO_WAIT_SECS ))
     while (( $(date +%s) < end )); do
-        id="$(audio_find_sink_id_for_name "$name" || true)"
-        if [[ -n "$id" ]]; then
-            user_session_cmd wpctl set-default "$id" >/dev/null 2>&1 || true
-            current="$(audio_default_sink_name || true)"
-            if [[ -n "$current" ]]; then
-                if [[ "$current" == "$last" ]]; then
-                    ((count++))
-                else
-                    last="$current"
-                    count=1
-                fi
-                if (( count >= AUDIO_STABLE_POLLS )); then
-                    log "set mapped audio device as default sink: $name"
-                    return 0
-                fi
-            else
-                last=""
-                count=0
+        if [[ -z "$id" ]]; then
+            id="$(audio_find_sink_id_for_name "$name" || true)"
+            if [[ -n "$id" && -z "$target_name" ]]; then
+                target_name="$(audio_sink_name_from_id "$id" || true)"
             fi
         fi
+
+        if [[ -n "$id" ]]; then
+            user_session_cmd wpctl set-default "$id" >/dev/null 2>&1 || true
+        fi
+
+        current="$(audio_default_sink_name || true)"
+
+        if [[ -n "$current" ]] && (
+            [[ -n "$target_name" && "$current" == "$target_name" ]] ||
+            audio_default_sink_matches_name "$current"
+        ); then
+            if [[ "$current" == "$last" ]]; then
+                ((count++))
+            else
+                last="$current"
+                count=1
+            fi
+
+            if (( count >= AUDIO_STABLE_POLLS )); then
+                log "set mapped audio device as default sink: $name (${target_name:-$current})"
+                return 0
+            fi
+        else
+            last=""
+            count=0
+
+            id="$(audio_find_sink_id_for_name "$name" || true)"
+            if [[ -n "$id" ]]; then
+                target_name="$(audio_sink_name_from_id "$id" || true)"
+            fi
+        fi
+
         sleep "$AUDIO_POLL_SECS"
     done
 
@@ -415,7 +496,7 @@ cmd_audio_default() {
 cmd_refresh_audio() {
     local name="$1"
     cmd_refresh "$name"
-    audio_prereqs_ok || die "audio prerequisites missing after refresh: need sudo, wpctl, pw-dump, jq, and a live user session bus"
+    wait_for_audio_prereqs || die "audio prerequisites missing after refresh: need sudo, wpctl, pw-dump, jq, and a live user session bus"
     wait_for_mapped_sink_id "$name" >/dev/null || die "mapped audio sink did not appear after refresh: $name"
     log "mapped audio sink is present after refresh: $name"
 }
@@ -479,7 +560,8 @@ main() {
             ;;
         refresh-audio-default)
             [[ $# -eq 2 ]] || { usage; exit 1; }
-            run_with_refresh_lock cmd_refresh_audio_default "$2"
+            run_with_refresh_lock cmd_refresh "$2"
+            cmd_audio_default "$2"
             ;;
         audio-default)
             [[ $# -eq 2 ]] || { usage; exit 1; }
