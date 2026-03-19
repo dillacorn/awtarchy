@@ -15,29 +15,30 @@ set -euo pipefail
 # Later refresh it:
 #   ./usb_refresh_fixer.sh refresh ifi
 #
+# Refresh an audio device without forcing default sink:
+#   ./usb_refresh_fixer.sh refresh-audio ifi
+#
+# Refresh an audio device and force it as default sink:
+#   ./usb_refresh_fixer.sh refresh-audio-default ifi
+#
+# Force the mapped audio device as default sink without refresh:
+#   ./usb_refresh_fixer.sh audio-default ifi
+#
 # Refresh all mapped devices:
 #   ./usb_refresh_fixer.sh
-#
-# Optional behavior:
-#   If the user currently has a real PipeWire default sink selected before refresh,
-#   this script will try to restore that same sink as default after the USB device
-#   comes back. This is generic and harmless for non-audio USB devices.
 
 CONFIG_DIR="/etc/usb_refresh_fixer"
 RESET_DELAY_SECONDS=2
 POST_PORT_REBIND_WAIT_SECONDS=2
 POST_CONTROLLER_REBIND_WAIT_SECONDS=3
 
-AUDIO_RESTORE_WAIT_SECS=20
-AUDIO_RESTORE_POLL_SECS=0.20
-AUDIO_RESTORE_STABLE_POLLS=5
+AUDIO_WAIT_SECS=30
+AUDIO_POLL_SECS=0.20
+AUDIO_STABLE_POLLS=5
 
 SELF_PATH="$(readlink -f "$0")"
 RUN_USER="${SUDO_USER:-${USER:-$(id -un)}}"
 SUDOERS_FILE="/etc/sudoers.d/usb_refresh_fixer-${RUN_USER}"
-
-# Coordination file for optional helpers such as waybar_ready_sound.sh.
-# Contents: PID of the active refresh process.
 ACTIVE_LOCK_FILE="/tmp/usb_refresh_fixer.${RUN_USER}.active"
 
 log() { printf '[usb_refresh_fixer] %s\n' "$*" >&2; }
@@ -256,7 +257,7 @@ rebind_usb_controller() {
     udevadm settle --timeout=15 || true
 }
 
-audio_restore_prereqs_ok() {
+audio_prereqs_ok() {
     command -v sudo >/dev/null 2>&1 || return 1
     command -v wpctl >/dev/null 2>&1 || return 1
     command -v pw-dump >/dev/null 2>&1 || return 1
@@ -278,118 +279,52 @@ audio_default_sink_name() {
     '
 }
 
-audio_default_sink_desc() {
-    user_session_cmd wpctl inspect @DEFAULT_AUDIO_SINK@ 2>/dev/null | awk -F'"' '
-        /node\.description =/ { print $2; found=1; exit }
-        /node\.nick =/        { if (!found) print $2; found=1; exit }
-    '
-}
+audio_find_sink_id_for_name() {
+    local name="$1"
+    local id=""
 
-audio_default_sink_is_real() {
-    local sink
-    sink="$(audio_default_sink_name || true)"
-    [[ -n "$sink" ]] || return 1
-    [[ "$sink" != "auto_null" ]] || return 1
-    return 0
-}
+    load_config "$name"
+    audio_prereqs_ok || return 1
 
-audio_find_sink_id_by_name() {
-    local want="$1"
-    [[ -n "$want" ]] || return 1
-
-    user_session_cmd pw-dump 2>/dev/null | jq -r --arg want "$want" '
-        .[]
-        | select(.type == "PipeWire:Interface:Node")
-        | select(.info.props["media.class"] == "Audio/Sink")
-        | select(.info.props["node.name"] == $want)
-        | .id
-    ' | head -n1
-}
-
-audio_find_sink_id_by_desc() {
-    local want="$1"
-    [[ -n "$want" ]] || return 1
-
-    user_session_cmd pw-dump 2>/dev/null | jq -r --arg want "$want" '
+    id="$(user_session_cmd pw-dump 2>/dev/null | jq -r --arg expected_id "${EXPECTED_ID,,}" '
+        def norm: ascii_downcase;
+        def split_id: $expected_id | split(":");
         .[]
         | select(.type == "PipeWire:Interface:Node")
         | select(.info.props["media.class"] == "Audio/Sink")
         | select(
-            .info.props["node.description"] == $want
-            or .info.props["node.nick"] == $want
+            (
+                (((.info.props["device.vendor.id"] // "") | norm) == (split_id[0]))
+                and
+                (((.info.props["device.product.id"] // "") | norm) == (split_id[1]))
+            )
+            or
+            ((((.info.props["device.vendor.id"] // "") | norm) + ":" + ((.info.props["device.product.id"] // "") | norm)) == $expected_id)
+            or
+            (((.info.props["device.bus-id"] // "") | norm) | contains($expected_id))
         )
         | .id
-    ' | head -n1
+    ' | head -n1 || true)"
+
+    [[ -n "$id" ]] || return 1
+    printf '%s\n' "$id"
 }
 
-audio_capture_previous_default_sink() {
-    SAVED_SINK_NAME=""
-    SAVED_SINK_DESC=""
+wait_for_mapped_sink_id() {
+    local name="$1"
+    local end id=""
 
-    audio_restore_prereqs_ok || return 0
-    audio_default_sink_is_real || return 0
-
-    SAVED_SINK_NAME="$(audio_default_sink_name || true)"
-    SAVED_SINK_DESC="$(audio_default_sink_desc || true)"
-
-    [[ -n "$SAVED_SINK_NAME$SAVED_SINK_DESC" ]] || return 0
-    log "saved previous default sink: ${SAVED_SINK_NAME:-${SAVED_SINK_DESC:-unknown}}"
-    return 0
-}
-
-audio_restore_previous_default_sink() {
-    local saved_name="$1"
-    local saved_desc="$2"
-    local end id="" cur="" last="" count=0
-
-    [[ -n "$saved_name$saved_desc" ]] || return 0
-    audio_restore_prereqs_ok || return 0
-
-    end=$(( $(date +%s) + AUDIO_RESTORE_WAIT_SECS ))
-
+    end=$(( $(date +%s) + AUDIO_WAIT_SECS ))
     while (( $(date +%s) < end )); do
-        id=""
-
-        if [[ -n "$saved_name" ]]; then
-            id="$(audio_find_sink_id_by_name "$saved_name" || true)"
-        fi
-
-        if [[ -z "$id" && -n "$saved_desc" ]]; then
-            id="$(audio_find_sink_id_by_desc "$saved_desc" || true)"
-        fi
-
+        id="$(audio_find_sink_id_for_name "$name" || true)"
         if [[ -n "$id" ]]; then
-            user_session_cmd wpctl set-default "$id" >/dev/null 2>&1 || true
-
-            if [[ -n "$saved_name" ]]; then
-                cur="$(audio_default_sink_name || true)"
-            else
-                cur="$(audio_default_sink_desc || true)"
-            fi
-
-            if [[ -n "$cur" && "$cur" == "${saved_name:-$saved_desc}" ]]; then
-                if [[ "$cur" == "$last" ]]; then
-                    ((count++))
-                else
-                    last="$cur"
-                    count=1
-                fi
-
-                if (( count >= AUDIO_RESTORE_STABLE_POLLS )); then
-                    log "restored previous default sink: $cur"
-                    return 0
-                fi
-            else
-                last=""
-                count=0
-            fi
+            printf '%s\n' "$id"
+            return 0
         fi
-
-        sleep "$AUDIO_RESTORE_POLL_SECS"
+        sleep "$AUDIO_POLL_SECS"
     done
 
-    log "previous default sink did not come back in time"
-    return 0
+    return 1
 }
 
 cmd_map() {
@@ -412,13 +347,7 @@ cmd_map() {
 
 cmd_refresh() {
     local name="$1"
-    local saved_sink_name="" saved_sink_desc=""
-
     load_config "$name"
-
-    audio_capture_previous_default_sink
-    saved_sink_name="${SAVED_SINK_NAME:-}"
-    saved_sink_desc="${SAVED_SINK_DESC:-}"
 
     log "refreshing $name"
     log "  id: $EXPECTED_ID"
@@ -429,7 +358,6 @@ cmd_refresh() {
         sleep "$POST_PORT_REBIND_WAIT_SECONDS"
         if device_present_by_id "$EXPECTED_ID"; then
             log "success: $name came back after port rebind"
-            audio_restore_previous_default_sink "$saved_sink_name" "$saved_sink_desc"
             return 0
         fi
         log "$name still missing after port rebind, trying controller fallback"
@@ -442,11 +370,60 @@ cmd_refresh() {
 
     if device_present_by_id "$EXPECTED_ID"; then
         log "success: $name came back after controller rebind"
-        audio_restore_previous_default_sink "$saved_sink_name" "$saved_sink_desc"
         return 0
     fi
 
     die "$name is still missing after all reset attempts"
+}
+
+cmd_audio_default() {
+    local name="$1"
+    local id=""
+    local end current="" last="" count=0
+
+    audio_prereqs_ok || die "audio restore prerequisites missing: need sudo, wpctl, pw-dump, jq, and a live user session bus"
+    load_config "$name"
+
+    end=$(( $(date +%s) + AUDIO_WAIT_SECS ))
+    while (( $(date +%s) < end )); do
+        id="$(audio_find_sink_id_for_name "$name" || true)"
+        if [[ -n "$id" ]]; then
+            user_session_cmd wpctl set-default "$id" >/dev/null 2>&1 || true
+            current="$(audio_default_sink_name || true)"
+            if [[ -n "$current" ]]; then
+                if [[ "$current" == "$last" ]]; then
+                    ((count++))
+                else
+                    last="$current"
+                    count=1
+                fi
+                if (( count >= AUDIO_STABLE_POLLS )); then
+                    log "set mapped audio device as default sink: $name"
+                    return 0
+                fi
+            else
+                last=""
+                count=0
+            fi
+        fi
+        sleep "$AUDIO_POLL_SECS"
+    done
+
+    die "could not set mapped audio device as default sink: $name"
+}
+
+cmd_refresh_audio() {
+    local name="$1"
+    cmd_refresh "$name"
+    audio_prereqs_ok || die "audio prerequisites missing after refresh: need sudo, wpctl, pw-dump, jq, and a live user session bus"
+    wait_for_mapped_sink_id "$name" >/dev/null || die "mapped audio sink did not appear after refresh: $name"
+    log "mapped audio sink is present after refresh: $name"
+}
+
+cmd_refresh_audio_default() {
+    local name="$1"
+    cmd_refresh "$name"
+    cmd_audio_default "$name"
 }
 
 cmd_refresh_all() {
@@ -467,12 +444,18 @@ usage() {
 Usage:
   usb_refresh_fixer.sh map <vendor:product> <name>
   usb_refresh_fixer.sh refresh <name>
+  usb_refresh_fixer.sh refresh-audio <name>
+  usb_refresh_fixer.sh refresh-audio-default <name>
+  usb_refresh_fixer.sh audio-default <name>
   usb_refresh_fixer.sh
 
 Examples:
   lsusb
   ./usb_refresh_fixer.sh map 20b1:3008 ifi
   ./usb_refresh_fixer.sh refresh ifi
+  ./usb_refresh_fixer.sh refresh-audio ifi
+  ./usb_refresh_fixer.sh refresh-audio-default ifi
+  ./usb_refresh_fixer.sh audio-default ifi
   ./usb_refresh_fixer.sh
 EOF
 }
@@ -489,6 +472,18 @@ main() {
         refresh)
             [[ $# -eq 2 ]] || { usage; exit 1; }
             run_with_refresh_lock cmd_refresh "$2"
+            ;;
+        refresh-audio)
+            [[ $# -eq 2 ]] || { usage; exit 1; }
+            run_with_refresh_lock cmd_refresh_audio "$2"
+            ;;
+        refresh-audio-default)
+            [[ $# -eq 2 ]] || { usage; exit 1; }
+            run_with_refresh_lock cmd_refresh_audio_default "$2"
+            ;;
+        audio-default)
+            [[ $# -eq 2 ]] || { usage; exit 1; }
+            cmd_audio_default "$2"
             ;;
         refresh-all)
             [[ $# -eq 1 ]] || { usage; exit 1; }
