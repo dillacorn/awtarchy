@@ -61,6 +61,7 @@ MKO_BORDER="#a4ff47"
 MKO_PROG="#a4ff47"
 
 ###########   FILE PATHS   ###########
+HYPR_LUA="$HOME/.config/hypr/hyprland.lua"
 HYPR_CONF="$HOME/.config/hypr/hyprland.conf"
 WAYBAR_CSS="$HOME/.config/waybar/style.css"
 WLOGOUT_CSS="$HOME/.config/wlogout/style.css"
@@ -71,14 +72,98 @@ MICRO_SETTINGS="$HOME/.config/micro/settings.json"
 ALACRITTY_CONF="$HOME/.config/alacritty/alacritty.toml"
 SPEEDCRUNCH_INI="$HOME/.config/SpeedCrunch/SpeedCrunch.ini"
 
+###########   HELPERS   ###########
+set_hypr_lua_config() {
+    local section="$1"
+    local key="$2"
+    local value="$3"
+
+    python - "$HYPR_LUA" "$section" "$key" "$value" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+section = sys.argv[2]
+key = sys.argv[3]
+value = sys.argv[4]
+
+text = path.read_text()
+
+section_re = re.escape(section)
+key_re = re.escape(key)
+
+pattern = re.compile(
+    rf'config_set\(\{{\[\[{section_re}\]\]\}},\s*\[\[{key_re}\]\],\s*\[\[.*?\]\]\)',
+    re.DOTALL,
+)
+
+replacement = f'config_set({{[[{section}]]}}, [[{key}]], [[{value}]])'
+
+text, count = pattern.subn(replacement, text)
+
+if count == 0:
+    raise SystemExit(f"ERROR: did not find Lua config key: {section}.{key}")
+
+path.write_text(text)
+PY
+}
+
+set_hypr_lua_comment() {
+    local key="$1"
+    local value="$2"
+
+    python - "$HYPR_LUA" "$key" "$value" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+key = sys.argv[2]
+value = sys.argv[3]
+
+text = path.read_text()
+
+pattern = re.compile(rf'-- {re.escape(key)} = rgba\([^)]+\)')
+replacement = f'-- {key} = {value}'
+
+text = pattern.sub(replacement, text)
+path.write_text(text)
+PY
+}
+
+apply_hyprland_colors() {
+    if [[ -f "$HYPR_LUA" ]]; then
+        set_hypr_lua_config "general" "col.active_border" "rgba(${NEW_ACTIVE_BORDER})"
+        set_hypr_lua_config "general" "col.inactive_border" "rgba(${NEW_INACTIVE_BORDER})"
+
+        # Keep preserved original comments visually synced too.
+        set_hypr_lua_comment "col.active_border" "rgba(${NEW_ACTIVE_BORDER})"
+        set_hypr_lua_comment "col.inactive_border" "rgba(${NEW_INACTIVE_BORDER})"
+
+        lua -e 'assert(loadfile(os.getenv("HOME") .. "/.config/hypr/hyprland.lua"))' >/dev/null
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null || true
+        return 0
+    fi
+
+    if [[ -f "$HYPR_CONF" ]]; then
+        sed -i \
+            -e "s/^ *col\.active_border *= *.*/col.active_border = rgba(${NEW_ACTIVE_BORDER})/"  \
+            -e "s/^ *col\.inactive_border *= *.*/col.inactive_border = rgba(${NEW_INACTIVE_BORDER})/" \
+            "$HYPR_CONF"
+
+        command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null || true
+        return 0
+    fi
+
+    printf 'WARNING: no hyprland.lua or hyprland.conf found. Skipping Hyprland colors.\n' >&2
+}
+
 ###########   APPLY CHANGES   ###########
 echo "🔄 Applying theme..."
 
 # Hyprland
-sed -i \
-    -e "s/^ *col\.active_border *= *.*/col.active_border = rgba(${NEW_ACTIVE_BORDER})/"  \
-    -e "s/^ *col\.inactive_border *= *.*/col.inactive_border = rgba(${NEW_INACTIVE_BORDER})/" \
-    "$HYPR_CONF"
+apply_hyprland_colors
 
 # Waybar
 sed -i \

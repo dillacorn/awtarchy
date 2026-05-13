@@ -4,6 +4,7 @@ set -euo pipefail
 BRIGHTNESS_SCRIPT="${HYPR_BRIGHTNESS_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/hypr-ddc-brightness.sh}"
 SUNSET_SCRIPT="${HYPR_SUNSET_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/hyprsunset_ctl.sh}"
 VIBRANCE_SCRIPT="${HYPR_VIBRANCE_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/vibrance_shader.sh}"
+HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
 HYPR_CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
 VIBRANCE_SHADER="${VIBRANCE_SHADER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance}"
 
@@ -176,7 +177,25 @@ refresh_vibrance() {
     done < "$VIBRANCE_SHADER"
   fi
 
-  if [[ -f "$HYPR_CONF" ]]; then
+  if [[ -f "$HYPR_LUA" ]]; then
+    if python - "$HYPR_LUA" <<'PY' >/dev/null 2>&1
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text()
+pat = re.compile(r'^\s*config_set\(\{\[\[decoration\]\]\},\s*\[\[screen_shader\]\],\s*\[\[(.*?)\]\]\)', re.M)
+for m in pat.finditer(text):
+    if m.group(1).strip().endswith('/shaders/vibrance'):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+    then
+      VIB_ENABLED="1"
+    else
+      VIB_ENABLED="0"
+    fi
+  elif [[ -f "$HYPR_CONF" ]]; then
     if grep -Eq '^[[:space:]]*screen_shader[[:space:]]*=.*(/|^)shaders/vibrance([[:space:]]|$|#)' "$HYPR_CONF"; then
       VIB_ENABLED="1"
     else

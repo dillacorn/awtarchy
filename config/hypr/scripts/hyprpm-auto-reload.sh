@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # ~/.config/hypr/scripts/hyprpm-auto-reload.sh
 #
-# Behavior:
-# - If hyprpm missing: exit 0
-# - Try: hyprpm reload
-# - If reload fails: hyprpm update (wait) -> hyprpm reload
-# - Rate-limit repeated update attempts with a TTL lock
-# - Log to: ~/.cache/hyprpm-auto/hyprpm-auto-reload.log
+# Safe default for Hyprland Lua/plugin migration:
+# - Does NOT run hyprpm reload by default.
+# - Live hyprpm reload can hot-unload/reload compositor plugins and may crash Hyprland.
+# - To intentionally allow the old behavior, set:
+#     HYPRPM_AUTO_LIVE_RELOAD=1
+#
+# Log: ~/.cache/hyprpm-auto/hyprpm-auto-reload.log
 
 set -u
 set -o pipefail
@@ -23,10 +24,16 @@ LOCK_FILE="/tmp/hyprpm-auto-reload.lock"
 
 RELOAD_TIMEOUT_SECONDS="${HYPRPM_RELOAD_TIMEOUT_SECONDS:-20}"
 UPDATE_TIMEOUT_SECONDS="${HYPRPM_UPDATE_TIMEOUT_SECONDS:-600}"
+LIVE_RELOAD="${HYPRPM_AUTO_LIVE_RELOAD:-0}"
+UPDATE_ON_FAILURE="${HYPRPM_AUTO_UPDATE_ON_FAILURE:-1}"
 
 mkdir -p "$LOG_DIR" 2>/dev/null || true
 
 ts() { date +"%Y-%m-%d %H:%M:%S"; }
+
+log_line() {
+  printf '[%s] %s\n' "$(ts)" "$*" >>"$LOG_FILE"
+}
 
 notify() {
   local msg="$1"
@@ -65,16 +72,20 @@ log_block() {
   } >>"$LOG_FILE"
 }
 
-# If hyprpm is not installed, do nothing.
 [[ -n "$HYPRPM" ]] || exit 0
 
-# Avoid hammering update/reload repeatedly if something is broken.
 if have_recent_lock; then
   exit 0
 fi
 
-# 1) Try reload
-reload_out="$("$HYPRPM" reload 2>&1)"
+if [[ "$LIVE_RELOAD" != "1" ]]; then
+  log_line "Skipped hyprpm reload. Set HYPRPM_AUTO_LIVE_RELOAD=1 to allow live plugin reload."
+  exit 0
+fi
+
+log_line "HYPRPM_AUTO_LIVE_RELOAD=1 set. Running live hyprpm reload."
+
+reload_out="$(run_maybe_timeout "$RELOAD_TIMEOUT_SECONDS" "$HYPRPM" reload 2>&1)"
 reload_rc=$?
 log_block "hyprpm reload" "$reload_rc" "$reload_out"
 
@@ -82,7 +93,11 @@ if [[ "$reload_rc" -eq 0 ]]; then
   exit 0
 fi
 
-# 2) Reload failed, try update then reload
+if [[ "$UPDATE_ON_FAILURE" != "1" ]]; then
+  notify "hyprpm reload failed. Auto update disabled. See log: $LOG_FILE"
+  exit 0
+fi
+
 touch_lock
 notify "hyprpm reload failed. Running hyprpm update, then reload."
 

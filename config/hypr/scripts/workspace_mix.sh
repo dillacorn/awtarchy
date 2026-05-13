@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
 # ~/.config/hypr/scripts/workspace_mix.sh
-# 
+#
 # PURPOSE:
 #   - Mix windows from selected Hyprland workspaces into a temporary workspace named by MIX_NAME
 #   - Toggle adds/removes live
 #   - Restore: return windows to their original workspaces in a stable, recorded order
 #     (tiled first, left-to-right using prior X then Y), then refocus last workspace
 #   - Note: exact tiled geometry cannot be restored; this preserves relative insertion order only
+#
+# Hyprland 0.55 Lua-compatible hyprctl dispatch version.
 # DEPS: bash, hyprctl, jq
 
 set -euo pipefail
@@ -32,6 +34,29 @@ require_deps() {
   fi
 }
 
+lua_quote() {
+  local s="${1:-}"
+  s=${s//\\/\\\\}
+  s=${s//\'/\\\'}
+  printf "'%s'" "$s"
+}
+
+is_numeric() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
+now_epoch()  { date +%s; }
+
+lua_ws_expr() {
+  local ws="${1:-}"
+  if [[ "$ws" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s' "$ws"
+  else
+    lua_quote "$ws"
+  fi
+}
+
+hypr_dispatch() {
+  hyprctl dispatch "$1"
+}
+
 monitors_json()   { hyprctl -j monitors; }
 workspaces_json() { hyprctl -j workspaces; }
 clients_json()    { hyprctl -j clients; }
@@ -39,12 +64,10 @@ clients_json()    { hyprctl -j clients; }
 focused_monitor() {
   monitors_json | jq -r '(map(select(.focused==true))[0].name) // (.[0].name) // empty'
 }
+
 focused_ws_label() {
   monitors_json | jq -r '(map(select(.focused==true))[0].activeWorkspace.name) // (.[0].activeWorkspace.name) // empty'
 }
-
-is_numeric() { [[ "${1:-}" =~ ^[0-9]+$ ]]; }
-now_epoch()  { date +%s; }
 
 # Normalize to a workspace label (string). If numeric id, resolve to name if possible.
 ws_label_from_arg() {
@@ -58,10 +81,26 @@ ws_label_from_arg() {
   fi
 }
 
-# For "workspace" and "movetoworkspacesilent": accept "name:<label>" or numeric id.
+# Workspace expression accepted by Lua dispatchers.
 ws_token_for_client_move() {
   local label="$1"
   if is_numeric "$label"; then printf '%s' "$label"; else printf 'name:%s' "$label"; fi
+}
+
+focus_ws() {
+  local label="$1"
+  hypr_dispatch "hl.dsp.focus({ workspace = $(lua_ws_expr "$(ws_token_for_client_move "$label")") })" >/dev/null
+}
+
+focus_addr() {
+  local addr="$1"
+  [[ -n "$addr" ]] || return 1
+  hypr_dispatch "hl.dsp.focus({ window = $(lua_quote "address:$addr") })" >/dev/null
+}
+
+move_focused_to_ws() {
+  local label="$1"
+  hypr_dispatch "hl.dsp.window.move({ workspace = $(lua_ws_expr "$(ws_token_for_client_move "$label")"), follow = false })" >/dev/null
 }
 
 empty_state_json() {
@@ -91,10 +130,14 @@ save_state() {
   mv -f "$tmp" "$STATE_FILE"
 }
 
-# Move by address to a workspace LABEL
+# Move by address to a workspace LABEL.
+# Targeted window moves are not clearly documented in 0.55 Lua, so this focuses
+# the window first and then moves activewindow silently.
 move_addr_to_ws() {
   local addr="$1" label="$2"
-  hyprctl dispatch movetoworkspacesilent "$(ws_token_for_client_move "$label"),address:$addr" >/dev/null
+  [[ -n "$addr" && -n "$label" ]] || return 1
+  focus_addr "$addr" || return 1
+  move_focused_to_ws "$label"
 }
 
 # Current client addresses (newline-separated)
@@ -143,6 +186,7 @@ apply_toggle_immediate() {
         move_addr_to_ws "$addr" "$label" || true
       fi
     done
+
     # Drop from state
     state="$(jq -c --arg l "$label" '
       .selection -= [$l]
@@ -162,12 +206,14 @@ apply_toggle_immediate() {
     local moves_to_add
     moves_to_add="$(clients_from_label_as_moves "$label")"
 
-    # Move them into mix
-    hyprctl dispatch workspace "$(ws_token_for_client_move "$mix_ws")" >/dev/null
+    # Move them into mix. This may visibly focus each moved window on Lua 0.55,
+    # but it avoids legacy movetoworkspacesilent syntax.
+    focus_ws "$mix_ws" >/dev/null 2>&1 || true
     jq -r '.[].address' <<<"$moves_to_add" | while IFS= read -r addr; do
       [[ -n "$addr" ]] || continue
-      move_addr_to_ws "$addr" "$mix_ws"
+      move_addr_to_ws "$addr" "$mix_ws" || true
     done
+    focus_ws "$mix_ws" >/dev/null 2>&1 || true
 
     # Merge into state
     state="$(jq -c --arg l "$label" --argjson add "$moves_to_add" '
@@ -185,7 +231,7 @@ restore_ws_ordered() {
   local state_json="$2"
 
   # Focus target workspace to influence tiling insertion points
-  hyprctl dispatch workspace "$(ws_token_for_client_move "$ws")" >/dev/null 2>&1 || true
+  focus_ws "$ws" >/dev/null 2>&1 || true
 
   local live last=""
   live="$(live_addr_set || true)"
@@ -201,10 +247,10 @@ restore_ws_ordered() {
       if grep -qx "$addr" <<<"$live"; then
         # Focus the previously placed one to bias the next split beside it
         if [[ -n "$last" ]]; then
-          hyprctl dispatch focuswindow "address:$last" >/dev/null 2>&1 || true
+          focus_addr "$last" >/dev/null 2>&1 || true
         fi
-        move_addr_to_ws "$addr" "$ws"
-        hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || true
+        move_addr_to_ws "$addr" "$ws" || true
+        focus_addr "$addr" >/dev/null 2>&1 || true
         last="$addr"
       fi
   done
@@ -223,10 +269,9 @@ case "$cmd" in
 
   restore)
     state="$(load_state)"
-    mix_ws="$(jq -r '.mix_ws' <<<"$state")"
     prev_ws="$(jq -r '.prev_ws // ""' <<<"$state")"
 
-    if [[ -n "$mix_ws" ]]; then
+    if [[ -n "$(jq -r '.mix_ws // ""' <<<"$state")" ]]; then
       # Restore per workspace in a stable order
       while IFS= read -r ws; do
         [[ -n "$ws" ]] || continue
@@ -237,7 +282,7 @@ case "$cmd" in
     # Clear state and refocus the previous workspace
     save_state <<<"$(empty_state_json)"
     if [[ -n "$prev_ws" ]]; then
-      hyprctl dispatch workspace "$(ws_token_for_client_move "$prev_ws")" >/dev/null
+      focus_ws "$prev_ws" >/dev/null
     fi
     ;;
 
@@ -252,7 +297,7 @@ case "$cmd" in
       save_state <<<"$state"
       mix_ws="$MIX_NAME"
     fi
-    hyprctl dispatch workspace "$(ws_token_for_client_move "$mix_ws")" >/devnull 2>&1 || hyprctl dispatch workspace "$(ws_token_for_client_move "$mix_ws")" >/dev/null
+    focus_ws "$mix_ws" >/dev/null
     ;;
 
   build) # backward-compat: just focus mixed view
@@ -283,7 +328,7 @@ case "$cmd" in
     ;;
 
   *)
-    err "unknown cmd: %s {toggle <ws>|restore|focus|build|status|doctor}" "$cmd"
+    err "unknown cmd: $cmd {toggle <ws>|restore|focus|build|status|doctor}"
     exit 2
     ;;
 esac

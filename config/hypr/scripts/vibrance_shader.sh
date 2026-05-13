@@ -3,7 +3,9 @@ set -euo pipefail
 
 # vibrance_shader.sh
 # - Edits ~/.config/hypr/shaders/vibrance (#define VIBRANCE X)
-# - Toggles ONLY the screen_shader vibrance line in hyprland.conf by commenting/uncommenting it.
+# - Toggles ONLY the screen_shader vibrance setting in hyprland.lua or hyprland.conf.
+# - Lua mode edits active config_set({[[decoration]]}, [[screen_shader]], [[...]]) lines.
+# - Conf fallback comments/uncomments screen_shader lines.
 # - When enabling, comments any other active screen_shader lines (pick-one behavior).
 #
 # Usage:
@@ -14,7 +16,8 @@ set -euo pipefail
 #   vibrance_shader.sh set 0.35
 #   vibrance_shader.sh key 1..9|0
 
-CONF="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf"
+HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
+CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
 SHADER="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance"
 
 LEVELS=(0.00 0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95)
@@ -85,6 +88,100 @@ set_shader_define() {
       prev_define = ($0 ~ /^[ \t]*#define[ \t]+VIBRANCE[ \t]+[0-9.]+[ \t]*$/) ? 1 : 0
     }
   ' "$SHADER" >"${SHADER}.tmp" && mv -f "${SHADER}.tmp" "$SHADER"
+}
+
+config_exists() {
+  [[ -f "$HYPR_LUA" || -f "$CONF" ]]
+}
+
+need_config() {
+  config_exists || die "missing Hyprland config: $HYPR_LUA or $CONF"
+}
+
+lua_vibrance_is_active() {
+  python - "$HYPR_LUA" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text()
+pat = re.compile(r'^\s*config_set\(\{\[\[decoration\]\]\},\s*\[\[screen_shader\]\],\s*\[\[(.*?)\]\]\)', re.M)
+for m in pat.finditer(text):
+    value = m.group(1).strip()
+    if value.endswith('/shaders/vibrance'):
+        raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+set_lua_vibrance_state() {
+  local enable="$1" # 1 enable, 0 disable
+  local shader_path="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance"
+
+  python - "$HYPR_LUA" "$enable" "$shader_path" <<'PY'
+from pathlib import Path
+import sys
+
+path = Path(sys.argv[1])
+enable = sys.argv[2] == "1"
+shader_path = sys.argv[3]
+
+lines = path.read_text().splitlines()
+out = []
+active_done = False
+inserted_after_comment = False
+
+def is_active_screen_shader_config(line: str) -> bool:
+    stripped = line.lstrip()
+    return (
+        not stripped.startswith("--")
+        and "config_set({[[decoration]]}, [[screen_shader]]" in stripped
+    )
+
+for line in lines:
+    stripped = line.lstrip()
+    indent = line[:len(line) - len(stripped)]
+
+    if is_active_screen_shader_config(line):
+        if enable and not active_done:
+            out.append(f'{indent}config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
+            active_done = True
+        else:
+            out.append(indent + "-- " + stripped)
+        continue
+
+    out.append(line)
+
+    if enable and not active_done and not inserted_after_comment and "screen_shader" in stripped and "/shaders/vibrance" in stripped:
+        out.append(f'{indent}config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
+        active_done = True
+        inserted_after_comment = True
+
+if enable and not active_done:
+    out.append("")
+    out.append("-- Added by vibrance_shader.sh")
+    out.append(f'config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
+
+path.write_text("\n".join(out) + "\n")
+PY
+}
+
+vibrance_is_active() {
+  if [[ -f "$HYPR_LUA" ]]; then
+    lua_vibrance_is_active
+    return $?
+  fi
+  conf_vibrance_is_active
+}
+
+set_vibrance_state() {
+  local enable="$1"
+  if [[ -f "$HYPR_LUA" ]]; then
+    set_lua_vibrance_state "$enable"
+  else
+    set_conf_vibrance_state "$enable"
+  fi
 }
 
 conf_vibrance_is_active() {
@@ -231,7 +328,7 @@ main() {
   local action="${1:-}"
   [[ -n "$action" ]] || die "usage: $0 up|down|toggle|off|set <val>|key <1..9|0>"
 
-  need_file "$CONF"
+  need_config
   need_file "$SHADER"
 
   local cur idx new_idx new want_enable
@@ -247,7 +344,7 @@ main() {
       set_shader_define "$new"
       want_enable=1
       [[ "$new" == "0.00" ]] && want_enable=0
-      set_conf_vibrance_state "$want_enable"
+      set_vibrance_state "$want_enable"
       reload_hypr
       notify_enabled_or_off "$want_enable" "$new"
       ;;
@@ -258,20 +355,25 @@ main() {
       set_shader_define "$new"
       want_enable=1
       [[ "$new" == "0.00" ]] && want_enable=0
-      set_conf_vibrance_state "$want_enable"
+      set_vibrance_state "$want_enable"
       reload_hypr
       notify_enabled_or_off "$want_enable" "$new"
       ;;
-    toggle|off)
-      if conf_vibrance_is_active; then
-        set_conf_vibrance_state 0
+    toggle)
+      if vibrance_is_active; then
+        set_vibrance_state 0
         reload_hypr
         notify "off"
       else
-        set_conf_vibrance_state 1
+        set_vibrance_state 1
         reload_hypr
         notify "$(read_vibrance)"
       fi
+      ;;
+    off)
+      set_vibrance_state 0
+      reload_hypr
+      notify "off"
       ;;
     set)
       [[ -n "${2:-}" ]] || die "usage: $0 set 0.35"
@@ -279,7 +381,7 @@ main() {
       set_shader_define "$new"
       want_enable=1
       [[ "$new" == "0.00" ]] && want_enable=0
-      set_conf_vibrance_state "$want_enable"
+      set_vibrance_state "$want_enable"
       reload_hypr
       notify_enabled_or_off "$want_enable" "$new"
       ;;
@@ -301,7 +403,7 @@ main() {
       set_shader_define "$new"
       want_enable=1
       [[ "$new" == "0.00" ]] && want_enable=0
-      set_conf_vibrance_state "$want_enable"
+      set_vibrance_state "$want_enable"
       reload_hypr
       notify_enabled_or_off "$want_enable" "$new"
       ;;

@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
 # ~/.config/hypr/scripts/hyprbars_toggle.sh
 #
-# Toggle hyprbars via hyprpm in a floating Alacritty.
-# If hyprbars isn't available yet, offer to add the official Hyprland plugins repo via hyprpm.
-# Pre-authenticates sudo once so hyprpm's internal sudo calls don't keep prompting.
+# Safer hyprbars toggle.
+# - Enabling can be applied immediately with hyprpm reload.
+# - Disabling is staged for next Hyprland restart to avoid hot-unloading hyprbars and crashing Hyprland.
 
 set -euo pipefail
 
@@ -20,13 +19,13 @@ HYPRPM_BIN="$(command -v hyprpm || true)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 LOCKFILE="${RUNTIME_DIR}/hyprbars-toggle.lockfile"
 
-# prevent double-tap spam
 if command -v flock >/dev/null 2>&1; then
   exec 9>"$LOCKFILE"
   flock -n 9 || exit 0
 fi
 
 TMP="${RUNTIME_DIR}/hyprbars-toggle.$$.$RANDOM.sh"
+
 cat >"$TMP" <<'BASH'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -44,14 +43,19 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# Cache sudo once so hyprpm's internal sudo calls don't keep prompting.
+pause_exit() {
+  printf '\nPress ENTER to close...'
+  read -r _ || true
+}
+
 if [[ -z "$SUDO_BIN" ]]; then
-  printf 'ERROR: sudo not found (hyprpm requires sudo for plugin install/enable steps).\n' >&2
+  printf 'ERROR: sudo not found. hyprpm requires sudo.\n' >&2
+  pause_exit
   exit 1
 fi
+
 "$SUDO_BIN" -v
 
-# Keep sudo timestamp alive while this terminal is open.
 (
   while true; do
     "$SUDO_BIN" -n true 2>/dev/null || true
@@ -68,6 +72,11 @@ repo_already_added() {
   "$HYPRPM_BIN" list 2>/dev/null | grep -qiE '(Repository[[:space:]]+hyprland-plugins:|hyprwm/hyprland-plugins|https://github.com/hyprwm/hyprland-plugins)'
 }
 
+hyprbars_loaded() {
+  [[ -n "$HYPRCTL_BIN" ]] || return 1
+  "$HYPRCTL_BIN" plugin list 2>/dev/null | grep -qiE '(^|[^a-zA-Z0-9_])hyprbars([^a-zA-Z0-9_]|$)'
+}
+
 install_official_plugins_repo() {
   printf '\n%s is not available yet.\n' "$PLUGIN"
   printf 'The Hyprland plugins repo is probably not added to hyprpm.\n\n'
@@ -81,50 +90,74 @@ install_official_plugins_repo() {
   read -r -p "Install Hyprland plugins now? [y/N] " ans
   case "${ans,,}" in
     y|yes) ;;
-    *) printf 'Cancelled. No changes made.\n'; exit 0 ;;
+    *) printf 'Cancelled. No changes made.\n'; pause_exit; exit 0 ;;
   esac
 
-  printf '\nhyprpm update\n'
   "$HYPRPM_BIN" update
 
-  printf '\nhyprpm add %s\n' "$REPO_URL"
   if ! "$HYPRPM_BIN" add "$REPO_URL"; then
     if repo_already_added; then
       printf '(repo already added)\n'
     else
       printf 'ERROR: failed to add plugins repo.\n' >&2
+      pause_exit
       exit 1
     fi
   fi
-
-  printf '\nhyprpm enable %s\n' "$PLUGIN"
-  "$HYPRPM_BIN" enable "$PLUGIN"
-
-  printf '\nhyprpm reload\n'
-  "$HYPRPM_BIN" reload
-
-  printf '\nInstalled and enabled.\n'
-  printf 'Press Super+Alt+T again to toggle hyprbars.\n'
-  exit 0
 }
 
-action="enable"
-if [[ -n "$HYPRCTL_BIN" ]]; then
-  if "$HYPRCTL_BIN" plugin list 2>/dev/null | grep -qiE '(^|[^a-zA-Z0-9_])hyprbars([^a-zA-Z0-9_]|$)'; then
-    action="disable"
-  fi
+printf '\nChecking hyprbars...\n\n'
+
+if hyprbars_loaded; then
+  printf 'hyprbars is currently loaded.\n'
+  printf 'Not hot-unloading it. Hot-unloading hyprbars can crash Hyprland.\n\n'
+  printf 'This will run:\n'
+  printf '  hyprpm disable hyprbars\n\n'
+  printf 'It will take effect after you log out and back in.\n\n'
+
+  local_ans=""
+  read -r -p "Disable hyprbars for next session? [y/N] " local_ans
+  case "${local_ans,,}" in
+    y|yes) ;;
+    *) printf 'Cancelled. No changes made.\n'; pause_exit; exit 0 ;;
+  esac
+
+  "$HYPRPM_BIN" disable "$PLUGIN"
+
+  printf '\nHyprbars disabled for next session.\n'
+  printf 'Log out and back in. Do not run hyprpm reload to hot-unload it.\n'
+
+  pause_exit
+  exit 0
 fi
 
-if [[ "$action" == "enable" ]]; then
-  if ! have_hyprbars_in_hyprpm; then
-    install_official_plugins_repo
-  fi
+printf 'hyprbars is not currently loaded.\n'
+
+if ! have_hyprbars_in_hyprpm; then
+  install_official_plugins_repo
 fi
 
-printf 'hyprpm %s %s\n' "$action" "$PLUGIN"
-"$HYPRPM_BIN" "$action" "$PLUGIN"
+printf '\nhyprpm enable %s\n' "$PLUGIN"
+"$HYPRPM_BIN" enable "$PLUGIN"
+
+printf '\nhyprpm reload\n'
 "$HYPRPM_BIN" reload
+
+if [[ -n "$HYPRCTL_BIN" ]]; then
+  printf '\nhyprctl reload\n'
+  "$HYPRCTL_BIN" reload || true
+
+  printf '\nLoaded plugins:\n\n'
+  "$HYPRCTL_BIN" plugin list 2>/dev/null || true
+
+  printf '\nConfig errors:\n\n'
+  "$HYPRCTL_BIN" configerrors || true
+fi
+
+printf '\nHyprbars enabled.\n'
+pause_exit
 BASH
+
 chmod +x "$TMP"
 
 exec "$ALACRITTY" \

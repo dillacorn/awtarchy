@@ -5,6 +5,7 @@
 # Single-run: wait for Steam main + Friends once, ensure Friends is RIGHT,
 # set split, exit.
 #
+# Hyprland 0.55 Lua-compatible hyprctl dispatch version.
 # Deps: hyprctl, jq
 
 set -euo pipefail
@@ -16,6 +17,26 @@ DEBUG="${DEBUG:-0}"
 
 log() {
   [ "$DEBUG" -eq 1 ] && printf '[splitratio_steam] %s\n' "$*" >&2 || true
+}
+
+lua_quote() {
+  local s="${1:-}"
+  s=${s//\\/\\\\}
+  s=${s//\'/\\\'}
+  printf "'%s'" "$s"
+}
+
+lua_ws_expr() {
+  local ws="${1:-}"
+  if [[ "$ws" =~ ^[1-9][0-9]*$ ]]; then
+    printf '%s' "$ws"
+  else
+    lua_quote "$ws"
+  fi
+}
+
+hypr_dispatch() {
+  hyprctl dispatch "$1"
 }
 
 clients_json() {
@@ -42,33 +63,13 @@ get_field() {
   clients_json | jq -r --arg a "$addr" ".[] | select(.address==\$a) | $jq_expr" 2>/dev/null || true
 }
 
-get_x() {
-  get_field "$1" '.at[0]'
-}
-
-get_y() {
-  get_field "$1" '.at[1]'
-}
-
-get_w() {
-  get_field "$1" '.size[0]'
-}
-
-get_h() {
-  get_field "$1" '.size[1]'
-}
-
-get_ws_id() {
-  get_field "$1" '.workspace.id'
-}
-
-get_floating() {
-  get_field "$1" '.floating'
-}
-
-get_fullscreen() {
-  get_field "$1" '.fullscreen'
-}
+get_x() { get_field "$1" '.at[0]'; }
+get_y() { get_field "$1" '.at[1]'; }
+get_w() { get_field "$1" '.size[0]'; }
+get_h() { get_field "$1" '.size[1]'; }
+get_ws_id() { get_field "$1" '.workspace.id'; }
+get_floating() { get_field "$1" '.floating'; }
+get_fullscreen() { get_field "$1" '.fullscreen'; }
 
 same_ws() {
   local a="$1" b="$2" wa wb
@@ -80,29 +81,62 @@ same_ws() {
 focus_addr() {
   local addr="$1"
   [ -n "$addr" ] || return 1
-  hyprctl dispatch focuswindow "address:$addr" >/dev/null 2>&1 || return 1
+  hypr_dispatch "hl.dsp.focus({ window = $(lua_quote "address:$addr") })" >/dev/null 2>&1
 }
 
-move_to_active_ws() {
-  hyprctl dispatch movewindow workspace active >/dev/null 2>&1 || true
+focus_ws() {
+  local ws="$1"
+  [ -n "$ws" ] || return 1
+  hypr_dispatch "hl.dsp.focus({ workspace = $(lua_ws_expr "$ws") })" >/dev/null 2>&1
+}
+
+move_focused_to_ws() {
+  local ws="$1"
+  [ -n "$ws" ] || return 1
+  hypr_dispatch "hl.dsp.window.move({ workspace = $(lua_ws_expr "$ws"), follow = false })" >/dev/null 2>&1
+}
+
+move_addr_to_ws() {
+  local addr="$1" ws="$2"
+  [ -n "$addr" ] && [ -n "$ws" ] || return 1
+  focus_addr "$addr" || return 1
+  move_focused_to_ws "$ws"
+}
+
+set_tiled_addr() {
+  local addr="$1"
+  [ -n "$addr" ] || return 1
+
+  # Try targeted first. If Hyprland rejects window= for this dispatcher,
+  # fall back to focusing the window and applying to activewindow.
+  hypr_dispatch "hl.dsp.window.float({ action = 'disable', window = $(lua_quote "address:$addr") })" >/dev/null 2>&1 \
+    || { focus_addr "$addr" && hypr_dispatch "hl.dsp.window.float({ action = 'disable' })" >/dev/null 2>&1; } \
+    || true
+}
+
+layout_msg() {
+  hypr_dispatch "hl.dsp.layout($(lua_quote "$1"))" >/dev/null 2>&1 || true
+}
+
+swap_window_dir() {
+  hypr_dispatch "hl.dsp.window.swap({ direction = $(lua_quote "$1") })" >/dev/null 2>&1 || true
 }
 
 ensure_tiled_same_ws() {
-  local steam_id="$1" friends_id="$2"
+  local steam_id="$1" friends_id="$2" target_ws
 
-  focus_addr "$steam_id" || true
-  move_to_active_ws
-  focus_addr "$friends_id" || true
-  move_to_active_ws
+  target_ws="$(get_ws_id "$steam_id")"
+  [[ -n "$target_ws" && "$target_ws" != "null" ]] || return 0
+
+  move_addr_to_ws "$steam_id" "$target_ws" || true
+  move_addr_to_ws "$friends_id" "$target_ws" || true
 
   if ! same_ws "$steam_id" "$friends_id"; then
-    focus_addr "$steam_id" || true
-    focus_addr "$friends_id" || true
-    move_to_active_ws
+    move_addr_to_ws "$friends_id" "$target_ws" || true
   fi
 
-  hyprctl dispatch settiled "address:$steam_id" >/dev/null 2>&1 || true
-  hyprctl dispatch settiled "address:$friends_id" >/dev/null 2>&1 || true
+  set_tiled_addr "$steam_id"
+  set_tiled_addr "$friends_id"
 }
 
 ensure_friends_right() {
@@ -118,7 +152,7 @@ ensure_friends_right() {
     fi
 
     focus_addr "$steam_id" || true
-    hyprctl dispatch layoutmsg swapsplit >/dev/null 2>&1 || true
+    layout_msg "swapsplit"
     sleep 0.10
 
     sx="$(get_x "$steam_id")"
@@ -128,7 +162,7 @@ ensure_friends_right() {
     fi
 
     focus_addr "$steam_id" || true
-    hyprctl dispatch swapwindow r >/dev/null 2>&1 || true
+    swap_window_dir "r"
     sleep 0.10
 
     sx="$(get_x "$steam_id")"
@@ -167,19 +201,11 @@ apply_splitratio_exact() {
 
   focus_addr "$steam_id" || return 1
 
-  # Preferred path on pre-0.54 and 0.54.1+.
-  hyprctl dispatch splitratio exact "$SPLIT" >/dev/null 2>&1 || true
+  # Hyprland 0.55 Lua: layout-specific messages go through hl.dsp.layout().
+  layout_msg "splitratio exact $SPLIT"
   sleep 0.10
   if ratio_applied "$steam_id" "$friends_id"; then
-    log "splitratio exact dispatcher worked"
-    return 0
-  fi
-
-  # 0.54.x layoutmsg path. 0.54.0 often returned ok while doing nothing.
-  hyprctl dispatch layoutmsg "splitratio exact $SPLIT" >/dev/null 2>&1 || true
-  sleep 0.10
-  if ratio_applied "$steam_id" "$friends_id"; then
-    log "layoutmsg splitratio exact worked"
+    log "layout splitratio exact worked"
     return 0
   fi
 
@@ -206,11 +232,11 @@ apply_resizeactive_fallback() {
 
   [ "$target_w" -gt 0 ] || return 1
 
-  hyprctl dispatch resizeactive "exact $target_w $sh" >/dev/null 2>&1 || true
+  hypr_dispatch "hl.dsp.window.resize({ x = $target_w, y = $sh, relative = false })" >/dev/null 2>&1 || true
   sleep 0.10
 
   if ratio_applied "$steam_id" "$friends_id"; then
-    log "resizeactive exact fallback worked"
+    log "window resize exact fallback worked"
     return 0
   fi
 

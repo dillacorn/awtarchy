@@ -56,3 +56,6 @@ application/x-extension-xhtml=firefox.desktop;
 application/x-extension-xht=firefox.desktop;
 application/x-shellscript=micro.desktop;
 video/webm=mpv.desktop;
+application/x-zerosize=micro.desktop;
+model/stl=micro.desktop;
+application/x-trash=micro.desktop;
