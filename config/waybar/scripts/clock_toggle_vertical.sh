@@ -1,20 +1,27 @@
 #!/usr/bin/env bash
+
 # ~/.config/waybar/scripts/clock_toggle_vertical.sh
 # Splits clock_toggle.sh JSON text into icon|a|b for vertical instances.
 #
 # clock_toggle.sh .text expected:
-#   " HH:MM" or " MM-DD" (icon + space + value)
+#   " HH:MM" or " MM-DD"
 
 set -euo pipefail
 
 mode="${1:-}"
 SRC="${XDG_CONFIG_HOME:-$HOME/.config}/waybar/scripts/clock_toggle.sh"
+
+if [[ "$mode" == "toggle" ]]; then
+  exec "$SRC" toggle
+fi
+
 json="$("$SRC" 2>/dev/null || true)"
 
-command -v jq >/dev/null 2>&1 || { printf '%s\n' "$json"; exit 0; }
+command -v jq >/dev/null 2>&1 || {
+  printf '%s\n' "$json"
+  exit 0
+}
 
-# Extract pieces from `.text`
-# Returns empty strings if format unexpected.
 jq -c --arg mode "$mode" '
   def split_text:
     (.text // "") as $t

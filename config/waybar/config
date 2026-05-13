@@ -18,7 +18,7 @@
       "hyprland/window"
     ],
     "modules-right": [
-      "idle_inhibitor",
+      "custom/idle_inhibitor",
       "cpu",
       "custom/cputemp",
       "memory",
@@ -147,12 +147,14 @@
         "Wiremix"
       ]
     },
-    "idle_inhibitor": {
-      "format": "{icon}",
-      "format-icons": {
-        "activated": "",
-        "deactivated": ""
-      }
+    "custom/idle_inhibitor": {
+      "exec": "~/.config/waybar/scripts/idle_inhibitor_global.sh",
+      "interval": 30,
+      "return-type": "json",
+      "signal": 13,
+      "on-click": "~/.config/waybar/scripts/idle_inhibitor_global.sh toggle",
+      "on-click-right": "~/.config/waybar/scripts/idle_inhibitor_global.sh toggle",
+      "tooltip": true
     },
     "tray": {
       "icon-size": 14,

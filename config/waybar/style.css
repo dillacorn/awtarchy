@@ -26,8 +26,13 @@ window#waybar {
   margin: 0;
 }
 
-window#waybar.top    { margin: 0; }
-window#waybar.bottom { margin: 0; }
+window#waybar.top {
+  margin: 0;
+}
+
+window#waybar.bottom {
+  margin: 0;
+}
 
 /* hard reset module container spacing */
 .modules-left > *,
@@ -43,6 +48,7 @@ window#waybar.bottom { margin: 0; }
   margin-right: 0;
   padding-right: 0;
 }
+
 #workspaces button {
   background: transparent;
   color: @color-default;
@@ -50,13 +56,16 @@ window#waybar.bottom { margin: 0; }
   border: 0;
   margin: 0;
 }
+
 #workspaces button:hover {
   background: rgba(198, 208, 245, 0.08);
 }
+
 #workspaces button.active {
   background: rgba(198, 208, 245, 0.10);
   color: @color-default;
 }
+
 #workspaces button.urgent {
   background: @bg-urgent;
   color: @color-dark;
@@ -69,6 +78,7 @@ window#waybar.bottom { margin: 0; }
   margin-left: 0;
   margin-right: 6px;
 }
+
 #custom-ws-hub,
 #custom-ws-up,
 #custom-ws-down,
@@ -79,6 +89,7 @@ window#waybar.bottom { margin: 0; }
   padding: 0 7px;
   color: @color-default;
 }
+
 #custom-ws-hub:hover,
 #custom-ws-up:hover,
 #custom-ws-down:hover,
@@ -88,7 +99,7 @@ window#waybar.bottom { margin: 0; }
 }
 
 /* === Unified flat modules === */
-#idle_inhibitor,
+#custom-idle_inhibitor,
 #scratchpad,
 #submap,
 #window,
@@ -111,9 +122,19 @@ window#waybar.bottom { margin: 0; }
   color: @color-default;
 }
 
-/* idle inhibitor hover */
-#idle_inhibitor:hover {
+/* idle inhibitor */
+#custom-idle_inhibitor {
+  min-width: 18px;
+}
+
+#custom-idle_inhibitor:hover {
   background: rgba(115, 121, 148, 0.25);
+}
+
+#custom-idle_inhibitor.activated,
+#custom-idle_inhibitor.deactivated,
+#custom-idle_inhibitor.error {
+  color: @color-default;
 }
 
 /* center window text */
@@ -126,6 +147,7 @@ window#waybar.bottom { margin: 0; }
   padding: 0 10px 0 8px;
   margin-right: 2px;
 }
+
 #custom-power:hover {
   background: rgba(115, 121, 148, 0.25);
 }
@@ -142,6 +164,7 @@ window#waybar.bottom { margin: 0; }
   background: transparent;
   color: @bg-charging;
 }
+
 #battery.critical:not(.charging) {
   background: transparent;
   color: @bg-critical;
@@ -157,20 +180,28 @@ window#waybar.bottom { margin: 0; }
 #tray {
   padding: 0 6px;
 }
-#tray > .passive { -gtk-icon-effect: dim; }
-#tray > .needs-attention { -gtk-icon-effect: highlight; }
+
+#tray > .passive {
+  -gtk-icon-effect: dim;
+}
+
+#tray > .needs-attention {
+  -gtk-icon-effect: highlight;
+}
 
 /* taskbar flat */
 #taskbar {
   background: transparent;
   padding: 0 4px;
 }
+
 #taskbar.empty {
   padding: 0;
   background: transparent;
   margin: 0;
   box-shadow: none;
 }
+
 #taskbar button {
   background: transparent;
   color: @color-default;
@@ -178,22 +209,33 @@ window#waybar.bottom { margin: 0; }
   margin: 0 2px;
   border: 0;
 }
+
 #taskbar button:hover {
   background: rgba(198, 208, 245, 0.08);
 }
+
 #taskbar button.active {
   background: rgba(198, 208, 245, 0.10);
 }
+
 #taskbar button.urgent {
   background: @bg-urgent;
   color: @color-dark;
 }
+
 #taskbar .taskbar-title {
   font-size: 0;
   color: transparent;
 }
 
-/* clocks */
+/* custom clock toggle */
+#custom-clock-toggle.date,
+#custom-clock-toggle.time {
+  padding: 0 6px;
+  margin: 0;
+}
+
+/* legacy clock selector kept harmless */
 #clock.date,
 #clock.time {
   padding: 0 6px;
@@ -207,7 +249,7 @@ window#waybar.right {
 }
 
 /* tighten common modules when vertical */
-window#waybar.left #idle_inhibitor,
+window#waybar.left #custom-idle_inhibitor,
 window#waybar.left #scratchpad,
 window#waybar.left #submap,
 window#waybar.left #window,
@@ -224,7 +266,7 @@ window#waybar.left #custom-clipboard,
 window#waybar.left #custom-power,
 window#waybar.left #taskbar,
 window#waybar.left #custom-clock-toggle,
-window#waybar.right #idle_inhibitor,
+window#waybar.right #custom-idle_inhibitor,
 window#waybar.right #scratchpad,
 window#waybar.right #submap,
 window#waybar.right #window,
@@ -252,6 +294,8 @@ window#waybar.right #workspaces button {
 }
 
 /* vertical fixed-width columns so icons/values visually align */
+window#waybar.left #custom-idle_inhibitor,
+window#waybar.right #custom-idle_inhibitor,
 window#waybar.left #custom-cputemp,
 window#waybar.right #custom-cputemp,
 window#waybar.left #wireplumber,
