@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ~/.config/hypr/scripts/launch_handler.sh
-# Ultra-light Hyprland toggle for FLOATING utility windows (no tiles touched).
+# Ultra-light Hyprland Lua toggle for FLOATING utility windows (no tiles touched).
 # - If a matching floating client exists on the focused workspace: close one (the most recent).
 # - Else if a matching floating client exists on another workspace: close all remote, then launch here.
 # - Else launch here.
@@ -108,8 +108,14 @@ proc_match_pid() {
 }
 
 close_addr() {
-  local a="$1"
-  [[ -n "$a" ]] && hyprctl dispatch closewindow "address:$a" >/dev/null 2>&1 || true
+  local a="$1" lua_expr
+  [[ -n "$a" ]] || return 0
+
+  # Hyprland 0.55+ Lua dispatcher replacement for:
+  #   hyprctl dispatch closewindow address:$a
+  # close(window?) accepts a selector such as address:0x...
+  printf -v lua_expr 'hl.dsp.window.close({ window = "address:%s" })' "$a"
+  hyprctl dispatch "$lua_expr" >/dev/null 2>&1 || true
 }
 
 # -------- classify matches (single pass over candidates) --------
