@@ -53,32 +53,32 @@
       "format": "🖱",
       "tooltip": true,
       "tooltip-format": "Toggle mouse submap",
-      "on-click": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl dispatch 'hl.dsp.submap(\\\"reset\\\")'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl dispatch 'hl.dsp.submap(\\\"mouse\\\")'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\"",
-      "on-click-right": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl dispatch 'hl.dsp.submap(\\\"reset\\\")'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl dispatch 'hl.dsp.submap(\\\"mouse\\\")'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\""
+      "on-click": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"reset\\\"))'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"mouse\\\"))'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\"",
+      "on-click-right": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"reset\\\"))'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"mouse\\\"))'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\""
     },
     "custom/ws-left": {
       "format": "←",
       "tooltip": true,
       "tooltip-format": "Move workspace LEFT",
-      "on-click": "hyprctl dispatch 'hl.dsp.workspace.move({ monitor = \\\"l\\\" })'"
+      "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.move({ monitor = \"l\" }))'"
     },
     "custom/ws-right": {
       "format": "→",
       "tooltip": true,
       "tooltip-format": "Move workspace RIGHT",
-      "on-click": "hyprctl dispatch 'hl.dsp.workspace.move({ monitor = \\\"r\\\" })'"
+      "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.move({ monitor = \"r\" }))'"
     },
     "custom/ws-up": {
       "format": "↑",
       "tooltip": true,
       "tooltip-format": "Move workspace UP",
-      "on-click": "hyprctl dispatch 'hl.dsp.workspace.move({ monitor = \\\"u\\\" })'"
+      "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.move({ monitor = \"u\" }))'"
     },
     "custom/ws-down": {
       "format": "↓",
       "tooltip": true,
       "tooltip-format": "Move workspace DOWN",
-      "on-click": "hyprctl dispatch 'hl.dsp.workspace.move({ monitor = \\\"d\\\" })'"
+      "on-click": "hyprctl eval 'hl.dispatch(hl.dsp.workspace.move({ monitor = \"d\" }))'"
     },
     "hyprland/workspaces": {
       "all-outputs": false,
@@ -115,7 +115,7 @@
       "format": "{}",
       "tooltip": true,
       "tooltip-format": "Current submap: {} (click to reset)",
-      "on-click": "bash -lc \"truncate -s 0 /tmp/hypr-submap; hyprctl dispatch 'hl.dsp.submap(\\\"reset\\\")'\""
+      "on-click": "bash -lc \"truncate -s 0 /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\"reset\"))'\""
     },
     "hyprland/window": {
       "format": "{title}",
