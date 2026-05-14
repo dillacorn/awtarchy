@@ -3,22 +3,23 @@ set -euo pipefail
 
 # vibrance_shader.sh
 # - Edits ~/.config/hypr/shaders/vibrance (#define VIBRANCE X)
-# - Toggles ONLY the screen_shader vibrance setting in hyprland.lua or hyprland.conf.
-# - Lua mode edits active config_set({[[decoration]]}, [[screen_shader]], [[...]]) lines.
-# - Conf fallback comments/uncomments screen_shader lines.
-# - When enabling, comments any other active screen_shader lines (pick-one behavior).
-#
-# Usage:
-#   vibrance_shader.sh up
-#   vibrance_shader.sh down
-#   vibrance_shader.sh toggle
-#   vibrance_shader.sh off
-#   vibrance_shader.sh set 0.35
-#   vibrance_shader.sh key 1..9|0
+# - Supports native Hyprland Lua: hl.config({ decoration = { screen_shader = "..." } })
+# - Still supports old hyprland.conf screen_shader lines as fallback.
 
 HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
-CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
-SHADER="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance"
+HYPR_CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
+SHADER="${VIBRANCE_SHADER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance}"
+
+if [[ -f "$HYPR_LUA" ]]; then
+  CONF="$HYPR_LUA"
+  CONF_MODE="lua"
+elif [[ -f "$HYPR_CONF" ]]; then
+  CONF="$HYPR_CONF"
+  CONF_MODE="conf"
+else
+  CONF="$HYPR_LUA"
+  CONF_MODE="lua"
+fi
 
 LEVELS=(0.00 0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95)
 
@@ -44,7 +45,7 @@ nearest_index() {
   local cur="$1"
   local best_i=0
   local best_d="999999"
-  local d
+  local d i
   for i in "${!LEVELS[@]}"; do
     d="$(awk -v a="$cur" -v b="${LEVELS[$i]}" 'BEGIN{d=a-b; if(d<0)d=-d; printf "%.6f", d}')"
     if awk -v d="$d" -v bd="$best_d" 'BEGIN{exit !(d < bd)}'; then
@@ -59,7 +60,7 @@ set_shader_define() {
   local new="$1"
 
   if grep -Eq '^[[:space:]]*#define[[:space:]]+VIBRANCE[[:space:]]+' "$SHADER"; then
-    perl -i -pe "s/^[ \t]*#define[ \t]+VIBRANCE[ \t]+[0-9.]+[ \t]*\$/#define VIBRANCE $new/" "$SHADER"
+    perl -i -pe "s/^[ \t]*#define[ \t]+VIBRANCE[ \t]+[-0-9.]+[ \t]*\$/#define VIBRANCE $new/" "$SHADER"
   else
     awk -v new="$new" '
       BEGIN{ins=0}
@@ -85,103 +86,123 @@ set_shader_define() {
     {
       if (prev_define && $0 ~ /^[ \t]*void[ \t]+main[ \t]*\(/) print ""
       print
-      prev_define = ($0 ~ /^[ \t]*#define[ \t]+VIBRANCE[ \t]+[0-9.]+[ \t]*$/) ? 1 : 0
+      prev_define = ($0 ~ /^[ \t]*#define[ \t]+VIBRANCE[ \t]+[-0-9.]+[ \t]*$/) ? 1 : 0
     }
   ' "$SHADER" >"${SHADER}.tmp" && mv -f "${SHADER}.tmp" "$SHADER"
 }
 
-config_exists() {
-  [[ -f "$HYPR_LUA" || -f "$CONF" ]]
-}
-
-need_config() {
-  config_exists || die "missing Hyprland config: $HYPR_LUA or $CONF"
-}
-
 lua_vibrance_is_active() {
-  python - "$HYPR_LUA" <<'PY'
+  python - "$CONF" <<'PY_LUA_ACTIVE'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text()
+line_re = re.compile(r'^\s*hl\.config\(\{\s*decoration\s*=\s*\{\s*screen_shader\s*=\s*("(?:\\.|[^"\\])*")\s*\}\s*\}\s*\)\s*$', re.M)
+
+for m in line_re.finditer(text):
+    raw = m.group(1)
+    try:
+        value = bytes(raw[1:-1], "utf-8").decode("unicode_escape")
+    except Exception:
+        value = raw[1:-1]
+    if value.rstrip().endswith("/shaders/vibrance"):
+        raise SystemExit(0)
+
+raise SystemExit(1)
+PY_LUA_ACTIVE
+}
+
+set_lua_vibrance_state() {
+  local enable="$1"
+  python - "$CONF" "$enable" "$HOME/.config/hypr/shaders/vibrance" <<'PY_LUA_SET'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-text = path.read_text()
-pat = re.compile(r'^\s*config_set\(\{\[\[decoration\]\]\},\s*\[\[screen_shader\]\],\s*\[\[(.*?)\]\]\)', re.M)
-for m in pat.finditer(text):
-    value = m.group(1).strip()
-    if value.endswith('/shaders/vibrance'):
-        raise SystemExit(0)
-raise SystemExit(1)
-PY
-}
-
-set_lua_vibrance_state() {
-  local enable="$1" # 1 enable, 0 disable
-  local shader_path="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance"
-
-  python - "$HYPR_LUA" "$enable" "$shader_path" <<'PY'
-from pathlib import Path
-import sys
-
-path = Path(sys.argv[1])
 enable = sys.argv[2] == "1"
-shader_path = sys.argv[3]
+default_path = sys.argv[3]
 
-lines = path.read_text().splitlines()
+lines = path.read_text().splitlines(keepends=True)
+
+shader_re = re.compile(
+    r'^(?P<indent>\s*)(?P<comment>--\s*)?'
+    r'hl\.config\(\{\s*decoration\s*=\s*\{\s*screen_shader\s*=\s*'
+    r'(?P<quote>"(?:\\.|[^"\\])*")'
+    r'\s*\}\s*\}\s*\)(?P<trail>\s*)$'
+)
+
+legacy_config_set_re = re.compile(
+    r'^\s*(?:--\s*)?config_set\(\{\[\[decoration\]\]\},\s*\[\[screen_shader\]\],.*$'
+)
+
+def decode_lua_string(raw: str) -> str:
+    try:
+        return bytes(raw[1:-1], "utf-8").decode("unicode_escape")
+    except Exception:
+        return raw[1:-1]
+
+def lua_string(value: str) -> str:
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
+
 out = []
-active_done = False
-inserted_after_comment = False
-
-def is_active_screen_shader_config(line: str) -> bool:
-    stripped = line.lstrip()
-    return (
-        not stripped.startswith("--")
-        and "config_set({[[decoration]]}, [[screen_shader]]" in stripped
-    )
+vib_found = False
+vib_done = False
+first_shader_index = None
+insert_before_index = None
 
 for line in lines:
-    stripped = line.lstrip()
-    indent = line[:len(line) - len(stripped)]
+    body = line[:-1] if line.endswith("\n") else line
+    newline = "\n" if line.endswith("\n") else ""
 
-    if is_active_screen_shader_config(line):
-        if enable and not active_done:
-            out.append(f'{indent}config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
-            active_done = True
-        else:
-            out.append(indent + "-- " + stripped)
+    # Delete obsolete helper-era shader lines. They are broken without hyprlang.lua/config_set().
+    if legacy_config_set_re.match(body):
         continue
+
+    m = shader_re.match(body)
+    if m:
+        if first_shader_index is None:
+            first_shader_index = len(out)
+
+        value = decode_lua_string(m.group("quote"))
+        is_vibrance = value.rstrip().endswith("/shaders/vibrance")
+        indent = m.group("indent")
+        trail = m.group("trail")
+
+        if is_vibrance:
+            vib_found = True
+            if enable and not vib_done:
+                out.append(f'{indent}hl.config({{ decoration = {{ screen_shader = {lua_string(default_path)} }} }}){trail}{newline}')
+                vib_done = True
+            else:
+                out.append(f'{indent}-- hl.config({{ decoration = {{ screen_shader = {lua_string(default_path)} }} }}){trail}{newline}')
+            continue
+
+        # When enabling vibrance, comment every other active shader line.
+        if enable and not m.group("comment"):
+            out.append(f'{indent}-- {body[len(indent):]}{newline}')
+        else:
+            out.append(line)
+        continue
+
+    if insert_before_index is None and "Shaders that require" in body:
+        insert_before_index = len(out)
 
     out.append(line)
 
-    if enable and not active_done and not inserted_after_comment and "screen_shader" in stripped and "/shaders/vibrance" in stripped:
-        out.append(f'{indent}config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
-        active_done = True
-        inserted_after_comment = True
+if enable and not vib_found:
+    new_line = f'    hl.config({{ decoration = {{ screen_shader = {lua_string(default_path)} }} }})\n'
+    if insert_before_index is not None:
+        out.insert(insert_before_index, new_line)
+    elif first_shader_index is not None:
+        out.insert(first_shader_index, new_line)
+    else:
+        out.append("\n-- Shaders\n")
+        out.append(new_line)
 
-if enable and not active_done:
-    out.append("")
-    out.append("-- Added by vibrance_shader.sh")
-    out.append(f'config_set({{[[decoration]]}}, [[screen_shader]], [[{shader_path}]])')
-
-path.write_text("\n".join(out) + "\n")
-PY
-}
-
-vibrance_is_active() {
-  if [[ -f "$HYPR_LUA" ]]; then
-    lua_vibrance_is_active
-    return $?
-  fi
-  conf_vibrance_is_active
-}
-
-set_vibrance_state() {
-  local enable="$1"
-  if [[ -f "$HYPR_LUA" ]]; then
-    set_lua_vibrance_state "$enable"
-  else
-    set_conf_vibrance_state "$enable"
-  fi
+path.write_text("".join(out))
+PY_LUA_SET
 }
 
 conf_vibrance_is_active() {
@@ -203,7 +224,7 @@ conf_vibrance_is_active() {
 }
 
 set_conf_vibrance_state() {
-  local enable="$1" # 1 enable, 0 disable
+  local enable="$1"
   local tmp default_path
   tmp="$(mktemp)"
   default_path="${HOME}/.config/hypr/shaders/vibrance"
@@ -238,26 +259,18 @@ set_conf_vibrance_state() {
       return (p ~ /\/shaders\/vibrance$/) ? 1 : 0
     }
 
-    BEGIN{
-      vib_found=0
-      first_vib_done=0
-      indent_guess=""
-    }
+    BEGIN{ vib_found=0; first_vib_done=0; indent_guess="" }
 
     {
       line=strip_cr($0)
-
       if (indent_guess=="" && line ~ /^[ \t]*#?[ \t]*screen_shader[ \t]*=/) indent_guess=indent_of(line)
 
       if (is_shader_line(line)) {
         if (is_vibrance(line)) {
           vib_found=1
-
           ind=indent_of(line)
           rest=substr(line, length(ind)+1)
-
           if (enable=="1") {
-            # first vibrance line becomes ACTIVE, any other vibrance lines become COMMENTED
             if (!first_vib_done) {
               sub(/^#[ \t]*/, "", rest)
               print ind rest
@@ -269,22 +282,18 @@ set_conf_vibrance_state() {
             }
             next
           } else {
-            # disable: comment ALL vibrance lines
             if (rest !~ /^#/) rest="#" rest
             sub(/^##+/, "#", rest)
             print ind rest
             next
           }
-        } else {
-          # other shaders
-          if (enable=="1" && shader_is_active(line)) {
-            ind=indent_of(line)
-            rest=substr(line, length(ind)+1)
-            if (rest !~ /^#/) rest="#" rest
-            sub(/^##+/, "#", rest)
-            print ind rest
-            next
-          }
+        } else if (enable=="1" && shader_is_active(line)) {
+          ind=indent_of(line)
+          rest=substr(line, length(ind)+1)
+          if (rest !~ /^#/) rest="#" rest
+          sub(/^##+/, "#", rest)
+          print ind rest
+          next
         }
       }
 
@@ -300,6 +309,22 @@ set_conf_vibrance_state() {
   ' "$CONF" >"$tmp"
 
   mv -f "$tmp" "$CONF"
+}
+
+vibrance_is_active() {
+  if [[ "$CONF_MODE" == "lua" ]]; then
+    lua_vibrance_is_active
+  else
+    conf_vibrance_is_active
+  fi
+}
+
+set_vibrance_state() {
+  if [[ "$CONF_MODE" == "lua" ]]; then
+    set_lua_vibrance_state "$1"
+  else
+    set_conf_vibrance_state "$1"
+  fi
 }
 
 reload_hypr() {
@@ -328,7 +353,7 @@ main() {
   local action="${1:-}"
   [[ -n "$action" ]] || die "usage: $0 up|down|toggle|off|set <val>|key <1..9|0>"
 
-  need_config
+  need_file "$CONF"
   need_file "$SHADER"
 
   local cur idx new_idx new want_enable

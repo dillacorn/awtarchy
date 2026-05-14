@@ -178,18 +178,23 @@ refresh_vibrance() {
   fi
 
   if [[ -f "$HYPR_LUA" ]]; then
-    if python - "$HYPR_LUA" <<'PY' >/dev/null 2>&1
+    if python - "$HYPR_LUA" <<'PY_QS_VIB' >/dev/null 2>&1
 from pathlib import Path
 import re
 import sys
 
 text = Path(sys.argv[1]).read_text()
-pat = re.compile(r'^\s*config_set\(\{\[\[decoration\]\]\},\s*\[\[screen_shader\]\],\s*\[\[(.*?)\]\]\)', re.M)
-for m in pat.finditer(text):
-    if m.group(1).strip().endswith('/shaders/vibrance'):
+line_re = re.compile(r'^\s*hl\.config\(\{\s*decoration\s*=\s*\{\s*screen_shader\s*=\s*("(?:\\.|[^"\\])*")\s*\}\s*\}\s*\)\s*$', re.M)
+for m in line_re.finditer(text):
+    raw = m.group(1)
+    try:
+        value = bytes(raw[1:-1], "utf-8").decode("unicode_escape")
+    except Exception:
+        value = raw[1:-1]
+    if value.rstrip().endswith('/shaders/vibrance'):
         raise SystemExit(0)
 raise SystemExit(1)
-PY
+PY_QS_VIB
     then
       VIB_ENABLED="1"
     else
