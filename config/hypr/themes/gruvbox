@@ -73,73 +73,70 @@ ALACRITTY_CONF="$HOME/.config/alacritty/alacritty.toml"
 SPEEDCRUNCH_INI="$HOME/.config/SpeedCrunch/SpeedCrunch.ini"
 
 ###########   HELPERS   ###########
-set_hypr_lua_config() {
-    local section="$1"
-    local key="$2"
-    local value="$3"
+set_hypr_lua_border_colors() {
+    local active_border="$1"
+    local inactive_border="$2"
 
-    python - "$HYPR_LUA" "$section" "$key" "$value" <<'PY'
+    python - "$HYPR_LUA" "$active_border" "$inactive_border" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-section = sys.argv[2]
-key = sys.argv[3]
-value = sys.argv[4]
+active = f"rgba({sys.argv[2]})"
+inactive = f"rgba({sys.argv[3]})"
 
 text = path.read_text()
 
-section_re = re.escape(section)
-key_re = re.escape(key)
+def lua_quote(value: str) -> str:
+    return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-pattern = re.compile(
-    rf'config_set\(\{{\[\[{section_re}\]\]\}},\s*\[\[{key_re}\]\],\s*\[\[.*?\]\]\)',
-    re.DOTALL,
-)
+def replace_key(text: str, key: str, value: str) -> tuple[str, int]:
+    pattern = re.compile(
+        r'(^[ \t]*hl\.config\(\{\s*general\s*=\s*\{\s*col\s*=\s*\{\s*'
+        + re.escape(key)
+        + r'\s*=\s*)"[^"]*"(\s*\}\s*\}\s*\}\s*\)\s*$)',
+        re.MULTILINE,
+    )
 
-replacement = f'config_set({{[[{section}]]}}, [[{key}]], [[{value}]])'
+    text, count = pattern.subn(
+        lambda m: m.group(1) + lua_quote(value) + m.group(2),
+        text,
+    )
 
-text, count = pattern.subn(replacement, text)
+    comment_pattern = re.compile(
+        r'(^[ \t]*--\s*col\.'
+        + re.escape(key)
+        + r'\s*=\s*)rgba\([^)]+\)',
+        re.MULTILINE,
+    )
 
-if count == 0:
-    raise SystemExit(f"ERROR: did not find Lua config key: {section}.{key}")
+    text = comment_pattern.sub(
+        lambda m: m.group(1) + value,
+        text,
+    )
 
-path.write_text(text)
-PY
-}
+    return text, count
 
-set_hypr_lua_comment() {
-    local key="$1"
-    local value="$2"
+text, active_count = replace_key(text, "active_border", active)
+text, inactive_count = replace_key(text, "inactive_border", inactive)
 
-    python - "$HYPR_LUA" "$key" "$value" <<'PY'
-from pathlib import Path
-import re
-import sys
+missing = []
+if active_count == 0:
+    missing.append("general.col.active_border")
+if inactive_count == 0:
+    missing.append("general.col.inactive_border")
 
-path = Path(sys.argv[1])
-key = sys.argv[2]
-value = sys.argv[3]
+if missing:
+    raise SystemExit("ERROR: did not find native Lua config key(s): " + ", ".join(missing))
 
-text = path.read_text()
-
-pattern = re.compile(rf'-- {re.escape(key)} = rgba\([^)]+\)')
-replacement = f'-- {key} = {value}'
-
-text = pattern.sub(replacement, text)
 path.write_text(text)
 PY
 }
 
 apply_hyprland_colors() {
     if [[ -f "$HYPR_LUA" ]]; then
-        set_hypr_lua_config "general" "col.active_border" "rgba(${NEW_ACTIVE_BORDER})"
-        set_hypr_lua_config "general" "col.inactive_border" "rgba(${NEW_INACTIVE_BORDER})"
-
-        # Keep preserved original comments visually synced too.
-        set_hypr_lua_comment "col.active_border" "rgba(${NEW_ACTIVE_BORDER})"
-        set_hypr_lua_comment "col.inactive_border" "rgba(${NEW_INACTIVE_BORDER})"
+        set_hypr_lua_border_colors "$NEW_ACTIVE_BORDER" "$NEW_INACTIVE_BORDER"
 
         lua -e 'assert(loadfile(os.getenv("HOME") .. "/.config/hypr/hyprland.lua"))' >/dev/null
         command -v hyprctl >/dev/null 2>&1 && hyprctl reload >/dev/null || true
@@ -148,7 +145,7 @@ apply_hyprland_colors() {
 
     if [[ -f "$HYPR_CONF" ]]; then
         sed -i \
-            -e "s/^ *col\.active_border *= *.*/col.active_border = rgba(${NEW_ACTIVE_BORDER})/"  \
+            -e "s/^ *col\.active_border *= *.*/col.active_border = rgba(${NEW_ACTIVE_BORDER})/" \
             -e "s/^ *col\.inactive_border *= *.*/col.inactive_border = rgba(${NEW_INACTIVE_BORDER})/" \
             "$HYPR_CONF"
 
