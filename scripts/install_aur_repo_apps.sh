@@ -14,6 +14,7 @@ PACKAGES_AUR=(
   wlogout
   qimgv-git
   alacritty-graphics
+  waybar-git
 )
 
 # ──────────────────────────────────────────────────────────────────────────────
