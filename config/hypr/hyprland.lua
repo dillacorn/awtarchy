@@ -48,16 +48,16 @@ hl.env("GAMESCOPE_WSI", "vk_wayland")
 
 -- Optional/problem-specific environment toggles.
 -- hl.env("WLR_RENDERER_ALLOW_SOFTWARE", "0")
--- hl.env("WLR_DRM_NO_ATOMIC", "1") -- Can help with some GPUs
+-- hl.env("WLR_DRM_NO_ATOMIC", "1") -- Old wlroots-era workaround; do not use on current Hyprland unless you know you need it.
 -- hl.env("HYPRLAND_NO_RT", "1") -- Disable realtime scheduling if having issues
--- hl.env("__GL_GSYNC_ALLOWED", "1")
--- hl.env("__GL_VRR_ALLOWED", "1")
+-- hl.env("__GL_GSYNC_ALLOWED", "1") -- Optional NVIDIA VRR/G-Sync toggle
+-- hl.env("__GL_VRR_ALLOWED", "0") -- Optional NVIDIA Adaptive Sync toggle; 0 is safer for some games
 
 -- NVIDIA/proprietary-driver-specific toggles.
+-- hl.env("GBM_BACKEND", "nvidia-drm") -- NVIDIA GBM backend
 -- hl.env("__GLX_VENDOR_LIBRARY_NAME", "nvidia") -- NVIDIA GLX vendor
 -- hl.env("LIBVA_DRIVER_NAME", "nvidia") -- NVIDIA VA-API driver
--- hl.env("GBM_BACKEND", "nvidia-drm") -- NVIDIA GBM backend
-
+-- hl.env("NVD_BACKEND", "direct") -- Optional: enable only with libva-nvidia-driver / libva-nvidia-driver installed
 
 -- ───────────────────────────────────────────────────────────────────────────────
 -- PERMISSIONS (requires Hyprland restart after edits)
@@ -190,12 +190,15 @@ hl.config({ general = { col = { inactive_border = "rgba(4b4b4bff)" } } })
     hl.config({ render = { cm_auto_hdr = 1 } })
 
 
--- opengl {
---     nvidia_anti_flicker = true
--- }
+-- hl.config({
+--     opengl = {
+--         nvidia_anti_flicker = true,
+--     },
+-- })
 
     hl.config({ cursor = { sync_gsettings_theme = true } })
     hl.config({ cursor = { no_hardware_cursors = 2 } })
+    hl.config({ cursor = { use_cpu_buffer = 2 } })
     hl.config({ cursor = { zoom_disable_aa = true } })
     hl.config({ cursor = { no_warps = false } })
     hl.config({ cursor = { persistent_warps = false } })
