@@ -35,27 +35,6 @@ hl.monitor({
     vrr = 0,
 })
 
-hl.monitor({
-    output = "DP-3",
-    mode = "1920x1080@240",
-    position = "0x-1080",
-    scale = 1,
-    vrr = 0,
-})
-
-hl.monitor({
-    output = "DP-1",
-    mode = "1920x1080@400",
-    position = "0x0",
-    scale = 1,
-    vrr = 0,
-})
-
--- Wake ViewSonic Display
-hl.on("hyprland.start", function()
-    hl.exec_cmd("bash -lc 'for i in 1 2 3 4 5; do ddcutil --display 2 setvcp D6 01 && exit 0; sleep 0.3; done; exit 0'")
-end)
-
 -- ───────────────────────────────────────────────────────────────────────────────
 -- ENV
 -- ───────────────────────────────────────────────────────────────────────────────
@@ -155,7 +134,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.config/hypr/scripts/awtwall-awtarchy-init.sh &")
     -- hl.exec_cmd("~/.config/hypr/scripts/wallpaper_engine.sh &")
     hl.exec_cmd("sh -lc 'exec alacritty --class awtarchy-tips-tui,awtarchy-tips-tui --title awtarchy-tips-tui -e \"$HOME/.config/hypr/scripts/awtarchy-tips-tui.sh\" --autostart'")
-    hl.exec_cmd("~/.config/hypr/scripts/miclock.sh &")
+    -- hl.exec_cmd("~/.config/hypr/scripts/miclock.sh &")
     hl.exec_cmd("wl-paste --type text --watch cliphist store &")
     hl.exec_cmd("wl-paste --type image --watch cliphist store &")
 
@@ -174,7 +153,7 @@ hl.on("hyprland.start", function()
     -- hl.exec_cmd("~/.config/hypr/scripts/usb_refresh_fixer.sh refresh-audio ifi &")
     --
     -- USB audio device, refresh it and force it as default sink:
-    hl.exec_cmd("~/.config/hypr/scripts/usb_refresh_fixer.sh refresh-audio-default ifi &")
+    -- hl.exec_cmd("~/.config/hypr/scripts/usb_refresh_fixer.sh refresh-audio-default ifi &")
 end)
 
 -- ───────────────────────────────────────────────────────────────────────────────
