@@ -91,19 +91,27 @@ text = path.read_text()
 def lua_quote(value: str) -> str:
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
-def replace_key(text: str, key: str, value: str) -> tuple[str, int]:
+def replace_lua_key(text: str, key: str, value: str) -> tuple[str, int]:
+    # Supports both the old one-line style:
+    #   hl.config({ general = { col = { active_border = "rgba(...)" } } })
+    # and the cleaned grouped-table style:
+    #   col = {
+    #       active_border = "rgba(...)",
+    #   }
     pattern = re.compile(
-        r'(^[ \t]*hl\.config\(\{\s*general\s*=\s*\{\s*col\s*=\s*\{\s*'
+        r'(^[ \t]*(?!--)[^\n]*?\b'
         + re.escape(key)
-        + r'\s*=\s*)"[^"]*"(\s*\}\s*\}\s*\}\s*\)\s*$)',
+        + r'\s*=\s*)"[^"\\]*(?:\\.[^"\\]*)*"',
         re.MULTILINE,
     )
 
     text, count = pattern.subn(
-        lambda m: m.group(1) + lua_quote(value) + m.group(2),
+        lambda m: m.group(1) + lua_quote(value),
         text,
     )
 
+    # Optional legacy comment support if you still keep old hyprland.conf-style
+    # color notes in the Lua file.
     comment_pattern = re.compile(
         r'(^[ \t]*--\s*col\.'
         + re.escape(key)
@@ -118,8 +126,8 @@ def replace_key(text: str, key: str, value: str) -> tuple[str, int]:
 
     return text, count
 
-text, active_count = replace_key(text, "active_border", active)
-text, inactive_count = replace_key(text, "inactive_border", inactive)
+text, active_count = replace_lua_key(text, "active_border", active)
+text, inactive_count = replace_lua_key(text, "inactive_border", inactive)
 
 missing = []
 if active_count == 0:
@@ -133,7 +141,6 @@ if missing:
 path.write_text(text)
 PY
 }
-
 apply_hyprland_colors() {
     if [[ -f "$HYPR_LUA" ]]; then
         set_hypr_lua_border_colors "$NEW_ACTIVE_BORDER" "$NEW_INACTIVE_BORDER"
