@@ -115,7 +115,8 @@
       "format": "{}",
       "tooltip": true,
       "tooltip-format": "Current submap: {} (click to reset)",
-      "on-click": "bash -lc \"truncate -s 0 /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\"reset\"))'\""
+      "on-click": "sh -c 'truncate -s 0 /tmp/hypr-submap; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'",
+      "on-click-right": "sh -c 'truncate -s 0 /tmp/hypr-submap; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
     },
     "hyprland/window": {
       "format": "{title}",
