@@ -11,6 +11,7 @@ PACKAGES_AUR=(
   # Utilities
   smtty
   awtwall
+  mpvpaper
   wlogout
   qimgv-git
   alacritty-graphics
