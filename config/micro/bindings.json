@@ -1,0 +1,6 @@
+{
+    "Alt-/": "lua:comment.comment",
+    "CtrlUnderscore": "lua:comment.comment",
+    "MouseWheelUp": "CursorUp,CursorUp,CursorUp,CursorUp,CursorUp",
+    "MouseWheelDown": "CursorDown,CursorDown,CursorDown,CursorDown,CursorDown"
+}
