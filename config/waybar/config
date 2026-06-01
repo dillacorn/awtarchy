@@ -28,6 +28,7 @@
       "custom/clock-toggle",
       "tray",
       "custom/clipboard",
+      "custom/mako_dnd",
       "custom/power"
     ],
     "custom/spacer-submap": {
@@ -184,6 +185,14 @@
       "on-click": "~/.config/hypr/scripts/cliphist-fuzzel.sh &",
       "on-click-right": "~/.config/hypr/scripts/cliphist-fuzzel.sh &",
       "interval": 0
+    },
+    "custom/mako_dnd": {
+      "exec": "~/.config/waybar/scripts/mako_dnd.sh",
+      "interval": 30,
+      "return-type": "json",
+      "signal": 14,
+      "on-click": "~/.config/waybar/scripts/mako_dnd.sh toggle",
+      "tooltip": true
     },
     "custom/power": {
       "on-click": "~/.config/hypr/scripts/wlogout_toggle.sh &",

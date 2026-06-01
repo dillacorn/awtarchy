@@ -113,6 +113,7 @@ window#waybar.bottom {
 #custom-apps,
 #custom-cputemp,
 #custom-clipboard,
+#custom-mako_dnd,
 #custom-power,
 #taskbar,
 #custom-clock-toggle {
@@ -150,6 +151,27 @@ window#waybar.bottom {
 
 #custom-power:hover {
   background: rgba(115, 121, 148, 0.25);
+}
+
+/* notification DND toggle */
+#custom-mako_dnd {
+  min-width: 18px;
+}
+
+#custom-mako_dnd:hover {
+  background: rgba(115, 121, 148, 0.25);
+}
+
+#custom-mako_dnd.normal {
+  color: @color-default;
+}
+
+#custom-mako_dnd.muted {
+  color: @bg-critical;
+}
+
+#custom-mako_dnd.error {
+  color: @bg-urgent;
 }
 
 /* clickable */
@@ -263,6 +285,7 @@ window#waybar.left #memory,
 window#waybar.left #custom-apps,
 window#waybar.left #custom-cputemp,
 window#waybar.left #custom-clipboard,
+window#waybar.left #custom-mako_dnd,
 window#waybar.left #custom-power,
 window#waybar.left #taskbar,
 window#waybar.left #custom-clock-toggle,
@@ -280,6 +303,7 @@ window#waybar.right #memory,
 window#waybar.right #custom-apps,
 window#waybar.right #custom-cputemp,
 window#waybar.right #custom-clipboard,
+window#waybar.right #custom-mako_dnd,
 window#waybar.right #custom-power,
 window#waybar.right #taskbar,
 window#waybar.right #custom-clock-toggle {
@@ -300,6 +324,8 @@ window#waybar.left #custom-cputemp,
 window#waybar.right #custom-cputemp,
 window#waybar.left #wireplumber,
 window#waybar.right #wireplumber,
+window#waybar.left #custom-mako_dnd,
+window#waybar.right #custom-mako_dnd,
 window#waybar.left #custom-clock-toggle,
 window#waybar.right #custom-clock-toggle {
   min-width: 36px;
