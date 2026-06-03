@@ -392,8 +392,8 @@ hl.config({
 -- ──────────────────────────────────────────────────────────────
 
 -- CS2 (Tactical - no accel)
--- Sens: 2.0
--- Style: Precise, consistent aim for tac shooters
+-- Sens: 1.62
+-- Style: Tac shooters where 180-degree flicks / rotations are not a priority.
 -- maccel: Use "No Accel" mode with SENS_MULT 0.40 (400 DPI)
 
 -- The Finals (Arena - with accel)
