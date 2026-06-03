@@ -392,37 +392,45 @@ hl.config({
 -- ──────────────────────────────────────────────────────────────
 
 -- CS2 (Tactical - no accel)
--- Sens: 1.62
--- Style: Tac shooters where 180-degree flicks / rotations are not a priority.
--- maccel: Use "No Accel" mode with SENS_MULT 0.40 (400 DPI)
+-- Sens:                  1.62
+-- eDPI:                  648
+-- Style:                 Tac shooters where 180-degree flicks / rotations are not a priority.
+-- maccel:                No Accel, SENS_MULT 0.40
 
 -- The Finals (Arena - with accel)
--- Hardware mouse DPI:    1600           # Hardware DPI of mouse
--- Base sens:             35             # Precise tracking
--- Fast sens:             47             # flicks / movement
--- Accel ratio:           47/35 = 1.34   # fast/base = ratio value
+-- Hardware DPI:          1600
+-- Base sens:             35             -- eDPI: ~636
+-- Fast sens:             47             -- eDPI: ~855
+-- Accel ratio:           47/35 = 1.34   -- fast/base = OutputCap
+
 -- maccel setup:
---   - Mode: Linear
---   - SENS_MULT:         0.40    # 400 DPI feel
---   - Y/x Ratio:         1.0     # 1.2 on 4:3 stretched / 1.1 on 16:10 stretched
---   - INPUT_DPI:         1600    # must match hardware DPI
---   - Angle Rotation:    0.0     # personal preference
---   - Accel:             1000    # no diff past value of 7 in graph visually but I believe increasing past 7 actually makes the jump more steep, because it does in "raw accel"
---   - Offset:            15      # accel activation threshold (mouse speed)
---   - OutputCap:         1.34    # example varies between games
+--   - Mode:              Linear
+--   - SENS_MULT:         0.40
+--   - INPUT_DPI:         1600
+--   - Y/X Ratio:         1.0             -- 1.2 on 4:3 / 1.1 on 16:10
+--   - Angle Rotation:    0.0
+--   - Accel:             1000
+--   - Offset:            15
+--   - OutputCap:         1.34
 
 -- ──────────────────────────────────────────────────────────────
 -- maccel setup guide
 -- https://github.com/Gnarus-G/maccel
 --
--- How to calculate your OutputCap: (value varies between all games)
--- 1. Play without accel - find your comfortable "fast" sens (e.g., 47)
--- 2. Find the "slow" sens you want for precision (e.g., 35)
--- 3. Calculate: OutputCap = fast_sens / slow_sens
---    Example: 47 / 35 = 1.34
+-- How to calculate your OutputCap:
+-- 1. Play without accel and find your comfortable "fast" sens.
+-- 2. Find the slower sens you want for precision.
+-- 3. Calculate: OutputCap = fast_sens / base_sens
 --
--- Result: Slow movements = 35 sens, fast flicks = 47 sens
--- (Game Example: The Finals)
+-- Example:
+--   47 / 35 = 1.34
+--
+-- Result:
+--   Slow movements = 35 sens
+--   Fast flicks    = 47 sens
+--
+-- Game example:
+--   The Finals
 --
 -- ──────────────────────────────────────────────────────────────
 
