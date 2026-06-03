@@ -406,8 +406,8 @@ hl.config({
 -- maccel setup:
 --   - Mode:              Linear
 --   - SENS_MULT:         0.40
---   - INPUT_DPI:         1600
 --   - Y/X Ratio:         1.0             -- 1.2 on 4:3 / 1.1 on 16:10
+--   - INPUT_DPI:         1600
 --   - Angle Rotation:    0.0
 --   - Accel:             1000
 --   - Offset:            15
@@ -417,17 +417,17 @@ hl.config({
 -- maccel setup guide
 -- https://github.com/Gnarus-G/maccel
 --
--- How to calculate your OutputCap:
--- 1. Play without accel and find your comfortable "fast" sens.
--- 2. Find the slower sens you want for precision.
--- 3. Calculate: OutputCap = fast_sens / base_sens
+-- How to calculate your OutputCap: (value varies between all games)
+-- 1. Play without accel - find your comfortable "fast" sens (e.g., 47)
+-- 2. Find the "slow" sens you want for precision (e.g., 35)
+-- 3. Calculate: OutputCap = fast_sens / slow_sens
 --
 -- Example:
 --   47 / 35 = 1.34
 --
 -- Result:
---   Slow movements = 35 sens
 --   Fast flicks    = 47 sens
+--   Slow movements = 35 sens
 --
 -- Game example:
 --   The Finals
