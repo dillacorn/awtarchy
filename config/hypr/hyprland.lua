@@ -369,6 +369,7 @@ end
 -- - maccel handles pointer movement/accel.
 -- - Scroll-wheel behavior is separate from maccel.
 -- - `emulate_discrete_scroll` is global, not per-mouse.
+-- - Logitech high-resolution wheels may need Solaar's "Scroll Wheel Resolution" enabled.
 -- - Get mouse names with:
 --     hyprctl devices | sed -n '/^mice:/,/^keyboards:/p'
 
@@ -395,9 +396,9 @@ hl.config({
         -- Scroll defaults
         scroll_factor = 1.0,
 
-        -- Logitech high-resolution wheel test:
-        -- 1 = Hyprland default-ish behavior
-        -- 0 = disables discrete emulation from high-res wheel events
+        -- High-resolution wheel handling:
+        -- 1 = emulate normal discrete wheel steps from high-res scroll events
+        -- 0 = pass smoother high-res scrolling through without discrete emulation
         emulate_discrete_scroll = 1,
     },
 })
