@@ -407,7 +407,7 @@ hl.config({
 
 -- hl.device({
 --     name = "logitech-g303-1",
---     scroll_factor = 1.0,
+--     scroll_factor = 5.0,
 -- })
 
 -- ──────────────────────────────────────────────────────────────
