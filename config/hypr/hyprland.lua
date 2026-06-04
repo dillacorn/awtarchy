@@ -368,7 +368,7 @@ end
 -- Mouse notes:
 -- - maccel handles pointer movement/accel.
 -- - Scroll-wheel behavior is separate from maccel.
--- - `emulate_discrete_scroll = 0` can fix weird high-resolution scroll behavior.
+-- - `emulate_discrete_scroll` is global, not per-mouse.
 -- - Get mouse names with:
 --     hyprctl devices | sed -n '/^mice:/,/^keyboards:/p'
 
@@ -394,7 +394,11 @@ hl.config({
 
         -- Scroll defaults
         scroll_factor = 1.0,
-        emulate_discrete_scroll = 0,
+
+        -- Logitech high-resolution wheel test:
+        -- 1 = Hyprland default-ish behavior
+        -- 0 = disables discrete emulation from high-res wheel events
+        emulate_discrete_scroll = 1,
     },
 })
 
@@ -407,7 +411,7 @@ hl.config({
 
 -- hl.device({
 --     name = "logitech-g303-1",
---     scroll_factor = 5.0,
+--     scroll_factor = 1.0,
 -- })
 
 -- ──────────────────────────────────────────────────────────────
