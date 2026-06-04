@@ -387,7 +387,7 @@ hl.config({
             scroll_factor = 0.5,
         },
 
-        -- Mouse: neutral input for maccel
+        -- No acceleration (1:1 raw input)
         accel_profile = "flat",
         sensitivity = 0,
         force_no_accel = 1,
