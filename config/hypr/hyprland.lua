@@ -364,6 +364,13 @@ end
 -- ───────────────────────────────────────────────────────────────────────────────
 -- INPUT
 -- ───────────────────────────────────────────────────────────────────────────────
+--
+-- Mouse notes:
+-- - maccel handles pointer movement/accel.
+-- - Scroll-wheel behavior is separate from maccel.
+-- - `emulate_discrete_scroll = 0` can fix weird high-resolution scroll behavior.
+-- - Get mouse names with:
+--     hyprctl devices | sed -n '/^mice:/,/^keyboards:/p'
 
 hl.config({
     input = {
@@ -380,12 +387,28 @@ hl.config({
             scroll_factor = 0.5,
         },
 
-        -- Mouse: No acceleration (1:1 raw input)
+        -- Mouse: neutral input for maccel
         accel_profile = "flat",
         sensitivity = 0,
         force_no_accel = 1,
+
+        -- Scroll defaults
+        scroll_factor = 1.0,
+        emulate_discrete_scroll = 0,
     },
 })
+
+-- ───────────────────────────────────────────────────────────────────────────────
+-- PER-MOUSE OVERRIDES
+-- ───────────────────────────────────────────────────────────────────────────────
+--
+-- Optional per-mouse settings.
+-- `emulate_discrete_scroll` is global and does not work here.
+
+-- hl.device({
+--     name = "logitech-g303-1",
+--     scroll_factor = 1.0,
+-- })
 
 -- ──────────────────────────────────────────────────────────────
 -- Game profiles @ 400 DPI w/ maccel
