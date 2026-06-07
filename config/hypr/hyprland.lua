@@ -434,12 +434,50 @@ hl.config({
 -- maccel setup:
 --   - Mode:              Linear
 --   - SENS_MULT:         0.40
---   - Y/X Ratio:         1.0             -- 1.2 on 4:3 / 1.1 on 16:10
+--   - Y/X Ratio:         1.0
 --   - INPUT_DPI:         1600
 --   - Angle Rotation:    0.0
 --   - Accel:             1000
 --   - Offset:            15
 --   - OutputCap:         1.34
+
+-- Stretched resolution Y/X ratio:
+--   Use this when playing a non-16:9 resolution stretched to a 16:9 display.
+--
+--   maccel uses Y/X Ratio.
+--   This multiplies vertical sensitivity relative to horizontal sensitivity.
+--
+--   Formula:
+--     Y/X Ratio = 16:9 aspect / stretched aspect
+--
+--   Common values:
+--   - 16:9 native:       1.00
+--   - 16:10 stretched:   1.11     -- example: 1728x1080 -> 1920x1080
+--   - 4:3 stretched:     1.33     -- example: 1440x1080 -> 1920x1080
+--
+--   X/Y equivalents:
+--   - 16:10 stretched:   0.90
+--   - 4:3 stretched:     0.75
+--
+--   4:3 math:
+--     1920 / 1440 = 1.33
+--
+--   16:10 math:
+--     16:9 / 16:10 = 10/9 = 1.11
+--
+--   This compensates for horizontal stretching so mouse movement feels closer
+--   to native 16:9.
+
+-- Angle Rotation:
+--   Sensor rotation matters. Even a small tilted sensor or natural grip angle
+--   can add unwanted Y movement during horizontal flicks.
+--
+--   Test:
+--   - Open paint, Krita, GIMP, Xournal++, or any drawing app.
+--   - Use the pencil/brush tool.
+--   - Flick the mouse left/right in straight horizontal lines.
+--   - Adjust Angle Rotation until the drawn flick lines are close to horizontal.
+--   - Goal: near-zero Y lift/drop at both ends of the flick.
 
 -- ──────────────────────────────────────────────────────────────
 -- maccel setup guide
