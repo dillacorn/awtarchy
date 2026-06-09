@@ -67,6 +67,7 @@ IS_VM=false
 IS_LAPTOP=false
 NO_REBOOT=0
 DRY_RUN=0
+TOP_MENU_ACTIVE=0
 
 INSTALL_ARCH=1
 INSTALL_AUR=1
@@ -595,6 +596,260 @@ edit_package_group() {
   done
 }
 
+
+flatpak_picker_has_app() {
+  local appid="$1" values_name="$2" selected_name="$3"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  local i existing_appid
+
+  for i in "${!_values_ref[@]}"; do
+    existing_appid="${_values_ref[i]#*|}"
+    if [[ "$existing_appid" == "$appid" ]]; then
+      _selected_ref[i]=1
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+flatpak_picker_add_app() {
+  local name="$1" appid="$2" labels_name="$3" values_name="$4" selected_name="$5" kinds_name="$6"
+  # shellcheck disable=SC2178
+  local -n _labels_ref="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  # shellcheck disable=SC2178
+  local -n _kinds_ref="$kinds_name"
+
+  [[ -n "$appid" ]] || return 1
+  [[ -n "$name" ]] || name="$appid"
+
+  if flatpak_picker_has_app "$appid" "$values_name" "$selected_name"; then
+    return 0
+  fi
+
+  _labels_ref+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
+  _values_ref+=("${name}|${appid}")
+  _selected_ref+=("1")
+  _kinds_ref+=("item")
+}
+
+flatpak_search_results() {
+  local query="$1" labels_name="$2" names_name="$3" ids_name="$4"
+  local -n _result_labels="$labels_name"
+  local -n _result_names="$names_name"
+  local -n _result_ids="$ids_name"
+  local appid name description line_count=0
+
+  _result_labels=()
+  _result_names=()
+  _result_ids=()
+
+  [[ -n "$query" ]] || return 1
+
+  # Prefer the local Flatpak search when available.
+  # If Flatpak is not installed yet, fall back to the Flathub web API through
+  # Python's standard library. This keeps dry-run usable on a fresh install.
+  if have flatpak; then
+    while IFS=$'\t' read -r appid name description _; do
+      appid="${appid//$'\r'/}"
+      name="${name//$'\r'/}"
+      description="${description//$'\r'/}"
+
+      [[ -n "$appid" ]] || continue
+      [[ "$appid" == "Application ID" || "$appid" == "Application" ]] && continue
+      [[ "$appid" == *.* ]] || continue
+      [[ -n "$name" ]] || name="$appid"
+
+      if [[ -n "$description" ]]; then
+        _result_labels+=("${name}    ${COLOR_DIM}${appid} - ${description}${COLOR_RESET}")
+      else
+        _result_labels+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
+      fi
+      _result_names+=("$name")
+      _result_ids+=("$appid")
+
+      ((line_count++)) || true
+      (( line_count >= 25 )) && break
+    done < <(flatpak search --columns=application,name,description "$query" 2>/dev/null || true)
+  fi
+
+  if (( ${#_result_ids[@]} == 0 )) && have python3; then
+    while IFS=$'\t' read -r appid name description _; do
+      appid="${appid//$'\r'/}"
+      name="${name//$'\r'/}"
+      description="${description//$'\r'/}"
+
+      [[ -n "$appid" ]] || continue
+      [[ "$appid" == *.* ]] || continue
+      [[ -n "$name" ]] || name="$appid"
+
+      if [[ -n "$description" ]]; then
+        _result_labels+=("${name}    ${COLOR_DIM}${appid} - ${description}${COLOR_RESET}")
+      else
+        _result_labels+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
+      fi
+      _result_names+=("$name")
+      _result_ids+=("$appid")
+    done < <(python3 - "$query" <<'PYFLATHUB'
+import json
+import sys
+import urllib.request
+
+query = sys.argv[1]
+payload = json.dumps({"query": query, "filters": []}).encode("utf-8")
+request = urllib.request.Request(
+    "https://flathub.org/api/v2/search",
+    data=payload,
+    headers={
+        "Content-Type": "application/json",
+        "User-Agent": "awtarchy-installer",
+    },
+    method="POST",
+)
+
+try:
+    with urllib.request.urlopen(request, timeout=8) as response:
+        data = json.load(response)
+except Exception:
+    sys.exit(0)
+
+if isinstance(data, list):
+    rows = data
+elif isinstance(data, dict):
+    rows = data.get("hits") or data.get("results") or data.get("apps") or data.get("data") or []
+else:
+    rows = []
+
+count = 0
+for row in rows:
+    if not isinstance(row, dict):
+        continue
+    appid = row.get("flatpakAppId") or row.get("id") or row.get("app_id") or row.get("appId") or row.get("application")
+    name = row.get("name") or row.get("title") or appid
+    description = row.get("summary") or row.get("description") or row.get("developerName") or ""
+    if not appid or "." not in appid:
+        continue
+    print(f"{appid}\t{name}\t{description}")
+    count += 1
+    if count >= 25:
+        break
+PYFLATHUB
+)
+  fi
+
+  (( ${#_result_ids[@]} > 0 ))
+}
+
+flatpak_search_add_menu() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local query choice i
+  local -a result_labels=()
+  local -a result_names=()
+  local -a result_ids=()
+  local -a menu_items=()
+
+  while true; do
+    choice="$(single_select_menu "Add Flatpak app" 0 "Search Flathub by app name" "Enter app ID manually" "Back")" || return 1
+    case "$choice" in
+      0)
+        clear_screen
+        query="$(prompt_line "Search Flathub app name: ")"
+        [[ -z "$query" ]] && continue
+
+        if ! flatpak_search_results "$query" result_labels result_names result_ids; then
+          clear_screen
+          printf '%s\n\n' "${COLOR_YELLOW}No Flatpak search results found.${COLOR_RESET}" >/dev/tty
+          if ! have flatpak; then
+            printf '%s\n' "Flatpak search requires the flatpak command to already be installed." >/dev/tty
+            printf '%s\n' "Use manual app ID, or add Flatpak apps after the installer installs flatpak." >/dev/tty
+          else
+            printf '%s\n' "Try a different app name or use manual app ID." >/dev/tty
+          fi
+          printf '\n' >/dev/tty
+          press_any_key
+          continue
+        fi
+
+        menu_items=()
+        for i in "${!result_labels[@]}"; do
+          menu_items+=("${result_labels[i]}")
+        done
+        menu_items+=("Search again")
+        menu_items+=("Enter app ID manually")
+        menu_items+=("Back")
+
+        choice="$(single_select_menu "Flathub search: ${query}" 0 "${menu_items[@]}")" || continue
+        if (( choice < ${#result_ids[@]} )); then
+          flatpak_picker_add_app "${result_names[choice]}" "${result_ids[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+          return 0
+        fi
+
+        if (( choice == ${#result_ids[@]} )); then
+          continue
+        elif (( choice == ${#result_ids[@]} + 1 )); then
+          clear_screen
+          local manual_appid manual_name
+          manual_appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
+          [[ -z "$manual_appid" ]] && continue
+          manual_name="$(prompt_line "Display name, empty uses app ID: ")"
+          [[ -z "$manual_name" ]] && manual_name="$manual_appid"
+          flatpak_picker_add_app "$manual_name" "$manual_appid" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+          return 0
+        else
+          continue
+        fi
+        ;;
+      1)
+        clear_screen
+        local appid name
+        appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
+        [[ -z "$appid" ]] && continue
+        name="$(prompt_line "Display name, empty uses app ID: ")"
+        [[ -z "$name" ]] && name="$appid"
+        flatpak_picker_add_app "$name" "$appid" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+}
+
+add_custom_picker_item() {
+  local type="$1" labels_name="$2" values_name="$3" selected_name="$4" kinds_name="$5"
+  # shellcheck disable=SC2178
+  local -n _labels_ref="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  # shellcheck disable=SC2178
+  local -n _kinds_ref="$kinds_name"
+  local custom
+
+  if [[ "$type" == "Flatpak app ID" ]]; then
+    flatpak_search_add_menu "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+    return $?
+  fi
+
+  clear_screen
+  custom="$(prompt_line "Enter ${type}: ")"
+  [[ -z "$custom" ]] && return 1
+  _labels_ref+=("${custom}")
+  _values_ref+=("${custom}")
+  _selected_ref+=("1")
+  _kinds_ref+=("item")
+}
+
+
 package_picker() {
   local title="$1" type="$2"
   local labels_name="$3" values_name="$4" selected_name="$5" kinds_name="$6"
@@ -660,7 +915,12 @@ package_picker() {
         -100) printf '%s [✓] Done with this list\n' "$prefix" ;;
         -104) printf '%s [<] Back\n' "$prefix" ;;
         -101) printf '%s [?] Search/filter list\n' "$prefix" ;;
-        -102) printf '%s [+] Add custom %s\n' "$prefix" "$type" ;;
+        -102) if [[ "$type" == "Flatpak app ID" ]]; then
+          printf '%s [+] Search/add Flatpak app\n' "$prefix"
+        else
+          printf '%s [+] Add custom %s\n' "$prefix" "$type"
+        fi
+        ;;
         -103) printf '%s [x] Clear search/filter\n' "$prefix" ;;
         *)
           if [[ "${kinds_ref[$i]}" == "group" ]]; then
@@ -683,6 +943,8 @@ package_picker() {
 
     if [[ "$type" == "Arch package" ]]; then
       printf '\n%s\n' "${COLOR_DIM}Enter/e = edit category, Space = select/clear category, b = back, Up/Down = move${COLOR_RESET}"
+    elif [[ "$type" == "Flatpak app ID" ]]; then
+      printf '\n%s\n' "${COLOR_DIM}Space/Enter = activate/toggle/search, b = back, Up/Down = move${COLOR_RESET}"
     else
       printf '\n%s\n' "${COLOR_DIM}Space/Enter = activate/toggle, b = back, Up/Down = move${COLOR_RESET}"
     fi
@@ -719,25 +981,10 @@ package_picker() {
             index=0
             ;;
           -102)
-            clear_screen
-            local custom name appid
-            if [[ "$type" == "Flatpak app ID" ]]; then
-              appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
-              [[ -z "$appid" ]] && continue
-              name="$(prompt_line "Display name, empty uses app ID: ")"
-              [[ -z "$name" ]] && name="$appid"
-              labels_ref+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
-              values_ref+=("${name}|${appid}")
-            else
-              custom="$(prompt_line "Enter ${type}: ")"
-              [[ -z "$custom" ]] && continue
-              labels_ref+=("${custom}")
-              values_ref+=("${custom}")
+            if add_custom_picker_item "$type" "$labels_name" "$values_name" "$selected_name" "$kinds_name"; then
+              filter=""
+              index=$((${#labels_ref[@]} + 4))
             fi
-            selected_ref+=("1")
-            kinds_ref+=("item")
-            filter=""
-            index=$((${#labels_ref[@]} + 4))
             ;;
           -103)
             filter=""
@@ -775,25 +1022,10 @@ package_picker() {
             index=0
             ;;
           -102)
-            clear_screen
-            local custom name appid
-            if [[ "$type" == "Flatpak app ID" ]]; then
-              appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
-              [[ -z "$appid" ]] && continue
-              name="$(prompt_line "Display name, empty uses app ID: ")"
-              [[ -z "$name" ]] && name="$appid"
-              labels_ref+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
-              values_ref+=("${name}|${appid}")
-            else
-              custom="$(prompt_line "Enter ${type}: ")"
-              [[ -z "$custom" ]] && continue
-              labels_ref+=("${custom}")
-              values_ref+=("${custom}")
+            if add_custom_picker_item "$type" "$labels_name" "$values_name" "$selected_name" "$kinds_name"; then
+              filter=""
+              index=$((${#labels_ref[@]} + 4))
             fi
-            selected_ref+=("1")
-            kinds_ref+=("item")
-            filter=""
-            index=$((${#labels_ref[@]} + 4))
             ;;
           -103)
             filter=""
@@ -932,8 +1164,17 @@ run_install_questionnaire() {
   detect_target_user_install
   if systemd-detect-virt --quiet; then IS_VM=true; else IS_VM=false; fi
 
-  local intro_title
-  intro_title="Awtarchy install setup
+  local step=0 rc choice
+  local -a labels=()
+  local -a values=()
+  local -a shell_labels=()
+  local -a shell_values=()
+
+  while true; do
+    case "$step" in
+      0)
+        local intro_title
+        intro_title="Awtarchy install setup
 
 Nothing installs yet. This first part only collects choices.
 
@@ -949,101 +1190,182 @@ After that, Awtarchy shows a summary. In dry-run mode it prints the plan and exi
 In normal install mode it will overwrite awtarchy-managed config files under:
   ${HOME_DIR}"
 
-  local intro_choice
-  intro_choice="$(single_select_menu "$intro_title" 0 "Start setup" "Cancel")" || die "Installation canceled."
-  [[ "$intro_choice" == "0" ]] || die "Installation canceled."
+        choice="$(single_select_menu "$intro_title" 0 "Start setup" "Back to main menu")" || return 2
+        case "$choice" in
+          0) step=1 ;;
+          *) return 2 ;;
+        esac
+        ;;
 
-  if [[ "$IS_VM" == false ]]; then
-    local sys_choice
-    sys_choice="$(single_select_menu "System type" 1 "Laptop" "Desktop")" || die "Installation canceled."
-    if [[ "$sys_choice" == "0" ]]; then IS_LAPTOP=true; else IS_LAPTOP=false; fi
-  else
-    IS_LAPTOP=false
-  fi
+      1)
+        if [[ "$IS_VM" == true ]]; then
+          IS_LAPTOP=false
+          step=2
+          continue
+        fi
 
-  local -a labels=(
-    "Arch repo packages"
-    "AUR packages"
-    "Flatpak apps"
-    "GPU dependencies"
-    "Ly TTY login manager"
-    "GNOME Keyring PAM integration"
-  )
-  local -a values=("$INSTALL_ARCH" "$INSTALL_AUR" "$INSTALL_FLATPAK" "$INSTALL_GPU" "$INSTALL_LY" "$ENABLE_KEYRING_PAM")
-  if [[ "$IS_VM" == true ]]; then
-    values[3]=0
-    # shellcheck disable=SC2034
-    labels[3]="GPU dependencies ${COLOR_DIM}(disabled in VM)${COLOR_RESET}"
-  fi
-  summary_toggle_menu "Install sections" labels values
-  INSTALL_ARCH="${values[0]}"
-  INSTALL_AUR="${values[1]}"
-  INSTALL_FLATPAK="${values[2]}"
-  INSTALL_GPU="${values[3]}"
-  INSTALL_LY="${values[4]}"
-  ENABLE_KEYRING_PAM="${values[5]}"
+        choice="$(single_select_menu "System type" 1 "Laptop" "Desktop" "Back")" || { step=0; continue; }
+        case "$choice" in
+          0) IS_LAPTOP=true; step=2 ;;
+          1) IS_LAPTOP=false; step=2 ;;
+          *) step=0 ;;
+        esac
+        ;;
 
-  if [[ -f "${HOME_DIR}/.bashrc" || -f "${HOME_DIR}/.bash_profile" ]]; then
-    local -a shell_labels=()
-    local -a shell_values=()
-    if [[ -f "${HOME_DIR}/.bashrc" ]]; then shell_labels+=("Overwrite existing ~/.bashrc"); shell_values+=("0"); fi
-    if [[ -f "${HOME_DIR}/.bash_profile" ]]; then shell_labels+=("Overwrite existing ~/.bash_profile"); shell_values+=("0"); fi
-    summary_toggle_menu "Existing shell files" shell_labels shell_values
-    local n=0
-    if [[ -f "${HOME_DIR}/.bashrc" ]]; then OVERWRITE_BASHRC="${shell_values[$n]}"; ((n++)) || true; else OVERWRITE_BASHRC=1; fi
-    if [[ -f "${HOME_DIR}/.bash_profile" ]]; then OVERWRITE_BASH_PROFILE="${shell_values[$n]}"; else OVERWRITE_BASH_PROFILE=1; fi
-  else
-    OVERWRITE_BASHRC=1
-    OVERWRITE_BASH_PROFILE=1
-  fi
+      2)
+        labels=(
+          "Arch repo packages"
+          "AUR packages"
+          "Flatpak apps"
+          "GPU dependencies"
+          "Ly TTY login manager"
+          "GNOME Keyring PAM integration"
+        )
+        values=("$INSTALL_ARCH" "$INSTALL_AUR" "$INSTALL_FLATPAK" "$INSTALL_GPU" "$INSTALL_LY" "$ENABLE_KEYRING_PAM")
+        if [[ "$IS_VM" == true ]]; then
+          values[3]=0
+          # shellcheck disable=SC2034
+          labels[3]="GPU dependencies ${COLOR_DIM}(disabled in VM)${COLOR_RESET}"
+        fi
 
-  if (( INSTALL_ARCH == 1 )); then
-    build_arch_picker_arrays
-    package_picker "Arch repo packages" "Arch package" ARCH_LABELS ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS
-    collect_selected_items ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS ARCH_SELECTED
-  else
-    ARCH_SELECTED=()
-  fi
+        if summary_toggle_menu "Install sections" labels values; then
+          INSTALL_ARCH="${values[0]}"
+          INSTALL_AUR="${values[1]}"
+          INSTALL_FLATPAK="${values[2]}"
+          INSTALL_GPU="${values[3]}"
+          INSTALL_LY="${values[4]}"
+          ENABLE_KEYRING_PAM="${values[5]}"
+          step=3
+        else
+          rc=$?
+          if (( rc == 2 )); then
+            if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi
+          else
+            return "$rc"
+          fi
+        fi
+        ;;
 
-  if (( INSTALL_AUR == 1 )); then
-    build_aur_picker_arrays
-    package_picker "AUR packages" "AUR package" AUR_LABELS AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS
-    collect_selected_items AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS AUR_SELECTED
-  else
-    AUR_SELECTED=()
-  fi
+      3)
+        if [[ -f "${HOME_DIR}/.bashrc" || -f "${HOME_DIR}/.bash_profile" ]]; then
+          shell_labels=()
+          shell_values=()
+          if [[ -f "${HOME_DIR}/.bashrc" ]]; then shell_labels+=("Overwrite existing ~/.bashrc"); shell_values+=("$OVERWRITE_BASHRC"); fi
+          if [[ -f "${HOME_DIR}/.bash_profile" ]]; then shell_labels+=("Overwrite existing ~/.bash_profile"); shell_values+=("$OVERWRITE_BASH_PROFILE"); fi
 
-  if (( INSTALL_FLATPAK == 1 )); then
-    build_flatpak_picker_arrays
-    package_picker "Flatpak apps" "Flatpak app ID" FLATPAK_LABELS FLATPAK_VALUES FLATPAK_SELECTED_FLAGS FLATPAK_KINDS
-    local -a flatpak_pairs=()
-    collect_selected_items FLATPAK_VALUES FLATPAK_SELECTED_FLAGS FLATPAK_KINDS flatpak_pairs
-    FLATPAK_SELECTED_NAMES=()
-    FLATPAK_SELECTED_IDS=()
-    local pair name appid
-    for pair in "${flatpak_pairs[@]}"; do
-      IFS='|' read -r name appid <<< "$pair"
-      FLATPAK_SELECTED_NAMES+=("$name")
-      FLATPAK_SELECTED_IDS+=("$appid")
-    done
-  else
-    FLATPAK_SELECTED_NAMES=()
-    FLATPAK_SELECTED_IDS=()
-  fi
+          if summary_toggle_menu "Existing shell files" shell_labels shell_values; then
+            local n=0
+            if [[ -f "${HOME_DIR}/.bashrc" ]]; then OVERWRITE_BASHRC="${shell_values[$n]}"; ((n++)) || true; else OVERWRITE_BASHRC=1; fi
+            if [[ -f "${HOME_DIR}/.bash_profile" ]]; then OVERWRITE_BASH_PROFILE="${shell_values[$n]}"; else OVERWRITE_BASH_PROFILE=1; fi
+            step=4
+          else
+            rc=$?
+            if (( rc == 2 )); then step=2; else return "$rc"; fi
+          fi
+        else
+          OVERWRITE_BASHRC=1
+          OVERWRITE_BASH_PROFILE=1
+          step=4
+        fi
+        ;;
 
-  if confirm_install_review; then
-    return 0
-  fi
+      4)
+        if (( INSTALL_ARCH == 1 )); then
+          if ! declare -p ARCH_LABELS ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS >/dev/null 2>&1; then
+            build_arch_picker_arrays
+          fi
 
-  case "$?" in
-    1)
-      run_install_questionnaire
-      return $?
-      ;;
-    *)
-      die "Installation canceled."
-      ;;
-  esac
+          if package_picker "Arch repo packages" "Arch package" ARCH_LABELS ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS; then
+            collect_selected_items ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS ARCH_SELECTED
+            step=5
+          else
+            rc=$?
+            if (( rc == 2 )); then step=3; else return "$rc"; fi
+          fi
+        else
+          ARCH_SELECTED=()
+          step=5
+        fi
+        ;;
+
+      5)
+        if (( INSTALL_AUR == 1 )); then
+          if ! declare -p AUR_LABELS AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS >/dev/null 2>&1; then
+            build_aur_picker_arrays
+          fi
+
+          if package_picker "AUR packages" "AUR package" AUR_LABELS AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS; then
+            collect_selected_items AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS AUR_SELECTED
+            step=6
+          else
+            rc=$?
+            if (( rc == 2 )); then step=4; else return "$rc"; fi
+          fi
+        else
+          AUR_SELECTED=()
+          step=6
+        fi
+        ;;
+
+      6)
+        if (( INSTALL_FLATPAK == 1 )); then
+          if ! declare -p FLATPAK_LABELS FLATPAK_VALUES FLATPAK_SELECTED_FLAGS FLATPAK_KINDS >/dev/null 2>&1; then
+            build_flatpak_picker_arrays
+          fi
+
+          if package_picker "Flatpak apps" "Flatpak app ID" FLATPAK_LABELS FLATPAK_VALUES FLATPAK_SELECTED_FLAGS FLATPAK_KINDS; then
+            local -a flatpak_pairs=()
+            collect_selected_items FLATPAK_VALUES FLATPAK_SELECTED_FLAGS FLATPAK_KINDS flatpak_pairs
+            FLATPAK_SELECTED_NAMES=()
+            FLATPAK_SELECTED_IDS=()
+            local pair name appid
+            for pair in "${flatpak_pairs[@]}"; do
+              IFS='|' read -r name appid <<< "$pair"
+              FLATPAK_SELECTED_NAMES+=("$name")
+              FLATPAK_SELECTED_IDS+=("$appid")
+            done
+            step=7
+          else
+            rc=$?
+            if (( rc == 2 )); then step=5; else return "$rc"; fi
+          fi
+        else
+          FLATPAK_SELECTED_NAMES=()
+          FLATPAK_SELECTED_IDS=()
+          step=7
+        fi
+        ;;
+
+      7)
+        if confirm_install_review; then
+          return 0
+        else
+          rc=$?
+          case "$rc" in
+            1)
+              if (( INSTALL_FLATPAK == 1 )); then
+                step=6
+              elif (( INSTALL_AUR == 1 )); then
+                step=5
+              elif (( INSTALL_ARCH == 1 )); then
+                step=4
+              elif [[ -f "${HOME_DIR}/.bashrc" || -f "${HOME_DIR}/.bash_profile" ]]; then
+                step=3
+              else
+                step=2
+              fi
+              ;;
+            2) return 2 ;;
+            *) return "$rc" ;;
+          esac
+        fi
+        ;;
+
+      *)
+        return 2
+        ;;
+    esac
+  done
 }
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -1585,7 +1907,20 @@ run_install() {
     esac
   done
 
+  local rc
+  set +e
   run_install_questionnaire
+  rc=$?
+  set -e
+  if (( rc != 0 )); then
+    if (( rc == 2 )); then
+      if (( TOP_MENU_ACTIVE == 0 )); then
+        top_menu
+      fi
+      return 2
+    fi
+    return "$rc"
+  fi
   if (( DRY_RUN == 1 )); then
     print_install_dry_run_plan
     return 0
@@ -1630,20 +1965,45 @@ run_backup_cleaner_entry() {
 }
 
 top_menu() {
-  local choice
-  choice="$(single_select_menu "Awtarchy" 0 \
-    "Install Awtarchy" \
-    "Dry-run Awtarchy install plan" \
-    "Update/reset Awtarchy configs from latest release" \
-    "Clean Awtarchy backup files" \
-    "Exit")" || exit 0
-  case "$choice" in
-    0) run_install ;;
-    1) run_install --dry-run ;;
-    2) update_reset_backup_main ;;
-    3) run_backup_cleaner_entry ;;
-    *) exit 0 ;;
-  esac
+  local choice rc
+  TOP_MENU_ACTIVE=1
+
+  while true; do
+    choice="$(single_select_menu "Awtarchy" 0 \
+      "Install Awtarchy" \
+      "Dry-run Awtarchy install plan" \
+      "Update/reset Awtarchy configs from latest release" \
+      "Clean Awtarchy backup files" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        if run_install; then
+          :
+        else
+          rc=$?
+          (( rc == 2 )) || return "$rc"
+        fi
+        ;;
+      1)
+        if run_install --dry-run; then
+          :
+        else
+          rc=$?
+          (( rc == 2 )) || return "$rc"
+        fi
+        ;;
+      2)
+        update_reset_backup_main
+        ;;
+      3)
+        run_backup_cleaner_entry
+        ;;
+      *)
+        exit 0
+        ;;
+    esac
+  done
 }
 
 install_gpu_dependencies_main() {
