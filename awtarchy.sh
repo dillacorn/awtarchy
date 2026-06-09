@@ -644,6 +644,10 @@ api_search_tool_ready() {
   have python3 || have python || have curl
 }
 
+api_search_python_ready() {
+  have python3 || have python
+}
+
 ensure_api_search_tool() {
   local purpose="${1:-search}"
 
@@ -666,6 +670,34 @@ ensure_api_search_tool() {
 
   pacman -S --needed --noconfirm python curl ca-certificates >/dev/tty
   api_search_tool_ready
+}
+
+ensure_python_api_search_tool() {
+  local purpose="${1:-search}"
+
+  if api_search_python_ready; then
+    return 0
+  fi
+
+  if (( DRY_RUN == 1 )); then
+    return 1
+  fi
+
+  if [[ "${EUID}" -ne 0 ]]; then
+    return 1
+  fi
+
+  clear_screen
+  printf '%s\n\n' "${COLOR_CYAN}Installing ${purpose} helper dependency...${COLOR_RESET}" >/dev/tty
+  printf '%s\n' "Awtarchy needs python to query and parse online package indexes reliably." >/dev/tty
+  printf '%s\n\n' "Installing python and ca-certificates now." >/dev/tty
+
+  pacman -S --needed --noconfirm python ca-certificates >/dev/tty
+  api_search_python_ready
+}
+
+ensure_aur_search_tool() {
+  ensure_python_api_search_tool "AUR search"
 }
 
 ensure_flatpak_search_tool() {
@@ -1288,8 +1320,7 @@ import urllib.request
 query = sys.argv[1]
 seen = set()
 
-def fetch(params):
-    url = "https://aur.archlinux.org/rpc/?" + urllib.parse.urlencode(params, doseq=True)
+def fetch_url(url):
     request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
     try:
         with urllib.request.urlopen(request, timeout=8) as response:
@@ -1298,11 +1329,12 @@ def fetch(params):
         return []
     return data.get("results", []) if isinstance(data, dict) else []
 
+base = "https://aur.archlinux.org/rpc/v5"
 rows = []
 # Exact lookup first.
-rows.extend(fetch({"v": "5", "type": "info", "arg[]": [query]}))
+rows.extend(fetch_url(base + "/info?" + urllib.parse.urlencode({"arg[]": [query]}, doseq=True)))
 # Then normal name/description search for close matches.
-rows.extend(fetch({"v": "5", "type": "search", "by": "name-desc", "arg": query}))
+rows.extend(fetch_url(base + "/search/" + urllib.parse.quote(query, safe="") + "?by=name-desc"))
 
 count = 0
 for row in rows:
@@ -1323,35 +1355,6 @@ PYAUR
 )
   fi
 
-  if (( ${#_result_names[@]} == 0 )) && have curl; then
-    while IFS=$'\t' read -r pkg description votes popularity _; do
-      pkg="${pkg//$'\r'/}"
-      description="${description//$'\r'/}"
-      votes="${votes//$'\r'/}"
-      popularity="${popularity//$'\r'/}"
-      aur_search_append_result "$pkg" "$description" "$votes" "$popularity" "$labels_name" "$names_name"
-    done < <(
-      {
-        curl -fsSL --max-time 10 --get \
-          --data-urlencode 'v=5' \
-          --data-urlencode 'type=info' \
-          --data-urlencode "arg[]=${query}" \
-          'https://aur.archlinux.org/rpc/' 2>/dev/null || true
-        printf '\n'
-        curl -fsSL --max-time 10 --get \
-          --data-urlencode 'v=5' \
-          --data-urlencode 'type=search' \
-          --data-urlencode 'by=name-desc' \
-          --data-urlencode "arg=${query}" \
-          'https://aur.archlinux.org/rpc/' 2>/dev/null || true
-      } \
-      | tr '{' '\n' \
-      | sed -nE 's/.*"Name"[[:space:]]*:[[:space:]]*"([^"]+)".*"Description"[[:space:]]*:[[:space:]]*("([^"]*)"|null).*"NumVotes"[[:space:]]*:[[:space:]]*([0-9]+).*"Popularity"[[:space:]]*:[[:space:]]*([0-9.]+).*/\1\t\3\t\4\t\5/p' \
-      | awk -F '\t' '$1 != "" && !seen[$1]++ {print}' \
-      | head -25
-    )
-  fi
-
   (( ${#_result_names[@]} > 0 ))
 }
 
@@ -1359,7 +1362,7 @@ aur_package_exists() {
   local pkg="$1"
   [[ -n "$pkg" ]] || return 1
 
-  if ! ensure_api_search_tool "AUR search"; then
+  if ! ensure_aur_search_tool; then
     return 2
   fi
 
@@ -1373,8 +1376,7 @@ import urllib.parse
 import urllib.request
 
 pkg = sys.argv[1]
-params = urllib.parse.urlencode({"v": "5", "type": "info"})
-url = "https://aur.archlinux.org/rpc/?" + params + "&" + urllib.parse.urlencode({"arg[]": pkg})
+url = "https://aur.archlinux.org/rpc/v5/info?" + urllib.parse.urlencode({"arg[]": [pkg]}, doseq=True)
 request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
 
 try:
@@ -1389,16 +1391,6 @@ for row in rows:
         sys.exit(0)
 sys.exit(1)
 PYAURINFO
-    return $?
-  fi
-
-  if have curl; then
-    curl -fsSL --max-time 10 --get \
-      --data-urlencode 'v=5' \
-      --data-urlencode 'type=info' \
-      --data-urlencode "arg[]=${pkg}" \
-      'https://aur.archlinux.org/rpc/' 2>/dev/null \
-      | grep -Fq '"Name":"'"${pkg}"'"'
     return $?
   fi
 
@@ -1445,7 +1437,7 @@ aur_search_add_menu() {
     query="$(prompt_line "Search AUR package name: ")"
     [[ -z "$query" ]] && return 1
 
-    if ! ensure_api_search_tool "AUR search"; then
+    if ! ensure_aur_search_tool; then
       show_search_tool_missing "AUR search"
       continue
     fi
