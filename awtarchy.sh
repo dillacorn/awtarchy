@@ -640,10 +640,118 @@ flatpak_picker_add_app() {
   _kinds_ref+=("item")
 }
 
+api_search_tool_ready() {
+  have python3 || have python || have curl
+}
+
+ensure_api_search_tool() {
+  local purpose="${1:-search}"
+
+  if api_search_tool_ready; then
+    return 0
+  fi
+
+  if (( DRY_RUN == 1 )); then
+    return 1
+  fi
+
+  if [[ "${EUID}" -ne 0 ]]; then
+    return 1
+  fi
+
+  clear_screen
+  printf '%s\n\n' "${COLOR_CYAN}Installing ${purpose} helper dependency...${COLOR_RESET}" >/dev/tty
+  printf '%s\n' "Awtarchy needs python or curl to search online package indexes before the main install starts." >/dev/tty
+  printf '%s\n\n' "Installing python, curl, and ca-certificates now." >/dev/tty
+
+  pacman -S --needed --noconfirm python curl ca-certificates >/dev/tty
+  api_search_tool_ready
+}
+
+ensure_flatpak_search_tool() {
+  if have flatpak || api_search_tool_ready; then
+    return 0
+  fi
+  ensure_api_search_tool "Flatpak search"
+}
+
+show_search_tool_missing() {
+  local purpose="$1"
+  clear_screen
+  printf '%s\n\n' "${COLOR_YELLOW}${purpose} is unavailable.${COLOR_RESET}" >/dev/tty
+  if (( DRY_RUN == 1 )); then
+    printf '%s\n' "Dry-run mode does not install helper dependencies." >/dev/tty
+    printf '%s\n' "Install python or curl first, or test this path during a live sudo install." >/dev/tty
+  elif [[ "${EUID}" -ne 0 ]]; then
+    printf '%s\n' "Run the installer with sudo so it can install python/curl for package search." >/dev/tty
+  else
+    printf '%s\n' "Could not install or find python/curl for package search." >/dev/tty
+  fi
+  printf '\n' >/dev/tty
+  press_any_key
+}
+
+arch_repo_package_exists() {
+  local pkg="$1"
+  [[ -n "$pkg" ]] || return 1
+  pacman -Si "$pkg" >/dev/null 2>&1
+}
+
+arch_picker_add_pkg() {
+  local pkg="$1" labels_name="$2" values_name="$3" selected_name="$4" kinds_name="$5"
+  # shellcheck disable=SC2178
+  local -n _labels_ref="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  # shellcheck disable=SC2178
+  local -n _kinds_ref="$kinds_name"
+  local i
+
+  [[ -n "$pkg" ]] || return 1
+
+  if ! arch_repo_package_exists "$pkg"; then
+    clear_screen
+    printf '%s\n\n' "${COLOR_YELLOW}Arch repo package not found: ${pkg}${COLOR_RESET}" >/dev/tty
+    printf '%s\n' "Manual Arch package entries must exist in enabled pacman repositories." >/dev/tty
+    printf '%s\n' "If this is an AUR package, add it from the AUR section instead." >/dev/tty
+    printf '\n' >/dev/tty
+    press_any_key
+    return 1
+  fi
+
+  for i in "${!_values_ref[@]}"; do
+    if [[ "${_values_ref[i]}" == "$pkg" ]]; then
+      _selected_ref[i]=1
+      return 0
+    fi
+  done
+
+  _labels_ref+=("${pkg}")
+  _values_ref+=("${pkg}")
+  _selected_ref+=("1")
+  _kinds_ref+=("item")
+}
+
+arch_manual_add_pkg() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local pkg
+
+  clear_screen
+  pkg="$(prompt_line "Enter Arch repo package name: ")"
+  [[ -z "$pkg" ]] && return 1
+  arch_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+}
+
+
 flatpak_search_results() {
   local query="$1" labels_name="$2" names_name="$3" ids_name="$4"
+  # shellcheck disable=SC2178
   local -n _result_labels="$labels_name"
+  # shellcheck disable=SC2178
   local -n _result_names="$names_name"
+  # shellcheck disable=SC2178
   local -n _result_ids="$ids_name"
   local appid name description line_count=0
 
@@ -784,6 +892,63 @@ PYFLATHUB
   (( ${#_result_ids[@]} > 0 ))
 }
 
+flatpak_app_lookup_name() {
+  local appid="$1" out_name_ref="$2"
+  # shellcheck disable=SC2178
+  local -n _out_name_ref="$out_name_ref"
+  local -a result_labels=()
+  local -a result_names=()
+  local -a result_ids=()
+  local i
+
+  _out_name_ref=""
+  [[ -n "$appid" && "$appid" == *.* ]] || return 1
+
+  if ! ensure_flatpak_search_tool; then
+    return 2
+  fi
+
+  flatpak_search_results "$appid" result_labels result_names result_ids || return 1
+  for i in "${!result_ids[@]}"; do
+    if [[ "${result_ids[i]}" == "$appid" ]]; then
+      _out_name_ref="${result_names[i]}"
+      [[ -n "$_out_name_ref" ]] || _out_name_ref="$appid"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+flatpak_manual_add_app() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local appid name lookup_name rc
+
+  clear_screen
+  appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
+  [[ -z "$appid" ]] && return 1
+
+  lookup_name=""
+  if flatpak_app_lookup_name "$appid" lookup_name; then
+    name="$lookup_name"
+  else
+    rc=$?
+    if (( rc == 2 )); then
+      show_search_tool_missing "Flatpak app validation"
+    else
+      clear_screen
+      printf '%s\n\n' "${COLOR_YELLOW}Flathub app ID not found: ${appid}${COLOR_RESET}" >/dev/tty
+      printf '%s\n' "Manual Flatpak entries must be confirmed against Flathub before being added." >/dev/tty
+      printf '%s\n' "Use Search Flathub by app name if you are not sure of the exact app ID." >/dev/tty
+      printf '\n' >/dev/tty
+      press_any_key
+    fi
+    return 1
+  fi
+
+  flatpak_picker_add_app "$name" "$appid" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+}
+
 flatpak_search_add_menu() {
   local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
   local query choice i
@@ -800,15 +965,15 @@ flatpak_search_add_menu() {
         query="$(prompt_line "Search Flathub app name: ")"
         [[ -z "$query" ]] && continue
 
+        if ! ensure_flatpak_search_tool; then
+          show_search_tool_missing "Flatpak search"
+          continue
+        fi
+
         if ! flatpak_search_results "$query" result_labels result_names result_ids; then
           clear_screen
           printf '%s\n\n' "${COLOR_YELLOW}No Flatpak search results found.${COLOR_RESET}" >/dev/tty
-          if ! have flatpak; then
-            printf '%s\n' "Flatpak search requires the flatpak command to already be installed." >/dev/tty
-            printf '%s\n' "Use manual app ID, or add Flatpak apps after the installer installs flatpak." >/dev/tty
-          else
-            printf '%s\n' "Try a different app name or use manual app ID." >/dev/tty
-          fi
+          printf '%s\n' "Try a different app name. Manual app ID entry is validated against Flathub before it is added." >/dev/tty
           printf '\n' >/dev/tty
           press_any_key
           continue
@@ -831,27 +996,14 @@ flatpak_search_add_menu() {
         if (( choice == ${#result_ids[@]} )); then
           continue
         elif (( choice == ${#result_ids[@]} + 1 )); then
-          clear_screen
-          local manual_appid manual_name
-          manual_appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
-          [[ -z "$manual_appid" ]] && continue
-          manual_name="$(prompt_line "Display name, empty uses app ID: ")"
-          [[ -z "$manual_name" ]] && manual_name="$manual_appid"
-          flatpak_picker_add_app "$manual_name" "$manual_appid" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-          return 0
+          flatpak_manual_add_app "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
+          continue
         else
           continue
         fi
         ;;
       1)
-        clear_screen
-        local appid name
-        appid="$(prompt_line "Enter full Flathub app ID, example com.github.tchx84.Flatseal: ")"
-        [[ -z "$appid" ]] && continue
-        name="$(prompt_line "Display name, empty uses app ID: ")"
-        [[ -z "$name" ]] && name="$appid"
-        flatpak_picker_add_app "$name" "$appid" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-        return 0
+        flatpak_manual_add_app "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
         ;;
       *)
         return 1
@@ -990,6 +1142,84 @@ PYAUR
   (( ${#_result_names[@]} > 0 ))
 }
 
+aur_package_exists() {
+  local pkg="$1"
+  [[ -n "$pkg" ]] || return 1
+
+  if ! ensure_api_search_tool "AUR search"; then
+    return 2
+  fi
+
+  if have python3 || have python; then
+    local pybin="python3"
+    have python3 || pybin="python"
+    "$pybin" - "$pkg" <<'PYAURINFO'
+import json
+import sys
+import urllib.parse
+import urllib.request
+
+pkg = sys.argv[1]
+params = urllib.parse.urlencode({"v": "5", "type": "info"})
+url = "https://aur.archlinux.org/rpc/?" + params + "&" + urllib.parse.urlencode({"arg[]": pkg})
+request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
+
+try:
+    with urllib.request.urlopen(request, timeout=8) as response:
+        data = json.load(response)
+except Exception:
+    sys.exit(1)
+
+rows = data.get("results", []) if isinstance(data, dict) else []
+for row in rows:
+    if isinstance(row, dict) and row.get("Name") == pkg:
+        sys.exit(0)
+sys.exit(1)
+PYAURINFO
+    return $?
+  fi
+
+  if have curl; then
+    curl -fsSL --max-time 10 --get \
+      --data-urlencode 'v=5' \
+      --data-urlencode 'type=info' \
+      --data-urlencode "arg[]=${pkg}" \
+      'https://aur.archlinux.org/rpc/' 2>/dev/null \
+      | grep -Fq '"Name":"'"${pkg}"'"'
+    return $?
+  fi
+
+  return 2
+}
+
+aur_manual_add_pkg() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local pkg rc
+
+  clear_screen
+  pkg="$(prompt_line "Enter AUR package name: ")"
+  [[ -z "$pkg" ]] && return 1
+
+  if aur_package_exists "$pkg"; then
+    aur_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+    return 0
+  fi
+
+  rc=$?
+  if (( rc == 2 )); then
+    show_search_tool_missing "AUR package validation"
+  else
+    clear_screen
+    printf '%s\n\n' "${COLOR_YELLOW}AUR package not found: ${pkg}${COLOR_RESET}" >/dev/tty
+    printf '%s\n' "Manual AUR entries must be confirmed against the AUR RPC before being added." >/dev/tty
+    printf '%s\n' "Use Search AUR by name/description if you are not sure of the exact package name." >/dev/tty
+    printf '\n' >/dev/tty
+    press_any_key
+  fi
+
+  return 1
+}
+
 aur_search_add_menu() {
   local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
   local query choice i pkg
@@ -1005,12 +1235,15 @@ aur_search_add_menu() {
         query="$(prompt_line "Search AUR package name: ")"
         [[ -z "$query" ]] && continue
 
+        if ! ensure_api_search_tool "AUR search"; then
+          show_search_tool_missing "AUR search"
+          continue
+        fi
+
         if ! aur_search_results "$query" result_labels result_names; then
           clear_screen
           printf '%s\n\n' "${COLOR_YELLOW}No AUR search results found.${COLOR_RESET}" >/dev/tty
-          printf '%s\n' "Search uses the AUR RPC API directly and does not require yay." >/dev/tty
-          printf '%s\n' "It does require network access plus python/python3 or curl." >/dev/tty
-          printf '%s\n' "Use manual package entry if needed." >/dev/tty
+          printf '%s\n' "Try a different package name. Manual package entry is validated against AUR before it is added." >/dev/tty
           printf '\n' >/dev/tty
           press_any_key
           continue
@@ -1033,21 +1266,14 @@ aur_search_add_menu() {
         if (( choice == ${#result_names[@]} )); then
           continue
         elif (( choice == ${#result_names[@]} + 1 )); then
-          clear_screen
-          pkg="$(prompt_line "Enter AUR package name: ")"
-          [[ -z "$pkg" ]] && continue
-          aur_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-          return 0
+          aur_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
+          continue
         else
           continue
         fi
         ;;
       1)
-        clear_screen
-        pkg="$(prompt_line "Enter AUR package name: ")"
-        [[ -z "$pkg" ]] && continue
-        aur_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-        return 0
+        aur_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
         ;;
       *)
         return 1
@@ -1076,6 +1302,11 @@ add_custom_picker_item() {
 
   if [[ "$type" == "AUR package" ]]; then
     aur_search_add_menu "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+    return $?
+  fi
+
+  if [[ "$type" == "Arch package" ]]; then
+    arch_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name"
     return $?
   fi
 
@@ -1156,6 +1387,10 @@ package_picker() {
         -101) printf '%s [?] Search/filter list\n' "$prefix" ;;
         -102) if [[ "$type" == "Flatpak app ID" ]]; then
           printf '%s [+] Search/add Flatpak app\n' "$prefix"
+        elif [[ "$type" == "AUR package" ]]; then
+          printf '%s [+] Search/add AUR package\n' "$prefix"
+        elif [[ "$type" == "Arch package" ]]; then
+          printf '%s [+] Add verified Arch package\n' "$prefix"
         else
           printf '%s [+] Add custom %s\n' "$prefix" "$type"
         fi
