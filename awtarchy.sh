@@ -653,9 +653,7 @@ flatpak_search_results() {
 
   [[ -n "$query" ]] || return 1
 
-  # Prefer the local Flatpak search when available.
-  # If Flatpak is not installed yet, fall back to the Flathub web API through
-  # Python's standard library. This keeps dry-run usable on a fresh install.
+  # Prefer local Flatpak metadata when available.
   if have flatpak; then
     while IFS=$'\t' read -r appid name description _; do
       appid="${appid//$'\r'/}"
@@ -680,7 +678,10 @@ flatpak_search_results() {
     done < <(flatpak search --columns=application,name,description "$query" 2>/dev/null || true)
   fi
 
-  if (( ${#_result_ids[@]} == 0 )) && have python3; then
+  # Fresh installs may not have flatpak yet. Use Flathub's API directly.
+  if (( ${#_result_ids[@]} == 0 )) && { have python3 || have python; }; then
+    local pybin="python3"
+    have python3 || pybin="python"
     while IFS=$'\t' read -r appid name description _; do
       appid="${appid//$'\r'/}"
       name="${name//$'\r'/}"
@@ -697,7 +698,7 @@ flatpak_search_results() {
       fi
       _result_names+=("$name")
       _result_ids+=("$appid")
-    done < <(python3 - "$query" <<'PYFLATHUB'
+    done < <("$pybin" - "$query" <<'PYFLATHUB'
 import json
 import sys
 import urllib.request
@@ -742,6 +743,42 @@ for row in rows:
         break
 PYFLATHUB
 )
+  fi
+
+  if (( ${#_result_ids[@]} == 0 )) && have curl; then
+    local escaped_query
+    escaped_query="${query//\\/\\\\}"
+    escaped_query="${escaped_query//\"/\\\"}"
+    while IFS=$'\t' read -r appid name description _; do
+      appid="${appid//$'\r'/}"
+      name="${name//$'\r'/}"
+      description="${description//$'\r'/}"
+
+      [[ -n "$appid" ]] || continue
+      [[ "$appid" == *.* ]] || continue
+      [[ -n "$name" ]] || name="$appid"
+
+      if [[ -n "$description" ]]; then
+        _result_labels+=("${name}    ${COLOR_DIM}${appid} - ${description}${COLOR_RESET}")
+      else
+        _result_labels+=("${name}    ${COLOR_DIM}${appid}${COLOR_RESET}")
+      fi
+      _result_names+=("$name")
+      _result_ids+=("$appid")
+    done < <(
+      curl -fsSL --max-time 10 \
+        -X POST 'https://flathub.org/api/v2/search' \
+        -H 'Content-Type: application/json' \
+        -H 'User-Agent: awtarchy-installer' \
+        --data-raw "{\"query\":\"${escaped_query}\",\"filters\":[]}" 2>/dev/null \
+      | tr '{' '\n' \
+      | sed -nE '
+          s/.*"(flatpakAppId|id|app_id|appId|application)"[[:space:]]*:[[:space:]]*"([^"]+)".*"(name|title)"[[:space:]]*:[[:space:]]*"([^"]*)".*/\2\t\4\t/p
+          s/.*"(name|title)"[[:space:]]*:[[:space:]]*"([^"]*)".*"(flatpakAppId|id|app_id|appId|application)"[[:space:]]*:[[:space:]]*"([^"]+)".*/\4\t\2\t/p
+        ' \
+      | awk -F '\t' '$1 ~ /\./ && !seen[$1]++ {print}' \
+      | head -25
+    )
   fi
 
   (( ${#_result_ids[@]} > 0 ))
@@ -823,6 +860,203 @@ flatpak_search_add_menu() {
   done
 }
 
+aur_picker_has_pkg() {
+  local pkg="$1" values_name="$2" selected_name="$3"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  local i
+
+  for i in "${!_values_ref[@]}"; do
+    if [[ "${_values_ref[i]}" == "$pkg" ]]; then
+      _selected_ref[i]=1
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+aur_picker_add_pkg() {
+  local pkg="$1" labels_name="$2" values_name="$3" selected_name="$4" kinds_name="$5"
+  # shellcheck disable=SC2178
+  local -n _labels_ref="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  # shellcheck disable=SC2178
+  local -n _kinds_ref="$kinds_name"
+
+  [[ -n "$pkg" ]] || return 1
+
+  if aur_picker_has_pkg "$pkg" "$values_name" "$selected_name"; then
+    return 0
+  fi
+
+  _labels_ref+=("$pkg")
+  _values_ref+=("$pkg")
+  _selected_ref+=("1")
+  _kinds_ref+=("item")
+}
+
+aur_search_results() {
+  local query="$1" labels_name="$2" names_name="$3"
+  # shellcheck disable=SC2178
+  local -n _result_labels="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _result_names="$names_name"
+  local pkg description votes popularity
+
+  _result_labels=()
+  _result_names=()
+
+  [[ -n "$query" ]] || return 1
+
+  # Query the AUR RPC directly. This does not require yay/paru to be installed.
+  if have python3 || have python; then
+    local pybin="python3"
+    have python3 || pybin="python"
+    while IFS=$'\t' read -r pkg description votes popularity _; do
+      pkg="${pkg//$'\r'/}"
+      description="${description//$'\r'/}"
+      votes="${votes//$'\r'/}"
+      popularity="${popularity//$'\r'/}"
+
+      [[ -n "$pkg" ]] || continue
+      if [[ -n "$description" ]]; then
+        _result_labels+=("${pkg}    ${COLOR_DIM}${description} | votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+      else
+        _result_labels+=("${pkg}    ${COLOR_DIM}votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+      fi
+      _result_names+=("$pkg")
+    done < <("$pybin" - "$query" <<'PYAUR'
+import json
+import sys
+import urllib.parse
+import urllib.request
+
+query = sys.argv[1]
+url = "https://aur.archlinux.org/rpc/v5/search/" + urllib.parse.quote(query, safe="") + "?by=name-desc"
+request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
+
+try:
+    with urllib.request.urlopen(request, timeout=8) as response:
+        data = json.load(response)
+except Exception:
+    sys.exit(0)
+
+rows = data.get("results", []) if isinstance(data, dict) else []
+for row in rows[:25]:
+    if not isinstance(row, dict):
+        continue
+    name = row.get("Name") or ""
+    desc = row.get("Description") or ""
+    votes = row.get("NumVotes") or 0
+    pop = row.get("Popularity") or 0
+    if name:
+        print(f"{name}\t{desc}\t{votes}\t{pop}")
+PYAUR
+)
+  fi
+
+  if (( ${#_result_names[@]} == 0 )) && have curl; then
+    while IFS=$'\t' read -r pkg description votes popularity _; do
+      pkg="${pkg//$'\r'/}"
+      description="${description//$'\r'/}"
+      votes="${votes//$'\r'/}"
+      popularity="${popularity//$'\r'/}"
+
+      [[ -n "$pkg" ]] || continue
+      if [[ -n "$description" ]]; then
+        _result_labels+=("${pkg}    ${COLOR_DIM}${description} | votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+      else
+        _result_labels+=("${pkg}    ${COLOR_DIM}votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+      fi
+      _result_names+=("$pkg")
+    done < <(
+      curl -fsSL --max-time 10 --get \
+        --data-urlencode "arg=${query}" \
+        --data-urlencode 'by=name-desc' \
+        'https://aur.archlinux.org/rpc/?v=5&type=search' 2>/dev/null \
+      | tr '{' '\n' \
+      | sed -nE 's/.*"Name"[[:space:]]*:[[:space:]]*"([^"]+)".*"Description"[[:space:]]*:[[:space:]]*("([^"]*)"|null).*"NumVotes"[[:space:]]*:[[:space:]]*([0-9]+).*"Popularity"[[:space:]]*:[[:space:]]*([0-9.]+).*/\1\t\3\t\4\t\5/p' \
+      | awk -F '\t' '$1 != "" && !seen[$1]++ {print}' \
+      | head -25
+    )
+  fi
+
+  (( ${#_result_names[@]} > 0 ))
+}
+
+aur_search_add_menu() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local query choice i pkg
+  local -a result_labels=()
+  local -a result_names=()
+  local -a menu_items=()
+
+  while true; do
+    choice="$(single_select_menu "Add AUR package" 0 "Search AUR by name/description" "Enter package name manually" "Back")" || return 1
+    case "$choice" in
+      0)
+        clear_screen
+        query="$(prompt_line "Search AUR package name: ")"
+        [[ -z "$query" ]] && continue
+
+        if ! aur_search_results "$query" result_labels result_names; then
+          clear_screen
+          printf '%s\n\n' "${COLOR_YELLOW}No AUR search results found.${COLOR_RESET}" >/dev/tty
+          printf '%s\n' "Search uses the AUR RPC API directly and does not require yay." >/dev/tty
+          printf '%s\n' "It does require network access plus python/python3 or curl." >/dev/tty
+          printf '%s\n' "Use manual package entry if needed." >/dev/tty
+          printf '\n' >/dev/tty
+          press_any_key
+          continue
+        fi
+
+        menu_items=()
+        for i in "${!result_labels[@]}"; do
+          menu_items+=("${result_labels[i]}")
+        done
+        menu_items+=("Search again")
+        menu_items+=("Enter package name manually")
+        menu_items+=("Back")
+
+        choice="$(single_select_menu "AUR search: ${query}" 0 "${menu_items[@]}")" || continue
+        if (( choice < ${#result_names[@]} )); then
+          aur_picker_add_pkg "${result_names[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+          return 0
+        fi
+
+        if (( choice == ${#result_names[@]} )); then
+          continue
+        elif (( choice == ${#result_names[@]} + 1 )); then
+          clear_screen
+          pkg="$(prompt_line "Enter AUR package name: ")"
+          [[ -z "$pkg" ]] && continue
+          aur_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+          return 0
+        else
+          continue
+        fi
+        ;;
+      1)
+        clear_screen
+        pkg="$(prompt_line "Enter AUR package name: ")"
+        [[ -z "$pkg" ]] && continue
+        aur_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+        return 0
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+}
+
+
 add_custom_picker_item() {
   local type="$1" labels_name="$2" values_name="$3" selected_name="$4" kinds_name="$5"
   # shellcheck disable=SC2178
@@ -837,6 +1071,11 @@ add_custom_picker_item() {
 
   if [[ "$type" == "Flatpak app ID" ]]; then
     flatpak_search_add_menu "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+    return $?
+  fi
+
+  if [[ "$type" == "AUR package" ]]; then
+    aur_search_add_menu "$labels_name" "$values_name" "$selected_name" "$kinds_name"
     return $?
   fi
 
