@@ -697,6 +697,24 @@ arch_repo_package_exists() {
   pacman -Si "$pkg" >/dev/null 2>&1
 }
 
+arch_picker_has_pkg() {
+  local pkg="$1" values_name="$2" selected_name="$3"
+  # shellcheck disable=SC2178
+  local -n _values_ref="$values_name"
+  # shellcheck disable=SC2178
+  local -n _selected_ref="$selected_name"
+  local i
+
+  for i in "${!_values_ref[@]}"; do
+    if [[ "${_values_ref[i]}" == "$pkg" ]]; then
+      _selected_ref[i]=1
+      return 0
+    fi
+  done
+
+  return 1
+}
+
 arch_picker_add_pkg() {
   local pkg="$1" labels_name="$2" values_name="$3" selected_name="$4" kinds_name="$5"
   # shellcheck disable=SC2178
@@ -707,26 +725,12 @@ arch_picker_add_pkg() {
   local -n _selected_ref="$selected_name"
   # shellcheck disable=SC2178
   local -n _kinds_ref="$kinds_name"
-  local i
 
   [[ -n "$pkg" ]] || return 1
 
-  if ! arch_repo_package_exists "$pkg"; then
-    clear_screen
-    printf '%s\n\n' "${COLOR_YELLOW}Arch repo package not found: ${pkg}${COLOR_RESET}" >/dev/tty
-    printf '%s\n' "Manual Arch package entries must exist in enabled pacman repositories." >/dev/tty
-    printf '%s\n' "If this is an AUR package, add it from the AUR section instead." >/dev/tty
-    printf '\n' >/dev/tty
-    press_any_key
-    return 1
+  if arch_picker_has_pkg "$pkg" "$values_name" "$selected_name"; then
+    return 0
   fi
-
-  for i in "${!_values_ref[@]}"; do
-    if [[ "${_values_ref[i]}" == "$pkg" ]]; then
-      _selected_ref[i]=1
-      return 0
-    fi
-  done
 
   _labels_ref+=("${pkg}")
   _values_ref+=("${pkg}")
@@ -734,16 +738,209 @@ arch_picker_add_pkg() {
   _kinds_ref+=("item")
 }
 
-arch_manual_add_pkg() {
-  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
-  local pkg
+arch_search_append_result() {
+  local pkg="$1" repo="$2" version="$3" description="$4" labels_name="$5" names_name="$6"
+  # shellcheck disable=SC2178
+  local -n _result_labels="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _result_names="$names_name"
+  local existing label
 
-  clear_screen
-  pkg="$(prompt_line "Enter Arch repo package name: ")"
-  [[ -z "$pkg" ]] && return 1
-  arch_picker_add_pkg "$pkg" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+  [[ -n "$pkg" ]] || return 1
+  for existing in "${_result_names[@]}"; do
+    [[ "$existing" == "$pkg" ]] && return 0
+  done
+
+  label="$pkg"
+  if [[ -n "$repo" || -n "$version" || -n "$description" ]]; then
+    label+="    ${COLOR_DIM}"
+    [[ -n "$repo" ]] && label+="${repo}"
+    [[ -n "$version" ]] && label+=" ${version}"
+    [[ -n "$description" ]] && label+=" - ${description}"
+    label+="${COLOR_RESET}"
+  fi
+
+  _result_labels+=("$label")
+  _result_names+=("$pkg")
 }
 
+arch_search_results() {
+  local query="$1" labels_name="$2" names_name="$3"
+  # shellcheck disable=SC2178
+  local -n _result_labels="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _result_names="$names_name"
+  local pkg repo version description
+
+  _result_labels=()
+  _result_names=()
+
+  [[ -n "$query" ]] || return 1
+
+  # Prefer local pacman metadata on Arch systems.
+  if have pacman; then
+    while IFS=$'\t' read -r pkg repo version description _; do
+      pkg="${pkg//$'\r'/}"
+      repo="${repo//$'\r'/}"
+      version="${version//$'\r'/}"
+      description="${description//$'\r'/}"
+      arch_search_append_result "$pkg" "$repo" "$version" "$description" "$labels_name" "$names_name"
+    done < <(pacman -Si "$query" 2>/dev/null | awk -F ': *' '
+      /^Repository/{repo=$2}
+      /^Name/{name=$2}
+      /^Version/{version=$2}
+      /^Description/{desc=$2}
+      END{if(name != "") print name "\t" repo "\t" version "\t" desc}
+    ')
+
+    while IFS=$'\t' read -r pkg repo version description _; do
+      pkg="${pkg//$'\r'/}"
+      repo="${repo//$'\r'/}"
+      version="${version//$'\r'/}"
+      description="${description//$'\r'/}"
+      arch_search_append_result "$pkg" "$repo" "$version" "$description" "$labels_name" "$names_name"
+      (( ${#_result_names[@]} >= 25 )) && break
+    done < <(pacman -Ss "$query" 2>/dev/null | awk '
+      /^[^[:space:]][^\/]+\/[^[:space:]]+/ {
+        if (name != "") print name "\t" repo "\t" version "\t" desc
+        split($1, parts, "/")
+        repo=parts[1]
+        name=parts[2]
+        version=$2
+        desc=""
+        next
+      }
+      /^[[:space:]]/ {
+        sub(/^[[:space:]]+/, "")
+        desc=$0
+        if (name != "") {
+          print name "\t" repo "\t" version "\t" desc
+          name=""; repo=""; version=""; desc=""
+        }
+      }
+      END{if(name != "") print name "\t" repo "\t" version "\t" desc}
+    ')
+  fi
+
+  # Fallback to Arch's package search JSON endpoint when pacman metadata is absent or stale.
+  if (( ${#_result_names[@]} == 0 )) && api_search_tool_ready; then
+    if have python3 || have python; then
+      local pybin="python3"
+      have python3 || pybin="python"
+      while IFS=$'\t' read -r pkg repo version description _; do
+        pkg="${pkg//$'\r'/}"
+        repo="${repo//$'\r'/}"
+        version="${version//$'\r'/}"
+        description="${description//$'\r'/}"
+        arch_search_append_result "$pkg" "$repo" "$version" "$description" "$labels_name" "$names_name"
+      done < <("$pybin" - "$query" <<'PYARCH'
+import json
+import sys
+import urllib.parse
+import urllib.request
+
+query = sys.argv[1]
+urls = [
+    "https://archlinux.org/packages/search/json/?" + urllib.parse.urlencode({"name": query}),
+    "https://archlinux.org/packages/search/json/?" + urllib.parse.urlencode({"q": query}),
+]
+seen = set()
+count = 0
+for url in urls:
+    request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            data = json.load(response)
+    except Exception:
+        continue
+    rows = data.get("results", []) if isinstance(data, dict) else []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        name = row.get("pkgname") or row.get("name") or ""
+        if not name or name in seen:
+            continue
+        seen.add(name)
+        repo = row.get("repo") or row.get("repo_name") or ""
+        version = row.get("pkgver") or row.get("version") or ""
+        rel = row.get("pkgrel") or ""
+        if version and rel:
+            version = f"{version}-{rel}"
+        desc = row.get("pkgdesc") or row.get("description") or ""
+        print(f"{name}\t{repo}\t{version}\t{desc}")
+        count += 1
+        if count >= 25:
+            raise SystemExit(0)
+PYARCH
+)
+    elif have curl; then
+      while IFS=$'\t' read -r pkg repo version description _; do
+        pkg="${pkg//$'\r'/}"
+        repo="${repo//$'\r'/}"
+        version="${version//$'\r'/}"
+        description="${description//$'\r'/}"
+        arch_search_append_result "$pkg" "$repo" "$version" "$description" "$labels_name" "$names_name"
+      done < <(
+        curl -fsSL --max-time 10 --get --data-urlencode "q=${query}" 'https://archlinux.org/packages/search/json/' 2>/dev/null \
+        | tr '{' '\n' \
+        | sed -nE 's/.*"pkgname"[[:space:]]*:[[:space:]]*"([^"]+)".*"repo"[[:space:]]*:[[:space:]]*"([^"]+)".*"pkgver"[[:space:]]*:[[:space:]]*"([^"]+)".*"pkgdesc"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1\t\2\t\3\t\4/p' \
+        | awk -F '\t' '$1 != "" && !seen[$1]++ {print}' \
+        | head -25
+      )
+    fi
+  fi
+
+  (( ${#_result_names[@]} > 0 ))
+}
+
+arch_search_add_menu() {
+  local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
+  local query choice i
+  local -a result_labels=()
+  local -a result_names=()
+  local -a menu_items=()
+
+  while true; do
+    clear_screen
+    query="$(prompt_line "Search Arch repo package name: ")"
+    [[ -z "$query" ]] && return 1
+
+    if ! arch_search_results "$query" result_labels result_names; then
+      if ! have pacman && ! ensure_api_search_tool "Arch repo search"; then
+        show_search_tool_missing "Arch repo search"
+        continue
+      fi
+      arch_search_results "$query" result_labels result_names || true
+    fi
+
+    if (( ${#result_names[@]} == 0 )); then
+      clear_screen
+      printf '%s\n\n' "${COLOR_YELLOW}No Arch repo search results found.${COLOR_RESET}" >/dev/tty
+      printf '%s\n' "Try a different package name. Arch repo packages must exist in enabled pacman repositories or Arch package search." >/dev/tty
+      printf '\n' >/dev/tty
+      press_any_key
+      continue
+    fi
+
+    menu_items=()
+    for i in "${!result_labels[@]}"; do
+      menu_items+=("${result_labels[i]}")
+    done
+    menu_items+=("Search again")
+    menu_items+=("Back")
+
+    choice="$(single_select_menu "Arch repo search: ${query}" 0 "${menu_items[@]}")" || continue
+    if (( choice < ${#result_names[@]} )); then
+      arch_picker_add_pkg "${result_names[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+      return 0
+    fi
+
+    if (( choice == ${#result_names[@]} )); then
+      continue
+    fi
+    return 1
+  done
+}
 
 flatpak_search_results() {
   local query="$1" labels_name="$2" names_name="$3" ids_name="$4"
@@ -958,57 +1155,41 @@ flatpak_search_add_menu() {
   local -a menu_items=()
 
   while true; do
-    choice="$(single_select_menu "Add Flatpak app" 0 "Search Flathub by app name" "Enter app ID manually" "Back")" || return 1
-    case "$choice" in
-      0)
-        clear_screen
-        query="$(prompt_line "Search Flathub app name: ")"
-        [[ -z "$query" ]] && continue
+    clear_screen
+    query="$(prompt_line "Search Flathub app name or app ID: ")"
+    [[ -z "$query" ]] && return 1
 
-        if ! ensure_flatpak_search_tool; then
-          show_search_tool_missing "Flatpak search"
-          continue
-        fi
+    if ! ensure_flatpak_search_tool; then
+      show_search_tool_missing "Flatpak search"
+      continue
+    fi
 
-        if ! flatpak_search_results "$query" result_labels result_names result_ids; then
-          clear_screen
-          printf '%s\n\n' "${COLOR_YELLOW}No Flatpak search results found.${COLOR_RESET}" >/dev/tty
-          printf '%s\n' "Try a different app name. Manual app ID entry is validated against Flathub before it is added." >/dev/tty
-          printf '\n' >/dev/tty
-          press_any_key
-          continue
-        fi
+    if ! flatpak_search_results "$query" result_labels result_names result_ids; then
+      clear_screen
+      printf '%s\n\n' "${COLOR_YELLOW}No Flatpak search results found.${COLOR_RESET}" >/dev/tty
+      printf '%s\n' "Try a different app name or app ID. Flatpak apps must be selected from confirmed Flathub results." >/dev/tty
+      printf '\n' >/dev/tty
+      press_any_key
+      continue
+    fi
 
-        menu_items=()
-        for i in "${!result_labels[@]}"; do
-          menu_items+=("${result_labels[i]}")
-        done
-        menu_items+=("Search again")
-        menu_items+=("Enter app ID manually")
-        menu_items+=("Back")
+    menu_items=()
+    for i in "${!result_labels[@]}"; do
+      menu_items+=("${result_labels[i]}")
+    done
+    menu_items+=("Search again")
+    menu_items+=("Back")
 
-        choice="$(single_select_menu "Flathub search: ${query}" 0 "${menu_items[@]}")" || continue
-        if (( choice < ${#result_ids[@]} )); then
-          flatpak_picker_add_app "${result_names[choice]}" "${result_ids[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-          return 0
-        fi
+    choice="$(single_select_menu "Flathub search: ${query}" 0 "${menu_items[@]}")" || continue
+    if (( choice < ${#result_ids[@]} )); then
+      flatpak_picker_add_app "${result_names[choice]}" "${result_ids[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+      return 0
+    fi
 
-        if (( choice == ${#result_ids[@]} )); then
-          continue
-        elif (( choice == ${#result_ids[@]} + 1 )); then
-          flatpak_manual_add_app "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
-          continue
-        else
-          continue
-        fi
-        ;;
-      1)
-        flatpak_manual_add_app "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
+    if (( choice == ${#result_ids[@]} )); then
+      continue
+    fi
+    return 1
   done
 }
 
@@ -1053,6 +1234,27 @@ aur_picker_add_pkg() {
   _kinds_ref+=("item")
 }
 
+aur_search_append_result() {
+  local pkg="$1" description="$2" votes="$3" popularity="$4" labels_name="$5" names_name="$6"
+  # shellcheck disable=SC2178
+  local -n _result_labels="$labels_name"
+  # shellcheck disable=SC2178
+  local -n _result_names="$names_name"
+  local existing
+
+  [[ -n "$pkg" ]] || return 1
+  for existing in "${_result_names[@]}"; do
+    [[ "$existing" == "$pkg" ]] && return 0
+  done
+
+  if [[ -n "$description" ]]; then
+    _result_labels+=("${pkg}    ${COLOR_DIM}${description} | votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+  else
+    _result_labels+=("${pkg}    ${COLOR_DIM}votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
+  fi
+  _result_names+=("$pkg")
+}
+
 aur_search_results() {
   local query="$1" labels_name="$2" names_name="$3"
   # shellcheck disable=SC2178
@@ -1066,7 +1268,8 @@ aur_search_results() {
 
   [[ -n "$query" ]] || return 1
 
-  # Query the AUR RPC directly. This does not require yay/paru to be installed.
+  # Query the AUR RPC directly. Exact package info is checked first so exact
+  # packages still show up even when the broader search endpoint misses them.
   if have python3 || have python; then
     local pybin="python3"
     have python3 || pybin="python"
@@ -1075,14 +1278,7 @@ aur_search_results() {
       description="${description//$'\r'/}"
       votes="${votes//$'\r'/}"
       popularity="${popularity//$'\r'/}"
-
-      [[ -n "$pkg" ]] || continue
-      if [[ -n "$description" ]]; then
-        _result_labels+=("${pkg}    ${COLOR_DIM}${description} | votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
-      else
-        _result_labels+=("${pkg}    ${COLOR_DIM}votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
-      fi
-      _result_names+=("$pkg")
+      aur_search_append_result "$pkg" "$description" "$votes" "$popularity" "$labels_name" "$names_name"
     done < <("$pybin" - "$query" <<'PYAUR'
 import json
 import sys
@@ -1090,25 +1286,39 @@ import urllib.parse
 import urllib.request
 
 query = sys.argv[1]
-url = "https://aur.archlinux.org/rpc/v5/search/" + urllib.parse.quote(query, safe="") + "?by=name-desc"
-request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
+seen = set()
 
-try:
-    with urllib.request.urlopen(request, timeout=8) as response:
-        data = json.load(response)
-except Exception:
-    sys.exit(0)
+def fetch(params):
+    url = "https://aur.archlinux.org/rpc/?" + urllib.parse.urlencode(params, doseq=True)
+    request = urllib.request.Request(url, headers={"User-Agent": "awtarchy-installer"})
+    try:
+        with urllib.request.urlopen(request, timeout=8) as response:
+            data = json.load(response)
+    except Exception:
+        return []
+    return data.get("results", []) if isinstance(data, dict) else []
 
-rows = data.get("results", []) if isinstance(data, dict) else []
-for row in rows[:25]:
+rows = []
+# Exact lookup first.
+rows.extend(fetch({"v": "5", "type": "info", "arg[]": [query]}))
+# Then normal name/description search for close matches.
+rows.extend(fetch({"v": "5", "type": "search", "by": "name-desc", "arg": query}))
+
+count = 0
+for row in rows:
     if not isinstance(row, dict):
         continue
     name = row.get("Name") or ""
+    if not name or name in seen:
+        continue
+    seen.add(name)
     desc = row.get("Description") or ""
     votes = row.get("NumVotes") or 0
     pop = row.get("Popularity") or 0
-    if name:
-        print(f"{name}\t{desc}\t{votes}\t{pop}")
+    print(f"{name}\t{desc}\t{votes}\t{pop}")
+    count += 1
+    if count >= 25:
+        break
 PYAUR
 )
   fi
@@ -1119,19 +1329,22 @@ PYAUR
       description="${description//$'\r'/}"
       votes="${votes//$'\r'/}"
       popularity="${popularity//$'\r'/}"
-
-      [[ -n "$pkg" ]] || continue
-      if [[ -n "$description" ]]; then
-        _result_labels+=("${pkg}    ${COLOR_DIM}${description} | votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
-      else
-        _result_labels+=("${pkg}    ${COLOR_DIM}votes: ${votes:-0} | pop: ${popularity:-0}${COLOR_RESET}")
-      fi
-      _result_names+=("$pkg")
+      aur_search_append_result "$pkg" "$description" "$votes" "$popularity" "$labels_name" "$names_name"
     done < <(
-      curl -fsSL --max-time 10 --get \
-        --data-urlencode "arg=${query}" \
-        --data-urlencode 'by=name-desc' \
-        'https://aur.archlinux.org/rpc/?v=5&type=search' 2>/dev/null \
+      {
+        curl -fsSL --max-time 10 --get \
+          --data-urlencode 'v=5' \
+          --data-urlencode 'type=info' \
+          --data-urlencode "arg[]=${query}" \
+          'https://aur.archlinux.org/rpc/' 2>/dev/null || true
+        printf '\n'
+        curl -fsSL --max-time 10 --get \
+          --data-urlencode 'v=5' \
+          --data-urlencode 'type=search' \
+          --data-urlencode 'by=name-desc' \
+          --data-urlencode "arg=${query}" \
+          'https://aur.archlinux.org/rpc/' 2>/dev/null || true
+      } \
       | tr '{' '\n' \
       | sed -nE 's/.*"Name"[[:space:]]*:[[:space:]]*"([^"]+)".*"Description"[[:space:]]*:[[:space:]]*("([^"]*)"|null).*"NumVotes"[[:space:]]*:[[:space:]]*([0-9]+).*"Popularity"[[:space:]]*:[[:space:]]*([0-9.]+).*/\1\t\3\t\4\t\5/p' \
       | awk -F '\t' '$1 != "" && !seen[$1]++ {print}' \
@@ -1222,63 +1435,47 @@ aur_manual_add_pkg() {
 
 aur_search_add_menu() {
   local labels_name="$1" values_name="$2" selected_name="$3" kinds_name="$4"
-  local query choice i pkg
+  local query choice i
   local -a result_labels=()
   local -a result_names=()
   local -a menu_items=()
 
   while true; do
-    choice="$(single_select_menu "Add AUR package" 0 "Search AUR by name/description" "Enter package name manually" "Back")" || return 1
-    case "$choice" in
-      0)
-        clear_screen
-        query="$(prompt_line "Search AUR package name: ")"
-        [[ -z "$query" ]] && continue
+    clear_screen
+    query="$(prompt_line "Search AUR package name: ")"
+    [[ -z "$query" ]] && return 1
 
-        if ! ensure_api_search_tool "AUR search"; then
-          show_search_tool_missing "AUR search"
-          continue
-        fi
+    if ! ensure_api_search_tool "AUR search"; then
+      show_search_tool_missing "AUR search"
+      continue
+    fi
 
-        if ! aur_search_results "$query" result_labels result_names; then
-          clear_screen
-          printf '%s\n\n' "${COLOR_YELLOW}No AUR search results found.${COLOR_RESET}" >/dev/tty
-          printf '%s\n' "Try a different package name. Manual package entry is validated against AUR before it is added." >/dev/tty
-          printf '\n' >/dev/tty
-          press_any_key
-          continue
-        fi
+    if ! aur_search_results "$query" result_labels result_names; then
+      clear_screen
+      printf '%s\n\n' "${COLOR_YELLOW}No AUR search results found.${COLOR_RESET}" >/dev/tty
+      printf '%s\n' "Try a different package name. AUR packages must be selected from confirmed AUR RPC results." >/dev/tty
+      printf '\n' >/dev/tty
+      press_any_key
+      continue
+    fi
 
-        menu_items=()
-        for i in "${!result_labels[@]}"; do
-          menu_items+=("${result_labels[i]}")
-        done
-        menu_items+=("Search again")
-        menu_items+=("Enter package name manually")
-        menu_items+=("Back")
+    menu_items=()
+    for i in "${!result_labels[@]}"; do
+      menu_items+=("${result_labels[i]}")
+    done
+    menu_items+=("Search again")
+    menu_items+=("Back")
 
-        choice="$(single_select_menu "AUR search: ${query}" 0 "${menu_items[@]}")" || continue
-        if (( choice < ${#result_names[@]} )); then
-          aur_picker_add_pkg "${result_names[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
-          return 0
-        fi
+    choice="$(single_select_menu "AUR search: ${query}" 0 "${menu_items[@]}")" || continue
+    if (( choice < ${#result_names[@]} )); then
+      aur_picker_add_pkg "${result_names[choice]}" "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+      return 0
+    fi
 
-        if (( choice == ${#result_names[@]} )); then
-          continue
-        elif (( choice == ${#result_names[@]} + 1 )); then
-          aur_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
-          continue
-        else
-          continue
-        fi
-        ;;
-      1)
-        aur_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name" && return 0
-        ;;
-      *)
-        return 1
-        ;;
-    esac
+    if (( choice == ${#result_names[@]} )); then
+      continue
+    fi
+    return 1
   done
 }
 
@@ -1306,7 +1503,7 @@ add_custom_picker_item() {
   fi
 
   if [[ "$type" == "Arch package" ]]; then
-    arch_manual_add_pkg "$labels_name" "$values_name" "$selected_name" "$kinds_name"
+    arch_search_add_menu "$labels_name" "$values_name" "$selected_name" "$kinds_name"
     return $?
   fi
 
