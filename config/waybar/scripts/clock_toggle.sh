@@ -1,112 +1,87 @@
 #!/usr/bin/env bash
-
-# ~/.config/waybar/scripts/clock_toggle.sh
-# Instance-scoped Waybar clock/date toggle.
-#
-# Scope priority:
-#   1. WAYBAR_CLOCK_SCOPE, if explicitly set
-#   2. nearest ancestor waybar PID
-#   3. current parent PID fallback
-
 set -euo pipefail
-export LC_ALL=C
-
-SIGNAL="${WAYBAR_CLOCK_SIGNAL:-12}"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
-mkdir -p "$STATE_DIR"
 
 find_waybar_pid() {
-  local pid="${1:-${PPID:-}}"
-  local comm=""
-  local ppid=""
+  local pid="${PPID:-}"
 
-  while [[ "$pid" =~ ^[0-9]+$ ]] && (( pid > 1 )); do
-    if [[ -r "/proc/$pid/comm" ]]; then
-      IFS= read -r comm < "/proc/$pid/comm" || comm=""
-      if [[ "$comm" == "waybar" ]]; then
-        printf '%s\n' "$pid"
-        return 0
-      fi
+  while [[ -n "$pid" && "$pid" != "1" && -r "/proc/$pid/stat" ]]; do
+    local comm
+    comm="$(cat "/proc/$pid/comm" 2>/dev/null || true)"
+
+    if [[ "$comm" == "waybar" ]]; then
+      printf '%s\n' "$pid"
+      return 0
     fi
 
-    if [[ ! -r "/proc/$pid/status" ]]; then
-      break
-    fi
-
-    ppid="$(awk '/^PPid:/ {print $2; exit}' "/proc/$pid/status" 2>/dev/null || true)"
-    [[ "$ppid" =~ ^[0-9]+$ ]] || break
-    [[ "$ppid" == "$pid" ]] && break
-    pid="$ppid"
+    pid="$(awk '{print $4}' "/proc/$pid/stat" 2>/dev/null || true)"
   done
 
-  return 1
+  printf 'manual\n'
 }
 
-safe_name() {
-  tr -cs 'A-Za-z0-9._-' '_' | sed -e 's/^_//' -e 's/_$//'
-}
+waybar_pid="$(find_waybar_pid)"
+state_file="${XDG_RUNTIME_DIR:-/tmp}/waybar-clock-toggle.${waybar_pid}.state"
 
-waybar_pid="$(find_waybar_pid || true)"
-
-if [[ -n "${WAYBAR_CLOCK_SCOPE:-}" ]]; then
-  scope="$(printf '%s' "$WAYBAR_CLOCK_SCOPE" | safe_name)"
-elif [[ -n "$waybar_pid" ]]; then
-  scope="pid-$waybar_pid"
-else
-  scope="pid-${PPID:-global}"
-fi
-
-[[ -n "$scope" ]] || scope="global"
-STATE_FILE="${STATE_DIR}/waybar-clock-mode.${scope}"
-
-read_mode() {
-  local mode="time"
-
-  if [[ -f "$STATE_FILE" ]]; then
-    mode="$(cat "$STATE_FILE" 2>/dev/null || printf 'time')"
-  fi
-
-  case "$mode" in
-    time|date) printf '%s\n' "$mode" ;;
-    *) printf 'time\n' ;;
-  esac
-}
-
-write_mode() {
-  printf '%s\n' "$1" > "$STATE_FILE"
-}
-
-signal_this_waybar() {
-  if [[ -n "$waybar_pid" ]]; then
-    kill "-RTMIN+${SIGNAL}" "$waybar_pid" 2>/dev/null || true
-  elif [[ "${WAYBAR_CLOCK_SIGNAL_ALL:-0}" == "1" ]]; then
-    pkill "-RTMIN+${SIGNAL}" waybar 2>/dev/null || true
-  fi
-}
+mode="$(cat "$state_file" 2>/dev/null || printf 'time')"
 
 if [[ "${1:-}" == "toggle" ]]; then
-  current="$(read_mode)"
-
-  if [[ "$current" == "time" ]]; then
-    write_mode "date"
+  if [[ "$mode" == "date" ]]; then
+    printf 'time\n' > "$state_file"
   else
-    write_mode "time"
+    printf 'date\n' > "$state_file"
   fi
 
-  signal_this_waybar
+  if [[ "$waybar_pid" != "manual" ]]; then
+    kill -RTMIN+12 "$waybar_pid" 2>/dev/null || true
+  fi
+
   exit 0
 fi
 
-mode="$(read_mode)"
-now_24="$(date +'%H:%M')"
-now_12="$(date +'%I:%M %p')"
-full_date="$(date +'%A, %d, %Y')"
+date_wday="$(date '+%a')"
+date_mday="$(date '+%-m/%-d')"
+date_full="$(date '+%A, %B %-d, %Y')"
+time_24="$(date '+%H:%M')"
+time_12="$(date '+%-I:%M %p')"
 
-if [[ "$mode" == "time" ]]; then
-  printf '{"text":" %s","tooltip":"%s\\n24h: %s\\n12h: %s","class":["time"]}\n' \
-    "$now_24" "$full_date" "$now_24" "$now_12"
+if command -v cal >/dev/null 2>&1; then
+  calendar_text="$(cal | sed '1d')"
 else
-  md="$(date +'%m-%d')"
-  printf '{"text":" %s","tooltip":"%s\\n24h: %s\\n12h: %s","class":["date"]}\n' \
-    "$md" "$full_date" "$now_24" "$now_12"
+  calendar_text="$(python3 - <<'PY'
+import calendar
+from datetime import date
+
+today = date.today()
+lines = calendar.month(today.year, today.month).rstrip().splitlines()
+print("\n".join(lines[1:]))
+PY
+)"
 fi
+
+if [[ "$mode" == "date" ]]; then
+  text=" ${date_wday} ${date_mday}"
+  class="date"
+  tooltip="${date_full}
+24h: ${time_24}
+12h: ${time_12}
+
+${calendar_text}"
+else
+  text=" ${time_24}"
+  class="time"
+  tooltip="${date_full}
+24h: ${time_24}
+12h: ${time_12}"
+fi
+
+python3 - "$text" "$tooltip" "$class" <<'PY'
+import json
+import sys
+
+text, tooltip, css_class = sys.argv[1], sys.argv[2], sys.argv[3]
+print(json.dumps({
+    "text": text,
+    "tooltip": tooltip,
+    "class": css_class,
+}, ensure_ascii=False))
+PY
