@@ -151,7 +151,7 @@
     },
     "custom/idle_inhibitor": {
       "exec": "~/.config/waybar/scripts/idle_inhibitor_global.sh",
-      "interval": 30,
+      "interval": 1,
       "return-type": "json",
       "signal": 13,
       "on-click": "~/.config/waybar/scripts/idle_inhibitor_global.sh toggle",

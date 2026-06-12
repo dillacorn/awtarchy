@@ -15,38 +15,81 @@ set -euo pipefail
 export LC_ALL=C
 
 SIGNAL="${WAYBAR_IDLE_SIGNAL:-13}"
-STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
 PID_FILE="${RUNTIME_DIR}/waybar-global-idle-inhibitor.pid"
-WHAT="${WAYBAR_IDLE_WHAT:-idle}"
 
-mkdir -p "$STATE_DIR"
+WHAT="${WAYBAR_IDLE_WHAT:-idle}"
+WHO="${WAYBAR_IDLE_WHO:-waybar}"
+WHY="${WAYBAR_IDLE_WHY:-Waybar global idle inhibitor}"
+PROC_NAME="${WAYBAR_IDLE_PROC_NAME:-waybar-global-idle-inhibitor}"
+
+mkdir -p "$RUNTIME_DIR"
+
+read_pid_file() {
+  [[ -f "$PID_FILE" ]] || return 1
+  cat "$PID_FILE" 2>/dev/null || true
+}
+
+valid_pid() {
+  local pid="${1:-}"
+  [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
+}
+
+matching_inhibitor_pids() {
+  local uid
+  uid="$(id -u)"
+
+  pgrep -u "$uid" -f "$PROC_NAME" 2>/dev/null || true
+  pgrep -u "$uid" -f "systemd-inhibit.*${WHY}" 2>/dev/null || true
+}
 
 cleanup_dead_pid() {
-  if [[ -f "$PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  local pid
+  pid="$(read_pid_file || true)"
 
-    if [[ ! "$pid" =~ ^[0-9]+$ ]] || ! kill -0 "$pid" 2>/dev/null; then
-      rm -f "$PID_FILE"
-    fi
+  if [[ -z "$pid" ]] || ! valid_pid "$pid"; then
+    rm -f "$PID_FILE"
   fi
+}
+
+systemd_inhibit_active() {
+  command -v systemd-inhibit >/dev/null 2>&1 || return 1
+  systemd-inhibit --list --no-pager 2>/dev/null | grep -Fq "$WHY"
 }
 
 is_active() {
   cleanup_dead_pid
 
-  if [[ -f "$PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
-    [[ "$pid" =~ ^[0-9]+$ ]] && kill -0 "$pid" 2>/dev/null
-  else
-    return 1
+  local pid
+  pid="$(read_pid_file || true)"
+
+  if valid_pid "$pid"; then
+    return 0
   fi
+
+  if matching_inhibitor_pids | grep -qE '^[0-9]+$'; then
+    return 0
+  fi
+
+  if systemd_inhibit_active; then
+    return 0
+  fi
+
+  return 1
 }
 
 signal_waybar() {
-  pkill "-RTMIN+${SIGNAL}" waybar 2>/dev/null || true
+  pkill -RTMIN+"${SIGNAL}" -x waybar 2>/dev/null || true
+}
+
+kill_pid_and_group() {
+  local pid="${1:-}"
+
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  [[ "$pid" == "$$" ]] && return 0
+
+  kill -- "-$pid" 2>/dev/null || true
+  kill "$pid" 2>/dev/null || true
 }
 
 start_inhibitor() {
@@ -61,10 +104,11 @@ start_inhibitor() {
 
   setsid systemd-inhibit \
     --what="$WHAT" \
-    --who="waybar" \
-    --why="Waybar global idle inhibitor" \
+    --who="$WHO" \
+    --why="$WHY" \
     --mode=block \
-    sleep infinity >/dev/null 2>&1 &
+    bash -c "trap 'exit 0' TERM INT HUP; exec -a \"\$0\" sleep infinity" "$PROC_NAME" \
+    >/dev/null 2>&1 &
 
   printf '%s\n' "$!" > "$PID_FILE"
 }
@@ -72,16 +116,25 @@ start_inhibitor() {
 stop_inhibitor() {
   cleanup_dead_pid
 
-  if [[ -f "$PID_FILE" ]]; then
-    local pid
-    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+  local pid
+  pid="$(read_pid_file || true)"
+  kill_pid_and_group "$pid"
 
-    if [[ "$pid" =~ ^[0-9]+$ ]]; then
-      kill -- "-$pid" 2>/dev/null || kill "$pid" 2>/dev/null || true
-    fi
+  while read -r pid; do
+    kill_pid_and_group "$pid"
+  done < <(matching_inhibitor_pids | sort -u)
 
-    rm -f "$PID_FILE"
-  fi
+  sleep 0.15
+
+  while read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    [[ "$pid" == "$$" ]] && continue
+
+    kill -9 -- "-$pid" 2>/dev/null || true
+    kill -9 "$pid" 2>/dev/null || true
+  done < <(matching_inhibitor_pids | sort -u)
+
+  rm -f "$PID_FILE"
 }
 
 case "${1:-status}" in
@@ -109,6 +162,11 @@ case "${1:-status}" in
     ;;
 
   status|"")
+    ;;
+
+  *)
+    printf '{"text":"","tooltip":"Unknown idle inhibitor command: %s","class":["error"]}\n' "${1:-}"
+    exit 1
     ;;
 esac
 
