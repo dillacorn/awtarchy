@@ -157,6 +157,15 @@ detect_target_user_install() {
   REPO_DIR="${HOME_DIR}/awtarchy"
 }
 
+user_config_has_no_files() {
+  local config_dir="${HOME_DIR}/.config"
+  [[ -d "$config_dir" ]] || return 0
+
+  local first_file
+  first_file="$(find "$config_dir" -mindepth 1 \( -type f -o -type l \) -print -quit 2>/dev/null || true)"
+  [[ -z "$first_file" ]]
+}
+
 run_as_target() {
   if [[ "${EUID}" -eq 0 ]]; then
     runuser -u "${TARGET_USER}" -- "$@"
@@ -1825,6 +1834,14 @@ confirm_install_review() {
 run_install_questionnaire() {
   require_root
   detect_target_user_install
+
+  if user_config_has_no_files; then
+    INSTALL_LY=1
+    ENABLE_KEYRING_PAM=1
+    OVERWRITE_BASHRC=1
+    OVERWRITE_BASH_PROFILE=1
+  fi
+
   if systemd-detect-virt --quiet; then IS_VM=true; else IS_VM=false; fi
 
   local step=0 rc choice
