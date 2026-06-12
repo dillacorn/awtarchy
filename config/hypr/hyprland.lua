@@ -570,13 +570,15 @@ local smtty_O = "sh -lc 'if hyprctl clients | grep -q \"class: smtty-O\"; then h
 -- If the patch file is missing, this behaves normally.
 local regression_temp_patch = nil
 do
-    local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
-    local patch_loader = loadfile(patch_path)
+    if type(os) == "table" and type(os.getenv) == "function" and type(loadfile) == "function" then
+        local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
+        local patch_loader = loadfile(patch_path)
 
-    if patch_loader then
-        local ok, patch = pcall(patch_loader, hl)
-        if ok and type(patch) == "table" then
-            regression_temp_patch = patch
+        if patch_loader then
+            local ok, patch = pcall(patch_loader, hl)
+            if ok and type(patch) == "table" then
+                regression_temp_patch = patch
+            end
         end
     end
 end
@@ -592,7 +594,7 @@ end
 local function _submap_on_cmd(name)
     local cmd = _submap_on_base(name)
 
-    if regression_temp_patch and regression_temp_patch.on then
+    if regression_temp_patch and type(regression_temp_patch.on) == "function" then
         return regression_temp_patch.on(name, cmd)
     end
 
@@ -602,7 +604,7 @@ end
 local function _submap_off_cmd(name)
     local cmd = _submap_off_base(name)
 
-    if regression_temp_patch and regression_temp_patch.off then
+    if regression_temp_patch and type(regression_temp_patch.off) == "function" then
         return regression_temp_patch.off(name, cmd)
     end
 
@@ -1104,7 +1106,7 @@ hl.define_submap("noalt", function()
     hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd(vm_on), {})
 end)
 
-───────────────────────────────────────────────────────────────────────────────
+-- ───────────────────────────────────────────────────────────────────────────────
 -- MOUSE SUBMAP
 -- ───────────────────────────────────────────────────────────────────────────────
 
@@ -1129,7 +1131,7 @@ hl.define_submap("mouse", function()
     hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd(vm_on), {})
 end)
 
-───────────────────────────────────────────────────────────────────────────────
+-- ───────────────────────────────────────────────────────────────────────────────
 -- VIRTUAL MACHINE SUBMAP
 -- ───────────────────────────────────────────────────────────────────────────────
 
