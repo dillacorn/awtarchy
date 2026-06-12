@@ -19,21 +19,8 @@
 -- example syntax: monitor=(name),(resolution@refresh),(position_0x0),(scale),(vrr,1/0 = enable/disable VRR)
 -- disable display example syntax: monitor=(name),disable
 
-hl.monitor({
-    output = "",
-    mode = "preferred",
-    position = "auto",
-    scale = "auto",
-    vrr = 0,
-})
-
-hl.monitor({
-    output = "Virtual-1",
-    mode = "1600x900@60",
-    position = "auto",
-    scale = 1,
-    vrr = 0,
-})
+hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto", vrr = 0 })
+hl.monitor({ output = "Virtual-1", mode = "1600x900@60", position = "auto", scale = 1, vrr = 0 })
 
 -- ───────────────────────────────────────────────────────────────────────────────
 -- ENV
@@ -577,9 +564,54 @@ local btop = "~/.config/hypr/scripts/launch_handler.sh btop \"alacritty --class 
 local smtty_O = "sh -lc 'if hyprctl clients | grep -q \"class: smtty-O\"; then hyprctl dispatch closewindow class:smtty-O; else alacritty --class smtty-O -e sh -lc '\"'\"'smtty -O; printf \"\\n[smtty -O finished]\\nPress ENTER to close...\"; read -r _'\"'\"'; fi'"
 
 -- Submap references (Toggle on)  [write name to file on entry]
-local noalt_on = "sh -c 'echo noalt > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"noalt mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"noalt\\\")\"'"
-local mouse_on = "sh -c 'echo mouse > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"mouse mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"mouse\\\")\"'"
-local vm_on = "sh -c 'echo vm > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"vm mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"vm\\\")\"'"
+-- Optional regression patch:
+-- If ~/.config/hypr/regression_temp_patch.lua exists, submap enter/exit commands
+-- are wrapped with temporary Hyprland mouse/submap regression workarounds.
+-- If the patch file is missing, this behaves normally.
+local regression_temp_patch = nil
+do
+    local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
+    local patch_loader = loadfile(patch_path)
+
+    if patch_loader then
+        local ok, patch = pcall(patch_loader, hl)
+        if ok and type(patch) == "table" then
+            regression_temp_patch = patch
+        end
+    end
+end
+
+local function _submap_on_base(name)
+    return "sh -c 'echo " .. name .. " > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"" .. name .. " mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"" .. name .. "\\\")\"'"
+end
+
+local function _submap_off_base(name)
+    return "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"" .. name .. " mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
+end
+
+local function _submap_on_cmd(name)
+    local cmd = _submap_on_base(name)
+
+    if regression_temp_patch and regression_temp_patch.on then
+        return regression_temp_patch.on(name, cmd)
+    end
+
+    return cmd
+end
+
+local function _submap_off_cmd(name)
+    local cmd = _submap_off_base(name)
+
+    if regression_temp_patch and regression_temp_patch.off then
+        return regression_temp_patch.off(name, cmd)
+    end
+
+    return cmd
+end
+
+local noalt_on = _submap_on_cmd("noalt")
+local mouse_on = _submap_on_cmd("mouse")
+local vm_on = _submap_on_cmd("vm")
 
 -- Shared bind tables. Native Lua only, no helpers, no translator.
 local workspace_keys = {
@@ -871,9 +903,9 @@ hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd(vm_on), {})
 
 hl.define_submap("noalt", function()
     -- Submap references in "noalt" (toggle off/on)  [empty file on exit]
-    local noalt_off = "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"noalt mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
-    local mouse_on = "sh -c 'echo mouse > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"mouse mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"mouse\\\")\"'"
-    local vm_on = "sh -c 'echo vm > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"vm mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"vm\\\")\"'"
+    local noalt_off = _submap_off_cmd("noalt")
+    local mouse_on = _submap_on_cmd("mouse")
+    local vm_on = _submap_on_cmd("vm")
 
     -- App launchers / terminals in "noalt"
     for _, bind in ipairs({
@@ -1103,7 +1135,7 @@ end)
 
 hl.define_submap("vm", function()
     -- Submap references in "vm" (Toggle off)  [empty file on exit]
-    local vm_off = "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"vm mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
+    local vm_off = _submap_off_cmd("vm")
 
     -- Binds
     for _, bind in ipairs({
