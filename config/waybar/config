@@ -54,8 +54,8 @@
       "format": "🖱",
       "tooltip": true,
       "tooltip-format": "Toggle mouse submap",
-      "on-click": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"reset\\\"))'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"mouse\\\"))'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\"",
-      "on-click-right": "bash -lc \"s=$(hyprctl submap 2>/dev/null | tr -d '\\\\r'); if printf '%s\\n' \\\"$s\\\" | grep -q mouse; then hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"reset\\\"))'; truncate -s 0 /tmp/hypr-submap; else printf '%s\\n' mouse > /tmp/hypr-submap; hyprctl eval 'hl.dispatch(hl.dsp.submap(\\\"mouse\\\"))'; fi; pkill -RTMIN+12 waybar 2>/dev/null || true\""
+      "on-click": "~/.config/waybar/scripts/toggle_mouse_submap.sh toggle",
+      "on-click-right": "~/.config/waybar/scripts/toggle_mouse_submap.sh toggle"
     },
     "custom/ws-left": {
       "format": "←",
@@ -116,8 +116,8 @@
       "format": "{}",
       "tooltip": true,
       "tooltip-format": "Current submap: {} (click to reset)",
-      "on-click": "sh -c 'truncate -s 0 /tmp/hypr-submap; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'",
-      "on-click-right": "sh -c 'truncate -s 0 /tmp/hypr-submap; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
+      "on-click": "~/.config/waybar/scripts/toggle_mouse_submap.sh reset",
+      "on-click-right": "~/.config/waybar/scripts/toggle_mouse_submap.sh reset"
     },
     "hyprland/window": {
       "format": "{title}",

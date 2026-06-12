@@ -1104,13 +1104,13 @@ hl.define_submap("noalt", function()
     hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd(vm_on), {})
 end)
 
--- ───────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────
 -- MOUSE SUBMAP
 -- ───────────────────────────────────────────────────────────────────────────────
 
 hl.define_submap("mouse", function()
     -- Submap references in "mouse" (Toggle off)  [empty file on exit]
-    local mouse_off = "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"mouse mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
+    local mouse_off = _submap_off_cmd("mouse")
 
     -- Resize (MOUSE-left/right / hold)
     for _, bind in ipairs(resize_keys) do
@@ -1120,8 +1120,8 @@ hl.define_submap("mouse", function()
     hl.bind("mouse:272", hl.dsp.window.drag(), { mouse = true })
     hl.bind("mouse:273", hl.dsp.window.resize(), { mouse = true })
     hl.bind("mouse:274", hl.dsp.window.float({ action = "toggle" }), {})
-    hl.bind("Escape", hl.dsp.exec_cmd(mouse_off .. " reset"), {})
-    hl.bind("Return", hl.dsp.exec_cmd(mouse_off .. " reset"), {})
+    hl.bind("Escape", hl.dsp.exec_cmd(mouse_off), {})
+    hl.bind("Return", hl.dsp.exec_cmd(mouse_off), {})
 
     -- Submap binds in "mouse"  (Toggle off/on)
     hl.bind("SUPER + ALT + M", hl.dsp.exec_cmd(mouse_off), {})
@@ -1129,14 +1129,14 @@ hl.define_submap("mouse", function()
     hl.bind("SUPER + ALT + V", hl.dsp.exec_cmd(vm_on), {})
 end)
 
--- ───────────────────────────────────────────────────────────────────────────────
+───────────────────────────────────────────────────────────────────────────────
 -- VIRTUAL MACHINE SUBMAP
 -- ───────────────────────────────────────────────────────────────────────────────
 
 hl.define_submap("vm", function()
     -- Submap references in "vm" (Toggle off)  [empty file on exit]
     local vm_off = _submap_off_cmd("vm")
-
+    
     -- Binds
     for _, bind in ipairs({
         { "SUPER + ALT + Q", hl.dsp.window.close(), {} },
