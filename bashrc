@@ -764,11 +764,19 @@ _aur_guard_add_ro_path() {
 _aur_guard_run_sandbox_command() {
   local network="$1"
   shift
+  local uid gid
   local -a systemd_args command_line
 
+  uid=$(id -u) || return 1
+  gid=$(id -g) || return 1
+
   systemd_args=(
+    /usr/bin/sudo
+    --
     /usr/bin/systemd-run
-    --user
+    --system
+    --uid="$uid"
+    --gid="$gid"
     --wait
     --pipe
     --collect
@@ -784,20 +792,123 @@ _aur_guard_run_sandbox_command() {
   case "$network" in
     allow)
       systemd_args+=(
-        --property='IPAddressDeny=localhost link-local multicast 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4 ::1/128 ::ffff:0:0/96 fc00::/7 fe80::/10 ff00::/8'
+        --property='IPAddressDeny=0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4 ::1/128 ::ffff:0:0/96 fc00::/7 fe80::/10 ff00::/8'
       )
+      # Variables in this embedded script intentionally expand only in the child Bash.
+      # shellcheck disable=SC2016
       command_line=(
-        /usr/bin/pasta
-        --quiet
-        --foreground
-        --config-net
-        --no-map-gw
-        --map-host-loopback none
-        --map-guest-addr none
-        --no-splice
-        --tcp-ports none
-        --udp-ports none
-        --
+        /usr/bin/bash
+        -c
+        '
+          set -Eeuo pipefail
+
+          state_dir=$(mktemp -d "${TMPDIR:-/tmp}/awtarchy-netns.XXXXXX")
+          gate="$state_dir/gate"
+          status_file="$state_dir/bwrap-status.jsonl"
+          pasta_pid_file="$state_dir/pasta.pid"
+          bwrap_pid=
+          pasta_pid=
+
+          cleanup() {
+            local rc=$?
+            trap - EXIT HUP INT TERM
+            exec 8>&- 2>/dev/null || true
+            exec 9>&- 2>/dev/null || true
+
+            if [[ -n ${bwrap_pid:-} ]] && kill -0 "$bwrap_pid" 2>/dev/null; then
+              kill "$bwrap_pid" 2>/dev/null || true
+              wait "$bwrap_pid" 2>/dev/null || true
+            fi
+            if [[ -n ${pasta_pid:-} ]] && kill -0 "$pasta_pid" 2>/dev/null; then
+              kill "$pasta_pid" 2>/dev/null || true
+              wait "$pasta_pid" 2>/dev/null || true
+            fi
+
+            rm -rf -- "$state_dir"
+            exit "$rc"
+          }
+          trap cleanup EXIT HUP INT TERM
+
+          mkfifo "$gate"
+          : > "$status_file"
+          exec 8<>"$gate"
+          exec 9>"$status_file"
+
+          "$@" &
+          bwrap_pid=$!
+          exec 9>&-
+
+          child_pid=
+          for ((attempt = 0; attempt < 200; attempt++)); do
+            child_pid=$(jq -r '\''select(type == "object" and has("child-pid")) | .["child-pid"]'\'' "$status_file" 2>/dev/null | head -n 1 || true)
+            if [[ $child_pid =~ ^[0-9]+$ ]]; then
+              break
+            fi
+
+            if ! kill -0 "$bwrap_pid" 2>/dev/null; then
+              set +e
+              wait "$bwrap_pid"
+              rc=$?
+              set -e
+              exit "$rc"
+            fi
+            sleep 0.05
+          done
+
+          if [[ ! $child_pid =~ ^[0-9]+$ ]]; then
+            printf "AUR Guard: timed out waiting for the bubblewrap namespace.\n" >&2
+            exit 1
+          fi
+
+          /usr/bin/pasta \
+            --quiet \
+            --foreground \
+            --config-net \
+            --dns 9.9.9.9 \
+            --dns-host 9.9.9.9 \
+            --dns-forward 9.9.9.9 \
+            --no-map-gw \
+            --map-host-loopback none \
+            --map-guest-addr none \
+            --no-splice \
+            --tcp-ports none \
+            --udp-ports none \
+            --tcp-ns none \
+            --udp-ns none \
+            --pid "$pasta_pid_file" \
+            "$child_pid" &
+          pasta_pid=$!
+
+          for ((attempt = 0; attempt < 200; attempt++)); do
+            if [[ -s $pasta_pid_file ]]; then
+              break
+            fi
+
+            if ! kill -0 "$pasta_pid" 2>/dev/null; then
+              set +e
+              wait "$pasta_pid"
+              rc=$?
+              set -e
+              exit "$rc"
+            fi
+            sleep 0.05
+          done
+
+          if [[ ! -s $pasta_pid_file ]]; then
+            printf "AUR Guard: timed out attaching pasta to the bubblewrap namespace.\n" >&2
+            exit 1
+          fi
+
+          printf "1" >&8
+          exec 8>&-
+
+          set +e
+          wait "$bwrap_pid"
+          rc=$?
+          set -e
+          exit "$rc"
+        '
+        awtarchy-network-sandbox
         "$@"
       )
       ;;
@@ -823,6 +934,7 @@ _aur_guard_sandbox_exec() {
   local access="$3"
   local rootfs="$4"
   local username uid gid sandbox_meta resolv_file passwd_file group_file path status
+  local gnupg_home cache_home src_dest build_dir pkg_dest srcpkg_dest log_dest
   local -a bwrap_args
 
   shift 4
@@ -889,9 +1001,7 @@ _aur_guard_sandbox_exec() {
   )
 
   case "$network" in
-    allow)
-      ;;
-    deny)
+    allow|deny)
       bwrap_args+=(--unshare-net)
       ;;
     *)
@@ -922,9 +1032,33 @@ _aur_guard_sandbox_exec() {
     --ro-bind "$group_file" /etc/group
   )
 
+  gnupg_home=/work/.awtarchy-gnupg
+  cache_home=/work/.awtarchy-cache
+  src_dest=/work
+  build_dir=/work/.awtarchy-build
+  pkg_dest=/work/.awtarchy-pkg
+  srcpkg_dest=/work/.awtarchy-srcpkg
+  log_dest=/work/.awtarchy-log
+
   case "$access" in
     readonly)
-      bwrap_args+=(--ro-bind "$workdir" /work)
+      bwrap_args+=(
+        --ro-bind "$workdir" /work
+        --dir /tmp/awtarchy-gnupg
+        --dir /tmp/awtarchy-cache
+        --dir /tmp/awtarchy-src
+        --dir /tmp/awtarchy-build
+        --dir /tmp/awtarchy-pkg
+        --dir /tmp/awtarchy-srcpkg
+        --dir /tmp/awtarchy-log
+      )
+      gnupg_home=/tmp/awtarchy-gnupg
+      cache_home=/tmp/awtarchy-cache
+      src_dest=/tmp/awtarchy-src
+      build_dir=/tmp/awtarchy-build
+      pkg_dest=/tmp/awtarchy-pkg
+      srcpkg_dest=/tmp/awtarchy-srcpkg
+      log_dest=/tmp/awtarchy-log
       ;;
     writable)
       bwrap_args+=(--bind "$workdir" /work)
@@ -939,6 +1073,10 @@ _aur_guard_sandbox_exec() {
       ;;
   esac
 
+  if [[ $network == allow ]]; then
+    bwrap_args+=(--block-fd 8 --json-status-fd 9)
+  fi
+
   bwrap_args+=(
     --dir /tmp/awtarchy-home
     --clearenv
@@ -950,20 +1088,20 @@ _aur_guard_sandbox_exec() {
     --setenv LANG C.UTF-8
     --setenv LC_ALL C.UTF-8
     --setenv TMPDIR /tmp
-    --setenv GNUPGHOME /work/.awtarchy-gnupg
-    --setenv XDG_CACHE_HOME /work/.awtarchy-cache
-    --setenv CARGO_HOME /work/.awtarchy-cache/cargo
-    --setenv GOCACHE /work/.awtarchy-cache/go-build
-    --setenv GOMODCACHE /work/.awtarchy-cache/go-mod
-    --setenv npm_config_cache /work/.awtarchy-cache/npm
-    --setenv BUN_INSTALL_CACHE_DIR /work/.awtarchy-cache/bun
-    --setenv YARN_CACHE_FOLDER /work/.awtarchy-cache/yarn
-    --setenv CCACHE_DIR /work/.awtarchy-cache/ccache
-    --setenv SRCDEST /work
-    --setenv BUILDDIR /work/.awtarchy-build
-    --setenv PKGDEST /work/.awtarchy-pkg
-    --setenv SRCPKGDEST /work/.awtarchy-srcpkg
-    --setenv LOGDEST /work/.awtarchy-log
+    --setenv GNUPGHOME "$gnupg_home"
+    --setenv XDG_CACHE_HOME "$cache_home"
+    --setenv CARGO_HOME "$cache_home/cargo"
+    --setenv GOCACHE "$cache_home/go-build"
+    --setenv GOMODCACHE "$cache_home/go-mod"
+    --setenv npm_config_cache "$cache_home/npm"
+    --setenv BUN_INSTALL_CACHE_DIR "$cache_home/bun"
+    --setenv YARN_CACHE_FOLDER "$cache_home/yarn"
+    --setenv CCACHE_DIR "$cache_home/ccache"
+    --setenv SRCDEST "$src_dest"
+    --setenv BUILDDIR "$build_dir"
+    --setenv PKGDEST "$pkg_dest"
+    --setenv SRCPKGDEST "$srcpkg_dest"
+    --setenv LOGDEST "$log_dest"
     --chdir /work
     "$@"
   )
@@ -1097,9 +1235,9 @@ _aur_guard_scan_source_tree() {
 
     if /usr/bin/grep -Eq "$_AUR_GUARD_SOURCE_DOWNLOAD_RE" "$file" \
         && /usr/bin/grep -Eq "$_AUR_GUARD_SOURCE_EXEC_RE" "$file"; then
-      printf '%s: contains both network-download and execution/persistence behavior\n' \
-        "$file"
-      matched=true
+      _aur_guard_note_context_warning \
+        "$pkg:source:$relative" \
+        "$relative contains both network-download and execution-capable behavior, but no direct malicious download-to-execution chain matched"
     fi
 
     if [[ ${relative##*/} == 'package.json' ]] \
@@ -1696,7 +1834,7 @@ _aur_guard_verify_package_recursive() {
 
   printf 'AUR Verify: extracting verified sources for %s inside an offline sandbox.\n' "$pkgbase"
   if ! _aur_guard_makepkg_sandbox "$pkgdir" deny writable \
-      --nobuild --noprepare --noverify --nodeps --holdver --noconfirm --nocolor; then
+      --nobuild --noprepare --nodeps --holdver --noconfirm --nocolor; then
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
     _aur_guard_fail "could not safely extract verified sources for $pkgbase"
@@ -2148,7 +2286,7 @@ _aur_guard_build_verified_artifacts() {
 
     _AUR_GUARD_SANDBOX_ROOTFS="$build_root"
     if ! _aur_guard_makepkg_sandbox "$pkgdir" allow writable \
-        --nobuild --noverify --holdver --noconfirm --nocolor; then
+        --nobuild --nodeps --holdver --noconfirm --nocolor; then
       unset _AUR_GUARD_SANDBOX_ROOTFS
       sudo rm -rf -- "$build_root"
       _aur_guard_fail "$pkgbase failed its isolated network preparation step"
@@ -2181,7 +2319,7 @@ _aur_guard_build_verified_artifacts() {
       "$pkgbase"
 
     if ! _aur_guard_makepkg_sandbox "$pkgdir" deny writable \
-        --noextract --noprepare --noverify --holdver --check --noconfirm --nocolor; then
+        --noextract --noprepare --nodeps --holdver --check --noconfirm --nocolor; then
       unset _AUR_GUARD_SANDBOX_ROOTFS
       sudo rm -rf -- "$build_root"
       _aur_guard_fail "$pkgbase failed its offline clean-root build/check/package step"
@@ -2380,16 +2518,29 @@ _aur_guard_verify_tree() {
   fi
 
   if [[ ${AUR_GUARD_TEST_MODE:-0} != 1 ]]; then
-    if ! command systemd-run --user --wait --pipe --collect --quiet \
+    local sandbox_uid sandbox_gid
+    sandbox_uid=$(id -u) || return 1
+    sandbox_gid=$(id -g) || return 1
+
+    if ! sudo -v; then
+      _aur_guard_fail 'sudo authentication is required to create system-managed AUR sandbox services'
+      return 1
+    fi
+
+    if ! sudo -- systemd-run --system --wait --pipe --collect --quiet \
+        --uid="$sandbox_uid" \
+        --gid="$sandbox_gid" \
         --property=Type=exec \
         --property=IPAddressDeny=any \
         /usr/bin/true >/dev/null 2>&1; then
-      _aur_guard_fail 'the per-user systemd manager cannot enforce cgroup IP filtering for transient sandbox services'
+      _aur_guard_fail 'the system service manager cannot enforce cgroup IP filtering for transient sandbox services'
       return 1
     fi
 
     if type -P curl >/dev/null 2>&1; then
-      if command systemd-run --user --wait --pipe --collect --quiet \
+      if sudo -- systemd-run --system --wait --pipe --collect --quiet \
+          --uid="$sandbox_uid" \
+          --gid="$sandbox_gid" \
           --property=Type=exec \
           --property=IPAddressDeny=any \
           /usr/bin/curl --fail --silent --show-error --max-time 5 \
@@ -2398,7 +2549,9 @@ _aur_guard_verify_tree() {
         return 1
       fi
     else
-      if command systemd-run --user --wait --pipe --collect --quiet \
+      if sudo -- systemd-run --system --wait --pipe --collect --quiet \
+          --uid="$sandbox_uid" \
+          --gid="$sandbox_gid" \
           --property=Type=exec \
           --property=IPAddressDeny=any \
           /usr/bin/wget --quiet --timeout=5 --output-document=/dev/null \
@@ -2512,8 +2665,11 @@ AUR_GUARD_TEST_HELPER
   }
 
   printf 'AUR Guard self-test: emergency-blocked packages must be refused.\n'
-  aurup_output=$(aurup vesktop-bin-patched 2>&1)
-  aurup_status=$?
+  if aurup_output=$(aurup vesktop-bin-patched 2>&1); then
+    aurup_status=0
+  else
+    aurup_status=$?
+  fi
   printf '%s\n' "$aurup_output"
 
   if (( aurup_status == 0 )); then
