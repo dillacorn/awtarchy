@@ -114,7 +114,7 @@ unset -f yay paru 2>/dev/null
 #
 # Normal workflow:
 #   sysupdate             update enabled pacman repository packages
-#   aurcheck              list available AUR updates and blocklisted names
+#   aurcheck              list available AUR updates, emergency blocks, and historical warnings
 #   aurverify package     recursively verify one AUR package and its AUR dependencies
 #   aurup package         verify the complete AUR dependency tree, then install
 #
@@ -126,16 +126,9 @@ _AUR_GUARD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/aur-guard"
 _AUR_GUARD_LIST_MAX_AGE=86400
 _AUR_GUARD_LIST_MIN_NAMES=100
 
-_AUR_GUARD_FALLBACK_BAD_PACKAGES=(
-  exodus-wallet-bin
-  gnome-randr-rust
-  minitube
-  ktea
-  librewolf-fix-bin
-  firefox-patch-bin
-  zen-browser-patched-bin
-  minecraft-cracked
-  ttf-ms-fonts-all
+# Exact names that should remain permanently blocked even after historical
+# incident records are cleaned or restored. Keep this list intentionally small.
+_AUR_GUARD_EMERGENCY_BLOCK_PACKAGES=(
   vesktop-bin-patched
 )
 
@@ -277,44 +270,105 @@ _aur_guard_refresh_blacklists() {
   fi
 }
 
-_aur_guard_blacklist_sources() {
+declare -A _AUR_GUARD_HISTORICAL_MATCHES=()
+
+_aur_guard_historical_sources() {
   local pkg="$1"
   local found=false
-  local bad
 
-  if grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"; then
+  if /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"; then
     printf 'Arch maintained incident list\n'
     found=true
   fi
 
-  if grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"; then
+  if /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"; then
     printf 'GitHub aur-malware-check list\n'
     found=true
   fi
 
-  for bad in "${_AUR_GUARD_FALLBACK_BAD_PACKAGES[@]}"; do
-    if [[ "$pkg" == "$bad" ]]; then
-      printf 'Awtarchy built-in emergency blocklist\n'
-      found=true
-      break
-    fi
-  done
-
   $found
 }
 
-_aur_guard_check_blacklist() {
+_aur_guard_emergency_block_source() {
+  local pkg="$1"
+  local bad
+
+  for bad in "${_AUR_GUARD_EMERGENCY_BLOCK_PACKAGES[@]}"; do
+    if [[ "$pkg" == "$bad" ]]; then
+      printf 'Awtarchy built-in emergency blocklist\n'
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+_aur_guard_check_emergency_block() {
+  local pkg="$1"
+  local source
+
+  source=$(_aur_guard_emergency_block_source "$pkg") || return 0
+
+  printf '\n\033[1;31mHARD BLOCK MATCH:\033[0m %s\n' "$pkg" >&2
+  printf '  - %s\n' "$source" >&2
+  return 1
+}
+
+_aur_guard_note_historical_match() {
   local pkg="$1"
   local sources
 
-  sources=$(_aur_guard_blacklist_sources "$pkg") || return 0
+  sources=$(_aur_guard_historical_sources "$pkg") || return 0
 
-  printf '\n\033[1;31mBLOCKLIST MATCH:\033[0m %s\n' "$pkg" >&2
-  while IFS= read -r source; do
-    [[ -n "$source" ]] && printf '  - %s\n' "$source" >&2
-  done <<< "$sources"
+  if [[ ! ${_AUR_GUARD_HISTORICAL_MATCHES[$pkg]+set} ]]; then
+    _AUR_GUARD_HISTORICAL_MATCHES["$pkg"]="$sources"
 
-  return 1
+    printf '\n\033[1;33mHISTORICAL INCIDENT MATCH:\033[0m %s\n' "$pkg" >&2
+    while IFS= read -r source; do
+      [[ -n "$source" ]] && printf '  - %s\n' "$source" >&2
+    done <<< "$sources"
+    printf 'This name was previously reported as affected. That does not prove the current AUR revision is malicious.\n' >&2
+    printf 'Awtarchy will continue with enhanced recursive and sandboxed verification.\n' >&2
+  fi
+}
+
+_aur_guard_has_historical_matches() {
+  (( ${#_AUR_GUARD_HISTORICAL_MATCHES[@]} > 0 ))
+}
+
+_aur_guard_print_historical_summary() {
+  local pkg source
+
+  _aur_guard_has_historical_matches || return 0
+
+  printf '\n\033[1;33mHistorical incident matches in this AUR dependency tree:\033[0m\n' >&2
+  while IFS= read -r pkg; do
+    printf '  %s\n' "$pkg" >&2
+    while IFS= read -r source; do
+      [[ -n "$source" ]] && printf '    - %s\n' "$source" >&2
+    done <<< "${_AUR_GUARD_HISTORICAL_MATCHES[$pkg]}"
+  done < <(printf '%s\n' "${!_AUR_GUARD_HISTORICAL_MATCHES[@]}" | LC_ALL=C sort)
+}
+
+_aur_guard_confirm_historical_install() {
+  local requested_pkg="$1"
+  local answer
+
+  _aur_guard_has_historical_matches || return 0
+
+  _aur_guard_print_historical_summary
+  printf '\nThe current revisions passed Awtarchy verification, but historical incident records remain.\n' >&2
+  printf 'Type exactly INSTALL %s to continue: ' "$requested_pkg" >&2
+
+  if ! IFS= read -r answer; then
+    printf '\nCancelled. No package was installed.\n' >&2
+    return 1
+  fi
+
+  if [[ "$answer" != "INSTALL $requested_pkg" ]]; then
+    printf 'Cancelled. No package was installed.\n' >&2
+    return 1
+  fi
 }
 
 _aur_guard_has_unsafe_flag() {
@@ -386,7 +440,7 @@ _aur_guard_block_message() {
   printf 'Raw AUR installs and mass updates bypass Awtarchy recursive verification.\n\n'
   printf 'Use:\n'
   printf '  sysupdate             update enabled pacman repo packages\n'
-  printf '  aurcheck              show AUR updates and blocklist matches\n'
+  printf '  aurcheck              show AUR updates, emergency blocks, and historical warnings\n'
   printf '  aurverify package     recursively verify a package and all AUR dependencies\n'
   printf '  aurup package         recursively verify, then install one package\n\n'
   printf 'Unsafe manual override:\n'
@@ -827,11 +881,12 @@ _aur_guard_verify_package_recursive() {
   fi
   _AUR_GUARD_REQUEST_STATE[$pkg]='active'
 
-  if ! _aur_guard_check_blacklist "$pkg"; then
+  if ! _aur_guard_check_emergency_block "$pkg"; then
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
-    _aur_guard_fail "$pkg is present on a trusted malware package list"
+    _aur_guard_fail "$pkg is present on the Awtarchy emergency blocklist"
     return 1
   fi
+  _aur_guard_note_historical_match "$pkg"
 
   fetch_parent="$_AUR_GUARD_WORK_DIR/fetch/${pkg//[^a-zA-Z0-9._+-]/_}"
   rm -rf "$fetch_parent"
@@ -863,21 +918,23 @@ _aur_guard_verify_package_recursive() {
   fi
   _AUR_GUARD_BASE_STATE[$pkgbase]='active'
 
-  if ! _aur_guard_check_blacklist "$pkgbase"; then
+  if ! _aur_guard_check_emergency_block "$pkgbase"; then
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
-    _aur_guard_fail "$pkgbase is present on a trusted malware package list"
+    _aur_guard_fail "$pkgbase is present on the Awtarchy emergency blocklist"
     return 1
   fi
+  _aur_guard_note_historical_match "$pkgbase"
 
   while IFS= read -r split_pkg; do
     [[ -n "$split_pkg" ]] || continue
-    if ! _aur_guard_check_blacklist "$split_pkg"; then
+    if ! _aur_guard_check_emergency_block "$split_pkg"; then
       _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
       _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
-      _aur_guard_fail "$split_pkg from package base $pkgbase is blocklisted"
+      _aur_guard_fail "$split_pkg from package base $pkgbase is emergency-blocked"
       return 1
     fi
+    _aur_guard_note_historical_match "$split_pkg"
   done < <(awk -F ' = ' '/^[[:space:]]*pkgname = / {print $2}' "$srcinfo")
 
   _aur_guard_prepare_public_keyring "$pkgdir" || {
@@ -954,8 +1011,8 @@ _aur_guard_verify_package_recursive() {
     dep_name=$(_aur_guard_dependency_name "$dep_spec")
     [[ -n "$dep_name" ]] || continue
 
-    if ! _aur_guard_check_blacklist "$dep_name"; then
-      _aur_guard_fail "$pkgbase depends on blocklisted package $dep_name"
+    if ! _aur_guard_check_emergency_block "$dep_name"; then
+      _aur_guard_fail "$pkgbase depends on emergency-blocked package $dep_name"
       return 1
     fi
 
@@ -1064,7 +1121,7 @@ _aur_guard_verify_tree() {
   }
 
   if ! type -P curl >/dev/null 2>&1 && ! type -P wget >/dev/null 2>&1; then
-    _aur_guard_fail 'curl or wget is required to check trusted malware package lists'
+    _aur_guard_fail 'curl or wget is required to check historical AUR incident lists'
     return 127
   fi
 
@@ -1081,6 +1138,7 @@ _aur_guard_verify_tree() {
 
   declare -gA _AUR_GUARD_REQUEST_STATE=()
   declare -gA _AUR_GUARD_BASE_STATE=()
+  _AUR_GUARD_HISTORICAL_MATCHES=()
 
   printf 'AUR Verify: recursively checking %s and all required AUR dependencies.\n' "$pkg"
   _aur_guard_verify_package_recursive "$pkg" '(requested)' || return 1
@@ -1096,10 +1154,11 @@ _aur_guard_cleanup_work() {
   fi
   unset _AUR_GUARD_WORK_DIR _AUR_GUARD_MANIFEST _AUR_GUARD_HELPER
   unset _AUR_GUARD_REQUEST_STATE _AUR_GUARD_BASE_STATE
+  _AUR_GUARD_HISTORICAL_MATCHES=()
 }
 
 aurguardtest() (
-  local test_root test_bin helper_log network_log
+  local test_root test_bin helper_log network_log historical_output
   local aurup_output wrapper_output aurup_status
   local tool
 
@@ -1109,6 +1168,7 @@ aurguardtest() (
   test_bin="$test_root/bin"
   helper_log="$test_root/helper-called.log"
   network_log="$test_root/network-called.log"
+  historical_output="$test_root/historical-output.log"
   mkdir -p "$test_bin" "$test_root/cache"
 
   for tool in makepkg git jq bwrap gpg timeout; do
@@ -1137,22 +1197,28 @@ AUR_GUARD_TEST_HELPER
   export PATH
 
   _AUR_GUARD_CACHE_DIR="$test_root/cache"
-  printf '%s\n' 'vesktop-bin-patched' > "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"
-  printf '%s\n' 'vesktop-bin-patched' > "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"
+  printf '%s\n' \
+    'vesktop-bin-patched' \
+    'historical-only-test' \
+    > "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"
+  printf '%s\n' \
+    'vesktop-bin-patched' \
+    'historical-only-test' \
+    > "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"
 
   # Keep this test offline and deterministic. The files above simulate both
-  # trusted malware-list sources after a successful refresh.
+  # historical incident-list sources after a successful refresh.
   _aur_guard_refresh_blacklists() {
     return 0
   }
 
-  printf 'AUR Guard self-test: aurup must refuse a blocklisted package.\n'
+  printf 'AUR Guard self-test: emergency-blocked packages must be refused.\n'
   aurup_output=$(aurup vesktop-bin-patched 2>&1)
   aurup_status=$?
   printf '%s\n' "$aurup_output"
 
   if (( aurup_status == 0 )); then
-    _aur_guard_fail 'self-test failed: aurup returned success for a blocklisted package'
+    _aur_guard_fail 'self-test failed: aurup returned success for an emergency-blocked package'
     return 1
   fi
 
@@ -1168,8 +1234,40 @@ AUR_GUARD_TEST_HELPER
   fi
 
   if ! command grep -Fq \
-      'trusted malware package list' <<< "$aurup_output"; then
-    _aur_guard_fail 'self-test failed: refusal did not identify the malware-list match'
+      'emergency blocklist' <<< "$aurup_output"; then
+    _aur_guard_fail 'self-test failed: refusal did not identify the emergency blocklist match'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: historical incident names must warn instead of hard-blocking.\n'
+  _AUR_GUARD_HISTORICAL_MATCHES=()
+  if ! _aur_guard_note_historical_match \
+      'historical-only-test' > "$historical_output" 2>&1; then
+    cat "$historical_output"
+    _aur_guard_fail 'self-test failed: historical incident warning returned failure'
+    return 1
+  fi
+  cat "$historical_output"
+
+  if [[ ! ${_AUR_GUARD_HISTORICAL_MATCHES[historical-only-test]+set} ]]; then
+    _aur_guard_fail 'self-test failed: historical incident match was not recorded'
+    return 1
+  fi
+
+  if ! _aur_guard_check_emergency_block 'historical-only-test'; then
+    _aur_guard_fail 'self-test failed: a historical-only package was incorrectly hard-blocked'
+    return 1
+  fi
+
+  if _aur_guard_confirm_historical_install \
+      'historical-only-test' <<< 'NO'; then
+    _aur_guard_fail 'self-test failed: incorrect historical confirmation was accepted'
+    return 1
+  fi
+
+  if ! _aur_guard_confirm_historical_install \
+      'historical-only-test' <<< 'INSTALL historical-only-test'; then
+    _aur_guard_fail 'self-test failed: exact historical confirmation was rejected'
     return 1
   fi
 
@@ -1230,7 +1328,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: blocklisted installs and malicious source scripts were refused without crawling embedded URLs'
+  _aur_guard_pass 'dry-run passed: emergency blocks, historical quarantine, source scanning, and no-crawl behavior worked'
 )
 
 aurhelp() {
@@ -1247,10 +1345,10 @@ Blocked:
 
 Safe workflow:
   sysupdate             update enabled pacman repository packages
-  aurcheck              show AUR updates and blocklist matches
+  aurcheck              show AUR updates, emergency blocks, and historical warnings
   aurverify package     recursively verify one package and every required AUR dependency
   aurup package         recursively verify, recheck AUR commits, then install
-  aurguardtest          run an offline no-install malware-block self-test
+  aurguardtest          run the offline AUR Guard self-test
 
 Examples:
   sysupdate
@@ -1266,7 +1364,9 @@ Unsafe override:
 
 Important:
   AUR packages are not official Arch packages.
-  The malware lists use package-name matches and can contain false positives.
+  The downloaded incident lists are historical affected-package records.
+  Historical matches trigger enhanced verification and explicit install confirmation.
+  Only the built-in emergency list and current malicious patterns hard-block installation.
   PKGBUILD metadata, source downloads, and source extraction run inside bubblewrap.
   Downloaded script/build files are scanned before installation is allowed.
   Source verification proves sources match the PKGBUILD declarations.
@@ -1279,7 +1379,8 @@ sysupdate() {
 }
 
 aurcheck() {
-  local helper output pkg blocked=false
+  local helper output pkg
+  local hard_blocked=false
 
   helper=$(_aur_guard_pick_helper) || {
     _aur_guard_fail 'no yay or paru found'
@@ -1287,6 +1388,7 @@ aurcheck() {
   }
 
   _aur_guard_refresh_blacklists || return 1
+  _AUR_GUARD_HISTORICAL_MATCHES=()
 
   output=$(command "$helper" -Qua) || return $?
   if [[ -z "$output" ]]; then
@@ -1295,21 +1397,33 @@ aurcheck() {
   fi
 
   printf '%s\n' "$output"
-  printf '\nAUR Guard blocklist check:\n'
+  printf '\nAUR Guard incident check:\n'
 
   while IFS= read -r pkg; do
     [[ -n "$pkg" ]] || continue
-    if ! _aur_guard_check_blacklist "$pkg"; then
-      blocked=true
+
+    if ! _aur_guard_check_emergency_block "$pkg"; then
+      hard_blocked=true
+      continue
     fi
+
+    _aur_guard_note_historical_match "$pkg"
   done < <(awk '{print $1}' <<< "$output" | LC_ALL=C sort -u)
 
-  if $blocked; then
-    _aur_guard_fail 'one or more available updates match a trusted malware package list'
+  if $hard_blocked; then
+    _aur_guard_fail 'one or more available updates match the Awtarchy emergency blocklist'
+    _AUR_GUARD_HISTORICAL_MATCHES=()
     return 1
   fi
 
-  _aur_guard_pass 'no available AUR update names matched the trusted malware lists'
+  if _aur_guard_has_historical_matches; then
+    _aur_guard_print_historical_summary
+    _aur_guard_pass 'no emergency-blocked updates found; historical matches require full aurup verification and confirmation'
+  else
+    _aur_guard_pass 'no available AUR update names matched the emergency or historical incident lists'
+  fi
+
+  _AUR_GUARD_HISTORICAL_MATCHES=()
 }
 
 aurverify() {
@@ -1327,14 +1441,14 @@ aurverify() {
     local repo_name
     repo_name=$(command pacman -Si "$pkg" 2>/dev/null | awk -F': ' '/^Repository/ {print $2; exit}')
 
-    _aur_guard_refresh_blacklists || return 1
-    if ! _aur_guard_check_blacklist "$pkg"; then
-      _aur_guard_fail "$pkg is available from [$repo_name] but matches a trusted malware package list"
+    if ! _aur_guard_check_emergency_block "$pkg"; then
+      _aur_guard_fail "$pkg is available from [$repo_name] but is explicitly emergency-blocked by Awtarchy"
       return 1
     fi
 
     printf 'AUR Verify: %s is available from enabled pacman repo [%s].\n' "$pkg" "$repo_name"
-    _aur_guard_pass "$pkg is handled by pacman and did not match the malware lists. Nothing was installed."
+    printf 'Historical AUR incident lists do not apply to this repository package.\n'
+    _aur_guard_pass "$pkg is handled by pacman. Nothing was installed."
     return 0
   fi
 
@@ -1342,7 +1456,12 @@ aurverify() {
   status=$?
 
   if (( status == 0 )); then
-    _aur_guard_pass "$pkg and all required AUR dependencies passed verification. Nothing was installed."
+    if _aur_guard_has_historical_matches; then
+      _aur_guard_print_historical_summary
+      _aur_guard_pass "$pkg and all required AUR dependencies passed enhanced verification. Historical incident warnings remain. Nothing was installed."
+    else
+      _aur_guard_pass "$pkg and all required AUR dependencies passed verification. Nothing was installed."
+    fi
   fi
 
   _aur_guard_cleanup_work
@@ -1364,17 +1483,13 @@ aurup() {
     local repo_name
     repo_name=$(command pacman -Si "$pkg" 2>/dev/null | awk -F': ' '/^Repository/ {print $2; exit}')
 
-    _aur_guard_refresh_blacklists || {
-      _aur_guard_refuse_install "$pkg" 'the trusted malware package lists could not be checked'
-      return 1
-    }
-
-    if ! _aur_guard_check_blacklist "$pkg"; then
-      _aur_guard_refuse_install "$pkg" "the package name appears on a trusted malware list, even though [$repo_name] currently provides it"
+    if ! _aur_guard_check_emergency_block "$pkg"; then
+      _aur_guard_refuse_install "$pkg" "the package is explicitly emergency-blocked by Awtarchy, even though [$repo_name] currently provides it"
       return 1
     fi
 
     printf 'AUR Guard: %s is available from enabled pacman repo [%s].\n' "$pkg" "$repo_name"
+    printf 'Historical AUR incident lists do not apply to this repository package.\n'
     printf 'Installing with pacman:\n  sudo pacman -S %s\n\n' "$pkg"
     sudo pacman -S "$pkg"
     return $?
@@ -1391,6 +1506,12 @@ aurup() {
 
   if ! _aur_guard_recheck_commits; then
     _aur_guard_refuse_install "$pkg" 'an AUR package changed after it was verified'
+    _aur_guard_cleanup_work
+    return 1
+  fi
+
+  if ! _aur_guard_confirm_historical_install "$pkg"; then
+    _aur_guard_refuse_install "$pkg" 'historical incident confirmation was not accepted'
     _aur_guard_cleanup_work
     return 1
   fi
