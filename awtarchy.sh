@@ -84,12 +84,15 @@ FLATPAK_SELECTED_IDS=()
 FLATPAK_SELECTED_NAMES=()
 
 TMP_SUDOERS=""
+AUR_SUDOERS_FILE=""
 
 cleanup_install_temp() {
   if [[ -n "${TMP_SUDOERS:-}" ]]; then
-    rm -f "${TMP_SUDOERS}" 2>/dev/null || true
+    rm -f -- "${TMP_SUDOERS}" 2>/dev/null || true
   fi
-  rm -f /etc/sudoers.d/temp_sudo_nopasswd 2>/dev/null || true
+  if [[ -n "${AUR_SUDOERS_FILE:-}" ]]; then
+    rm -f -- "${AUR_SUDOERS_FILE}" 2>/dev/null || true
+  fi
 }
 trap cleanup_install_temp EXIT
 
@@ -2161,16 +2164,29 @@ install_arch_repo_apps_stage() {
   if pacman -Qi bluez >/dev/null 2>&1; then systemctl enable --now bluetooth.service || true; fi
 }
 
+remove_temp_sudoers_for_aur() {
+  if [[ -n "${AUR_SUDOERS_FILE:-}" ]]; then
+    rm -f -- "$AUR_SUDOERS_FILE"
+    AUR_SUDOERS_FILE=""
+  fi
+}
+
 create_temp_sudoers_for_aur() {
-  TMP_SUDOERS="$(mktemp /tmp/temp_sudoers.XXXXXX)"
+  remove_temp_sudoers_for_aur
+
+  TMP_SUDOERS="$(mktemp /tmp/awtarchy-aur-sudoers.XXXXXX)"
+  AUR_SUDOERS_FILE="/etc/sudoers.d/awtarchy_aur_${TARGET_USER}_$$"
   printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$TARGET_USER" > "$TMP_SUDOERS"
+
   if ! visudo -c -f "$TMP_SUDOERS" >/dev/null 2>&1; then
-    rm -f "$TMP_SUDOERS"
+    rm -f -- "$TMP_SUDOERS"
     TMP_SUDOERS=""
+    AUR_SUDOERS_FILE=""
     die "Generated sudoers file is invalid."
   fi
-  install -m 0440 "$TMP_SUDOERS" /etc/sudoers.d/temp_sudo_nopasswd
-  rm -f "$TMP_SUDOERS"
+
+  install -m 0440 "$TMP_SUDOERS" "$AUR_SUDOERS_FILE"
+  rm -f -- "$TMP_SUDOERS"
   TMP_SUDOERS=""
 }
 
@@ -2252,6 +2268,8 @@ install_aur_repo_apps_stage() {
       warn "UFW is not installed. Skipping Moonlight firewall configuration."
     fi
   fi
+
+  remove_temp_sudoers_for_aur
 }
 
 flatpak_effective_scope_install() {
@@ -4199,25 +4217,6 @@ detect_repo_scripts_dir() {
   return 1
 }
 
-detect_aur_helper() {
-  if command -v yay >/dev/null 2>&1; then
-    printf '%s\n' "yay"
-    return 0
-  fi
-  if command -v paru >/dev/null 2>&1; then
-    printf '%s\n' "paru"
-    return 0
-  fi
-
-  local helper=""
-  helper="$(run_target bash -lc 'if command -v yay >/dev/null 2>&1; then echo yay; elif command -v paru >/dev/null 2>&1; then echo paru; fi' 2>/dev/null || true)"
-  if [[ -n "${helper}" ]]; then
-    printf '%s\n' "${helper}"
-    return 0
-  fi
-  return 1
-}
-
 flatpak_effective_install_scope() {
   if [[ "${EUID}" -ne 0 ]]; then
     printf '%s\n' "user"
@@ -4265,18 +4264,64 @@ install_missing_arch_repo_packages() {
 }
 
 install_missing_aur_packages() {
+  local guard_bashrc="$1"
+  shift
   local -a pkgs=("$@")
   (( ${#pkgs[@]} )) || return 0
 
-  local aur_helper=""
-  if ! aur_helper="$(detect_aur_helper)"; then
-    warn "No AUR helper found (yay/paru). Skipping AUR package installs."
+  if [[ "${EUID}" -ne 0 ]]; then
+    warn "AUR installs require root. Re-run update-reset-backup with sudo to install missing packages."
     return 1
   fi
 
-  log "Installing missing AUR packages with ${aur_helper} (${#pkgs[@]}):"
-  print_wrapped_list pkgs "  - "
-  run_target "${aur_helper}" -S --needed --noconfirm "${pkgs[@]}"
+  [[ -f "$guard_bashrc" ]] || {
+    warn "AUR Guard configuration not found: ${guard_bashrc}"
+    return 1
+  }
+  grep -q '^aurup()' "$guard_bashrc" || {
+    warn "AUR Guard aurup function not found in: ${guard_bashrc}"
+    return 1
+  }
+
+  log "Installing AUR Guard requirements for missing-package restoration..."
+  pacman -S --needed --noconfirm \
+    base-devel git bubblewrap passt devtools gnupg coreutils jq libarchive file curl sudo
+
+  local sudoers_tmp="" sudoers_file=""
+  sudoers_tmp="$(mktemp /tmp/awtarchy-update-aur-sudoers.XXXXXX)"
+  sudoers_file="/etc/sudoers.d/awtarchy_update_aur_${TARGET_USER}_$$"
+
+  (
+    trap 'rm -f -- "$sudoers_tmp" "$sudoers_file"' EXIT HUP INT TERM
+
+    printf '%s ALL=(ALL) NOPASSWD: ALL\n' "$TARGET_USER" > "$sudoers_tmp"
+    if ! visudo -c -f "$sudoers_tmp" >/dev/null 2>&1; then
+      warn "Generated temporary sudoers file is invalid."
+      exit 1
+    fi
+
+    install -m 0440 "$sudoers_tmp" "$sudoers_file"
+    rm -f -- "$sudoers_tmp"
+
+    log "Installing missing AUR packages through AUR Guard practical mode (${#pkgs[@]}):"
+    print_wrapped_list pkgs "  - "
+
+    local pkg=""
+    for pkg in "${pkgs[@]}"; do
+      # The single-quoted script expands inside the child Bash process.
+      # shellcheck disable=SC2016
+      run_target env \
+        HOME="$HOME_DIR" \
+        USER="$TARGET_USER" \
+        LOGNAME="$TARGET_USER" \
+        bash --noprofile --norc -c '
+          guard_bashrc=$1
+          pkg=$2
+          source <(sed -n "/^# --- AUR Guard ---/,\$p" "$guard_bashrc")
+          aurup "$pkg"
+        ' awtarchy-update-aur "$guard_bashrc" "$pkg"
+    done
+  )
 }
 
 install_missing_flatpak_apps() {
@@ -4388,7 +4433,7 @@ check_and_offer_missing_installs() {
       warn "Missing AUR packages (${#missing_aur[@]}) from install_aur_repo_apps.sh:"
       print_wrapped_list missing_aur "  - "
       if ask_yes_no "Install all missing AUR packages now?"; then
-        install_missing_aur_packages "${missing_aur[@]}" || true
+        install_missing_aur_packages "${repo_dir}/bashrc" "${missing_aur[@]}" || true
       else
         log "Skipped AUR package installation."
       fi
