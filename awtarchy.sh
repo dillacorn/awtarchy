@@ -84,16 +84,12 @@ FLATPAK_SELECTED_IDS=()
 FLATPAK_SELECTED_NAMES=()
 
 TMP_SUDOERS=""
-YAY_TMP_DIR=""
 
 cleanup_install_temp() {
   if [[ -n "${TMP_SUDOERS:-}" ]]; then
     rm -f "${TMP_SUDOERS}" 2>/dev/null || true
   fi
   rm -f /etc/sudoers.d/temp_sudo_nopasswd 2>/dev/null || true
-  if [[ -n "${YAY_TMP_DIR:-}" ]]; then
-    rm -rf "${YAY_TMP_DIR}" 2>/dev/null || true
-  fi
 }
 trap cleanup_install_temp EXIT
 
@@ -2178,48 +2174,75 @@ create_temp_sudoers_for_aur() {
   TMP_SUDOERS=""
 }
 
+ensure_aur_guard_requirements() {
+  log "Installing AUR Guard requirements..."
+  pacman -S --needed --noconfirm \
+    base-devel git bubblewrap passt devtools gnupg coreutils jq libarchive file curl
+}
+
+run_aur_guard_as_target() {
+  local command_name="$1"
+  shift
+
+  local guard_bashrc="${REPO_DIR}/bashrc"
+  [[ -f "$guard_bashrc" ]] || die "Missing AUR Guard configuration: ${guard_bashrc}"
+  grep -q '^aurup()' "$guard_bashrc" || die "${guard_bashrc} does not contain the AUR Guard aurup function."
+
+  # Variables in this embedded script intentionally expand in the child Bash.
+  # shellcheck disable=SC2016
+  run_as_target env \
+    HOME="$HOME_DIR" \
+    USER="$TARGET_USER" \
+    LOGNAME="$TARGET_USER" \
+    bash --noprofile --norc -c '
+      guard_bashrc=$1
+      shift
+      source <(sed -n "/^# --- AUR Guard ---/,\$p" "$guard_bashrc")
+      "$@"
+    ' awtarchy-aur-guard "$guard_bashrc" "$command_name" "$@"
+}
+
 ensure_yay() {
   if have yay; then return 0; fi
   if run_as_target bash -lc 'command -v yay >/dev/null 2>&1'; then return 0; fi
 
-  warn "yay not found. Installing yay from AUR..."
-  pacman -S --needed --noconfirm git base-devel
-  YAY_TMP_DIR="$(run_as_target mktemp -d -t yay-XXXXXX)"
-  run_as_target bash -lc "set -euo pipefail; git clone https://aur.archlinux.org/yay.git '$YAY_TMP_DIR'; cd '$YAY_TMP_DIR'; makepkg -sirc --noconfirm"
-  rm -rf "$YAY_TMP_DIR" 2>/dev/null || true
-  YAY_TMP_DIR=""
+  warn "yay not found. Installing it through AUR Guard practical mode..."
+  run_aur_guard_as_target aurup yay
 }
 
 install_aur_repo_apps_stage() {
   (( INSTALL_AUR == 1 )) || { warn "Skipping AUR application install."; return 0; }
+
+  ensure_aur_guard_requirements
   create_temp_sudoers_for_aur
   ensure_yay
 
   if (( ${#AUR_SELECTED[@]} == 0 )); then
     warn "No AUR packages selected. Skipping package loop."
   else
-    log "Updating system and AUR packages with yay..."
-    run_as_target yay -Syu --noconfirm
+    log "Installing selected AUR packages through AUR Guard practical mode..."
     local pkg
     for pkg in "${AUR_SELECTED[@]}"; do
-      if run_as_target yay -Qi "$pkg" >/dev/null 2>&1; then
+      if pacman -Q "$pkg" >/dev/null 2>&1; then
         printf '%s\n' "${COLOR_YELLOW}${pkg} already installed. Skipping...${COLOR_RESET}"
       else
-        printf '%s\n' "${COLOR_CYAN}Installing ${pkg}...${COLOR_RESET}"
-        run_as_target yay -S --needed --noconfirm "$pkg"
+        printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
+        run_aur_guard_as_target aurup "$pkg"
         printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
       fi
-      run_as_target rm -rf "${HOME_DIR}/.cache/yay/${pkg}" || true
     done
-    run_as_target yay -Sc --noconfirm || true
   fi
 
   if [[ "$IS_LAPTOP" == true && "$IS_VM" == false ]]; then
-    log "Installing tlpui for laptop power management..."
-    run_as_target yay -S --needed --noconfirm tlpui || true
+    if pacman -Q tlpui >/dev/null 2>&1; then
+      printf '%s\n' "${COLOR_YELLOW}tlpui already installed. Skipping...${COLOR_RESET}"
+    else
+      log "Installing tlpui through AUR Guard practical mode..."
+      run_aur_guard_as_target aurup tlpui || true
+    fi
   fi
 
-  if run_as_target yay -Qs moonlight-qt-bin >/dev/null 2>&1; then
+  if pacman -Q moonlight-qt-bin >/dev/null 2>&1; then
     log "Moonlight AUR package detected. Configuring UFW rules for Moonlight..."
     if have ufw; then
       ufw allow 48010/tcp || true
