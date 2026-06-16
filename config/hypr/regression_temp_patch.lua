@@ -19,8 +19,7 @@ local disable_alt_mouse = table.concat({
 }, "; ")
 
 local enable_alt_mouse = table.concat({
-    'hl.unbind("ALT + mouse:272")',
-    'hl.unbind("ALT + mouse:273")',
+    disable_alt_mouse,
     'hl.bind("ALT + mouse:272", hl.dsp.window.drag(), { mouse = true })',
     'hl.bind("ALT + mouse:273", hl.dsp.window.resize(), { mouse = true })',
 }, "; ")
@@ -38,16 +37,49 @@ local enable_mouse_mode = table.concat({
     'hl.bind("mouse:274", hl.dsp.window.float({ action = "toggle" }), {})',
 }, "; ")
 
+local disable_vm_mouse = table.concat({
+    'hl.unbind("SUPER + ALT + mouse:272")',
+    'hl.unbind("SUPER + ALT + mouse:273")',
+    'hl.unbind("SUPER + ALT + mouse:274")',
+}, "; ")
+
+local enable_vm_mouse = table.concat({
+    disable_vm_mouse,
+    'hl.bind("SUPER + ALT + mouse:272", hl.dsp.window.drag(), { mouse = true })',
+    'hl.bind("SUPER + ALT + mouse:273", hl.dsp.window.resize(), { mouse = true })',
+    'hl.bind("SUPER + ALT + mouse:274", hl.dsp.window.float({ action = "toggle" }), {})',
+}, "; ")
+
 function M.on(name, cmd)
     if name == "mouse" then
-        return lua_eval(disable_alt_mouse .. "; " .. enable_mouse_mode) .. "; " .. cmd
+        return lua_eval(
+            disable_alt_mouse .. "; " ..
+            disable_vm_mouse .. "; " ..
+            enable_mouse_mode
+        ) .. "; " .. cmd
     end
 
-    return lua_eval(disable_mouse_mode .. "; " .. disable_alt_mouse) .. "; " .. cmd
+    if name == "vm" then
+        return lua_eval(
+            disable_mouse_mode .. "; " ..
+            disable_alt_mouse .. "; " ..
+            enable_vm_mouse
+        ) .. "; " .. cmd
+    end
+
+    return lua_eval(
+        disable_mouse_mode .. "; " ..
+        disable_vm_mouse .. "; " ..
+        disable_alt_mouse
+    ) .. "; " .. cmd
 end
 
 function M.off(name, cmd)
-    return cmd .. "; " .. lua_eval(disable_mouse_mode .. "; " .. enable_alt_mouse)
+    return cmd .. "; " .. lua_eval(
+        disable_mouse_mode .. "; " ..
+        disable_vm_mouse .. "; " ..
+        enable_alt_mouse
+    )
 end
 
 return M
