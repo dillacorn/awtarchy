@@ -558,14 +558,59 @@ _aur_guard_has_default_install_search() {
   return 0
 }
 
+_aur_guard_is_read_only_helper_command() {
+  local arg
+  local has_read_only_mode=false
+
+  (( $# > 0 )) || return 1
+
+  for arg in "$@"; do
+    case "$arg" in
+      -Q*|--query|--query=*|-P*|--show-stats|--help|-h|--version|-V)
+        has_read_only_mode=true
+        ;;
+      -Ss|-Ssq|-Sqs|-Si|-Sii|-Sl|-Sg|-Sp|--search|--info|--list|--groups|--print)
+        has_read_only_mode=true
+        ;;
+      -S*|-R*|-U*|-Y*|--sync|--remove|--upgrade|--sysupgrade|--refresh|--clean|--downloadonly|--gendb|--devel|--combinedupgrade|--noconfirm|--answer*|--mflags*|--save)
+        return 1
+        ;;
+    esac
+  done
+
+  $has_read_only_mode
+}
+
+_aur_guard_run_helper() {
+  local helper="$1"
+  shift || true
+
+  if _aur_guard_is_read_only_helper_command "$@"; then
+    if ! type -P "$helper" >/dev/null 2>&1; then
+      printf '%s is not installed or not in PATH.\n' "$helper" >&2
+      return 127
+    fi
+    command "$helper" "$@"
+    return $?
+  fi
+
+  _aur_guard_block_message "$helper"
+  return 1
+}
+
 _aur_guard_block_message() {
   local helper="$1"
 
-  printf '\033[1;31mAUR Guard blocked this %s transaction.\033[0m\n\n' "$helper"
-  printf 'Every direct helper operation is blocked by policy because it bypasses Awtarchy verification.\n\n'
+  printf '\033[1;31mAUR Guard blocked this %s package transaction.\033[0m\n\n' "$helper"
+  printf 'Direct read-only helper queries are allowed, but install, update, remove, and build operations must use AUR Guard.\n\n'
+  printf 'Read-only examples:\n'
+  printf '  %s -Qiu             inspect installed packages with available upgrades\n' "$helper"
+  printf '  %s -Qm              list installed foreign/AUR packages\n' "$helper"
+  printf '  %s -Ss package      search packages\n\n' "$helper"
   printf 'Use:\n'
-  printf '  sysupdate             update enabled pacman repo packages\n'
-  printf '  aurcheck              show AUR updates, emergency blocks, and historical warnings\n'
+  printf '  aurinstalled         list installed foreign/AUR packages and versions\n'
+  printf '  sysupdate            update enabled pacman repo packages\n'
+  printf '  aurcheck             show AUR updates, emergency blocks, and historical warnings\n'
   printf '  aurverify package         practical packaging and upstream-source verification\n'
   printf '  aurverify --deep package  exhaustive upstream and dependency-cache scanning\n'
   printf '  aurup package             practical clean-root build and install\n'
@@ -3134,7 +3179,7 @@ AUR_GUARD_TEST_CURL
   cat > "$test_bin/yay" <<'AUR_GUARD_TEST_HELPER'
 #!/bin/sh
 printf '%s\n' "$*" >> "${AUR_GUARD_TEST_HELPER_LOG:?}"
-exit 99
+exit 0
 AUR_GUARD_TEST_HELPER
 
   cp "$test_bin/yay" "$test_bin/paru"
@@ -3266,23 +3311,45 @@ AUR_GUARD_TEST_HELPER
     return 1
   fi
 
+  printf '\nAUR Guard self-test: read-only yay/paru queries must remain available.\n'
+  : > "$helper_log"
+
   local direct_command
   for direct_command in \
       'yay -Qm' \
-      'yay -G example' \
+      'yay -Qiu' \
       'yay -Ss example' \
       'yay --version' \
       'paru -Qm' \
       'paru --version'; do
+    if ! wrapper_output=$(eval "$direct_command" 2>&1); then
+      printf '%s\n' "$wrapper_output"
+      _aur_guard_fail "self-test failed: read-only helper query was blocked: $direct_command"
+      return 1
+    fi
+  done
+
+  if (( $(wc -l < "$helper_log") != 6 )); then
+    _aur_guard_fail 'self-test failed: one or more read-only helper queries did not reach the external helper'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: helper writes and package transactions must remain blocked.\n'
+  : > "$helper_log"
+  for direct_command in \
+      'yay -G example' \
+      'yay -S example' \
+      'yay -Syu' \
+      'paru -R example'; do
     if wrapper_output=$(eval "$direct_command" 2>&1); then
       printf '%s\n' "$wrapper_output"
-      _aur_guard_fail "self-test failed: direct helper command returned success: $direct_command"
+      _aur_guard_fail "self-test failed: blocked helper transaction returned success: $direct_command"
       return 1
     fi
   done
 
   if [[ -s "$helper_log" ]]; then
-    _aur_guard_fail 'self-test failed: a direct yay/paru command reached the external helper'
+    _aur_guard_fail 'self-test failed: a blocked yay/paru command reached the external helper'
     return 1
   fi
 
@@ -3625,18 +3692,24 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, helper blocking, package-name validation, strong and content-addressed integrity, safe internal symlinks, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
 )
 
 aurhelp() {
   cat <<'AUR_GUARD_HELP'
 AUR Guard quick help
 
+Allowed direct helper queries:
+  yay -Qiu                  inspect installed packages with available upgrades
+  yay -Qm                   list installed foreign/AUR packages
+  yay -Ss package           search packages
+  paru supports the same read-only queries
+
 Blocked:
-  Every direct yay command
-  Every direct paru command
+  Direct helper install, update, remove, build, and cleanup transactions
 
 Safe workflow:
+  aurinstalled              list installed foreign/AUR packages and versions
   sysupdate                 update enabled pacman repository packages
   aurcheck                  show AUR updates, emergency blocks, and historical warnings
   aurverify package         practical packaging and upstream-source verification
@@ -3646,6 +3719,9 @@ Safe workflow:
   aurguardtest              run the offline AUR Guard self-test
 
 Examples:
+  aurinstalled
+  yay -Qiu
+  yay -Qm
   sysupdate
   aurcheck
   aurverify awtwall
@@ -3674,6 +3750,23 @@ Important:
   Source verification requires strong checksums, exact VCS commits, or matching signatures pinned by validpgpkeys.
   Source-host matching is a useful review signal, not proof that upstream code is harmless.
 AUR_GUARD_HELP
+}
+
+aurinstalled() {
+  local output
+
+  if ! output=$(command pacman -Qm 2>/dev/null); then
+    printf 'Unable to query installed foreign packages with pacman.\n' >&2
+    return 1
+  fi
+
+  if [[ -z "$output" ]]; then
+    printf 'No foreign/AUR packages are currently installed.\n'
+    return 0
+  fi
+
+  printf 'Installed foreign/AUR packages and versions:\n'
+  printf '%s\n' "$output"
 }
 
 sysupdate() {
@@ -3915,11 +4008,9 @@ aurunsafe() {
 }
 
 yay() {
-  _aur_guard_block_message yay
-  return 1
+  _aur_guard_run_helper yay "$@"
 }
 
 paru() {
-  _aur_guard_block_message paru
-  return 1
+  _aur_guard_run_helper paru "$@"
 }
