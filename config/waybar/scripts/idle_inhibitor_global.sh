@@ -15,7 +15,8 @@ set -euo pipefail
 export LC_ALL=C
 
 SIGNAL="${WAYBAR_IDLE_SIGNAL:-13}"
-RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}"
+uid="$(id -u)"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
 PID_FILE="${RUNTIME_DIR}/waybar-global-idle-inhibitor.pid"
 
 WHAT="${WAYBAR_IDLE_WHAT:-idle}"
@@ -36,9 +37,6 @@ valid_pid() {
 }
 
 matching_inhibitor_pids() {
-  local uid
-  uid="$(id -u)"
-
   pgrep -u "$uid" -f "$PROC_NAME" 2>/dev/null || true
   pgrep -u "$uid" -f "systemd-inhibit.*${WHY}" 2>/dev/null || true
 }
@@ -110,7 +108,7 @@ start_inhibitor() {
     bash -c "trap 'exit 0' TERM INT HUP; exec -a \"\$0\" sleep infinity" "$PROC_NAME" \
     >/dev/null 2>&1 &
 
-  printf '%s\n' "$!" > "$PID_FILE"
+  printf '%s\n' "$!" >"$PID_FILE"
 }
 
 stop_inhibitor() {
@@ -159,6 +157,13 @@ case "${1:-status}" in
     stop_inhibitor
     signal_waybar
     exit 0
+    ;;
+
+  is-active)
+    if is_active; then
+      exit 0
+    fi
+    exit 1
     ;;
 
   status|"")

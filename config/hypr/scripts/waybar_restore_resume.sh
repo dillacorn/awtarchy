@@ -2,15 +2,9 @@
 # ~/.config/hypr/scripts/waybar_restore_resume.sh
 #
 # hypridle on-resume/unlock:
-# - If marker says "running", restore Waybar.
-# - Otherwise do nothing.
-#
-# More tolerant on resume:
-# - waits for Hyprland monitors to come back
-# - treats either managed pidfiles OR a live waybar process as success
-# - cleans stale pidfiles
-# - retries over a longer window
-# - logs failures for debugging
+# - Restore Waybar only when the idle timeout marked it for restoration.
+# - Serialize against the timeout stop script.
+# - Require Waybar to remain alive before clearing the restore marker.
 
 set -u -o pipefail
 
@@ -23,6 +17,7 @@ WAYBAR_SH="${WAYBAR_SH:-${SCRIPTS_DIR}/waybar.sh}"
 uid="$(id -u)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
 IDLE_MARKER="${IDLE_MARKER:-${RUNTIME_DIR}/waybar.idle_restore}"
+TRANSITION_LOCK="${TRANSITION_LOCK:-${RUNTIME_DIR}/waybar.idle_transition.lock}"
 
 PER_DIR="${PER_DIR:-${CACHE}/waybar/per-output}"
 LOG_FILE="${LOG_FILE:-${CACHE}/waybar/restore_resume.log}"
@@ -30,12 +25,26 @@ LOG_FILE="${LOG_FILE:-${CACHE}/waybar/restore_resume.log}"
 mkdir -p "$RUNTIME_DIR" "$PER_DIR" "$(dirname "$LOG_FILE")" 2>/dev/null || true
 [[ -x "$WAYBAR_SH" ]] || exit 0
 
+if command -v flock >/dev/null 2>&1; then
+  exec 9>"$TRANSITION_LOCK"
+  flock -x 9
+fi
+
 log() {
   printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE" 2>/dev/null || true
 }
 
 pid_alive() {
-  [[ -n "${1:-}" ]] && [[ "$1" =~ ^[0-9]+$ ]] && kill -0 "$1" 2>/dev/null
+  [[ "${1:-}" =~ ^[0-9]+$ ]] && kill -0 "$1" 2>/dev/null
+}
+
+pid_comm() {
+  tr -d '\n' </proc/"$1"/comm 2>/dev/null || true
+}
+
+pid_is_waybar() {
+  local pid="${1:-}"
+  pid_alive "$pid" && [[ "$(pid_comm "$pid")" == "waybar" ]]
 }
 
 cleanup_stale_pidfiles() {
@@ -44,7 +53,7 @@ cleanup_stale_pidfiles() {
   shopt -s nullglob
   for pidfile in "$PER_DIR"/*.pid; do
     pid="$(tr -d ' \t\r\n' <"$pidfile" 2>/dev/null || true)"
-    if ! pid_alive "$pid"; then
+    if ! pid_is_waybar "$pid"; then
       rm -f "$pidfile" 2>/dev/null || true
     fi
   done
@@ -56,7 +65,7 @@ any_managed_waybar_running() {
   shopt -s nullglob
   for pidfile in "$PER_DIR"/*.pid; do
     pid="$(tr -d ' \t\r\n' <"$pidfile" 2>/dev/null || true)"
-    pid_alive "$pid" && return 0
+    pid_is_waybar "$pid" && return 0
   done
   return 1
 }
@@ -64,6 +73,13 @@ any_managed_waybar_running() {
 any_waybar_running() {
   any_managed_waybar_running && return 0
   pgrep -u "$uid" -x waybar >/dev/null 2>&1
+}
+
+waybar_running_stable() {
+  any_waybar_running || return 1
+  sleep 0.35
+  cleanup_stale_pidfiles
+  any_waybar_running
 }
 
 wait_for_hypr_ready() {
@@ -85,29 +101,23 @@ marker="$(tr -d ' \t\r\n' <"$IDLE_MARKER" 2>/dev/null || true)"
 [[ "$marker" == "running" ]] || exit 0
 
 cleanup_stale_pidfiles
+wait_for_hypr_ready || log "Hyprland monitors were not ready before restore attempts"
 
-if any_waybar_running; then
+if waybar_running_stable; then
   rm -f "$IDLE_MARKER" 2>/dev/null || true
+  log "Waybar was already running and stable on resume"
   exit 0
 fi
 
-wait_for_hypr_ready || log "Hyprland monitors were not ready before restore attempts"
-
 attempt=1
 while (( attempt <= 10 )); do
-  if any_waybar_running; then
-    rm -f "$IDLE_MARKER" 2>/dev/null || true
-    log "Waybar restore succeeded before attempt ${attempt}"
-    exit 0
-  fi
-
   log "Waybar restore attempt ${attempt}"
   "$WAYBAR_SH" start >>"$LOG_FILE" 2>&1 || true
 
   settle=0
-  while (( settle < 8 )); do
+  while (( settle < 16 )); do
     cleanup_stale_pidfiles
-    if any_waybar_running; then
+    if waybar_running_stable; then
       rm -f "$IDLE_MARKER" 2>/dev/null || true
       log "Waybar restore succeeded on attempt ${attempt}"
       exit 0
@@ -119,5 +129,5 @@ while (( attempt <= 10 )); do
   ((attempt++))
 done
 
-log "Waybar restore failed; marker kept for next retry"
+log "Waybar restore failed; marker kept for next resume/unlock retry"
 exit 0
