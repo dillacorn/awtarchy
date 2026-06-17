@@ -120,7 +120,7 @@ unset -f yay paru 2>/dev/null
 #   aurup package             practical clean-root build and install
 #   aurup --deep package      exhaustive offline build and artifact inspection
 #
-# Every direct yay/paru invocation is blocked. Use aurunsafe only after manual review.
+# Direct read-only yay/paru queries are allowed. Package-changing operations remain blocked.
 
 _AUR_GUARD_ARCH_LIST_URL='https://md.archlinux.org/s/SxbqukK6IA/download'
 _AUR_GUARD_GITHUB_LIST_URL='https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt'
@@ -154,6 +154,8 @@ _AUR_GUARD_ARTIFACT_MAX_FILES=200000
 _AUR_GUARD_TREE_MAX_BYTES=$((32 * 1024 * 1024 * 1024))
 _AUR_GUARD_NETWORK_TEST_URL='https://aur.archlinux.org/'
 _AUR_GUARD_MODE='practical'
+_AUR_GUARD_COMMIT_RECHECK_ATTEMPTS=3
+_AUR_GUARD_COMMIT_RECHECK_DELAY_SECONDS=2
 
 _aur_guard_is_deep_mode() {
   [[ ${_AUR_GUARD_MODE:-practical} == deep ]]
@@ -820,9 +822,10 @@ _aur_guard_add_ro_path() {
 _aur_guard_run_sandbox_command() {
   local network="$1"
   shift
-  local uid gid
-  local -a systemd_args command_line
+  local uid gid sandbox_status i
+  local -a systemd_args command_line sandbox_command fallback_command
 
+  sandbox_command=("$@")
   uid=$(id -u) || return 1
   gid=$(id -g) || return 1
 
@@ -943,16 +946,16 @@ _aur_guard_run_sandbox_command() {
             if ! kill -0 "$pasta_pid" 2>/dev/null; then
               set +e
               wait "$pasta_pid"
-              rc=$?
               set -e
-              exit "$rc"
+              printf "AUR Guard: pasta could not attach to the private network namespace.\n" >&2
+              exit 125
             fi
             sleep 0.05
           done
 
           if [[ ! -s $pasta_pid_file ]]; then
             printf "AUR Guard: timed out attaching pasta to the bubblewrap namespace.\n" >&2
-            exit 1
+            exit 125
           fi
 
           printf "1" >&8
@@ -965,11 +968,11 @@ _aur_guard_run_sandbox_command() {
           exit "$rc"
         '
         awtarchy-network-sandbox
-        "$@"
+        "${sandbox_command[@]}"
       )
       ;;
     deny)
-      command_line=("$@")
+      command_line=("${sandbox_command[@]}")
       ;;
     *)
       _aur_guard_fail "invalid sandbox network mode: $network"
@@ -977,11 +980,40 @@ _aur_guard_run_sandbox_command() {
       ;;
   esac
 
+  if command timeout \
+      --foreground \
+      --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
+      "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
+      "${systemd_args[@]}" "${command_line[@]}"; then
+    return 0
+  else
+    sandbox_status=$?
+  fi
+
+  if [[ "$network" != allow || $sandbox_status -ne 125 ]]; then
+    return "$sandbox_status"
+  fi
+
+  printf 'AUR Guard: pasta namespace attachment is unavailable; falling back to systemd-enforced public-network filtering.\n' >&2
+  fallback_command=()
+  for ((i = 0; i < ${#sandbox_command[@]}; i++)); do
+    case "${sandbox_command[i]}" in
+      --unshare-net)
+        ;;
+      --block-fd|--json-status-fd)
+        ((i++)) || true
+        ;;
+      *)
+        fallback_command+=("${sandbox_command[i]}")
+        ;;
+    esac
+  done
+
   command timeout \
     --foreground \
     --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
     "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
-    "${systemd_args[@]}" "${command_line[@]}"
+    "${systemd_args[@]}" "${fallback_command[@]}"
 }
 
 _aur_guard_sandbox_exec() {
@@ -2475,8 +2507,37 @@ _aur_guard_verify_package_recursive() {
   return 0
 }
 
+_aur_guard_confirm_unchecked_commits() {
+  local phase="$1"
+  shift
+  local entry pkgbase expected answer phrase token
+
+  token=$(printf '%s\n' "$@" | sha256sum | awk '{print substr($1, 1, 12)}') || return 1
+  phrase="CONTINUE VERIFIED ${token}"
+
+  printf '\n\033[1;33mAUR Guard could not confirm the following current AUR commits %s:\033[0m\n' \
+    "$phase" >&2
+  for entry in "$@"; do
+    IFS=$'\t' read -r pkgbase expected <<< "$entry"
+    printf '  %-36s %s\n' "$pkgbase" "${expected:0:12}" >&2
+  done
+  printf 'These already-fetched revisions passed verification, but their current AUR status could not be checked.\n' >&2
+  printf 'This is a network or namespace verification failure, not proof that the packages changed.\n' >&2
+  printf 'Type exactly %s to continue with these verified revisions: ' "$phrase" >&2
+
+  if [[ ! -r /dev/tty ]]; then
+    printf '\nNo readable terminal is available for confirmation.\n' >&2
+    return 1
+  fi
+
+  IFS= read -r answer </dev/tty || return 1
+  [[ "$answer" == "$phrase" ]]
+}
+
 _aur_guard_recheck_commits() {
-  local pkgbase expected remote parent pkgdir current temp
+  local phase="${1:-before installation}"
+  local pkgbase expected remote parent pkgdir current temp attempt
+  local -a unconfirmed=()
 
   temp=$(mktemp -d) || return 1
 
@@ -2487,27 +2548,50 @@ _aur_guard_recheck_commits() {
       return 1
     }
 
-    current=$(
-      _aur_guard_sandbox_exec "$temp" allow writable / \
-        /usr/bin/git ls-remote -- "$remote" HEAD 2>/dev/null \
-        | awk 'NR == 1 {print $1}'
-    )
+    current=
+    for ((attempt = 1; attempt <= _AUR_GUARD_COMMIT_RECHECK_ATTEMPTS; attempt++)); do
+      if current=$(
+          _aur_guard_sandbox_exec "$temp" allow writable / \
+            /usr/bin/git ls-remote -- "$remote" HEAD 2>/dev/null
+        ); then
+        current=$(awk 'NR == 1 {print $1}' <<< "$current")
+      else
+        current=
+      fi
+
+      if [[ "$current" =~ ^[0-9a-fA-F]{40,64}$ ]]; then
+        break
+      fi
+
+      current=
+      if (( attempt < _AUR_GUARD_COMMIT_RECHECK_ATTEMPTS )); then
+        printf 'AUR Guard: retrying current AUR commit check for %s (%d/%d).\n' \
+          "$pkgbase" "$attempt" "$_AUR_GUARD_COMMIT_RECHECK_ATTEMPTS" >&2
+        sleep "$_AUR_GUARD_COMMIT_RECHECK_DELAY_SECONDS"
+      fi
+    done
 
     if [[ -z "$current" ]]; then
-      rm -rf "$temp"
-      _aur_guard_fail "could not recheck current AUR commit for $pkgbase"
-      return 1
+      unconfirmed+=("$pkgbase"$'\t'"$expected")
+      continue
     fi
 
     if [[ "$current" != "$expected" ]]; then
       rm -rf "$temp"
       _aur_guard_fail "$pkgbase changed after verification"
       printf 'Verified: %s\nCurrent:  %s\n' "$expected" "$current" >&2
-      return 1
+      return 3
     fi
   done < "$_AUR_GUARD_MANIFEST"
 
   rm -rf "$temp"
+
+  if (( ${#unconfirmed[@]} > 0 )); then
+    if ! _aur_guard_confirm_unchecked_commits "$phase" "${unconfirmed[@]}"; then
+      _aur_guard_fail 'could not confirm one or more current AUR commits'
+      return 2
+    fi
+  fi
 }
 
 _aur_guard_prepare_build_root() {
@@ -2678,8 +2762,12 @@ _aur_guard_scan_artifact() {
       | awk -F ' = ' '$1 == "conflict" {print $2}'
   )
 
-  if grep -E ' (->|link to) (/|\.\./|.*(/\.\./|/\.\.$))' "$verbose_listing"; then
-    _aur_guard_fail "$pkgbase produced an archive with an unsafe symbolic-link or hard-link target"
+  # Relative package links such as usr/lib/debug/.build-id/* commonly contain
+  # ../ components. They are validated after sandboxed extraction by resolving
+  # each link against its containing directory and requiring it to remain inside
+  # the package root. Only absolute archive link targets are rejected here.
+  if grep -E ' (->|link to) /' "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced an archive with an absolute symbolic-link or hard-link target"
     return 1
   fi
 
@@ -3888,7 +3976,8 @@ aurverify() {
 }
 
 aurup() {
-  local pkg status
+  local pkg status recheck_status
+  local restart_count=0
   local _AUR_GUARD_MODE='practical'
   local _AUR_GUARD_BUILD_REQUESTED=1
 
@@ -3930,47 +4019,76 @@ aurup() {
     return $?
   fi
 
-  _aur_guard_verify_tree "$pkg"
-  status=$?
+  while true; do
+    _aur_guard_verify_tree "$pkg"
+    status=$?
 
-  if (( status != 0 )); then
-    _aur_guard_refuse_install "$pkg" "recursive ${_AUR_GUARD_MODE} AUR verification failed"
+    if (( status != 0 )); then
+      _aur_guard_refuse_install "$pkg" "recursive ${_AUR_GUARD_MODE} AUR verification failed"
+      _aur_guard_cleanup_work
+      return "$status"
+    fi
+
+    if _aur_guard_recheck_commits 'before building'; then
+      :
+    else
+      recheck_status=$?
+      if (( recheck_status == 3 && restart_count == 0 )); then
+        printf 'AUR Guard: discarding verified work and restarting once from the new AUR commit.\n' >&2
+        _aur_guard_cleanup_work
+        ((restart_count++)) || true
+        continue
+      fi
+      if (( recheck_status == 3 )); then
+        _aur_guard_refuse_install "$pkg" 'an AUR package changed repeatedly during verification'
+      else
+        _aur_guard_refuse_install "$pkg" 'the current AUR commit could not be confirmed'
+      fi
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if ! _aur_guard_build_verified_artifacts "$pkg"; then
+      _aur_guard_refuse_install "$pkg" "${_AUR_GUARD_MODE} clean-root build or artifact inspection failed"
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if _aur_guard_recheck_commits 'after building'; then
+      :
+    else
+      recheck_status=$?
+      if (( recheck_status == 3 && restart_count == 0 )); then
+        printf 'AUR Guard: discarding built artifacts and restarting once from the new AUR commit.\n' >&2
+        _aur_guard_cleanup_work
+        ((restart_count++)) || true
+        continue
+      fi
+      if (( recheck_status == 3 )); then
+        _aur_guard_refuse_install "$pkg" 'an AUR package changed repeatedly while artifacts were being built'
+      else
+        _aur_guard_refuse_install "$pkg" 'the current AUR commit could not be confirmed after building'
+      fi
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if ! _aur_guard_confirm_guarded_install "$pkg"; then
+      _aur_guard_refuse_install "$pkg" 'required warning confirmation was not accepted'
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if ! _aur_guard_install_verified_transaction "$pkg"; then
+      _aur_guard_refuse_install "$pkg" 'the final verified pacman transaction failed'
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    _aur_guard_pass "$pkg and every required AUR dependency were built in disposable clean roots and installed from reverified local artifacts using ${_AUR_GUARD_MODE} mode."
     _aur_guard_cleanup_work
-    return "$status"
-  fi
-
-  if ! _aur_guard_recheck_commits; then
-    _aur_guard_refuse_install "$pkg" 'an AUR package changed after it was verified'
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  if ! _aur_guard_build_verified_artifacts "$pkg"; then
-    _aur_guard_refuse_install "$pkg" "${_AUR_GUARD_MODE} clean-root build or artifact inspection failed"
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  if ! _aur_guard_recheck_commits; then
-    _aur_guard_refuse_install "$pkg" 'an AUR package changed after its artifact was built'
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  if ! _aur_guard_confirm_guarded_install "$pkg"; then
-    _aur_guard_refuse_install "$pkg" 'required warning confirmation was not accepted'
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  if ! _aur_guard_install_verified_transaction "$pkg"; then
-    _aur_guard_refuse_install "$pkg" 'the final verified pacman transaction failed'
-    _aur_guard_cleanup_work
-    return 1
-  fi
-
-  _aur_guard_pass "$pkg and every required AUR dependency were built in disposable clean roots and installed from reverified local artifacts using ${_AUR_GUARD_MODE} mode."
-  _aur_guard_cleanup_work
+    return 0
+  done
 }
 
 aurunsafe() {
