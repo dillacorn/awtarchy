@@ -125,6 +125,7 @@ unset -f yay paru 2>/dev/null
 _AUR_GUARD_ARCH_LIST_URL='https://md.archlinux.org/s/SxbqukK6IA/download'
 _AUR_GUARD_GITHUB_LIST_URL='https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt'
 _AUR_GUARD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/aur-guard"
+_AUR_GUARD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy/aur-guard"
 _AUR_GUARD_LIST_MAX_AGE=86400
 _AUR_GUARD_LIST_MIN_NAMES=100
 
@@ -2507,6 +2508,277 @@ _aur_guard_verify_package_recursive() {
   return 0
 }
 
+_aur_guard_pkgbuild_review_reason() {
+  local line="$1"
+
+  line="${line#?}"
+  [[ "$line" =~ ^[[:space:]]*# ]] && return 1
+
+  if grep -Eiq '(^|[;&|[:space:]])(curl|wget|fetch|aria2c)([[:space:]]|$)|git[[:space:]]+clone([[:space:]]|$)' <<< "$line"; then
+    printf '%s\n' 'network/download'
+    return 0
+  fi
+
+  if grep -Eiq '(^|[;&|[:space:]])(eval|source)([[:space:]]|$)|(^|[;&|[:space:]])(bash|sh|zsh|python3?|node)[[:space:]]+-[ce]([[:space:]]|$)|base64[[:space:]].*(-d|--decode)|/dev/(tcp|udp)' <<< "$line"; then
+    printf '%s\n' 'dynamic execution'
+    return 0
+  fi
+
+  if grep -Eiq '(^|[;&|[:space:]])(sudo|pkexec|systemctl|useradd|groupadd|crontab)([[:space:]]|$)|(^|[;&|[:space:]])setcap([[:space:]]|$)|chmod[[:space:]][^#]*(u\+s|g\+s|[2467][0-9]{3})|LD_PRELOAD|(^|[^[:alnum:]_])(/etc/|/usr/lib/systemd/|\.config/autostart/)' <<< "$line"; then
+    printf '%s\n' 'privilege/system change'
+    return 0
+  fi
+
+  if grep -Eiq '(^|[;&|[:space:]])(npm|pnpm|yarn|bun|pip|pip3|cargo)[[:space:]]+(install|add)([[:space:]]|$)' <<< "$line"; then
+    printf '%s\n' 'dependency installer'
+    return 0
+  fi
+
+  if grep -Eiq '(^|[^[:alnum:]_])SKIP([^[:alnum:]_]|$)|--(skipchecksums|skippgpcheck|skipinteg)' <<< "$line"; then
+    printf '%s\n' 'integrity bypass'
+    return 0
+  fi
+
+  return 1
+}
+
+_aur_guard_review_color_enabled() {
+  [[ ${AUR_GUARD_COLOR:-auto} == always ]] && return 0
+  [[ ${AUR_GUARD_COLOR:-auto} == never ]] && return 1
+  [[ -t 1 && ${TERM:-dumb} != dumb && -z ${NO_COLOR:-} ]]
+}
+
+_aur_guard_colorize_pkgbuild_review() {
+  local mode="${1:-diff}"
+  local line content reason reset
+  local use_color=false
+
+  if _aur_guard_review_color_enabled; then
+    use_color=true
+    reset=$'\033[0m'
+  else
+    reset=''
+  fi
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    reason=
+    content="$line"
+
+    if [[ "$mode" == diff ]]; then
+      case "$line" in
+        '--- '*|'+++ '*|'@@ '*)
+          if $use_color; then
+            printf '\033[1;36m%s%s\n' "$line" "$reset"
+          else
+            printf '%s\n' "$line"
+          fi
+          continue
+          ;;
+        +*)
+          content="${line:1}"
+          reason=$(_aur_guard_pkgbuild_review_reason "$line" 2>/dev/null || true)
+          if [[ -n "$reason" ]]; then
+            if $use_color; then
+              printf '\033[1;31m%s  [FLAGGED: %s]%s\n' "$line" "$reason" "$reset"
+            else
+              printf '%s  [FLAGGED: %s]\n' "$line" "$reason"
+            fi
+          elif $use_color; then
+            printf '\033[0;32m%s%s\n' "$line" "$reset"
+          else
+            printf '%s\n' "$line"
+          fi
+          continue
+          ;;
+      esac
+    else
+      reason=$(_aur_guard_pkgbuild_review_reason " $content" 2>/dev/null || true)
+      if [[ -n "$reason" ]]; then
+        if $use_color; then
+          printf '\033[1;31m%s  [FLAGGED: %s]%s\n' "$line" "$reason" "$reset"
+        else
+          printf '%s  [FLAGGED: %s]\n' "$line" "$reason"
+        fi
+        continue
+      fi
+    fi
+
+    if $use_color; then
+      printf '\033[0;32m%s%s\n' "$line" "$reset"
+    else
+      printf '%s\n' "$line"
+    fi
+  done
+}
+
+_aur_guard_render_pkgbuild_diff() {
+  local old_file="$1"
+  local new_file="$2"
+  local old_label="$3"
+  local new_label="$4"
+  local diff_file status=0
+
+  diff_file=$(mktemp) || return 1
+  diff -u --label "$old_label" --label "$new_label" \
+    "$old_file" "$new_file" > "$diff_file" || status=$?
+
+  if (( status > 1 )); then
+    rm -f -- "$diff_file"
+    return "$status"
+  fi
+
+  _aur_guard_colorize_pkgbuild_review diff < "$diff_file"
+  rm -f -- "$diff_file"
+}
+
+_aur_guard_render_current_pkgbuild() {
+  local pkgbuild="$1"
+  awk '{printf "%6d  %s\\n", NR, $0}' "$pkgbuild" \
+    | _aur_guard_colorize_pkgbuild_review file
+}
+
+_aur_guard_installed_versions_for_base() {
+  local pkgbase="$1"
+  local required_base pkgname version
+  local found=false
+
+  while IFS=$'\t' read -r required_base pkgname; do
+    [[ "$required_base" == "$pkgbase" && -n "$pkgname" ]] || continue
+    version=$(command pacman -Q "$pkgname" 2>/dev/null | awk '{print $2; exit}') || true
+    [[ -n "$version" ]] || continue
+    printf '%s=%s\n' "$pkgname" "$version"
+    found=true
+  done < "$_AUR_GUARD_REQUIRED_PACKAGES"
+
+  $found
+}
+
+_aur_guard_review_installed_pkgbuilds() {
+  local pkgbase commit remote parent pkgdir versions snapshot answer entry kind
+  local -a review_entries=()
+
+  while IFS=$'\t' read -r pkgbase commit remote parent pkgdir; do
+    [[ -n "$pkgbase" && -f "$pkgdir/PKGBUILD" && ! -L "$pkgdir/PKGBUILD" ]] || continue
+    versions=$(_aur_guard_installed_versions_for_base "$pkgbase" 2>/dev/null || true)
+    [[ -n "$versions" ]] || continue
+
+    snapshot="$_AUR_GUARD_STATE_DIR/pkgbuilds/$pkgbase/PKGBUILD"
+    if [[ -f "$snapshot" && ! -L "$snapshot" ]]; then
+      if cmp -s -- "$snapshot" "$pkgdir/PKGBUILD"; then
+        printf 'AUR Guard: %s PKGBUILD is unchanged since its last successful AUR Guard install.\n' "$pkgbase"
+        continue
+      fi
+      kind='diff'
+    else
+      kind='current'
+    fi
+
+    review_entries+=("$pkgbase"$'\t'"$commit"$'\t'"$pkgdir"$'\t'"$snapshot"$'\t'"$kind"$'\t'"${versions//$'\n'/, }")
+  done < "$_AUR_GUARD_MANIFEST"
+
+  (( ${#review_entries[@]} > 0 )) || return 0
+
+  printf '\n\033[1;36mPKGBUILD review is available for installed AUR packages:\033[0m\n'
+  for entry in "${review_entries[@]}"; do
+    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions <<< "$entry"
+    if [[ "$kind" == diff ]]; then
+      printf '  %-30s installed: %s | verified commit: %s | changes available\n' \
+        "$pkgbase" "$versions" "${commit:0:12}"
+    else
+      printf '  %-30s installed: %s | verified commit: %s | no saved baseline yet\n' \
+        "$pkgbase" "$versions" "${commit:0:12}"
+    fi
+  done
+  printf 'Green lines are unflagged. Red [FLAGGED] lines require extra attention but are not proof of malicious code.\n'
+
+  if [[ ! -r /dev/tty ]]; then
+    printf 'No readable terminal is available; skipping optional PKGBUILD display.\n'
+    return 0
+  fi
+
+  printf 'View the PKGBUILD review before building? [y/N]: '
+  IFS= read -r answer </dev/tty || return 0
+  case "$answer" in
+    y|Y|yes|YES|Yes)
+      ;;
+    *)
+      printf 'PKGBUILD display skipped.\n'
+      return 0
+      ;;
+  esac
+
+  for entry in "${review_entries[@]}"; do
+    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions <<< "$entry"
+    printf '\n\033[1;36m===== %s PKGBUILD review =====\033[0m\n' "$pkgbase"
+    printf 'Installed: %s\nVerified AUR commit: %s\n' "$versions" "$commit"
+
+    if [[ "$kind" == diff ]]; then
+      _aur_guard_render_pkgbuild_diff \
+        "$snapshot" "$pkgdir/PKGBUILD" \
+        "$pkgbase previous successful install" \
+        "$pkgbase verified AUR ${commit:0:12}" || {
+          printf 'AUR Guard: could not render the PKGBUILD diff for %s.\n' "$pkgbase" >&2
+        }
+    else
+      printf 'No previous AUR Guard PKGBUILD snapshot exists. Showing the full current PKGBUILD.\n'
+      _aur_guard_render_current_pkgbuild "$pkgdir/PKGBUILD"
+    fi
+  done
+
+  printf '\nPKGBUILD review complete; continuing with the verified build.\n'
+}
+
+_aur_guard_store_pkgbuild_snapshots() {
+  local root pkgbase commit remote parent pkgdir base_dir temp versions
+  local failed=false
+
+  root="$_AUR_GUARD_STATE_DIR/pkgbuilds"
+  if ! mkdir -p -- "$root" || ! chmod 700 -- "$_AUR_GUARD_STATE_DIR" "$root" 2>/dev/null; then
+    printf 'AUR Guard: warning: could not prepare the PKGBUILD snapshot directory: %s\n' "$root" >&2
+    return 1
+  fi
+
+  while IFS=$'\t' read -r pkgbase commit remote parent pkgdir; do
+    [[ -n "$pkgbase" && -f "$pkgdir/PKGBUILD" && ! -L "$pkgdir/PKGBUILD" ]] || continue
+    base_dir="$root/$pkgbase"
+
+    if [[ -L "$base_dir" || ( -e "$base_dir" && ! -d "$base_dir" ) ]]; then
+      printf 'AUR Guard: warning: unsafe PKGBUILD snapshot path skipped: %s\n' "$base_dir" >&2
+      failed=true
+      continue
+    fi
+
+    if ! mkdir -p -- "$base_dir" || ! chmod 700 -- "$base_dir"; then
+      printf 'AUR Guard: warning: could not create PKGBUILD snapshot directory for %s.\n' "$pkgbase" >&2
+      failed=true
+      continue
+    fi
+
+    temp=$(mktemp "$base_dir/.PKGBUILD.XXXXXX") || {
+      failed=true
+      continue
+    }
+    if ! install -m 600 -- "$pkgdir/PKGBUILD" "$temp" \
+        || ! mv -f -- "$temp" "$base_dir/PKGBUILD"; then
+      rm -f -- "$temp"
+      printf 'AUR Guard: warning: could not save the PKGBUILD snapshot for %s.\n' "$pkgbase" >&2
+      failed=true
+      continue
+    fi
+
+    versions=$(_aur_guard_installed_versions_for_base "$pkgbase" 2>/dev/null || true)
+    {
+      printf 'commit=%s\n' "$commit"
+      printf 'saved_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      printf 'installed=%s\n' "${versions//$'\n'/, }"
+    } > "$base_dir/metadata"
+    chmod 600 -- "$base_dir/metadata"
+  done < "$_AUR_GUARD_MANIFEST"
+
+  $failed && return 1
+  return 0
+}
+
 _aur_guard_confirm_unchecked_commits() {
   local phase="$1"
   shift
@@ -3747,6 +4019,51 @@ AUR_GUARD_TEST_CACHE_PAYLOAD
   fi
   printf '%s\n' "$dependency_scan_output"
 
+  printf '\nAUR Guard self-test: PKGBUILD review colors unflagged lines green and flagged lines red.\n'
+  local review_old review_new review_output
+  review_old="$test_root/PKGBUILD.old"
+  review_new="$test_root/PKGBUILD.new"
+  cat > "$review_old" <<'AUR_GUARD_TEST_PKGBUILD_OLD'
+pkgname=review-demo
+pkgver=1
+package() {
+  install -Dm755 review-demo "$pkgdir/usr/bin/review-demo"
+}
+AUR_GUARD_TEST_PKGBUILD_OLD
+  cat > "$review_new" <<'AUR_GUARD_TEST_PKGBUILD_NEW'
+pkgname=review-demo
+pkgver=2
+package() {
+  git clone https://example.invalid/plugin.git "$srcdir/plugin"
+  systemctl --root="$pkgdir" enable review-demo.service
+  install -Dm755 review-demo "$pkgdir/usr/bin/review-demo"
+}
+AUR_GUARD_TEST_PKGBUILD_NEW
+
+  if ! review_output=$(AUR_GUARD_COLOR=never _aur_guard_render_pkgbuild_diff \
+      "$review_old" "$review_new" \
+      'review-demo previous successful install' \
+      'review-demo verified AUR test'); then
+    _aur_guard_fail 'self-test failed: PKGBUILD review diff could not be rendered'
+    return 1
+  fi
+  if _aur_guard_review_color_enabled; then
+    AUR_GUARD_COLOR=always _aur_guard_render_pkgbuild_diff \
+      "$review_old" "$review_new" \
+      'review-demo previous successful install' \
+      'review-demo verified AUR test'
+  else
+    printf '%s\n' "$review_output"
+  fi
+
+  if ! grep -Fq "+  git clone https://example.invalid/plugin.git \"\$srcdir/plugin\"  [FLAGGED: network/download]" \
+      <<< "$review_output" \
+      || ! grep -Fq "+  systemctl --root=\"\$pkgdir\" enable review-demo.service  [FLAGGED: privilege/system change]" \
+      <<< "$review_output"; then
+    _aur_guard_fail 'self-test failed: PKGBUILD review did not flag attention-worthy added lines'
+    return 1
+  fi
+
   printf 'AUR Guard self-test: practical mode is the default and deep mode remains explicit.\n'
   local _AUR_GUARD_MODE='practical'
   if _aur_guard_is_deep_mode; then
@@ -3780,7 +4097,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, green/red PKGBUILD review highlighting, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
 )
 
 aurhelp() {
@@ -3805,6 +4122,10 @@ Safe workflow:
   aurup package             practical clean-root build and install
   aurup --deep package      exhaustive offline build and artifact inspection
   aurguardtest              run the offline AUR Guard self-test
+
+Upgrade review:
+  For already-installed AUR packages, aurup offers a colorized PKGBUILD diff
+  against the last successful AUR Guard install. New installs are not delayed.
 
 Examples:
   aurinstalled
@@ -3837,6 +4158,8 @@ Important:
   Final artifacts have metadata, paths, links, privileges, hashes, and activation points checked before one pacman transaction.
   Source verification requires strong checksums, exact VCS commits, or matching signatures pinned by validpgpkeys.
   Source-host matching is a useful review signal, not proof that upstream code is harmless.
+  Green PKGBUILD lines are unflagged; red [FLAGGED] lines are heuristic attention markers, not proof of malicious code.
+  PKGBUILD snapshots are saved only after a successful verified installation.
 AUR_GUARD_HELP
 }
 
@@ -4048,6 +4371,8 @@ aurup() {
       return 1
     fi
 
+    _aur_guard_review_installed_pkgbuilds
+
     if ! _aur_guard_build_verified_artifacts "$pkg"; then
       _aur_guard_refuse_install "$pkg" "${_AUR_GUARD_MODE} clean-root build or artifact inspection failed"
       _aur_guard_cleanup_work
@@ -4083,6 +4408,10 @@ aurup() {
       _aur_guard_refuse_install "$pkg" 'the final verified pacman transaction failed'
       _aur_guard_cleanup_work
       return 1
+    fi
+
+    if ! _aur_guard_store_pkgbuild_snapshots; then
+      printf '%s\n' 'AUR Guard: installation succeeded, but one or more PKGBUILD review snapshots could not be saved.' >&2
     fi
 
     _aur_guard_pass "$pkg and every required AUR dependency were built in disposable clean roots and installed from reverified local artifacts using ${_AUR_GUARD_MODE} mode."
