@@ -112,7 +112,7 @@ fi
 attempt=1
 while (( attempt <= 10 )); do
   log "Waybar restore attempt ${attempt}"
-  "$WAYBAR_SH" start >>"$LOG_FILE" 2>&1 || true
+  "$WAYBAR_SH" start 9>&- >>"$LOG_FILE" 2>&1 || true
 
   settle=0
   while (( settle < 16 )); do
