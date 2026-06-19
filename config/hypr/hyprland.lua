@@ -1194,10 +1194,6 @@ hl.window_rule({ match = { class = games }, fullscreen = true })
 hl.window_rule({ match = { class = games }, immediate = true })
 hl.window_rule({ match = { class = games }, idle_inhibit = "always" })
 
--- Discord voice calls do not keep the system awake automatically.
--- Use the Waybar idle inhibitor when Discord must keep the machine awake.
-hl.window_rule({ match = { class = "^(discord|discordcanary|discordptb|com\\.discordapp\\.Discord|vesktop|dev\\.vencord\\.Vesktop)$" }, idle_inhibit = "none" })
-
 -- Workspace auto-assignments
 hl.window_rule({ match = { class = "^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io\\.github\\.ungoogled_software\\.ungoogled_chromium)$" }, workspace = "2 silent" })
 hl.window_rule({ match = { class = "^(discord|com\\.discordapp\\.Discord|vesktop|dev\\.vencord\\.Vesktop|brave-app\\.revolt\\.chat__-.*|chat\\.revolt\\.RevoltDesktop|info\\.mumble\\.Mumble|fluxer|Fluxer)$" }, workspace = "3 silent" })
