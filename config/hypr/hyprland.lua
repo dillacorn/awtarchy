@@ -570,15 +570,13 @@ local smtty_O = "sh -lc 'if hyprctl clients | grep -q \"class: smtty-O\"; then h
 -- If the patch file is missing, this behaves normally.
 local regression_temp_patch = nil
 do
-    if type(os) == "table" and type(os.getenv) == "function" and type(loadfile) == "function" then
-        local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
-        local patch_loader = loadfile(patch_path)
+    local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
+    local patch_loader = loadfile(patch_path)
 
-        if patch_loader then
-            local ok, patch = pcall(patch_loader, hl)
-            if ok and type(patch) == "table" then
-                regression_temp_patch = patch
-            end
+    if patch_loader then
+        local ok, patch = pcall(patch_loader, hl)
+        if ok and type(patch) == "table" then
+            regression_temp_patch = patch
         end
     end
 end
@@ -594,7 +592,7 @@ end
 local function _submap_on_cmd(name)
     local cmd = _submap_on_base(name)
 
-    if regression_temp_patch and type(regression_temp_patch.on) == "function" then
+    if regression_temp_patch and regression_temp_patch.on then
         return regression_temp_patch.on(name, cmd)
     end
 
@@ -604,7 +602,7 @@ end
 local function _submap_off_cmd(name)
     local cmd = _submap_off_base(name)
 
-    if regression_temp_patch and type(regression_temp_patch.off) == "function" then
+    if regression_temp_patch and regression_temp_patch.off then
         return regression_temp_patch.off(name, cmd)
     end
 
@@ -1195,6 +1193,10 @@ hl.window_rule({ match = { class = games }, rounding = 0 })
 hl.window_rule({ match = { class = games }, fullscreen = true })
 hl.window_rule({ match = { class = games }, immediate = true })
 hl.window_rule({ match = { class = games }, idle_inhibit = "always" })
+
+-- Discord voice calls do not keep the system awake automatically.
+-- Use the Waybar idle inhibitor when Discord must keep the machine awake.
+hl.window_rule({ match = { class = "^(discord|discordcanary|discordptb|com\\.discordapp\\.Discord|vesktop|dev\\.vencord\\.Vesktop)$" }, idle_inhibit = "none" })
 
 -- Workspace auto-assignments
 hl.window_rule({ match = { class = "^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io\\.github\\.ungoogled_software\\.ungoogled_chromium)$" }, workspace = "2 silent" })
