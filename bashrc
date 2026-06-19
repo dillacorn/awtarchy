@@ -157,6 +157,8 @@ _AUR_GUARD_NETWORK_TEST_URL='https://aur.archlinux.org/'
 _AUR_GUARD_MODE='practical'
 _AUR_GUARD_COMMIT_RECHECK_ATTEMPTS=3
 _AUR_GUARD_COMMIT_RECHECK_DELAY_SECONDS=2
+# Informational recent-revision threshold. Maintainer changes remain the hard gate.
+AUR_GUARD_RECENT_CHANGE_HOURS="${AUR_GUARD_RECENT_CHANGE_HOURS:-72}"
 
 _aur_guard_is_deep_mode() {
   [[ ${_AUR_GUARD_MODE:-practical} == deep ]]
@@ -775,6 +777,36 @@ _aur_guard_rpc_package_base() {
     .results[]
     | select(.Name == $pkg)
     | (.PackageBase // .Name)
+  ' "$json"
+
+  local status=$?
+  rm -f "$json"
+  return "$status"
+}
+
+_aur_guard_rpc_package_metadata() {
+  local pkg="$1"
+  local json encoded
+
+  _aur_guard_validate_package_name "$pkg" || return 1
+  encoded=$(_aur_guard_urlencode "$pkg") || return 1
+  json=$(mktemp) || return 1
+
+  if ! _aur_guard_download \
+      "https://aur.archlinux.org/rpc/v5/info?arg%5B%5D=${encoded}" \
+      "$json"; then
+    rm -f "$json"
+    return 1
+  fi
+
+  command jq -er --arg pkg "$pkg" '
+    first(.results[] | select(.Name == $pkg)) as $package
+    | [
+        ($package.PackageBase // $package.Name),
+        ($package.Maintainer // "<orphaned>"),
+        (($package.LastModified // 0) | tostring)
+      ]
+    | @tsv
   ' "$json"
 
   local status=$?
@@ -2186,12 +2218,24 @@ _aur_guard_validate_checkout_tree() {
 _aur_guard_fetch_package() {
   local pkg="$1"
   local fetch_parent="$2"
-  local pkgbase remote pkgdir
+  local pkgbase maintainer last_modified metadata remote pkgdir
 
   _aur_guard_validate_package_name "$pkg" || return 1
-  pkgbase=$(_aur_guard_rpc_package_base "$pkg") || return 1
+  metadata=$(_aur_guard_rpc_package_metadata "$pkg") || return 1
+  IFS=$'\t' read -r pkgbase maintainer last_modified <<< "$metadata"
+
   [[ -n "$pkgbase" ]] || return 1
   _aur_guard_validate_package_name "$pkgbase" || return 1
+  [[ "$maintainer" == '<orphaned>' || "$maintainer" =~ ^[[:alnum:]_.@+-]+$ ]] || return 1
+  [[ "$last_modified" =~ ^[0-9]+$ ]] || return 1
+
+  if [[ -n ${_AUR_GUARD_AUR_METADATA:-} ]]; then
+    if ! awk -F '\t' -v base="$pkgbase" '$1 == base {found = 1} END {exit !found}' \
+        "$_AUR_GUARD_AUR_METADATA" 2>/dev/null; then
+      printf '%s\t%s\t%s\n' "$pkgbase" "$maintainer" "$last_modified" \
+        >> "$_AUR_GUARD_AUR_METADATA"
+    fi
+  fi
 
   mkdir -p "$fetch_parent" || return 1
   pkgdir="$fetch_parent/$pkgbase"
@@ -2548,67 +2592,97 @@ _aur_guard_review_color_enabled() {
   [[ -t 1 && ${TERM:-dumb} != dumb && -z ${NO_COLOR:-} ]]
 }
 
-_aur_guard_colorize_pkgbuild_review() {
-  local mode="${1:-diff}"
-  local line content reason reset
-  local use_color=false
+_aur_guard_print_pkgbuild_diff_header() {
+  local use_color=false reset=''
 
   if _aur_guard_review_color_enabled; then
     use_color=true
     reset=$'\033[0m'
-  else
-    reset=''
   fi
 
-  while IFS= read -r line || [[ -n "$line" ]]; do
-    reason=
-    content="$line"
+  if $use_color; then
+    printf '\033[1;36m%6s %6s │ %s%s\n' 'OLD' 'NEW' 'PKGBUILD' "$reset"
+    printf '\033[1;36m───────────────┼────────────────────────────────────────────────────────%s\n' "$reset"
+  else
+    printf '%6s %6s │ %s\n' 'OLD' 'NEW' 'PKGBUILD'
+    printf '───────────────┼────────────────────────────────────────────────────────\n'
+  fi
+}
 
-    if [[ "$mode" == diff ]]; then
-      case "$line" in
-        '--- '*|'+++ '*|'@@ '*)
-          if $use_color; then
-            printf '\033[1;36m%s%s\n' "$line" "$reset"
-          else
-            printf '%s\n' "$line"
-          fi
-          continue
-          ;;
-        +*)
-          content="${line:1}"
-          reason=$(_aur_guard_pkgbuild_review_reason "$line" 2>/dev/null || true)
-          if [[ -n "$reason" ]]; then
-            if $use_color; then
-              printf '\033[1;31m%s  [FLAGGED: %s]%s\n' "$line" "$reason" "$reset"
-            else
-              printf '%s  [FLAGGED: %s]\n' "$line" "$reason"
-            fi
-          elif $use_color; then
-            printf '\033[0;32m%s%s\n' "$line" "$reset"
-          else
-            printf '%s\n' "$line"
-          fi
-          continue
-          ;;
-      esac
-    else
-      reason=$(_aur_guard_pkgbuild_review_reason " $content" 2>/dev/null || true)
-      if [[ -n "$reason" ]]; then
-        if $use_color; then
-          printf '\033[1;31m%s  [FLAGGED: %s]%s\n' "$line" "$reason" "$reset"
-        else
-          printf '%s  [FLAGGED: %s]\n' "$line" "$reason"
-        fi
-        continue
-      fi
-    fi
+_aur_guard_print_pkgbuild_source_header() {
+  local use_color=false reset=''
 
-    if $use_color; then
-      printf '\033[0;32m%s%s\n' "$line" "$reset"
+  if _aur_guard_review_color_enabled; then
+    use_color=true
+    reset=$'\033[0m'
+  fi
+
+  if $use_color; then
+    printf '\033[1;36m%6s │ %s%s\n' 'LINE' 'PKGBUILD' "$reset"
+    printf '\033[1;36m───────┼────────────────────────────────────────────────────────────────%s\n' "$reset"
+  else
+    printf '%6s │ %s\n' 'LINE' 'PKGBUILD'
+    printf '───────┼────────────────────────────────────────────────────────────────\n'
+  fi
+}
+
+_aur_guard_print_pkgbuild_diff_row() {
+  local old_number="$1"
+  local new_number="$2"
+  local marker="$3"
+  local content="$4"
+  local inspect_added="${5:-false}"
+  local reason='' use_color=false reset=''
+
+  if [[ "$inspect_added" == true ]]; then
+    reason=$(_aur_guard_pkgbuild_review_reason " $content" 2>/dev/null || true)
+  fi
+
+  if _aur_guard_review_color_enabled; then
+    use_color=true
+    reset=$'\033[0m'
+  fi
+
+  if $use_color; then
+    printf '\033[2;36m%6s %6s\033[0m \033[1;36m│\033[0m ' "$old_number" "$new_number"
+    if [[ -n "$reason" ]]; then
+      printf '\033[1;31m%s %s  [FLAGGED: %s]%s\n' "$marker" "$content" "$reason" "$reset"
     else
-      printf '%s\n' "$line"
+      printf '\033[0;32m%s %s%s\n' "$marker" "$content" "$reset"
     fi
-  done
+  elif [[ -n "$reason" ]]; then
+    printf '%6s %6s │ %s %s  [FLAGGED: %s]\n' \
+      "$old_number" "$new_number" "$marker" "$content" "$reason"
+  else
+    printf '%6s %6s │ %s %s\n' \
+      "$old_number" "$new_number" "$marker" "$content"
+  fi
+}
+
+_aur_guard_print_pkgbuild_source_row() {
+  local line_number="$1"
+  local content="$2"
+  local reason='' use_color=false reset=''
+
+  reason=$(_aur_guard_pkgbuild_review_reason " $content" 2>/dev/null || true)
+
+  if _aur_guard_review_color_enabled; then
+    use_color=true
+    reset=$'\033[0m'
+  fi
+
+  if $use_color; then
+    printf '\033[2;36m%6s\033[0m \033[1;36m│\033[0m ' "$line_number"
+    if [[ -n "$reason" ]]; then
+      printf '\033[1;31m%s  [FLAGGED: %s]%s\n' "$content" "$reason" "$reset"
+    else
+      printf '\033[0;32m%s%s\n' "$content" "$reset"
+    fi
+  elif [[ -n "$reason" ]]; then
+    printf '%6s │ %s  [FLAGGED: %s]\n' "$line_number" "$content" "$reason"
+  else
+    printf '%6s │ %s\n' "$line_number" "$content"
+  fi
 }
 
 _aur_guard_render_pkgbuild_diff() {
@@ -2616,7 +2690,7 @@ _aur_guard_render_pkgbuild_diff() {
   local new_file="$2"
   local old_label="$3"
   local new_label="$4"
-  local diff_file status=0
+  local diff_file line content old_number new_number status=0 first_hunk=true
 
   diff_file=$(mktemp) || return 1
   diff -u --label "$old_label" --label "$new_label" \
@@ -2627,14 +2701,67 @@ _aur_guard_render_pkgbuild_diff() {
     return "$status"
   fi
 
-  _aur_guard_colorize_pkgbuild_review diff < "$diff_file"
+  if (( status == 0 )); then
+    printf 'No PKGBUILD changes were found.\n'
+    rm -f -- "$diff_file"
+    return 0
+  fi
+
+  _aur_guard_print_pkgbuild_diff_header
+
+  old_number=0
+  new_number=0
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    case "$line" in
+      '--- '*|'+++ '*)
+        continue
+        ;;
+      '@@ '*)
+        if [[ "$line" =~ ^@@\ -([0-9]+)(,([0-9]+))?\ \+([0-9]+)(,([0-9]+))?\ @@ ]]; then
+          old_number=${BASH_REMATCH[1]}
+          new_number=${BASH_REMATCH[4]}
+          if $first_hunk; then
+            first_hunk=false
+          else
+            printf '\n'
+          fi
+        fi
+        continue
+        ;;
+      '\ No newline at end of file')
+        continue
+        ;;
+      +*)
+        content=${line:1}
+        _aur_guard_print_pkgbuild_diff_row '' "$new_number" '+' "$content" true
+        ((new_number += 1))
+        ;;
+      -*)
+        content=${line:1}
+        _aur_guard_print_pkgbuild_diff_row "$old_number" '' '-' "$content" false
+        ((old_number += 1))
+        ;;
+      ' '*)
+        content=${line:1}
+        _aur_guard_print_pkgbuild_diff_row "$old_number" "$new_number" ' ' "$content" false
+        ((old_number += 1))
+        ((new_number += 1))
+        ;;
+    esac
+  done < "$diff_file"
+
   rm -f -- "$diff_file"
 }
 
 _aur_guard_render_current_pkgbuild() {
   local pkgbuild="$1"
-  awk '{printf "%6d  %s\\n", NR, $0}' "$pkgbuild" \
-    | _aur_guard_colorize_pkgbuild_review file
+  local line line_number=0
+
+  _aur_guard_print_pkgbuild_source_header
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    ((line_number += 1))
+    _aur_guard_print_pkgbuild_source_row "$line_number" "$line"
+  done < "$pkgbuild"
 }
 
 _aur_guard_installed_versions_for_base() {
@@ -2653,83 +2780,456 @@ _aur_guard_installed_versions_for_base() {
   $found
 }
 
+_aur_guard_current_metadata_for_base() {
+  local pkgbase="$1"
+
+  [[ -n ${_AUR_GUARD_AUR_METADATA:-} \
+      && -f $_AUR_GUARD_AUR_METADATA \
+      && ! -L $_AUR_GUARD_AUR_METADATA ]] || return 1
+
+  awk -F '\t' -v base="$pkgbase" '
+    $1 == base {
+      maintainer = $2
+      modified = $3
+    }
+    END {
+      if (maintainer != "") {
+        printf "%s\t%s\n", maintainer, modified
+      } else {
+        exit 1
+      }
+    }
+  ' "$_AUR_GUARD_AUR_METADATA"
+}
+
+_aur_guard_saved_metadata_value() {
+  local pkgbase="$1"
+  local key="$2"
+  local metadata="$_AUR_GUARD_STATE_DIR/pkgbuilds/$pkgbase/metadata"
+
+  [[ -e "$metadata" ]] || return 1
+  [[ -f "$metadata" && ! -L "$metadata" ]] || return 2
+
+  awk -F '=' -v wanted="$key" '
+    $1 == wanted {
+      sub(/^[^=]*=/, "")
+      print
+      found = 1
+      exit
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "$metadata"
+}
+
+_aur_guard_revision_age_seconds() {
+  local last_modified="$1"
+  local now age
+
+  [[ "$last_modified" =~ ^[0-9]+$ && "$last_modified" != 0 ]] || return 1
+  now=$(date +%s) || return 1
+  age=$((now - last_modified))
+  (( age < 0 )) && age=0
+  printf '%s\n' "$age"
+}
+
+_aur_guard_format_revision_age() {
+  local last_modified="$1"
+  local age days hours minutes
+
+  age=$(_aur_guard_revision_age_seconds "$last_modified") || {
+    printf '%s\n' 'unknown'
+    return 0
+  }
+
+  days=$((age / 86400))
+  hours=$(((age % 86400) / 3600))
+  minutes=$(((age % 3600) / 60))
+
+  if (( days > 0 )); then
+    printf '%dd %dh\n' "$days" "$hours"
+  elif (( hours > 0 )); then
+    printf '%dh %dm\n' "$hours" "$minutes"
+  else
+    printf '%dm\n' "$minutes"
+  fi
+}
+
+_aur_guard_revision_is_recent() {
+  local last_modified="$1"
+  local threshold_hours="${AUR_GUARD_RECENT_CHANGE_HOURS:-72}"
+  local age
+
+  [[ "$threshold_hours" =~ ^[0-9]+$ ]] || threshold_hours=72
+  age=$(_aur_guard_revision_age_seconds "$last_modified") || return 1
+  (( age <= threshold_hours * 3600 ))
+}
+
+_aur_guard_count_flagged_pkgbuild_lines() {
+  local current="$1"
+  local previous="${2:-}"
+  local line content reason diff_file status=0 count=0
+
+  [[ -f "$current" && ! -L "$current" ]] || return 1
+
+  if [[ -n "$previous" && -f "$previous" && ! -L "$previous" ]]; then
+    diff_file=$(mktemp) || return 1
+    diff -u -- "$previous" "$current" > "$diff_file" || status=$?
+    if (( status > 1 )); then
+      rm -f -- "$diff_file"
+      return "$status"
+    fi
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      case "$line" in
+        '+++ '*|'--- '*)
+          continue
+          ;;
+        +*)
+          content=${line:1}
+          reason=$(_aur_guard_pkgbuild_review_reason " $content" 2>/dev/null || true)
+          [[ -n "$reason" ]] && count=$((count + 1))
+          ;;
+      esac
+    done < "$diff_file"
+    rm -f -- "$diff_file"
+  else
+    while IFS= read -r line || [[ -n "$line" ]]; do
+      reason=$(_aur_guard_pkgbuild_review_reason " $line" 2>/dev/null || true)
+      [[ -n "$reason" ]] && count=$((count + 1))
+    done < "$current"
+  fi
+
+  printf '%s\n' "$count"
+}
+
+_aur_guard_assess_aur_identity() {
+  local pkgbase commit remote parent pkgdir versions current
+  local current_maintainer last_modified previous_maintainer saved_status
+
+  [[ -n ${_AUR_GUARD_IDENTITY_CHANGES:-} ]] || return 1
+  : > "$_AUR_GUARD_IDENTITY_CHANGES" || return 1
+
+  while IFS=$'\t' read -r pkgbase commit remote parent pkgdir; do
+    [[ -n "$pkgbase" ]] || continue
+    versions=$(_aur_guard_installed_versions_for_base "$pkgbase" 2>/dev/null || true)
+    [[ -n "$versions" ]] || continue
+
+    current=$(_aur_guard_current_metadata_for_base "$pkgbase") || {
+      _aur_guard_fail "current AUR maintainer metadata is unavailable for installed package base $pkgbase"
+      return 1
+    }
+    IFS=$'\t' read -r current_maintainer last_modified <<< "$current"
+
+    previous_maintainer=
+    if previous_maintainer=$(_aur_guard_saved_metadata_value "$pkgbase" maintainer 2>/dev/null); then
+      :
+    else
+      saved_status=$?
+      if (( saved_status == 2 )); then
+        _aur_guard_fail "unsafe saved AUR metadata path detected for $pkgbase"
+        return 1
+      fi
+      previous_maintainer=
+    fi
+
+    if [[ -n "$previous_maintainer" && "$previous_maintainer" != "$current_maintainer" ]]; then
+      printf '%s\t%s\t%s\t%s\t%s\n' \
+        "$pkgbase" "$previous_maintainer" "$current_maintainer" \
+        "$last_modified" "$commit" >> "$_AUR_GUARD_IDENTITY_CHANGES"
+    fi
+  done < "$_AUR_GUARD_MANIFEST"
+
+  _AUR_GUARD_IDENTITY_ASSESSED=1
+  [[ -s "$_AUR_GUARD_IDENTITY_CHANGES" ]] && return 10
+  return 0
+}
+
+_aur_guard_identity_change_for_base() {
+  local pkgbase="$1"
+
+  [[ -n ${_AUR_GUARD_IDENTITY_CHANGES:-} \
+      && -f $_AUR_GUARD_IDENTITY_CHANGES \
+      && ! -L $_AUR_GUARD_IDENTITY_CHANGES ]] || return 1
+
+  awk -F '\t' -v base="$pkgbase" '
+    $1 == base {
+      printf "%s\t%s\n", $2, $3
+      found = 1
+      exit
+    }
+    END {
+      if (!found) {
+        exit 1
+      }
+    }
+  ' "$_AUR_GUARD_IDENTITY_CHANGES"
+}
+
+_aur_guard_identity_confirmation_phrase() {
+  local token
+
+  [[ -n ${_AUR_GUARD_IDENTITY_CHANGES:-} \
+      && -s $_AUR_GUARD_IDENTITY_CHANGES \
+      && ! -L $_AUR_GUARD_IDENTITY_CHANGES ]] || return 1
+
+  token=$(sha256sum -- "$_AUR_GUARD_IDENTITY_CHANGES" \
+    | awk '{print substr($1, 1, 12)}') || return 1
+  printf 'CONTINUE MAINTAINER %s\n' "$token"
+}
+
+_aur_guard_confirm_identity_changes() {
+  local pkgbase previous current last_modified commit answer phrase
+
+  [[ -n ${_AUR_GUARD_IDENTITY_CHANGES:-} \
+      && -s $_AUR_GUARD_IDENTITY_CHANGES ]] || return 0
+
+  phrase=$(_aur_guard_identity_confirmation_phrase) || return 1
+
+  printf '\n\033[1;31mCRITICAL AUR MAINTAINER CHANGE\033[0m\n' >&2
+  while IFS=$'\t' read -r pkgbase previous current last_modified commit; do
+    printf '  %s: %s -> %s | revision age: %s | commit: %s\n' \
+      "$pkgbase" "$previous" "$current" \
+      "$(_aur_guard_format_revision_age "$last_modified")" "${commit:0:12}" >&2
+  done < "$_AUR_GUARD_IDENTITY_CHANGES"
+  printf 'AUR Guard forced deep verification and displayed the PKGBUILD review.\n' >&2
+  printf 'Type exactly %s to continue building: ' "$phrase" >&2
+
+  if [[ ${AUR_GUARD_TEST_MODE:-0} == 1 ]]; then
+    IFS= read -r answer || return 1
+  else
+    if [[ ! -r /dev/tty ]]; then
+      printf '\nNo readable terminal is available for maintainer-change confirmation.\n' >&2
+      return 1
+    fi
+    IFS= read -r answer </dev/tty || return 1
+  fi
+
+  [[ "$answer" == "$phrase" ]]
+}
+
 _aur_guard_review_installed_pkgbuilds() {
   local pkgbase commit remote parent pkgdir versions snapshot answer entry kind
+  local current current_maintainer last_modified previous_maintainer saved_status
+  local identity flagged age threshold_hours previous_for_scan
+  local reset='' green='' yellow='' red='' cyan='' bold=''
+  local mandatory_review=false
+  local -a all_entries=()
   local -a review_entries=()
+
+  if [[ ${_AUR_GUARD_IDENTITY_ASSESSED:-0} != 1 ]]; then
+    if _aur_guard_assess_aur_identity; then
+      :
+    else
+      case "$?" in
+        10) ;;
+        *) return 1 ;;
+      esac
+    fi
+  fi
+
+  threshold_hours="${AUR_GUARD_RECENT_CHANGE_HOURS:-72}"
+  [[ "$threshold_hours" =~ ^[0-9]+$ ]] || threshold_hours=72
+
+  if _aur_guard_review_color_enabled; then
+    reset=$'\033[0m'
+    green=$'\033[1;32m'
+    yellow=$'\033[1;33m'
+    red=$'\033[1;31m'
+    cyan=$'\033[1;36m'
+    bold=$'\033[1m'
+  fi
 
   while IFS=$'\t' read -r pkgbase commit remote parent pkgdir; do
     [[ -n "$pkgbase" && -f "$pkgdir/PKGBUILD" && ! -L "$pkgdir/PKGBUILD" ]] || continue
     versions=$(_aur_guard_installed_versions_for_base "$pkgbase" 2>/dev/null || true)
     [[ -n "$versions" ]] || continue
 
+    current=$(_aur_guard_current_metadata_for_base "$pkgbase") || {
+      _aur_guard_fail "current AUR metadata is unavailable for installed package base $pkgbase"
+      return 1
+    }
+    IFS=$'\t' read -r current_maintainer last_modified <<< "$current"
+
+    previous_maintainer=
+    if previous_maintainer=$(_aur_guard_saved_metadata_value "$pkgbase" maintainer 2>/dev/null); then
+      :
+    else
+      saved_status=$?
+      if (( saved_status == 2 )); then
+        _aur_guard_fail "unsafe saved AUR metadata path detected for $pkgbase"
+        return 1
+      fi
+      previous_maintainer=
+    fi
+
     snapshot="$_AUR_GUARD_STATE_DIR/pkgbuilds/$pkgbase/PKGBUILD"
     if [[ -f "$snapshot" && ! -L "$snapshot" ]]; then
       if cmp -s -- "$snapshot" "$pkgdir/PKGBUILD"; then
-        printf 'AUR Guard: %s PKGBUILD is unchanged since its last successful AUR Guard install.\n' "$pkgbase"
-        continue
+        kind='unchanged'
+      else
+        kind='diff'
       fi
-      kind='diff'
+    elif [[ -e "$snapshot" ]]; then
+      _aur_guard_fail "unsafe saved PKGBUILD snapshot path detected for $pkgbase"
+      return 1
     else
       kind='current'
     fi
 
-    review_entries+=("$pkgbase"$'\t'"$commit"$'\t'"$pkgdir"$'\t'"$snapshot"$'\t'"$kind"$'\t'"${versions//$'\n'/, }")
+    previous_for_scan=
+    [[ "$kind" == diff ]] && previous_for_scan="$snapshot"
+    flagged=$(_aur_guard_count_flagged_pkgbuild_lines \
+      "$pkgdir/PKGBUILD" "$previous_for_scan") || return 1
+
+    identity='unchanged'
+    if _aur_guard_identity_change_for_base "$pkgbase" >/dev/null 2>&1; then
+      identity='changed'
+      mandatory_review=true
+    elif [[ -z "$previous_maintainer" ]]; then
+      identity='baseline-missing'
+    fi
+
+    all_entries+=(
+      "$pkgbase"$'\t'"$commit"$'\t'"$pkgdir"$'\t'"$snapshot"$'\t'"$kind"$'\t'"${versions//$'\n'/, }"$'\t'"$current_maintainer"$'\t'"$previous_maintainer"$'\t'"$last_modified"$'\t'"$flagged"$'\t'"$identity"
+    )
+
+    if [[ "$kind" != unchanged || "$identity" == changed ]]; then
+      review_entries+=(
+        "$pkgbase"$'\t'"$commit"$'\t'"$pkgdir"$'\t'"$snapshot"$'\t'"$kind"$'\t'"${versions//$'\n'/, }"$'\t'"$identity"
+      )
+    fi
   done < "$_AUR_GUARD_MANIFEST"
+
+  (( ${#all_entries[@]} > 0 )) || return 0
+
+  printf '\n%sAUR package review summary%s\n' "$cyan" "$reset"
+  for entry in "${all_entries[@]}"; do
+    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions \
+      current_maintainer previous_maintainer last_modified flagged identity <<< "$entry"
+    age=$(_aur_guard_format_revision_age "$last_modified")
+
+    printf '\n  %s%s%s\n' "$bold" "$pkgbase" "$reset"
+    printf '    Installed: %s\n' "$versions"
+
+    case "$identity" in
+      changed)
+        printf '    Maintainer: %s%s -> %s [CHANGED]%s\n' \
+          "$red" "$previous_maintainer" "$current_maintainer" "$reset"
+        ;;
+      baseline-missing)
+        if [[ "$current_maintainer" == '<orphaned>' ]]; then
+          printf '    Maintainer: %s%s [ORPHANED; no saved baseline]%s\n' \
+            "$red" "$current_maintainer" "$reset"
+        else
+          printf '    Maintainer: %s%s [no saved baseline]%s\n' \
+            "$yellow" "$current_maintainer" "$reset"
+        fi
+        ;;
+      *)
+        if [[ "$current_maintainer" == '<orphaned>' ]]; then
+          printf '    Maintainer: %s%s [ORPHANED]%s\n' \
+            "$red" "$current_maintainer" "$reset"
+        else
+          printf '    Maintainer: %s%s [unchanged]%s\n' \
+            "$green" "$current_maintainer" "$reset"
+        fi
+        ;;
+    esac
+
+    if _aur_guard_revision_is_recent "$last_modified"; then
+      printf '    AUR revision: %s%s old [RECENT: within %sh]%s\n' \
+        "$yellow" "$age" "$threshold_hours" "$reset"
+    else
+      printf '    AUR revision: %s%s old%s\n' "$green" "$age" "$reset"
+    fi
+
+    case "$kind" in
+      diff)
+        if (( flagged > 0 )); then
+          printf '    PKGBUILD: %schanged | flagged additions: %s%s\n' \
+            "$red" "$flagged" "$reset"
+        else
+          printf '    PKGBUILD: %schanged | flagged additions: 0%s\n' \
+            "$yellow" "$reset"
+        fi
+        ;;
+      current)
+        printf '    PKGBUILD: %sno saved baseline | flagged current lines: %s%s\n' \
+          "$yellow" "$flagged" "$reset"
+        ;;
+      unchanged)
+        printf '    PKGBUILD: %sunchanged%s\n' "$green" "$reset"
+        ;;
+    esac
+
+    if [[ "$identity" == changed ]] \
+        && _aur_guard_revision_is_recent "$last_modified"; then
+      printf '    Risk: %sCRITICAL - maintainer changed on a recent AUR revision%s\n' \
+        "$red" "$reset"
+    fi
+  done
 
   (( ${#review_entries[@]} > 0 )) || return 0
 
-  printf '\n\033[1;36mPKGBUILD review is available for installed AUR packages:\033[0m\n'
-  for entry in "${review_entries[@]}"; do
-    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions <<< "$entry"
-    if [[ "$kind" == diff ]]; then
-      printf '  %-30s installed: %s | verified commit: %s | changes available\n' \
-        "$pkgbase" "$versions" "${commit:0:12}"
-    else
-      printf '  %-30s installed: %s | verified commit: %s | no saved baseline yet\n' \
-        "$pkgbase" "$versions" "${commit:0:12}"
-    fi
-  done
-  printf 'Green lines are unflagged. Red [FLAGGED] lines require extra attention but are not proof of malicious code.\n'
+  printf '\n%sPKGBUILD review is available for installed AUR packages.%s\n' "$cyan" "$reset"
+  printf 'PKGBUILD changes use an AUR-style line-numbered code view. Green lines are unflagged; red [FLAGGED] lines require extra attention.\n'
 
-  if [[ ! -r /dev/tty ]]; then
-    printf 'No readable terminal is available; skipping optional PKGBUILD display.\n'
-    return 0
+  if $mandatory_review; then
+    printf '%sMaintainer ownership changed. PKGBUILD display is mandatory.%s\n' \
+      "$red" "$reset"
+  else
+    if [[ ! -r /dev/tty ]]; then
+      printf 'No readable terminal is available; skipping optional PKGBUILD display.\n'
+      return 0
+    fi
+
+    printf 'View the PKGBUILD review before building? [y/N]: '
+    IFS= read -r answer </dev/tty || return 0
+    case "$answer" in
+      y|Y|yes|YES|Yes)
+        ;;
+      *)
+        printf 'PKGBUILD display skipped.\n'
+        return 0
+        ;;
+    esac
   fi
 
-  printf 'View the PKGBUILD review before building? [y/N]: '
-  IFS= read -r answer </dev/tty || return 0
-  case "$answer" in
-    y|Y|yes|YES|Yes)
-      ;;
-    *)
-      printf 'PKGBUILD display skipped.\n'
-      return 0
-      ;;
-  esac
-
   for entry in "${review_entries[@]}"; do
-    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions <<< "$entry"
-    printf '\n\033[1;36m===== %s PKGBUILD review =====\033[0m\n' "$pkgbase"
+    IFS=$'\t' read -r pkgbase commit pkgdir snapshot kind versions identity <<< "$entry"
+    printf '\n%s===== %s PKGBUILD review =====%s\n' "$cyan" "$pkgbase" "$reset"
     printf 'Installed: %s\nVerified AUR commit: %s\n' "$versions" "$commit"
 
-    if [[ "$kind" == diff ]]; then
-      _aur_guard_render_pkgbuild_diff \
-        "$snapshot" "$pkgdir/PKGBUILD" \
-        "$pkgbase previous successful install" \
-        "$pkgbase verified AUR ${commit:0:12}" || {
-          printf 'AUR Guard: could not render the PKGBUILD diff for %s.\n' "$pkgbase" >&2
-        }
-    else
-      printf 'No previous AUR Guard PKGBUILD snapshot exists. Showing the full current PKGBUILD.\n'
-      _aur_guard_render_current_pkgbuild "$pkgdir/PKGBUILD"
-    fi
+    case "$kind" in
+      diff)
+        _aur_guard_render_pkgbuild_diff \
+          "$snapshot" "$pkgdir/PKGBUILD" \
+          "$pkgbase previous successful install" \
+          "$pkgbase verified AUR ${commit:0:12}" || {
+            printf 'AUR Guard: could not render the PKGBUILD diff for %s.\n' "$pkgbase" >&2
+          }
+        ;;
+      unchanged)
+        printf 'The PKGBUILD is unchanged, but the maintainer change requires a full source review.\n'
+        _aur_guard_render_current_pkgbuild "$pkgdir/PKGBUILD"
+        ;;
+      current)
+        printf 'No previous AUR Guard PKGBUILD snapshot exists. Showing the current PKGBUILD in a line-numbered source view.\n'
+        _aur_guard_render_current_pkgbuild "$pkgdir/PKGBUILD"
+        ;;
+    esac
   done
 
   printf '\nPKGBUILD review complete; continuing with the verified build.\n'
 }
 
 _aur_guard_store_pkgbuild_snapshots() {
-  local root pkgbase commit remote parent pkgdir base_dir temp versions
+  local root pkgbase commit remote parent pkgdir base_dir temp metadata_temp
+  local versions current maintainer last_modified
   local failed=false
 
   root="$_AUR_GUARD_STATE_DIR/pkgbuilds"
@@ -2766,18 +3266,38 @@ _aur_guard_store_pkgbuild_snapshots() {
       continue
     fi
 
+    current=$(_aur_guard_current_metadata_for_base "$pkgbase") || {
+      printf 'AUR Guard: warning: could not save maintainer metadata for %s.\n' "$pkgbase" >&2
+      failed=true
+      continue
+    }
+    IFS=$'\t' read -r maintainer last_modified <<< "$current"
     versions=$(_aur_guard_installed_versions_for_base "$pkgbase" 2>/dev/null || true)
-    {
-      printf 'commit=%s\n' "$commit"
-      printf 'saved_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-      printf 'installed=%s\n' "${versions//$'\n'/, }"
-    } > "$base_dir/metadata"
-    chmod 600 -- "$base_dir/metadata"
+
+    metadata_temp=$(mktemp "$base_dir/.metadata.XXXXXX") || {
+      failed=true
+      continue
+    }
+    if ! {
+        printf 'commit=%s\n' "$commit"
+        printf 'maintainer=%s\n' "$maintainer"
+        printf 'last_modified=%s\n' "$last_modified"
+        printf 'saved_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        printf 'installed=%s\n' "${versions//$'\n'/, }"
+      } > "$metadata_temp" \
+        || ! chmod 600 -- "$metadata_temp" \
+        || ! mv -f -- "$metadata_temp" "$base_dir/metadata"; then
+      rm -f -- "$metadata_temp"
+      printf 'AUR Guard: warning: could not save AUR metadata for %s.\n' "$pkgbase" >&2
+      failed=true
+      continue
+    fi
   done < "$_AUR_GUARD_MANIFEST"
 
   $failed && return 1
   return 0
 }
+
 
 _aur_guard_confirm_unchecked_commits() {
   local phase="$1"
@@ -3471,16 +3991,21 @@ _aur_guard_verify_tree() {
   _AUR_GUARD_REQUIRED_PACKAGES="$_AUR_GUARD_WORK_DIR/required-packages.tsv"
   _AUR_GUARD_REPO_DEPS="$_AUR_GUARD_WORK_DIR/repository-dependencies.txt"
   _AUR_GUARD_ARTIFACTS="$_AUR_GUARD_WORK_DIR/built-artifacts.tsv"
+  _AUR_GUARD_AUR_METADATA="$_AUR_GUARD_WORK_DIR/aur-metadata.tsv"
+  _AUR_GUARD_IDENTITY_CHANGES="$_AUR_GUARD_WORK_DIR/maintainer-changes.tsv"
   : > "$_AUR_GUARD_MANIFEST"
   : > "$_AUR_GUARD_REQUIRED_PACKAGES"
   : > "$_AUR_GUARD_REPO_DEPS"
   : > "$_AUR_GUARD_ARTIFACTS"
+  : > "$_AUR_GUARD_AUR_METADATA"
+  : > "$_AUR_GUARD_IDENTITY_CHANGES"
 
   declare -gA _AUR_GUARD_REQUEST_STATE=()
   declare -gA _AUR_GUARD_BASE_STATE=()
   _AUR_GUARD_HISTORICAL_MATCHES=()
   _AUR_GUARD_CONTEXT_WARNINGS=()
   _AUR_GUARD_INSTALL_STARTED=0
+  _AUR_GUARD_IDENTITY_ASSESSED=0
 
   printf 'AUR Verify: recursively checking %s and all required AUR dependencies in %s mode.\n' \
     "$pkg" "${_AUR_GUARD_MODE:-practical}"
@@ -3505,6 +4030,8 @@ _aur_guard_cleanup_work() {
   unset _AUR_GUARD_WORK_DIR _AUR_GUARD_MANIFEST _AUR_GUARD_HELPER
   unset _AUR_GUARD_SANDBOX_ROOTFS _AUR_GUARD_INSTALL_STARTED
   unset _AUR_GUARD_REQUIRED_PACKAGES _AUR_GUARD_REPO_DEPS _AUR_GUARD_ARTIFACTS
+  unset _AUR_GUARD_AUR_METADATA _AUR_GUARD_IDENTITY_CHANGES
+  unset _AUR_GUARD_IDENTITY_ASSESSED
   unset _AUR_GUARD_REQUEST_STATE _AUR_GUARD_BASE_STATE
   _AUR_GUARD_HISTORICAL_MATCHES=()
   _AUR_GUARD_CONTEXT_WARNINGS=()
@@ -4019,8 +4546,8 @@ AUR_GUARD_TEST_CACHE_PAYLOAD
   fi
   printf '%s\n' "$dependency_scan_output"
 
-  printf '\nAUR Guard self-test: PKGBUILD review colors unflagged lines green and flagged lines red.\n'
-  local review_old review_new review_output
+  printf '\nAUR Guard self-test: PKGBUILD review uses clean line-numbered source and diff views.\n'
+  local review_old review_new review_output review_current_output
   review_old="$test_root/PKGBUILD.old"
   review_new="$test_root/PKGBUILD.new"
   cat > "$review_old" <<'AUR_GUARD_TEST_PKGBUILD_OLD'
@@ -4056,11 +4583,153 @@ AUR_GUARD_TEST_PKGBUILD_NEW
     printf '%s\n' "$review_output"
   fi
 
-  if ! grep -Fq "+  git clone https://example.invalid/plugin.git \"\$srcdir/plugin\"  [FLAGGED: network/download]" \
+  if ! grep -Fq "git clone https://example.invalid/plugin.git \"\$srcdir/plugin\"  [FLAGGED: network/download]" \
       <<< "$review_output" \
-      || ! grep -Fq "+  systemctl --root=\"\$pkgdir\" enable review-demo.service  [FLAGGED: privilege/system change]" \
+      || ! grep -Fq "systemctl --root=\"\$pkgdir\" enable review-demo.service  [FLAGGED: privilege/system change]" \
+      <<< "$review_output" \
+      || ! grep -Eq '^[[:space:]]*OLD[[:space:]]+NEW[[:space:]]+│[[:space:]]+PKGBUILD$' \
       <<< "$review_output"; then
-    _aur_guard_fail 'self-test failed: PKGBUILD review did not flag attention-worthy added lines'
+    _aur_guard_fail 'self-test failed: PKGBUILD diff view was not line-numbered or did not flag attention-worthy added lines'
+    return 1
+  fi
+
+  if ! review_current_output=$(AUR_GUARD_COLOR=never \
+      _aur_guard_render_current_pkgbuild "$review_new"); then
+    _aur_guard_fail 'self-test failed: current PKGBUILD source view could not be rendered'
+    return 1
+  fi
+
+  if ! grep -Eq '^[[:space:]]*1[[:space:]]+│[[:space:]]+pkgname=review-demo$' \
+      <<< "$review_current_output" \
+      || grep -Fq '\n' <<< "$review_current_output"; then
+    _aur_guard_fail 'self-test failed: current PKGBUILD source view was bunched together instead of using real line breaks'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: maintainer changes force deep review and exact confirmation.\n'
+  local identity_pkgdir identity_state identity_status identity_output
+  local identity_phrase identity_now identity_metadata
+  identity_pkgdir="$test_root/identity-package"
+  identity_state="$test_root/identity-state"
+  mkdir -p "$identity_pkgdir" "$identity_state/pkgbuilds/review-demo"
+  cp -- "$review_new" "$identity_pkgdir/PKGBUILD"
+  cp -- "$review_old" "$identity_state/pkgbuilds/review-demo/PKGBUILD"
+
+  cat > "$identity_state/pkgbuilds/review-demo/metadata" <<'AUR_GUARD_TEST_OLD_METADATA'
+commit=1111111111111111111111111111111111111111
+maintainer=old-maintainer
+last_modified=1
+saved_at=2026-01-01T00:00:00Z
+installed=review-demo=1.0-1
+AUR_GUARD_TEST_OLD_METADATA
+
+  cat > "$test_bin/pacman" <<'AUR_GUARD_TEST_IDENTITY_PACMAN'
+#!/bin/sh
+if [ "$1" = "-Q" ] && [ "$2" = "review-demo" ]; then
+  printf '%s\n' 'review-demo 1.0-1'
+  exit 0
+fi
+exit 1
+AUR_GUARD_TEST_IDENTITY_PACMAN
+  chmod 0755 "$test_bin/pacman"
+
+  _AUR_GUARD_STATE_DIR="$identity_state"
+  _AUR_GUARD_MANIFEST="$test_root/identity-manifest.tsv"
+  _AUR_GUARD_REQUIRED_PACKAGES="$test_root/identity-required.tsv"
+  _AUR_GUARD_AUR_METADATA="$test_root/identity-current.tsv"
+  _AUR_GUARD_IDENTITY_CHANGES="$test_root/identity-changes.tsv"
+  _AUR_GUARD_IDENTITY_ASSESSED=0
+  identity_now=$(date +%s)
+  printf 'review-demo\t2222222222222222222222222222222222222222\thttps://aur.archlinux.org/review-demo.git\t(requested)\t%s\n' \
+    "$identity_pkgdir" > "$_AUR_GUARD_MANIFEST"
+  printf 'review-demo\treview-demo\n' > "$_AUR_GUARD_REQUIRED_PACKAGES"
+  printf 'review-demo\tnew-maintainer\t%s\n' "$((identity_now - 1800))" \
+    > "$_AUR_GUARD_AUR_METADATA"
+  : > "$_AUR_GUARD_IDENTITY_CHANGES"
+
+  if _aur_guard_assess_aur_identity; then
+    _aur_guard_fail 'self-test failed: a saved maintainer change was not detected'
+    return 1
+  else
+    identity_status=$?
+  fi
+  if (( identity_status != 10 )); then
+    _aur_guard_fail 'self-test failed: maintainer-change assessment returned the wrong status'
+    return 1
+  fi
+
+  if ! identity_output=$(AUR_GUARD_COLOR=never \
+      _aur_guard_review_installed_pkgbuilds 2>&1); then
+    printf '%s\n' "$identity_output"
+    _aur_guard_fail 'self-test failed: mandatory maintainer-change review could not be rendered'
+    return 1
+  fi
+  printf '%s\n' "$identity_output"
+
+  if ! grep -Fq 'Maintainer: old-maintainer -> new-maintainer [CHANGED]' \
+      <<< "$identity_output" \
+      || ! grep -Fq 'Risk: CRITICAL - maintainer changed on a recent AUR revision' \
+      <<< "$identity_output" \
+      || ! grep -Fq 'Maintainer ownership changed. PKGBUILD display is mandatory.' \
+      <<< "$identity_output"; then
+    _aur_guard_fail 'self-test failed: maintainer-change severity or mandatory review output is missing'
+    return 1
+  fi
+
+  identity_phrase=$(_aur_guard_identity_confirmation_phrase) || return 1
+  if _aur_guard_confirm_identity_changes <<< 'WRONG CONFIRMATION' >/dev/null 2>&1; then
+    _aur_guard_fail 'self-test failed: incorrect maintainer-change confirmation was accepted'
+    return 1
+  fi
+  if ! _aur_guard_confirm_identity_changes <<< "$identity_phrase" >/dev/null 2>&1; then
+    _aur_guard_fail 'self-test failed: exact maintainer-change confirmation was rejected'
+    return 1
+  fi
+
+  if ! _aur_guard_store_pkgbuild_snapshots; then
+    _aur_guard_fail 'self-test failed: successful-install maintainer metadata could not be saved'
+    return 1
+  fi
+  identity_metadata="$identity_state/pkgbuilds/review-demo/metadata"
+  if ! grep -Fxq 'maintainer=new-maintainer' "$identity_metadata" \
+      || ! grep -Fq 'last_modified=' "$identity_metadata"; then
+    _aur_guard_fail 'self-test failed: the successful-install snapshot omitted current AUR identity metadata'
+    return 1
+  fi
+
+  _AUR_GUARD_IDENTITY_ASSESSED=0
+  if ! _aur_guard_assess_aur_identity; then
+    _aur_guard_fail 'self-test failed: an unchanged saved maintainer produced a false positive'
+    return 1
+  fi
+  if [[ -s "$_AUR_GUARD_IDENTITY_CHANGES" ]]; then
+    _aur_guard_fail 'self-test failed: unchanged maintainer metadata left a critical-change record'
+    return 1
+  fi
+
+  printf '%s\n' '#!/bin/sh' 'exit 1' > "$test_bin/pacman"
+  chmod 0755 "$test_bin/pacman"
+
+  local aurup_definition identity_assess_line deep_restart_line build_line
+  local install_line snapshot_line
+  aurup_definition=$(declare -f aurup) || return 1
+  identity_assess_line=$(grep -n -m1 '_aur_guard_assess_aur_identity' \
+    <<< "$aurup_definition" | cut -d: -f1)
+  deep_restart_line=$(grep -n -m1 'Discarding practical-mode work and restarting automatically in deep mode' \
+    <<< "$aurup_definition" | cut -d: -f1)
+  build_line=$(grep -n -m1 '_aur_guard_build_verified_artifacts' \
+    <<< "$aurup_definition" | cut -d: -f1)
+  install_line=$(grep -n -m1 '_aur_guard_install_verified_transaction' \
+    <<< "$aurup_definition" | cut -d: -f1)
+  snapshot_line=$(grep -n -m1 '_aur_guard_store_pkgbuild_snapshots' \
+    <<< "$aurup_definition" | cut -d: -f1)
+
+  if [[ -z "$identity_assess_line" || -z "$deep_restart_line" || -z "$build_line" \
+      || -z "$install_line" || -z "$snapshot_line" ]] \
+      || (( identity_assess_line >= deep_restart_line )) \
+      || (( deep_restart_line >= build_line )) \
+      || (( install_line >= snapshot_line )); then
+    _aur_guard_fail 'self-test failed: maintainer changes do not force deep mode before building or metadata is saved before installation'
     return 1
   fi
 
@@ -4097,7 +4766,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, green/red PKGBUILD review highlighting, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, clean line-numbered PKGBUILD review rendering, maintainer-change tracking and confirmation, recent-revision risk summaries, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
 )
 
 aurhelp() {
@@ -4124,8 +4793,11 @@ Safe workflow:
   aurguardtest              run the offline AUR Guard self-test
 
 Upgrade review:
-  For already-installed AUR packages, aurup offers a colorized PKGBUILD diff
-  against the last successful AUR Guard install. New installs are not delayed.
+  For already-installed AUR packages, aurup shows maintainer identity, AUR
+  revision age, PKGBUILD change status, and flagged additions before building.
+  Normal PKGBUILD changes remain optional to display. A maintainer change forces
+  deep verification, mandatory PKGBUILD display, and exact confirmation.
+  AUR_GUARD_RECENT_CHANGE_HOURS controls the informational recent-change window.
 
 Examples:
   aurinstalled
@@ -4158,7 +4830,7 @@ Important:
   Final artifacts have metadata, paths, links, privileges, hashes, and activation points checked before one pacman transaction.
   Source verification requires strong checksums, exact VCS commits, or matching signatures pinned by validpgpkeys.
   Source-host matching is a useful review signal, not proof that upstream code is harmless.
-  Green PKGBUILD lines are unflagged; red [FLAGGED] lines are heuristic attention markers, not proof of malicious code.
+  PKGBUILD reviews use an AUR-style line-numbered view; green lines are unflagged and red [FLAGGED] lines are heuristic attention markers, not proof of malicious code.
   PKGBUILD snapshots are saved only after a successful verified installation.
 AUR_GUARD_HELP
 }
@@ -4299,7 +4971,7 @@ aurverify() {
 }
 
 aurup() {
-  local pkg status recheck_status
+  local pkg status recheck_status identity_status
   local restart_count=0
   local _AUR_GUARD_MODE='practical'
   local _AUR_GUARD_BUILD_REQUESTED=1
@@ -4371,7 +5043,37 @@ aurup() {
       return 1
     fi
 
-    _aur_guard_review_installed_pkgbuilds
+    if _aur_guard_assess_aur_identity; then
+      identity_status=0
+    else
+      identity_status=$?
+    fi
+
+    if (( identity_status == 10 )) && [[ "$_AUR_GUARD_MODE" != deep ]]; then
+      printf '\n\033[1;31mAUR Guard detected a maintainer change for an installed package.\033[0m\n' >&2
+      printf 'Discarding practical-mode work and restarting automatically in deep mode.\n' >&2
+      _aur_guard_cleanup_work
+      _AUR_GUARD_MODE='deep'
+      continue
+    fi
+
+    if (( identity_status != 0 && identity_status != 10 )); then
+      _aur_guard_refuse_install "$pkg" 'AUR maintainer identity metadata could not be validated'
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if ! _aur_guard_review_installed_pkgbuilds; then
+      _aur_guard_refuse_install "$pkg" 'the installed-package review could not be completed'
+      _aur_guard_cleanup_work
+      return 1
+    fi
+
+    if ! _aur_guard_confirm_identity_changes; then
+      _aur_guard_refuse_install "$pkg" 'the maintainer-change confirmation was not accepted'
+      _aur_guard_cleanup_work
+      return 1
+    fi
 
     if ! _aur_guard_build_verified_artifacts "$pkg"; then
       _aur_guard_refuse_install "$pkg" "${_AUR_GUARD_MODE} clean-root build or artifact inspection failed"
