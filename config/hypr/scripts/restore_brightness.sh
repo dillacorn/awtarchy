@@ -4,29 +4,57 @@
 
 set -euo pipefail
 
-# Optional: pin a display. Use exactly one token, e.g. "--bus=5"
-# Export in your environment or set here. Leave empty to auto-select.
-: "${DDCUTIL_BUS:=}"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+uid="$(id -u)"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
 
-BR_FILE="/tmp/brightness_level"
+LOG_FILE="${HYPRIDLE_ACTION_LOG:-${CACHE}/hypridle/actions.log}"
+BR_FILE="${RUNTIME_DIR}/hypridle-brightness-level"
+DIM_MARKER="${RUNTIME_DIR}/hypridle-ddc-dimmed"
 DEFAULT_BRIGHTNESS="70"
 
-# Ensure panel is awake after unlock, then give it a moment
-hyprctl dispatch dpms on >/dev/null 2>&1 || true
+# Optional: pin a display. Use exactly one token, e.g. "--bus=5"
+: "${DDCUTIL_BUS:=}"
+DDCUTIL_ARGS=()
+[[ -n "$DDCUTIL_BUS" ]] && DDCUTIL_ARGS+=("$DDCUTIL_BUS")
+
+mkdir -p "$RUNTIME_DIR" "$(dirname "$LOG_FILE")"
+
+log() {
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE" 2>/dev/null || true
+}
+
+# Do nothing unless this idle cycle actually dimmed the monitor.
+if [[ ! -f "$DIM_MARKER" ]]; then
+    log "brightness restore skipped: no DDC dim marker"
+    exit 0
+fi
+
+hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })' >/dev/null 2>&1 || true
 sleep 0.6
 
-# Read saved brightness with validation
-if [[ -r "${BR_FILE}" ]]; then
-  BRIGHTNESS="$(tr -dc '0-9' < "${BR_FILE}")"
+if [[ -r "$BR_FILE" ]]; then
+    BRIGHTNESS="$(tr -dc '0-9' <"$BR_FILE")"
 else
-  BRIGHTNESS=""
-fi
-if [[ -z "${BRIGHTNESS}" || "${BRIGHTNESS}" -lt 0 || "${BRIGHTNESS}" -gt 100 ]]; then
-  BRIGHTNESS="${DEFAULT_BRIGHTNESS}"
+    BRIGHTNESS=""
 fi
 
-# Restore with one retry; quote all expansions
-if ! timeout 3 ddcutil ${DDCUTIL_BUS:+$DDCUTIL_BUS} setvcp 0x10 "${BRIGHTNESS}" >/dev/null 2>&1; then
-  sleep 0.35
-  timeout 3 ddcutil ${DDCUTIL_BUS:+$DDCUTIL_BUS} setvcp 0x10 "${BRIGHTNESS}" >/dev/null 2>&1 || true
+if [[ ! "$BRIGHTNESS" =~ ^[0-9]+$ ]] ||
+   (( BRIGHTNESS < 0 || BRIGHTNESS > 100 )); then
+    BRIGHTNESS="$DEFAULT_BRIGHTNESS"
+fi
+
+if timeout 3 ddcutil "${DDCUTIL_ARGS[@]}" setvcp 0x10 "$BRIGHTNESS" >/dev/null 2>&1; then
+    rm -f "$DIM_MARKER"
+    log "DDC brightness restored: ${BRIGHTNESS}"
+    exit 0
+fi
+
+sleep 0.35
+
+if timeout 3 ddcutil "${DDCUTIL_ARGS[@]}" setvcp 0x10 "$BRIGHTNESS" >/dev/null 2>&1; then
+    rm -f "$DIM_MARKER"
+    log "DDC brightness restored after retry: ${BRIGHTNESS}"
+else
+    log "DDC brightness restore failed; marker retained"
 fi

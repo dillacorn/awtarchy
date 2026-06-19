@@ -4,19 +4,61 @@
 
 set -euo pipefail
 
+CONF="${XDG_CONFIG_HOME:-$HOME/.config}"
+CACHE="${XDG_CACHE_HOME:-$HOME/.cache}"
+uid="$(id -u)"
+RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
+
+INHIBITOR_SH="${INHIBITOR_SH:-${CONF}/waybar/scripts/idle_inhibitor_global.sh}"
+LOG_FILE="${HYPRIDLE_ACTION_LOG:-${CACHE}/hypridle/actions.log}"
+BR_FILE="${RUNTIME_DIR}/hypridle-brightness-level"
+DIM_MARKER="${RUNTIME_DIR}/hypridle-ddc-dimmed"
+
 # Optional: pin a display. Use exactly one token, e.g. "--bus=5"
 : "${DDCUTIL_BUS:=}"
+DDCUTIL_ARGS=()
+[[ -n "$DDCUTIL_BUS" ]] && DDCUTIL_ARGS+=("$DDCUTIL_BUS")
 
-BR_FILE="/tmp/brightness_level"
+mkdir -p "$RUNTIME_DIR" "$(dirname "$LOG_FILE")"
 
-# Save current brightness (best effort)
-timeout 2 ddcutil ${DDCUTIL_BUS:+$DDCUTIL_BUS} getvcp 0x10 2>/dev/null \
-  | awk -F'current value = ' 'NF>1{print $2}' \
-  | awk -F',' '{print $1}' \
-  | tr -dc '0-9' > "${BR_FILE}" || true
+log() {
+    printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG_FILE" 2>/dev/null || true
+}
 
-# Dim to 20 with one retry
-if ! timeout 3 ddcutil ${DDCUTIL_BUS:+$DDCUTIL_BUS} setvcp 0x10 20 >/dev/null 2>&1; then
-  sleep 0.35
-  timeout 3 ddcutil ${DDCUTIL_BUS:+$DDCUTIL_BUS} setvcp 0x10 20 >/dev/null 2>&1 || true
+if [[ -x "$INHIBITOR_SH" ]] && "$INHIBITOR_SH" is-active >/dev/null 2>&1; then
+    rm -f "$DIM_MARKER"
+    log "blocked DDC dim: idle inhibitor active"
+    exit 0
+fi
+
+rm -f "$DIM_MARKER"
+
+# Save current brightness. Do not replace a valid saved value with empty output.
+saved_brightness="$(
+    timeout 2 ddcutil "${DDCUTIL_ARGS[@]}" getvcp 0x10 2>/dev/null |
+        awk -F'current value = ' 'NF > 1 { print $2 }' |
+        awk -F',' '{ print $1 }' |
+        tr -dc '0-9' ||
+        true
+)"
+
+if [[ "$saved_brightness" =~ ^[0-9]+$ ]] &&
+   (( saved_brightness >= 0 && saved_brightness <= 100 )); then
+    printf '%s\n' "$saved_brightness" >"$BR_FILE"
+fi
+
+if timeout 3 ddcutil "${DDCUTIL_ARGS[@]}" setvcp 0x10 20 >/dev/null 2>&1; then
+    printf 'dimmed\n' >"$DIM_MARKER"
+    log "DDC dim applied: brightness 20"
+    exit 0
+fi
+
+sleep 0.35
+
+if timeout 3 ddcutil "${DDCUTIL_ARGS[@]}" setvcp 0x10 20 >/dev/null 2>&1; then
+    printf 'dimmed\n' >"$DIM_MARKER"
+    log "DDC dim applied after retry: brightness 20"
+else
+    rm -f "$DIM_MARKER"
+    log "DDC dim failed"
 fi
