@@ -14,6 +14,9 @@ LOG_FILE="${HYPRIDLE_ACTION_LOG:-${CACHE}/hypridle/actions.log}"
 HYPRCTL_BIN="${HYPRCTL_BIN:-hyprctl}"
 PLAYERCTL_BIN="${PLAYERCTL_BIN:-playerctl}"
 
+OBS_LOG_FILE_OVERRIDE="${OBS_LOG_FILE_OVERRIDE:-}"
+OBS_PROCESS_REQUIRED="${OBS_PROCESS_REQUIRED:-1}"
+
 # Keep synchronized with the game classes in hyprland.lua.
 GAME_CLASS_REGEX='^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|chiaki|moonlight|com\.moonlight_stream\.Moonlight|.*\.exe)$'
 
@@ -148,6 +151,235 @@ game_is_running() {
         ' \
         <<<"$clients" \
         >/dev/null 2>&1
+}
+
+
+obs_pids() {
+    {
+        pgrep -u "$(id -u)" -x obs 2>/dev/null || true
+        pgrep -u "$(id -u)" -x obs-studio 2>/dev/null || true
+    } |
+        awk '/^[0-9]+$/ && !seen[$0]++'
+}
+
+obs_process_is_running() {
+    obs_pids | grep -qE '^[0-9]+$'
+}
+
+obs_current_log() {
+    local pid fd target
+    local directory file modified
+    local newest=""
+    local newest_modified=-1
+
+    if [[ -n "$OBS_LOG_FILE_OVERRIDE" ]]; then
+        [[ -r "$OBS_LOG_FILE_OVERRIDE" ]] || return 1
+        printf '%s\n' "$OBS_LOG_FILE_OVERRIDE"
+        return 0
+    fi
+
+    while IFS= read -r pid; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+
+        for fd in "/proc/${pid}/fd/"*; do
+            target="$(
+                readlink -f -- "$fd" 2>/dev/null ||
+                    true
+            )"
+
+            case "$target" in
+                */obs-studio/logs/*.txt)
+                    if [[ -r "$target" ]]; then
+                        printf '%s\n' "$target"
+                        return 0
+                    fi
+                    ;;
+            esac
+        done
+    done < <(obs_pids)
+
+    for directory in \
+        "$HOME/.config/obs-studio/logs" \
+        "$HOME/.var/app/com.obsproject.Studio/config/obs-studio/logs"
+    do
+        [[ -d "$directory" ]] || continue
+
+        shopt -s nullglob
+
+        for file in "$directory"/*.txt; do
+            modified="$(
+                stat -c '%Y' -- "$file" 2>/dev/null ||
+                    printf '%s' -1
+            )"
+
+            [[ "$modified" =~ ^[0-9]+$ ]] || continue
+
+            if (( modified > newest_modified )); then
+                newest="$file"
+                newest_modified="$modified"
+            fi
+        done
+    done
+
+    [[ -n "$newest" && -r "$newest" ]] || return 1
+    printf '%s\n' "$newest"
+}
+
+obs_output_states() {
+    local log_file
+
+    if [[ "$OBS_PROCESS_REQUIRED" != "0" ]] &&
+       ! obs_process_is_running
+    then
+        return 1
+    fi
+
+    log_file="$(obs_current_log)" || return 1
+
+    awk '
+        /==== Recording Start/ {
+            recording = 1
+        }
+
+        /==== Recording Stop/ {
+            recording = 0
+        }
+
+        /==== Streaming Start/ {
+            streaming = 1
+        }
+
+        /==== Streaming Stop/ {
+            streaming = 0
+        }
+
+        /User stopped the stream/ {
+            streaming = 0
+        }
+
+        /streaming stop requested/ {
+            streaming = 0
+        }
+
+        /Output '\''[^'\'']*stream[^'\'']*'\'': stopping/ {
+            streaming = 0
+        }
+
+        /==== Replay Buffer Start/ {
+            replay = 1
+        }
+
+        /==== Replay Buffer Stop/ {
+            replay = 0
+        }
+
+        /Starting Virtual Camera output/ {
+            virtual_camera = 1
+        }
+
+        /starting virtual-output/ {
+            virtual_camera = 1
+        }
+
+        /Failed to start virtual camera/ {
+            virtual_camera = 0
+        }
+
+        /Output '\''virtualcam_output'\'': stopping/ {
+            virtual_camera = 0
+        }
+
+        /virtual-output stop/ {
+            virtual_camera = 0
+        }
+
+        END {
+            separator = ""
+
+            if (recording) {
+                printf "%srecording", separator
+                separator = ","
+            }
+
+            if (streaming) {
+                printf "%sstreaming", separator
+                separator = ","
+            }
+
+            if (replay) {
+                printf "%sreplay-buffer", separator
+                separator = ","
+            }
+
+            if (virtual_camera) {
+                printf "%svirtual-camera", separator
+                separator = ","
+            }
+
+            if (separator != "") {
+                printf "\n"
+            }
+        }
+    ' "$log_file"
+}
+
+obs_output_is_active() {
+    local states
+
+    states="$(
+        obs_output_states 2>/dev/null ||
+            true
+    )"
+
+    [[ -n "$states" ]]
+}
+
+obs_diagnose() {
+    local log_file states
+
+    printf '%s\n' 'obs_processes:'
+
+    if ! obs_pids |
+        while IFS= read -r pid; do
+            ps -o pid=,comm=,args= -p "$pid"
+        done
+    then
+        true
+    fi
+
+    if ! obs_process_is_running; then
+        printf '%s\n' '  none'
+    fi
+
+    log_file="$(
+        obs_current_log 2>/dev/null ||
+            true
+    )"
+
+    printf 'current_log=%s\n' "${log_file:-none}"
+
+    states="$(
+        obs_output_states 2>/dev/null ||
+            true
+    )"
+
+    printf 'active_outputs=%s\n' "${states:-none}"
+
+    if [[ -n "$states" ]]; then
+        printf '%s\n' 'obs_output_active=yes'
+    else
+        printf '%s\n' 'obs_output_active=no'
+    fi
+
+    if [[ -n "$log_file" && -r "$log_file" ]]; then
+        printf '\n%s\n' 'recent_output_events:'
+
+        grep -E \
+            '==== (Recording|Streaming|Replay Buffer) (Start|Stop)|User stopped the stream|streaming stop requested|Starting Virtual Camera output|starting virtual-output|Failed to start virtual camera|virtualcam_output.*stopping|virtual-output stop' \
+            "$log_file" |
+            tail -n 20 ||
+            true
+    fi
 }
 
 media_is_audio_only() {
@@ -421,11 +653,26 @@ case "$action" in
         video_diagnose
         exit
         ;;
+
+    obs-active)
+        obs_output_is_active
+        exit
+        ;;
+
+    obs-diagnose)
+        obs_diagnose
+        exit
+        ;;
 esac
 
 if [[ -x "$INHIBITOR_SH" ]] &&
    "$INHIBITOR_SH" is-active >/dev/null 2>&1; then
     log "blocked timeout action: ${action:-missing}; Waybar inhibitor active"
+    exit 0
+fi
+
+if obs_output_is_active; then
+    log "blocked timeout action: ${action:-missing}; OBS output active: $(obs_output_states || printf unknown)"
     exit 0
 fi
 
