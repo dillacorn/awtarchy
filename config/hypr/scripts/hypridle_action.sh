@@ -13,9 +13,39 @@ LOG_FILE="${HYPRIDLE_ACTION_LOG:-${CACHE}/hypridle/actions.log}"
 
 HYPRCTL_BIN="${HYPRCTL_BIN:-hyprctl}"
 PLAYERCTL_BIN="${PLAYERCTL_BIN:-playerctl}"
+BUSCTL_BIN="${BUSCTL_BIN:-busctl}"
+PS_BIN="${PS_BIN:-ps}"
+SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
+SYSTEMD_RUN_BIN="${SYSTEMD_RUN_BIN:-systemd-run}"
+LOGINCTL_BIN="${LOGINCTL_BIN:-loginctl}"
+NOHUP_BIN="${NOHUP_BIN:-nohup}"
 
 OBS_LOG_FILE_OVERRIDE="${OBS_LOG_FILE_OVERRIDE:-}"
 OBS_PROCESS_REQUIRED="${OBS_PROCESS_REQUIRED:-1}"
+
+
+# Suspend-only productive-work protection.
+# Waybar hiding, dimming, locking, and DPMS behavior remain unchanged.
+SUSPEND_RUNTIME_DIR="${SUSPEND_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}}"
+SUSPEND_WATCH_UNIT="${SUSPEND_WATCH_UNIT:-awtarchy-suspend-watch.service}"
+SUSPEND_WATCH_PID_FILE="${SUSPEND_WATCH_PID_FILE:-${SUSPEND_RUNTIME_DIR}/awtarchy-suspend-watch.pid}"
+SUSPEND_WATCH_LOG="${SUSPEND_WATCH_LOG:-${CACHE}/hypridle/suspend-watch.log}"
+SUSPEND_WATCH_BACKEND="${SUSPEND_WATCH_BACKEND:-}"
+SUSPEND_RECHECK_SECONDS="${SUSPEND_RECHECK_SECONDS:-60}"
+SUSPEND_PRODUCTIVE_MIN_AGE="${SUSPEND_PRODUCTIVE_MIN_AGE:-30}"
+SUSPEND_ACTIVITY_SAMPLE_SECONDS="${SUSPEND_ACTIVITY_SAMPLE_SECONDS:-5}"
+SUSPEND_CPU_HIGH_PERCENT="${SUSPEND_CPU_HIGH_PERCENT:-85}"
+SUSPEND_CPU_IO_PERCENT="${SUSPEND_CPU_IO_PERCENT:-25}"
+SUSPEND_DISK_BYTES_PER_SECOND="${SUSPEND_DISK_BYTES_PER_SECOND:-1048576}"
+SUSPEND_EXEC_OVERRIDE="${SUSPEND_EXEC_OVERRIDE:-}"
+
+PROC_STAT_FILE="${PROC_STAT_FILE:-/proc/stat}"
+PROC_DISKSTATS_FILE="${PROC_DISKSTATS_FILE:-/proc/diskstats}"
+SYS_CLASS_BLOCK_DIR="${SYS_CLASS_BLOCK_DIR:-/sys/class/block}"
+
+# Match Linux process comm names, not full command lines. Bash performs this
+# ERE match directly so backslashes are not reinterpreted by awk -v.
+PRODUCTIVE_COMM_REGEX="${PRODUCTIVE_COMM_REGEX:-^(makepkg|pacman|paru|yay|pikaur|aura|trizen|make|gmake|ninja|cmake|meson|cargo|rustc|gcc|g\+\+|cc|c\+\+|clang|clang\+\+|cc1|cc1plus|lto1|ld|ld\.lld|mold|ar|ranlib|objcopy|strip|pahole|go|javac|gradle|mvn|ffmpeg|HandBrakeCLI|blender|rsync|rclone|restic|borg|tar|gzip|pigz|bzip2|pbzip2|xz|pixz|zstd|pzstd|7z|7zz|zip|unzip|cp|mv|dd|btrfs|zfs|fsck|mkfs\..*|wget|curl|aria2c)$}"
 
 # Keep synchronized with the game classes in hyprland.lua.
 GAME_CLASS_REGEX='^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|chiaki|moonlight|com\.moonlight_stream\.Moonlight|.*\.exe)$'
@@ -382,6 +412,656 @@ obs_diagnose() {
     fi
 }
 
+
+valid_positive_integer() {
+    [[ "${1:-}" =~ ^[1-9][0-9]*$ ]]
+}
+
+valid_percent() {
+    valid_positive_integer "${1:-}" &&
+        (( 10#$1 >= 1 && 10#$1 <= 100 ))
+}
+
+command_is_available() {
+    local command_name="${1:-}"
+
+    [[ -n "$command_name" ]] || return 1
+
+    if [[ "$command_name" == */* ]]; then
+        [[ -x "$command_name" ]]
+    else
+        command -v "$command_name" >/dev/null 2>&1
+    fi
+}
+
+normalize_suspend_settings() {
+    valid_positive_integer "$SUSPEND_RECHECK_SECONDS" ||
+        SUSPEND_RECHECK_SECONDS=60
+    valid_positive_integer "$SUSPEND_PRODUCTIVE_MIN_AGE" ||
+        SUSPEND_PRODUCTIVE_MIN_AGE=30
+    valid_positive_integer "$SUSPEND_ACTIVITY_SAMPLE_SECONDS" ||
+        SUSPEND_ACTIVITY_SAMPLE_SECONDS=5
+    valid_percent "$SUSPEND_CPU_HIGH_PERCENT" ||
+        SUSPEND_CPU_HIGH_PERCENT=85
+    valid_percent "$SUSPEND_CPU_IO_PERCENT" ||
+        SUSPEND_CPU_IO_PERCENT=25
+    valid_positive_integer "$SUSPEND_DISK_BYTES_PER_SECOND" ||
+        SUSPEND_DISK_BYTES_PER_SECOND=1048576
+}
+
+manual_inhibitor_is_active() {
+    [[ -x "$INHIBITOR_SH" ]] &&
+        "$INHIBITOR_SH" is-active >/dev/null 2>&1
+}
+
+native_sleep_blocked() {
+    local value
+
+    command_is_available "$BUSCTL_BIN" || return 1
+
+    value="$(
+        "$BUSCTL_BIN" get-property \
+            --value \
+            org.freedesktop.login1 \
+            /org/freedesktop/login1 \
+            org.freedesktop.login1.Manager \
+            BlockInhibited \
+            2>/dev/null ||
+        "$BUSCTL_BIN" get-property \
+            org.freedesktop.login1 \
+            /org/freedesktop/login1 \
+            org.freedesktop.login1.Manager \
+            BlockInhibited \
+            2>/dev/null ||
+        true
+    )"
+
+    value="${value#s }"
+    value="${value#\"}"
+    value="${value%\"}"
+    value="${value//:/ }"
+
+    [[ " $value " == *" sleep "* ]]
+}
+
+productive_jobs() {
+    local pid age state comm
+    local restore_nocasematch=0
+    local process_list
+
+    command_is_available "$PS_BIN" || return 1
+
+    process_list="$(
+        LC_ALL=C "$PS_BIN" \
+            -eo pid=,etimes=,stat=,comm= \
+            2>/dev/null ||
+        true
+    )"
+
+    [[ -n "$process_list" ]] || return 1
+
+    shopt -q nocasematch || {
+        shopt -s nocasematch
+        restore_nocasematch=1
+    }
+
+    while read -r pid age state comm; do
+        [[ "$pid" =~ ^[0-9]+$ ]] || continue
+        [[ "$age" =~ ^[0-9]+$ ]] || continue
+        (( age >= SUSPEND_PRODUCTIVE_MIN_AGE )) || continue
+
+        case "$state" in
+            Z*|T*|X*)
+                continue
+                ;;
+        esac
+
+        if [[ "$comm" =~ $PRODUCTIVE_COMM_REGEX ]]; then
+            printf 'pid=%s age=%ss state=%s command=%s\n' \
+                "$pid" "$age" "$state" "$comm"
+        fi
+    done <<<"$process_list"
+
+    (( restore_nocasematch == 0 )) || shopt -u nocasematch
+}
+
+cpu_snapshot() {
+    local label user nice system idle iowait irq softirq steal
+    local total busy
+
+    [[ -r "$PROC_STAT_FILE" ]] || return 1
+
+    read -r \
+        label user nice system idle iowait irq softirq steal _ \
+        <"$PROC_STAT_FILE" ||
+        return 1
+
+    [[ "$label" == cpu ]] || return 1
+
+    for value in \
+        "$user" "$nice" "$system" "$idle" \
+        "$iowait" "$irq" "$softirq" "$steal"
+    do
+        [[ "$value" =~ ^[0-9]+$ ]] || return 1
+    done
+
+    total=$((
+        user + nice + system + idle + iowait + irq + softirq + steal
+    ))
+    busy=$((total - idle - iowait))
+
+    printf '%s %s\n' "$busy" "$total"
+}
+
+disk_sector_snapshot() {
+    local _major _minor device
+    local _reads_completed _reads_merged sectors_read _read_ms
+    local _writes_completed _writes_merged sectors_written _write_ms
+    local _in_progress _io_ms _weighted_ms _remaining_fields
+    local total=0
+
+    [[ -r "$PROC_DISKSTATS_FILE" ]] || {
+        printf '%s\n' 0
+        return 0
+    }
+
+    while read -r \
+        _major _minor device \
+        _reads_completed _reads_merged sectors_read _read_ms \
+        _writes_completed _writes_merged sectors_written _write_ms \
+        _in_progress _io_ms _weighted_ms _remaining_fields
+    do
+        [[ -n "$device" ]] || continue
+        [[ -e "${SYS_CLASS_BLOCK_DIR}/${device}/partition" ]] && continue
+
+        case "$device" in
+            loop*|ram*|zram*|dm-*|md*)
+                continue
+                ;;
+        esac
+
+        [[ "$sectors_read" =~ ^[0-9]+$ ]] || continue
+        [[ "$sectors_written" =~ ^[0-9]+$ ]] || continue
+
+        total=$((total + sectors_read + sectors_written))
+    done <"$PROC_DISKSTATS_FILE"
+
+    printf '%s\n' "$total"
+}
+
+activity_interval() {
+    local seconds="$1"
+    local disk_before disk_after
+    local busy_before total_before busy_after total_after
+    local busy_delta total_delta disk_delta
+    local cpu_percent disk_bytes_per_second
+
+    if ! read -r busy_before total_before < <(cpu_snapshot); then
+        printf '%s\n' '0 0 unavailable'
+        return 0
+    fi
+
+    disk_before="$(disk_sector_snapshot)"
+    sleep "$seconds"
+
+    if ! read -r busy_after total_after < <(cpu_snapshot); then
+        printf '%s\n' '0 0 unavailable'
+        return 0
+    fi
+
+    disk_after="$(disk_sector_snapshot)"
+
+    busy_delta=$((busy_after - busy_before))
+    total_delta=$((total_after - total_before))
+    disk_delta=$((disk_after - disk_before))
+
+    (( busy_delta < 0 )) && busy_delta=0
+    (( total_delta < 1 )) && total_delta=1
+    (( disk_delta < 0 )) && disk_delta=0
+
+    cpu_percent=$((busy_delta * 100 / total_delta))
+    disk_bytes_per_second=$((disk_delta * 512 / seconds))
+
+    printf '%s %s available\n' \
+        "$cpu_percent" "$disk_bytes_per_second"
+}
+
+activity_interval_is_busy() {
+    local cpu_percent="$1"
+    local disk_bytes_per_second="$2"
+
+    (( cpu_percent >= SUSPEND_CPU_HIGH_PERCENT )) && return 0
+
+    ((
+        cpu_percent >= SUSPEND_CPU_IO_PERCENT &&
+        disk_bytes_per_second >= SUSPEND_DISK_BYTES_PER_SECOND
+    ))
+}
+
+measure_sustained_system_activity() {
+    local available_one available_two
+
+    read -r \
+        SUSPEND_CPU_ONE SUSPEND_DISK_ONE available_one \
+        < <(activity_interval "$SUSPEND_ACTIVITY_SAMPLE_SECONDS")
+
+    read -r \
+        SUSPEND_CPU_TWO SUSPEND_DISK_TWO available_two \
+        < <(activity_interval "$SUSPEND_ACTIVITY_SAMPLE_SECONDS")
+
+    SUSPEND_LAST_ACTIVITY="interval1_cpu=${SUSPEND_CPU_ONE}% interval1_disk=${SUSPEND_DISK_ONE}B/s interval2_cpu=${SUSPEND_CPU_TWO}% interval2_disk=${SUSPEND_DISK_TWO}B/s"
+
+    [[ "$available_one" == available ]] || return 1
+    [[ "$available_two" == available ]] || return 1
+
+    activity_interval_is_busy \
+        "$SUSPEND_CPU_ONE" \
+        "$SUSPEND_DISK_ONE" &&
+        activity_interval_is_busy \
+            "$SUSPEND_CPU_TWO" \
+            "$SUSPEND_DISK_TWO"
+}
+
+productive_sleep_guard_reason() {
+    local jobs
+
+    normalize_suspend_settings
+
+    if native_sleep_blocked; then
+        printf '%s\n' 'native sleep block inhibitor active'
+        return 0
+    fi
+
+    jobs="$(productive_jobs)"
+    if [[ -n "$jobs" ]]; then
+        printf 'productive job active: %s\n' \
+            "$(head -n 1 <<<"$jobs")"
+        return 0
+    fi
+
+    if measure_sustained_system_activity; then
+        printf 'sustained system activity: %s\n' \
+            "$SUSPEND_LAST_ACTIVITY"
+        return 0
+    fi
+
+    # Catch a job or inhibitor that appeared while activity was sampled.
+    if native_sleep_blocked; then
+        printf '%s\n' 'native sleep block inhibitor became active'
+        return 0
+    fi
+
+    jobs="$(productive_jobs)"
+    if [[ -n "$jobs" ]]; then
+        printf 'productive job became active: %s\n' \
+            "$(head -n 1 <<<"$jobs")"
+        return 0
+    fi
+
+    return 1
+}
+
+suspend_watch_reason() {
+    local states
+
+    if manual_inhibitor_is_active; then
+        printf '%s\n' 'Waybar inhibitor active'
+        return 0
+    fi
+
+    if obs_output_is_active; then
+        states="$(obs_output_states || printf unknown)"
+        printf 'OBS output active: %s\n' "$states"
+        return 0
+    fi
+
+    if game_is_running; then
+        printf '%s\n' 'game active'
+        return 0
+    fi
+
+    if video_is_playing; then
+        printf '%s\n' 'visible video playback active'
+        return 0
+    fi
+
+    productive_sleep_guard_reason
+}
+
+suspend_guard_diagnose() {
+    local jobs reason activity_active=no
+
+    normalize_suspend_settings
+
+    printf 'manual_inhibitor=%s\n' \
+        "$(manual_inhibitor_is_active && printf yes || printf no)"
+    printf 'obs_output=%s\n' \
+        "$(obs_output_is_active && printf yes || printf no)"
+    printf 'game=%s\n' \
+        "$(game_is_running && printf yes || printf no)"
+    printf 'visible_video=%s\n' \
+        "$(video_is_playing && printf yes || printf no)"
+    printf 'native_sleep_block=%s\n' \
+        "$(native_sleep_blocked && printf yes || printf no)"
+
+    printf '\n%s\n' 'productive_jobs:'
+    jobs="$(productive_jobs)"
+    if [[ -n "$jobs" ]]; then
+        printf '%s\n' "$jobs"
+    else
+        printf '%s\n' 'none'
+    fi
+
+    printf '\n%s\n' 'activity_sampling:'
+    printf 'sample_seconds=%s x 2\n' "$SUSPEND_ACTIVITY_SAMPLE_SECONDS"
+    printf 'high_cpu_threshold=%s%%\n' "$SUSPEND_CPU_HIGH_PERCENT"
+    printf 'cpu_plus_io_threshold=%s%% and %sB/s\n' \
+        "$SUSPEND_CPU_IO_PERCENT" \
+        "$SUSPEND_DISK_BYTES_PER_SECOND"
+
+    if measure_sustained_system_activity; then
+        activity_active=yes
+    fi
+
+    printf 'sustained_activity=%s\n' "$activity_active"
+    printf '%s\n' "$SUSPEND_LAST_ACTIVITY"
+
+    if manual_inhibitor_is_active; then
+        reason='Waybar inhibitor active'
+    elif obs_output_is_active; then
+        reason="OBS output active: $(obs_output_states || printf unknown)"
+    elif game_is_running; then
+        reason='game active'
+    elif video_is_playing; then
+        reason='visible video playback active'
+    elif native_sleep_blocked; then
+        reason='native sleep block inhibitor active'
+    elif [[ -n "$jobs" ]]; then
+        reason="productive job active: $(head -n 1 <<<"$jobs")"
+    elif [[ "$activity_active" == yes ]]; then
+        reason="sustained system activity: $SUSPEND_LAST_ACTIVITY"
+    else
+        reason='none'
+    fi
+
+    printf '\nsuspend_guard_active=%s\n' \
+        "$([[ "$reason" != none ]] && printf yes || printf no)"
+    printf 'reason=%s\n' "$reason"
+}
+
+suspend_guard_is_active() {
+    suspend_watch_reason >/dev/null
+}
+
+resolve_self_path() {
+    readlink -f -- "${BASH_SOURCE[0]}" 2>/dev/null ||
+        printf '%s\n' "${BASH_SOURCE[0]}"
+}
+
+fallback_suspend_watch_pid() {
+    local pid argument
+    local self_path
+    local found_self=0
+    local found_action=0
+    local -a arguments=()
+
+    [[ -r "$SUSPEND_WATCH_PID_FILE" ]] || return 1
+
+    pid="$(tr -d '[:space:]' <"$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true)"
+    [[ "$pid" =~ ^[0-9]+$ ]] || {
+        rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+        return 1
+    }
+
+    kill -0 "$pid" 2>/dev/null || {
+        rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+        return 1
+    }
+
+    [[ -r "/proc/${pid}/cmdline" ]] || return 1
+    mapfile -d '' -t arguments <"/proc/${pid}/cmdline" || true
+
+    self_path="$(resolve_self_path)"
+
+    for argument in "${arguments[@]}"; do
+        [[ "$argument" == "$self_path" ]] && found_self=1
+        [[ "$argument" == suspend-watch ]] && found_action=1
+    done
+
+    if (( found_self == 1 && found_action == 1 )); then
+        printf '%s\n' "$pid"
+        return 0
+    fi
+
+    rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+    return 1
+}
+
+systemd_suspend_watch_is_active() {
+    local state
+
+    command_is_available "$SYSTEMCTL_BIN" || return 1
+
+    state="$(
+        "$SYSTEMCTL_BIN" --user is-active \
+            "$SUSPEND_WATCH_UNIT" 2>/dev/null ||
+            true
+    )"
+
+    [[ "$state" == active || "$state" == activating ]]
+}
+
+suspend_watch_is_active() {
+    systemd_suspend_watch_is_active && return 0
+    fallback_suspend_watch_pid >/dev/null
+}
+
+cancel_suspend_watch() {
+    local pid
+    local cancelled=0
+
+    if systemd_suspend_watch_is_active; then
+        "$SYSTEMCTL_BIN" --user stop "$SUSPEND_WATCH_UNIT" \
+            >/dev/null 2>&1 || true
+        cancelled=1
+    fi
+
+    pid="$(fallback_suspend_watch_pid || true)"
+    if [[ -n "$pid" ]]; then
+        kill "$pid" >/dev/null 2>&1 || true
+
+        for _ in {1..30}; do
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 0.05
+        done
+
+        kill -9 "$pid" >/dev/null 2>&1 || true
+        rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+        cancelled=1
+    fi
+
+    if (( cancelled == 1 )); then
+        log 'suspend watch cancelled by user activity'
+    fi
+}
+
+cleanup_fallback_watch_pid() {
+    local recorded
+
+    [[ "$SUSPEND_WATCH_BACKEND" == fallback ]] || return 0
+    [[ -r "$SUSPEND_WATCH_PID_FILE" ]] || return 0
+
+    recorded="$(tr -d '[:space:]' <"$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true)"
+    [[ "$recorded" == "$$" ]] || return 0
+
+    rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+}
+
+start_fallback_suspend_watch() {
+    local self_path="$1"
+    local pid temporary_pid_file
+
+    command_is_available "$NOHUP_BIN" || return 1
+
+    mkdir -p \
+        "$SUSPEND_RUNTIME_DIR" \
+        "$(dirname "$SUSPEND_WATCH_LOG")" \
+        2>/dev/null ||
+        return 1
+
+    rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+
+    SUSPEND_WATCH_BACKEND=fallback \
+        "$NOHUP_BIN" "$self_path" suspend-watch \
+        >>"$SUSPEND_WATCH_LOG" 2>&1 </dev/null &
+    pid=$!
+
+    temporary_pid_file="${SUSPEND_WATCH_PID_FILE}.tmp.$$"
+    printf '%s\n' "$pid" >"$temporary_pid_file"
+    mv -f "$temporary_pid_file" "$SUSPEND_WATCH_PID_FILE"
+
+    sleep 0.05
+
+    if kill -0 "$pid" 2>/dev/null; then
+        log "suspend watch started with fallback pid ${pid}"
+        return 0
+    fi
+
+    rm -f "$SUSPEND_WATCH_PID_FILE" 2>/dev/null || true
+    return 1
+}
+
+start_suspend_watch() {
+    local self_path variable
+    local -a environment_args=()
+
+    if suspend_watch_is_active; then
+        log 'suspend watch already active'
+        return 0
+    fi
+
+    self_path="$(resolve_self_path)"
+
+    for variable in \
+        HOME \
+        PATH \
+        XDG_CONFIG_HOME \
+        XDG_CACHE_HOME \
+        XDG_RUNTIME_DIR \
+        HYPRLAND_INSTANCE_SIGNATURE \
+        WAYLAND_DISPLAY \
+        DBUS_SESSION_BUS_ADDRESS \
+        INHIBITOR_SH \
+        HYPRCTL_BIN \
+        PLAYERCTL_BIN \
+        BUSCTL_BIN \
+        PS_BIN \
+        SYSTEMCTL_BIN \
+        SYSTEMD_RUN_BIN \
+        LOGINCTL_BIN \
+        NOHUP_BIN \
+        OBS_LOG_FILE_OVERRIDE \
+        OBS_PROCESS_REQUIRED \
+        SUSPEND_RUNTIME_DIR \
+        SUSPEND_WATCH_UNIT \
+        SUSPEND_WATCH_PID_FILE \
+        SUSPEND_WATCH_LOG \
+        SUSPEND_RECHECK_SECONDS \
+        SUSPEND_PRODUCTIVE_MIN_AGE \
+        SUSPEND_ACTIVITY_SAMPLE_SECONDS \
+        SUSPEND_CPU_HIGH_PERCENT \
+        SUSPEND_CPU_IO_PERCENT \
+        SUSPEND_DISK_BYTES_PER_SECOND \
+        SUSPEND_EXEC_OVERRIDE \
+        PROC_STAT_FILE \
+        PROC_DISKSTATS_FILE \
+        SYS_CLASS_BLOCK_DIR \
+        PRODUCTIVE_COMM_REGEX
+    do
+        if [[ -n "${!variable:-}" ]]; then
+            environment_args+=("--setenv=${variable}=${!variable}")
+        fi
+    done
+
+    if command_is_available "$SYSTEMD_RUN_BIN" &&
+       command_is_available "$SYSTEMCTL_BIN" &&
+       "$SYSTEMCTL_BIN" --user show-environment \
+            >/dev/null 2>&1
+    then
+        "$SYSTEMCTL_BIN" --user reset-failed \
+            "$SUSPEND_WATCH_UNIT" >/dev/null 2>&1 || true
+
+        if "$SYSTEMD_RUN_BIN" \
+            --user \
+            --quiet \
+            --collect \
+            --unit="$SUSPEND_WATCH_UNIT" \
+            --service-type=exec \
+            --setenv=SUSPEND_WATCH_BACKEND=systemd \
+            "${environment_args[@]}" \
+            -- \
+            "$self_path" suspend-watch
+        then
+            log 'suspend watch started with systemd user manager'
+            return 0
+        fi
+    fi
+
+    log 'suspend watch transient unit unavailable; using process fallback'
+
+    if start_fallback_suspend_watch "$self_path"; then
+        return 0
+    fi
+
+    log 'suspend watch could not be started; refusing unsafe suspend'
+    return 1
+}
+
+perform_suspend() {
+    if [[ -n "$SUSPEND_EXEC_OVERRIDE" ]]; then
+        command_is_available "$SUSPEND_EXEC_OVERRIDE" || return 1
+        "$SUSPEND_EXEC_OVERRIDE"
+        return
+    fi
+
+    if command_is_available "$SYSTEMCTL_BIN" &&
+       "$SYSTEMCTL_BIN" suspend
+    then
+        return 0
+    fi
+
+    command_is_available "$LOGINCTL_BIN" || return 1
+    "$LOGINCTL_BIN" suspend
+}
+
+suspend_watch_loop() {
+    local reason
+
+    normalize_suspend_settings
+
+    if [[ "$SUSPEND_WATCH_BACKEND" == fallback ]]; then
+        trap cleanup_fallback_watch_pid EXIT INT TERM
+    fi
+
+    while true; do
+        reason="$(suspend_watch_reason || true)"
+
+        if [[ -z "$reason" ]]; then
+            log 'suspend watch: guard clear; suspending'
+
+            if perform_suspend; then
+                return 0
+            fi
+
+            log "suspend watch: suspend command failed; rechecking in ${SUSPEND_RECHECK_SECONDS}s"
+        else
+            log "suspend watch: blocked; ${reason}; rechecking in ${SUSPEND_RECHECK_SECONDS}s"
+        fi
+
+        sleep "$SUSPEND_RECHECK_SECONDS"
+    done
+}
+
 media_is_audio_only() {
     local player="${1,,}"
     local title="${2,,}"
@@ -634,6 +1314,7 @@ case "$action" in
         ;;
 
     resume-sleep)
+        cancel_suspend_watch
         "$INHIBITOR_SH" off >/dev/null 2>&1 || true
         log "sleep transition: inhibitor reset after sleep"
         exec "$HYPRCTL_BIN" dispatch 'hl.dsp.dpms({ action = "enable" })'
@@ -663,7 +1344,38 @@ case "$action" in
         obs_diagnose
         exit
         ;;
+
+
+    suspend-guard-active)
+        suspend_guard_is_active
+        exit
+        ;;
+
+    suspend-guard-diagnose)
+        suspend_guard_diagnose
+        exit
+        ;;
+
+    suspend-watch-status)
+        suspend_watch_is_active
+        exit
+        ;;
+
+    cancel-suspend-watch)
+        cancel_suspend_watch
+        exit
+        ;;
+
+    suspend-watch)
+        suspend_watch_loop
+        exit
+        ;;
 esac
+
+if [[ "$action" == "suspend" ]]; then
+    start_suspend_watch
+    exit
+fi
 
 if [[ -x "$INHIBITOR_SH" ]] &&
    "$INHIBITOR_SH" is-active >/dev/null 2>&1; then
@@ -703,10 +1415,6 @@ case "$action" in
 
     dpms-off)
         exec "$HYPRCTL_BIN" dispatch 'hl.dsp.dpms({ action = "disable" })'
-        ;;
-
-    suspend)
-        systemctl suspend || exec loginctl suspend
         ;;
 
     test-touch)
