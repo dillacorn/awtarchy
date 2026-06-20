@@ -25,6 +25,7 @@ OBS_PROCESS_REQUIRED="${OBS_PROCESS_REQUIRED:-1}"
 
 
 # Suspend-only productive-work protection.
+# Known jobs, native sleep blockers, and sustained high CPU delay suspend.
 # Waybar hiding, dimming, locking, and DPMS behavior remain unchanged.
 SUSPEND_RUNTIME_DIR="${SUSPEND_RUNTIME_DIR:-${XDG_RUNTIME_DIR:-/run/user/$(id -u)}}"
 SUSPEND_WATCH_UNIT="${SUSPEND_WATCH_UNIT:-awtarchy-suspend-watch.service}"
@@ -35,13 +36,9 @@ SUSPEND_RECHECK_SECONDS="${SUSPEND_RECHECK_SECONDS:-60}"
 SUSPEND_PRODUCTIVE_MIN_AGE="${SUSPEND_PRODUCTIVE_MIN_AGE:-30}"
 SUSPEND_ACTIVITY_SAMPLE_SECONDS="${SUSPEND_ACTIVITY_SAMPLE_SECONDS:-5}"
 SUSPEND_CPU_HIGH_PERCENT="${SUSPEND_CPU_HIGH_PERCENT:-85}"
-SUSPEND_CPU_IO_PERCENT="${SUSPEND_CPU_IO_PERCENT:-25}"
-SUSPEND_DISK_BYTES_PER_SECOND="${SUSPEND_DISK_BYTES_PER_SECOND:-1048576}"
 SUSPEND_EXEC_OVERRIDE="${SUSPEND_EXEC_OVERRIDE:-}"
 
 PROC_STAT_FILE="${PROC_STAT_FILE:-/proc/stat}"
-PROC_DISKSTATS_FILE="${PROC_DISKSTATS_FILE:-/proc/diskstats}"
-SYS_CLASS_BLOCK_DIR="${SYS_CLASS_BLOCK_DIR:-/sys/class/block}"
 
 # Match Linux process comm names, not full command lines. Bash performs this
 # ERE match directly so backslashes are not reinterpreted by awk -v.
@@ -443,10 +440,6 @@ normalize_suspend_settings() {
         SUSPEND_ACTIVITY_SAMPLE_SECONDS=5
     valid_percent "$SUSPEND_CPU_HIGH_PERCENT" ||
         SUSPEND_CPU_HIGH_PERCENT=85
-    valid_percent "$SUSPEND_CPU_IO_PERCENT" ||
-        SUSPEND_CPU_IO_PERCENT=25
-    valid_positive_integer "$SUSPEND_DISK_BYTES_PER_SECOND" ||
-        SUSPEND_DISK_BYTES_PER_SECOND=1048576
 }
 
 manual_inhibitor_is_active() {
@@ -553,115 +546,54 @@ cpu_snapshot() {
     printf '%s %s\n' "$busy" "$total"
 }
 
-disk_sector_snapshot() {
-    local _major _minor device
-    local _reads_completed _reads_merged sectors_read _read_ms
-    local _writes_completed _writes_merged sectors_written _write_ms
-    local _in_progress _io_ms _weighted_ms _remaining_fields
-    local total=0
-
-    [[ -r "$PROC_DISKSTATS_FILE" ]] || {
-        printf '%s\n' 0
-        return 0
-    }
-
-    while read -r \
-        _major _minor device \
-        _reads_completed _reads_merged sectors_read _read_ms \
-        _writes_completed _writes_merged sectors_written _write_ms \
-        _in_progress _io_ms _weighted_ms _remaining_fields
-    do
-        [[ -n "$device" ]] || continue
-        [[ -e "${SYS_CLASS_BLOCK_DIR}/${device}/partition" ]] && continue
-
-        case "$device" in
-            loop*|ram*|zram*|dm-*|md*)
-                continue
-                ;;
-        esac
-
-        [[ "$sectors_read" =~ ^[0-9]+$ ]] || continue
-        [[ "$sectors_written" =~ ^[0-9]+$ ]] || continue
-
-        total=$((total + sectors_read + sectors_written))
-    done <"$PROC_DISKSTATS_FILE"
-
-    printf '%s\n' "$total"
-}
-
 activity_interval() {
     local seconds="$1"
-    local disk_before disk_after
     local busy_before total_before busy_after total_after
-    local busy_delta total_delta disk_delta
-    local cpu_percent disk_bytes_per_second
+    local busy_delta total_delta
+    local cpu_percent
 
     if ! read -r busy_before total_before < <(cpu_snapshot); then
-        printf '%s\n' '0 0 unavailable'
+        printf '%s\n' '0 unavailable'
         return 0
     fi
 
-    disk_before="$(disk_sector_snapshot)"
     sleep "$seconds"
 
     if ! read -r busy_after total_after < <(cpu_snapshot); then
-        printf '%s\n' '0 0 unavailable'
+        printf '%s\n' '0 unavailable'
         return 0
     fi
 
-    disk_after="$(disk_sector_snapshot)"
-
     busy_delta=$((busy_after - busy_before))
     total_delta=$((total_after - total_before))
-    disk_delta=$((disk_after - disk_before))
 
     (( busy_delta < 0 )) && busy_delta=0
     (( total_delta < 1 )) && total_delta=1
-    (( disk_delta < 0 )) && disk_delta=0
 
     cpu_percent=$((busy_delta * 100 / total_delta))
-    disk_bytes_per_second=$((disk_delta * 512 / seconds))
 
-    printf '%s %s available\n' \
-        "$cpu_percent" "$disk_bytes_per_second"
-}
-
-activity_interval_is_busy() {
-    local cpu_percent="$1"
-    local disk_bytes_per_second="$2"
-
-    (( cpu_percent >= SUSPEND_CPU_HIGH_PERCENT )) && return 0
-
-    ((
-        cpu_percent >= SUSPEND_CPU_IO_PERCENT &&
-        disk_bytes_per_second >= SUSPEND_DISK_BYTES_PER_SECOND
-    ))
+    printf '%s available\n' "$cpu_percent"
 }
 
 measure_sustained_system_activity() {
     local available_one available_two
 
-    read -r \
-        SUSPEND_CPU_ONE SUSPEND_DISK_ONE available_one \
+    read -r SUSPEND_CPU_ONE available_one \
         < <(activity_interval "$SUSPEND_ACTIVITY_SAMPLE_SECONDS")
 
-    read -r \
-        SUSPEND_CPU_TWO SUSPEND_DISK_TWO available_two \
+    read -r SUSPEND_CPU_TWO available_two \
         < <(activity_interval "$SUSPEND_ACTIVITY_SAMPLE_SECONDS")
 
-    SUSPEND_LAST_ACTIVITY="interval1_cpu=${SUSPEND_CPU_ONE}% interval1_disk=${SUSPEND_DISK_ONE}B/s interval2_cpu=${SUSPEND_CPU_TWO}% interval2_disk=${SUSPEND_DISK_TWO}B/s"
+    SUSPEND_LAST_ACTIVITY="interval1_cpu=${SUSPEND_CPU_ONE}% interval2_cpu=${SUSPEND_CPU_TWO}%"
 
     [[ "$available_one" == available ]] || return 1
     [[ "$available_two" == available ]] || return 1
 
-    activity_interval_is_busy \
-        "$SUSPEND_CPU_ONE" \
-        "$SUSPEND_DISK_ONE" &&
-        activity_interval_is_busy \
-            "$SUSPEND_CPU_TWO" \
-            "$SUSPEND_DISK_TWO"
+    ((
+        SUSPEND_CPU_ONE >= SUSPEND_CPU_HIGH_PERCENT &&
+        SUSPEND_CPU_TWO >= SUSPEND_CPU_HIGH_PERCENT
+    ))
 }
-
 productive_sleep_guard_reason() {
     local jobs
 
@@ -755,9 +687,6 @@ suspend_guard_diagnose() {
     printf '\n%s\n' 'activity_sampling:'
     printf 'sample_seconds=%s x 2\n' "$SUSPEND_ACTIVITY_SAMPLE_SECONDS"
     printf 'high_cpu_threshold=%s%%\n' "$SUSPEND_CPU_HIGH_PERCENT"
-    printf 'cpu_plus_io_threshold=%s%% and %sB/s\n' \
-        "$SUSPEND_CPU_IO_PERCENT" \
-        "$SUSPEND_DISK_BYTES_PER_SECOND"
 
     if measure_sustained_system_activity; then
         activity_active=yes
@@ -970,12 +899,8 @@ start_suspend_watch() {
         SUSPEND_PRODUCTIVE_MIN_AGE \
         SUSPEND_ACTIVITY_SAMPLE_SECONDS \
         SUSPEND_CPU_HIGH_PERCENT \
-        SUSPEND_CPU_IO_PERCENT \
-        SUSPEND_DISK_BYTES_PER_SECOND \
         SUSPEND_EXEC_OVERRIDE \
         PROC_STAT_FILE \
-        PROC_DISKSTATS_FILE \
-        SYS_CLASS_BLOCK_DIR \
         PRODUCTIVE_COMM_REGEX
     do
         if [[ -n "${!variable:-}" ]]; then
