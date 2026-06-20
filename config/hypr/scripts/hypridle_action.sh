@@ -49,9 +49,53 @@ get_clients() {
     timeout 2 "$HYPRCTL_BIN" clients -j 2>/dev/null || true
 }
 
+
 focused_workspace_id() {
     timeout 2 "$HYPRCTL_BIN" activeworkspace -j 2>/dev/null |
         jq -r '.id // empty' 2>/dev/null ||
+        true
+}
+
+visible_workspaces_json() {
+    local monitors
+
+    monitors="$(
+        timeout 2 "$HYPRCTL_BIN" monitors -j 2>/dev/null ||
+            true
+    )"
+
+    if [[ -z "$monitors" ]]; then
+        printf '%s\n' '[]'
+        return 1
+    fi
+
+    jq -c '
+        [
+            .[]
+            |
+            (.activeWorkspace.id // empty),
+            (
+                .specialWorkspace.id
+                // .activeSpecialWorkspace.id
+                // empty
+            )
+        ]
+        | map(
+            select(
+                type == "number"
+                and . != 0
+            )
+        )
+        | unique
+    ' <<<"$monitors" 2>/dev/null || {
+        printf '%s\n' '[]'
+        return 1
+    }
+}
+
+visible_workspace_ids() {
+    visible_workspaces_json |
+        jq -r '.[]' 2>/dev/null ||
         true
 }
 
@@ -128,20 +172,21 @@ media_is_audio_only() {
     return 1
 }
 
-browser_video_on_focused_workspace() {
+
+browser_video_on_visible_workspace() {
     local media_title="$1"
-    local workspace clients
+    local visible clients
 
     [[ ${#media_title} -ge 4 ]] || return 1
 
-    workspace="$(focused_workspace_id)"
+    visible="$(visible_workspaces_json)"
     clients="$(get_clients)"
 
-    [[ "$workspace" =~ ^-?[0-9]+$ ]] || return 1
+    [[ "$visible" != "[]" ]] || return 1
     [[ -n "$clients" ]] || return 1
 
     jq -e \
-        --argjson workspace "$workspace" \
+        --argjson visible "$visible" \
         --arg regex "$BROWSER_CLASS_REGEX" \
         --arg media_title "$media_title" \
         '
@@ -151,7 +196,11 @@ browser_video_on_focused_workspace() {
             .[];
             (.mapped == true)
             and
-            ((.workspace.id // -999999) == $workspace)
+            (
+                (.workspace.id // -999999) as $workspace_id
+                |
+                ($visible | index($workspace_id)) != null
+            )
             and
             (
                 ((.class // "") | test($regex; "i"))
@@ -159,31 +208,40 @@ browser_video_on_focused_workspace() {
                 ((.initialClass // "") | test($regex; "i"))
             )
             and
-            ((.title // "") | ascii_downcase | contains($needle))
+            (
+                (.title // "")
+                | ascii_downcase
+                | contains($needle)
+            )
         )
         ' \
         <<<"$clients" \
         >/dev/null 2>&1
 }
 
-dedicated_video_on_focused_workspace() {
-    local workspace clients
 
-    workspace="$(focused_workspace_id)"
+dedicated_video_on_visible_workspace() {
+    local visible clients
+
+    visible="$(visible_workspaces_json)"
     clients="$(get_clients)"
 
-    [[ "$workspace" =~ ^-?[0-9]+$ ]] || return 1
+    [[ "$visible" != "[]" ]] || return 1
     [[ -n "$clients" ]] || return 1
 
     jq -e \
-        --argjson workspace "$workspace" \
+        --argjson visible "$visible" \
         --arg regex "$VIDEO_PLAYER_CLASS_REGEX" \
         '
         any(
             .[];
             (.mapped == true)
             and
-            ((.workspace.id // -999999) == $workspace)
+            (
+                (.workspace.id // -999999) as $workspace_id
+                |
+                ($visible | index($workspace_id)) != null
+            )
             and
             (
                 ((.class // "") | test($regex; "i"))
@@ -231,13 +289,13 @@ video_is_playing() {
         player_lower="${player,,}"
 
         if [[ "$player_lower" =~ $VIDEO_PLAYER_MPRIS_REGEX ]] &&
-           dedicated_video_on_focused_workspace
+           dedicated_video_on_visible_workspace
         then
             return 0
         fi
 
         if [[ "$player_lower" =~ $BROWSER_MPRIS_REGEX ]] &&
-           browser_video_on_focused_workspace "$title"
+           browser_video_on_visible_workspace "$title"
         then
             return 0
         fi
@@ -257,6 +315,16 @@ video_diagnose() {
 
     printf 'focused_workspace=%s\n' \
         "$(focused_workspace_id || printf unknown)"
+
+    printf 'visible_workspaces=%s\n' \
+        "$(visible_workspaces_json |
+            jq -r '
+                if length == 0 then
+                    "none"
+                else
+                    map(tostring) | join(",")
+                end
+            ' 2>/dev/null || printf unknown)"
 
     printf '\n%s\n' 'relevant_windows:'
 
@@ -367,7 +435,7 @@ if game_is_running; then
 fi
 
 if video_is_playing; then
-    log "blocked timeout action: ${action:-missing}; focused video playback active"
+    log "blocked timeout action: ${action:-missing}; visible video playback active"
     exit 0
 fi
 
