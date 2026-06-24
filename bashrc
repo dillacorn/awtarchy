@@ -123,11 +123,17 @@ unset -f yay paru 2>/dev/null
 # Direct read-only yay/paru queries are allowed. Package-changing operations remain blocked.
 
 _AUR_GUARD_ARCH_LIST_URL='https://md.archlinux.org/s/SxbqukK6IA/download'
-_AUR_GUARD_GITHUB_LIST_URL='https://raw.githubusercontent.com/lenucksi/aur-malware-check/master/package_list.txt'
+_AUR_GUARD_GITHUB_REPO='lenucksi/aur-malware-check'
+_AUR_GUARD_GITHUB_BRANCH='master'
+_AUR_GUARD_GITHUB_LIST_PATH='data/lists/package_list.txt'
+_AUR_GUARD_GITHUB_LIST_URL="https://raw.githubusercontent.com/${_AUR_GUARD_GITHUB_REPO}/${_AUR_GUARD_GITHUB_BRANCH}/${_AUR_GUARD_GITHUB_LIST_PATH}"
+_AUR_GUARD_GITHUB_ARCHIVE_URL="https://github.com/${_AUR_GUARD_GITHUB_REPO}/archive/refs/heads/${_AUR_GUARD_GITHUB_BRANCH}.tar.gz"
 _AUR_GUARD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/aur-guard"
 _AUR_GUARD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy/aur-guard"
 _AUR_GUARD_LIST_MAX_AGE=86400
+_AUR_GUARD_LIST_MAX_BYTES=2097152
 _AUR_GUARD_LIST_MIN_NAMES=100
+_AUR_GUARD_GITHUB_ARCHIVE_MAX_BYTES=20971520
 
 # Exact names that should remain permanently blocked even after historical
 # incident records are cleaned or restored. Keep this list intentionally small.
@@ -282,6 +288,75 @@ _aur_guard_download() {
   _aur_guard_sandbox_exec "$output_dir" allow writable / "${command_line[@]}"
 }
 
+_aur_guard_download_github_package_list() {
+  local direct_url="$1"
+  local output="$2"
+  local output_dir archive listing candidate archive_size
+  local -a candidates=()
+
+  # Use the canonical current path first. If the repository moves the file,
+  # inspect the branch archive and accept only one unambiguous package_list.txt.
+  if _aur_guard_download "$direct_url" "$output" && [[ -s "$output" ]]; then
+    return 0
+  fi
+  rm -f "$output"
+
+  type -P bsdtar >/dev/null 2>&1 || return 127
+
+  output_dir=$(dirname -- "$output") || return 1
+  archive=$(mktemp "$output_dir/github-list-repo.XXXXXX.tar.gz") || return 1
+  listing=$(mktemp "$output_dir/github-list-repo.XXXXXX.files") || {
+    rm -f "$archive"
+    return 1
+  }
+
+  if ! _aur_guard_download "$_AUR_GUARD_GITHUB_ARCHIVE_URL" "$archive" \
+      || [[ ! -s "$archive" ]]; then
+    rm -f "$archive" "$listing"
+    return 1
+  fi
+
+  archive_size=$(stat -c %s "$archive" 2>/dev/null) || {
+    rm -f "$archive" "$listing"
+    return 1
+  }
+  if (( archive_size > _AUR_GUARD_GITHUB_ARCHIVE_MAX_BYTES )); then
+    printf 'AUR Guard: GitHub fallback archive exceeded the %d-byte safety limit.\n' \
+      "$_AUR_GUARD_GITHUB_ARCHIVE_MAX_BYTES" >&2
+    rm -f "$archive" "$listing"
+    return 1
+  fi
+
+  if ! /usr/bin/bsdtar -tf "$archive" > "$listing" 2>/dev/null; then
+    rm -f "$archive" "$listing"
+    return 1
+  fi
+
+  mapfile -t candidates < <(
+    LC_ALL=C /usr/bin/grep -E \
+      '^[A-Za-z0-9._-]+(/[-A-Za-z0-9._]+)*/package_list\.txt$' \
+      "$listing"
+  )
+
+  if (( ${#candidates[@]} != 1 )); then
+    printf 'AUR Guard: GitHub fallback found %d valid package_list.txt candidates; refusing ambiguous repository data.\n' \
+      "${#candidates[@]}" >&2
+    rm -f "$archive" "$listing"
+    return 1
+  fi
+
+  candidate=${candidates[0]}
+  if ! /usr/bin/bsdtar -xOf "$archive" "$candidate" > "$output" 2>/dev/null \
+      || [[ ! -s "$output" ]]; then
+    rm -f "$archive" "$listing" "$output"
+    return 1
+  fi
+
+  rm -f "$archive" "$listing"
+  printf 'AUR Guard: resolved moved GitHub package list at %s.\n' \
+    "${candidate#*/}" >&2
+}
+
 _aur_guard_cache_is_fresh() {
   local file="$1"
   local now mtime
@@ -306,32 +381,49 @@ _aur_guard_update_one_list() {
   local url="$2"
   local raw="$3"
   local names="$4"
-  local tmp
+  local downloader="${5:-_aur_guard_download}"
+  local tmp tmp_names size count
 
   tmp=$(mktemp "${raw}.tmp.XXXXXX") || return 1
-
-  if _aur_guard_download "$url" "$tmp" && [[ -s "$tmp" ]]; then
-    mv -f "$tmp" "$raw"
-    _aur_guard_normalize_list "$raw" "$names"
-  else
+  tmp_names=$(mktemp "${names}.tmp.XXXXXX") || {
     rm -f "$tmp"
-    if _aur_guard_cache_is_fresh "$raw"; then
-      printf 'AUR Guard: %s list download failed; using cache newer than 24 hours.\n' "$label" >&2
-      [[ -s "$names" ]] || _aur_guard_normalize_list "$raw" "$names"
-    else
-      return 1
+    return 1
+  }
+
+  if "$downloader" "$url" "$tmp" && [[ -s "$tmp" ]]; then
+    size=$(stat -c %s "$tmp" 2>/dev/null || printf '0')
+    if (( size > 0 && size <= _AUR_GUARD_LIST_MAX_BYTES )); then
+      _aur_guard_normalize_list "$tmp" "$tmp_names"
+      count=$(wc -l < "$tmp_names")
+      if [[ -s "$tmp_names" ]] && (( count >= _AUR_GUARD_LIST_MIN_NAMES )); then
+        mv -f "$tmp" "$raw"
+        mv -f "$tmp_names" "$names"
+        return 0
+      fi
     fi
   fi
 
-  [[ -s "$names" ]] || return 1
+  rm -f "$tmp" "$tmp_names"
 
-  local count
-  count=$(wc -l < "$names")
-  (( count >= _AUR_GUARD_LIST_MIN_NAMES ))
+  if _aur_guard_cache_is_fresh "$raw"; then
+    tmp_names=$(mktemp "${names}.tmp.XXXXXX") || return 1
+    _aur_guard_normalize_list "$raw" "$tmp_names"
+    count=$(wc -l < "$tmp_names")
+    if [[ -s "$tmp_names" ]] && (( count >= _AUR_GUARD_LIST_MIN_NAMES )); then
+      mv -f "$tmp_names" "$names"
+      printf 'AUR Guard: %s list download failed or returned invalid data; using cache newer than 24 hours.\n' \
+        "$label" >&2
+      return 0
+    fi
+    rm -f "$tmp_names"
+  fi
+
+  return 1
 }
 
 _aur_guard_refresh_blacklists() {
   local arch_raw arch_names github_raw github_names
+  local arch_ok=0 github_ok=0
 
   mkdir -p "$_AUR_GUARD_CACHE_DIR" || return 1
 
@@ -340,21 +432,29 @@ _aur_guard_refresh_blacklists() {
   github_raw="$_AUR_GUARD_CACHE_DIR/github-malware-list.raw"
   github_names="$_AUR_GUARD_CACHE_DIR/github-malware-list.names"
 
-  if ! _aur_guard_update_one_list \
-      'Arch' \
+  if _aur_guard_update_one_list \
+      'official Arch' \
       "$_AUR_GUARD_ARCH_LIST_URL" \
       "$arch_raw" \
       "$arch_names"; then
-    _aur_guard_fail 'could not download or use a fresh cached Arch malware package list'
-    return 1
+    arch_ok=1
+  else
+    printf 'AUR Guard: official Arch malware list unavailable.\n' >&2
   fi
 
-  if ! _aur_guard_update_one_list \
-      'GitHub community' \
+  if _aur_guard_update_one_list \
+      'GitHub mirror' \
       "$_AUR_GUARD_GITHUB_LIST_URL" \
       "$github_raw" \
-      "$github_names"; then
-    _aur_guard_fail 'could not download or use a fresh cached GitHub malware package list'
+      "$github_names" \
+      _aur_guard_download_github_package_list; then
+    github_ok=1
+  else
+    printf 'AUR Guard: GitHub malware-list mirror unavailable.\n' >&2
+  fi
+
+  if (( arch_ok == 0 && github_ok == 0 )); then
+    _aur_guard_fail 'could not download or use a fresh cached malware package list from either source'
     return 1
   fi
 }
@@ -366,13 +466,15 @@ _aur_guard_historical_sources() {
   local pkg="$1"
   local found=false
 
-  if /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"; then
+  if [[ -s "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names" ]] \
+      && /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/arch-malware-list.names"; then
     printf 'Arch maintained incident list\n'
     found=true
   fi
 
-  if /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"; then
-    printf 'GitHub aur-malware-check list\n'
+  if [[ -s "$_AUR_GUARD_CACHE_DIR/github-malware-list.names" ]] \
+      && /usr/bin/grep -Fxq -- "$pkg" "$_AUR_GUARD_CACHE_DIR/github-malware-list.names"; then
+    printf 'GitHub aur-malware-check mirror\n'
     found=true
   fi
 
@@ -488,17 +590,22 @@ _aur_guard_confirm_guarded_install() {
   _aur_guard_print_historical_summary
   _aur_guard_print_context_summary
   printf '\nThe exact package revisions passed automated inspection, but the warnings above require manual acknowledgement.\n' >&2
-  printf 'Type exactly INSTALL %s to continue: ' "$requested_pkg" >&2
+  printf 'Install %s? [y/N]: ' "$requested_pkg" >&2
 
   if ! IFS= read -r answer; then
     printf '\nCancelled. No package was installed.\n' >&2
     return 1
   fi
 
-  if [[ "$answer" != "INSTALL $requested_pkg" ]]; then
-    printf 'Cancelled. No package was installed.\n' >&2
-    return 1
-  fi
+  case "$answer" in
+    y|Y|yes|YES|Yes)
+      return 0
+      ;;
+    *)
+      printf 'Cancelled. No package was installed.\n' >&2
+      return 1
+      ;;
+  esac
 }
 
 _aur_guard_has_unsafe_flag() {
@@ -898,8 +1005,24 @@ _aur_guard_run_sandbox_command() {
           gate="$state_dir/gate"
           status_file="$state_dir/bwrap-status.jsonl"
           pasta_pid_file="$state_dir/pasta.pid"
+          pasta_stderr="$state_dir/pasta.stderr"
           bwrap_pid=
           pasta_pid=
+
+          report_pasta_stderr() {
+            local line
+
+            [[ -s $pasta_stderr ]] || return 0
+            while IFS= read -r line; do
+              case "$line" in
+                Couldn?t\ get\ any\ nameserver\ address)
+                  ;;
+                *)
+                  printf "%s\n" "$line" >&2
+                  ;;
+              esac
+            done < "$pasta_stderr"
+          }
 
           cleanup() {
             local rc=$?
@@ -968,7 +1091,7 @@ _aur_guard_run_sandbox_command() {
             --tcp-ns none \
             --udp-ns none \
             --pid "$pasta_pid_file" \
-            "$child_pid" &
+            "$child_pid" 2>"$pasta_stderr" &
           pasta_pid=$!
 
           for ((attempt = 0; attempt < 200; attempt++)); do
@@ -980,17 +1103,24 @@ _aur_guard_run_sandbox_command() {
               set +e
               wait "$pasta_pid"
               set -e
+              report_pasta_stderr
               printf "AUR Guard: pasta could not attach to the private network namespace.\n" >&2
               exit 125
+            fi
+
+            if (( attempt == 40 )); then
+              printf "AUR Guard: isolated network setup is taking longer than expected.\n" >&2
             fi
             sleep 0.05
           done
 
           if [[ ! -s $pasta_pid_file ]]; then
+            report_pasta_stderr
             printf "AUR Guard: timed out attaching pasta to the bubblewrap namespace.\n" >&2
             exit 125
           fi
 
+          report_pasta_stderr
           printf "1" >&8
           exec 8>&-
 
@@ -1213,6 +1343,7 @@ _aur_guard_sandbox_exec() {
     --setenv LANG C.UTF-8
     --setenv LC_ALL C.UTF-8
     --setenv TMPDIR /tmp
+    --setenv FAKEROOTDONTTRYCHOWN 1
     --setenv GNUPGHOME "$gnupg_home"
     --setenv XDG_CACHE_HOME "$cache_home"
     --setenv XDG_DATA_HOME "$cache_home/xdg-data"
@@ -3224,7 +3355,29 @@ _aur_guard_review_installed_pkgbuilds() {
     esac
   done
 
-  printf '\nPKGBUILD review complete; continuing with the verified build.\n'
+  printf '\nPKGBUILD review complete.\n'
+  printf 'Continue with the verified clean build? [y/N]: '
+
+  if [[ ${AUR_GUARD_TEST_MODE:-0} == 1 ]]; then
+    IFS= read -r answer || answer=
+  else
+    if [[ ! -r /dev/tty ]]; then
+      printf '\nNo readable terminal is available; cancelling before the clean build.\n' >&2
+      return 20
+    fi
+    IFS= read -r answer </dev/tty || answer=
+  fi
+
+  case "$answer" in
+    y|Y|yes|YES|Yes)
+      printf 'PKGBUILD review approved; continuing with the verified clean build.\n'
+      return 0
+      ;;
+    *)
+      printf 'Build cancelled after PKGBUILD review.\n'
+      return 20
+      ;;
+  esac
 }
 
 _aur_guard_store_pkgbuild_snapshots() {
@@ -3557,9 +3710,11 @@ _aur_guard_scan_artifact() {
   # Relative package links such as usr/lib/debug/.build-id/* commonly contain
   # ../ components. They are validated after sandboxed extraction by resolving
   # each link against its containing directory and requiring it to remain inside
-  # the package root. Only absolute archive link targets are rejected here.
-  if grep -E ' (->|link to) /' "$verbose_listing"; then
-    _aur_guard_fail "$pkgbase produced an archive with an absolute symbolic-link or hard-link target"
+  # the package root. Absolute hard links remain forbidden because extraction
+  # would bind archive content to a host-root path. Absolute symbolic links are
+  # validated after extraction as package-root paths such as /opt/example/AppRun.
+  if grep -E ' link to /' "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced an archive with an absolute hard-link target"
     return 1
   fi
 
@@ -3605,11 +3760,13 @@ _aur_guard_scan_artifact() {
     target=$(readlink -- "$entry") || return 1
     case "$target" in
       /*)
-        _aur_guard_fail "$pkgbase generated an absolute symbolic link: ${entry#"$scan_root"/} -> $target"
-        return 1
+        resolved=$(realpath -m -- "$scan_root/${target#/}") || return 1
+        ;;
+      *)
+        resolved=$(realpath -m -- "$(dirname -- "$entry")/$target") || return 1
         ;;
     esac
-    resolved=$(realpath -m -- "$(dirname -- "$entry")/$target") || return 1
+
     case "$resolved" in
       "$scan_root"|"$scan_root"/*)
         ;;
@@ -3618,6 +3775,11 @@ _aur_guard_scan_artifact() {
         return 1
         ;;
     esac
+
+    if [[ "$target" == /* && ! -e "$resolved" && ! -L "$resolved" ]]; then
+      _aur_guard_fail "$pkgbase generated an absolute symbolic link to a path not provided by the package: ${entry#"$scan_root"/} -> $target"
+      return 1
+    fi
   done < <(find -P "$scan_root" -xdev -type l -print0)
 
   if type -P getcap >/dev/null 2>&1; then
@@ -3852,7 +4014,7 @@ _aur_guard_install_verified_transaction() {
   _AUR_GUARD_INSTALL_STARTED=1
 
   printf '\nAUR Guard: installing every verified AUR artifact and required repository dependency in one pacman transaction.\n'
-  if ! sudo pacman -U --needed "${artifacts[@]}"; then
+  if ! sudo pacman -U --needed --noconfirm "${artifacts[@]}"; then
     return 1
   fi
 
@@ -4146,14 +4308,14 @@ AUR_GUARD_TEST_HELPER
   fi
 
   if _aur_guard_confirm_guarded_install \
-      'historical-only-test' <<< 'NO'; then
-    _aur_guard_fail 'self-test failed: incorrect historical confirmation was accepted'
+      'historical-only-test' <<< 'n'; then
+    _aur_guard_fail 'self-test failed: declined historical confirmation was accepted'
     return 1
   fi
 
   if ! _aur_guard_confirm_guarded_install \
-      'historical-only-test' <<< 'INSTALL historical-only-test'; then
-    _aur_guard_fail 'self-test failed: exact historical confirmation was rejected'
+      'historical-only-test' <<< 'y'; then
+    _aur_guard_fail 'self-test failed: affirmative historical confirmation was rejected'
     return 1
   fi
 
@@ -4606,9 +4768,10 @@ AUR_GUARD_TEST_PKGBUILD_NEW
     return 1
   fi
 
-  printf '\nAUR Guard self-test: maintainer changes force deep review and exact confirmation.\n'
+  printf '\nAUR Guard self-test: maintainer changes force deep review, explicit continuation, and exact confirmation.\n'
   local identity_pkgdir identity_state identity_status identity_output
   local identity_phrase identity_now identity_metadata
+  local identity_reject_output identity_review_status
   identity_pkgdir="$test_root/identity-package"
   identity_state="$test_root/identity-state"
   mkdir -p "$identity_pkgdir" "$identity_state/pkgbuilds/review-demo"
@@ -4659,9 +4822,9 @@ AUR_GUARD_TEST_IDENTITY_PACMAN
   fi
 
   if ! identity_output=$(AUR_GUARD_COLOR=never \
-      _aur_guard_review_installed_pkgbuilds 2>&1); then
+      _aur_guard_review_installed_pkgbuilds <<< 'y' 2>&1); then
     printf '%s\n' "$identity_output"
-    _aur_guard_fail 'self-test failed: mandatory maintainer-change review could not be rendered'
+    _aur_guard_fail 'self-test failed: mandatory maintainer-change review could not be rendered and approved'
     return 1
   fi
   printf '%s\n' "$identity_output"
@@ -4671,8 +4834,29 @@ AUR_GUARD_TEST_IDENTITY_PACMAN
       || ! grep -Fq 'Risk: CRITICAL - maintainer changed on a recent AUR revision' \
       <<< "$identity_output" \
       || ! grep -Fq 'Maintainer ownership changed. PKGBUILD display is mandatory.' \
+      <<< "$identity_output" \
+      || ! grep -Fq 'Continue with the verified clean build? [y/N]:' \
+      <<< "$identity_output" \
+      || ! grep -Fq 'PKGBUILD review approved; continuing with the verified clean build.' \
       <<< "$identity_output"; then
-    _aur_guard_fail 'self-test failed: maintainer-change severity or mandatory review output is missing'
+    _aur_guard_fail 'self-test failed: maintainer-change review or explicit build-continuation output is missing'
+    return 1
+  fi
+
+  if identity_reject_output=$(AUR_GUARD_COLOR=never \
+      _aur_guard_review_installed_pkgbuilds <<< 'n' 2>&1); then
+    printf '%s\n' "$identity_reject_output"
+    _aur_guard_fail 'self-test failed: a rejected post-review build confirmation returned success'
+    return 1
+  else
+    identity_review_status=$?
+  fi
+
+  if (( identity_review_status != 20 )) \
+      || ! grep -Fq 'Build cancelled after PKGBUILD review.' \
+      <<< "$identity_reject_output"; then
+    printf '%s\n' "$identity_reject_output"
+    _aur_guard_fail 'self-test failed: rejected post-review build confirmation did not cancel cleanly'
     return 1
   fi
 
@@ -4971,7 +5155,7 @@ aurverify() {
 }
 
 aurup() {
-  local pkg status recheck_status identity_status
+  local pkg status recheck_status identity_status review_status
   local restart_count=0
   local _AUR_GUARD_MODE='practical'
   local _AUR_GUARD_BUILD_REQUESTED=1
@@ -5063,8 +5247,15 @@ aurup() {
       return 1
     fi
 
-    if ! _aur_guard_review_installed_pkgbuilds; then
-      _aur_guard_refuse_install "$pkg" 'the installed-package review could not be completed'
+    if _aur_guard_review_installed_pkgbuilds; then
+      :
+    else
+      review_status=$?
+      if (( review_status == 20 )); then
+        _aur_guard_refuse_install "$pkg" 'the build was cancelled after PKGBUILD review'
+      else
+        _aur_guard_refuse_install "$pkg" 'the installed-package review could not be completed'
+      fi
       _aur_guard_cleanup_work
       return 1
     fi
@@ -5101,7 +5292,7 @@ aurup() {
     fi
 
     if ! _aur_guard_confirm_guarded_install "$pkg"; then
-      _aur_guard_refuse_install "$pkg" 'required warning confirmation was not accepted'
+      _aur_guard_refuse_install "$pkg" 'installation was not confirmed after warning review'
       _aur_guard_cleanup_work
       return 1
     fi
