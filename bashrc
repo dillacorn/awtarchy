@@ -125,8 +125,8 @@ unset -f yay paru 2>/dev/null
 _AUR_GUARD_ARCH_LIST_URL='https://md.archlinux.org/s/SxbqukK6IA/download'
 _AUR_GUARD_GITHUB_REPO='lenucksi/aur-malware-check'
 _AUR_GUARD_GITHUB_BRANCH='master'
-_AUR_GUARD_GITHUB_LIST_PATH='data/lists/package_list.txt'
-_AUR_GUARD_GITHUB_LIST_URL="https://raw.githubusercontent.com/${_AUR_GUARD_GITHUB_REPO}/${_AUR_GUARD_GITHUB_BRANCH}/${_AUR_GUARD_GITHUB_LIST_PATH}"
+_AUR_GUARD_GITHUB_MANIFEST_PATH='data/campaigns.json'
+_AUR_GUARD_GITHUB_LIST_URL="https://raw.githubusercontent.com/${_AUR_GUARD_GITHUB_REPO}/${_AUR_GUARD_GITHUB_BRANCH}/${_AUR_GUARD_GITHUB_MANIFEST_PATH}"
 _AUR_GUARD_GITHUB_ARCHIVE_URL="https://github.com/${_AUR_GUARD_GITHUB_REPO}/archive/refs/heads/${_AUR_GUARD_GITHUB_BRANCH}.tar.gz"
 _AUR_GUARD_CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/aur-guard"
 _AUR_GUARD_STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy/aur-guard"
@@ -158,9 +158,19 @@ _AUR_GUARD_SANDBOX_TASKS_MAX=1024
 _AUR_GUARD_SANDBOX_FILE_SIZE_MAX=$((16 * 1024 * 1024 * 1024))
 _AUR_GUARD_ARTIFACT_MAX_BYTES=$((8 * 1024 * 1024 * 1024))
 _AUR_GUARD_ARTIFACT_MAX_FILES=200000
+_AUR_GUARD_ICON_THEME_ARTIFACT_MAX_FILES=1000000
+_AUR_GUARD_PROGRESS_INTERVAL_SECONDS=10
+_AUR_GUARD_PROGRESS_FILE_INTERVAL=5000
+_AUR_GUARD_PROGRESS_ENTRY_INTERVAL=25000
 _AUR_GUARD_TREE_MAX_BYTES=$((32 * 1024 * 1024 * 1024))
+_AUR_GUARD_WORK_PARENT="${AUR_GUARD_WORK_PARENT:-${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/aur-guard/work}"
 _AUR_GUARD_NETWORK_TEST_URL='https://aur.archlinux.org/'
 _AUR_GUARD_MODE='practical'
+# Awtarchy marks automated AUR Guard children explicitly. Package names are
+# never trusted or allowlisted; installer mode only removes duplicate prompts
+# after the normal recursive verification, clean build, and artifact checks.
+_AUR_GUARD_INSTALLER_MODE=0
+[[ ${AWTARCHY_AUR_INSTALLER_MODE:-0} == 1 ]] && _AUR_GUARD_INSTALLER_MODE=1
 _AUR_GUARD_COMMIT_RECHECK_ATTEMPTS=3
 _AUR_GUARD_COMMIT_RECHECK_DELAY_SECONDS=2
 # Informational recent-revision threshold. Maintainer changes remain the hard gate.
@@ -170,6 +180,29 @@ _aur_guard_is_deep_mode() {
   [[ ${_AUR_GUARD_MODE:-practical} == deep ]]
 }
 
+_aur_guard_is_installer_mode() {
+  [[ ${_AUR_GUARD_INSTALLER_MODE:-0} == 1 ]]
+}
+
+_aur_guard_installer_warnings_are_routine() {
+  local key
+
+  _aur_guard_is_installer_mode || return 1
+  _aur_guard_has_historical_matches && return 1
+  _aur_guard_has_context_warnings || return 1
+
+  for key in "${!_AUR_GUARD_CONTEXT_WARNINGS[@]}"; do
+    case "$key" in
+      *' package conflict'|*' package replacement')
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+  done
+
+  return 0
+}
 
 _aur_guard_pass() {
   local msg="$1"
@@ -183,6 +216,46 @@ _aur_guard_fail() {
   printf '\n\033[1;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n' >&2
   printf '\033[1;31mFAILED:\033[0m %s\n' "$msg" >&2
   printf '\033[1;31m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\033[0m\n' >&2
+}
+
+_aur_guard_progress_heartbeat() {
+  local label="$1"
+  local started="$2"
+
+  while sleep "$_AUR_GUARD_PROGRESS_INTERVAL_SECONDS"; do
+    printf 'AUR Verify: still %s (%d seconds elapsed).\n' \
+      "$label" "$((SECONDS - started))" >&2
+  done
+}
+
+_aur_guard_run_with_progress() {
+  local label="$1"
+  shift
+
+  local started=$SECONDS
+  local heartbeat_fd
+  local heartbeat_pid
+  local status=0
+
+  printf 'AUR Verify: %s...\n' "$label" >&2
+
+  # Process substitution keeps the heartbeat out of the interactive job table,
+  # avoiding noisy "[1] PID" messages while the real command stays foreground.
+  exec {heartbeat_fd}< <(_aur_guard_progress_heartbeat "$label" "$started")
+  heartbeat_pid=$!
+
+  "$@" || status=$?
+
+  kill "$heartbeat_pid" 2>/dev/null || true
+  wait "$heartbeat_pid" 2>/dev/null || true
+  exec {heartbeat_fd}<&-
+
+  if (( status == 0 )); then
+    printf 'AUR Verify: completed %s in %d seconds.\n' \
+      "$label" "$((SECONDS - started))" >&2
+  fi
+
+  return "$status"
 }
 
 _aur_guard_refuse_install() {
@@ -288,73 +361,153 @@ _aur_guard_download() {
   _aur_guard_sandbox_exec "$output_dir" allow writable / "${command_line[@]}"
 }
 
+_aur_guard_github_campaign_list_paths() {
+  local manifest="$1"
+  local list_path
+  local -a raw_paths=()
+
+  type -P jq >/dev/null 2>&1 || return 127
+  mapfile -t raw_paths < <(
+    jq -er '
+      .campaigns
+      | select(type == "array")
+      | .[]
+      | select(.type == "aur")
+      | .lists[]?
+      | select(type == "string")
+    ' "$manifest"
+  )
+  (( ${#raw_paths[@]} > 0 )) || return 1
+
+  for list_path in "${raw_paths[@]}"; do
+    if [[ ! "$list_path" =~ ^data/campaigns/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+\.txt$ ]]; then
+      printf 'AUR Guard: GitHub campaign manifest contains an unsafe list path: %s\n' \
+        "$list_path" >&2
+      return 1
+    fi
+  done
+
+  printf '%s\n' "${raw_paths[@]}" | LC_ALL=C sort -u
+}
+
 _aur_guard_download_github_package_list() {
-  local direct_url="$1"
+  local manifest_url="$1"
   local output="$2"
-  local output_dir archive listing candidate archive_size
-  local -a candidates=()
+  local output_dir manifest archive listing archive_manifest archive_root
+  local list_path list_url list_file archive_entry archive_size
+  local -a list_paths=()
 
-  # Use the canonical current path first. If the repository moves the file,
-  # inspect the branch archive and accept only one unambiguous package_list.txt.
-  if _aur_guard_download "$direct_url" "$output" && [[ -s "$output" ]]; then
-    return 0
-  fi
-  rm -f "$output"
-
+  type -P jq >/dev/null 2>&1 || return 127
   type -P bsdtar >/dev/null 2>&1 || return 127
 
   output_dir=$(dirname -- "$output") || return 1
+  manifest=$(mktemp "$output_dir/github-campaigns.XXXXXX.json") || return 1
+
+  # Current repository layout is campaign-based. Resolve every declared AUR
+  # package list from the signed-in-run manifest instead of guessing filenames.
+  if _aur_guard_download "$manifest_url" "$manifest" && [[ -s "$manifest" ]]; then
+    mapfile -t list_paths < <(_aur_guard_github_campaign_list_paths "$manifest")
+    if (( ${#list_paths[@]} > 0 )); then
+      : > "$output"
+      for list_path in "${list_paths[@]}"; do
+        list_url="https://raw.githubusercontent.com/${_AUR_GUARD_GITHUB_REPO}/${_AUR_GUARD_GITHUB_BRANCH}/${list_path}"
+        list_file=$(mktemp "$output_dir/github-campaign-list.XXXXXX.txt") || {
+          rm -f "$manifest" "$output"
+          return 1
+        }
+        if ! _aur_guard_download "$list_url" "$list_file" || [[ ! -s "$list_file" ]]; then
+          rm -f "$manifest" "$list_file" "$output"
+          return 1
+        fi
+        cat "$list_file" >> "$output" || {
+          rm -f "$manifest" "$list_file" "$output"
+          return 1
+        }
+        printf '\n' >> "$output"
+        rm -f "$list_file"
+      done
+      rm -f "$manifest"
+      printf 'AUR Guard: loaded %d campaign package lists from the GitHub malware mirror.\n' \
+        "${#list_paths[@]}" >&2
+      return 0
+    fi
+  fi
+
+  rm -f "$manifest" "$output"
+
   archive=$(mktemp "$output_dir/github-list-repo.XXXXXX.tar.gz") || return 1
   listing=$(mktemp "$output_dir/github-list-repo.XXXXXX.files") || {
     rm -f "$archive"
     return 1
   }
+  archive_manifest=$(mktemp "$output_dir/github-campaigns-archive.XXXXXX.json") || {
+    rm -f "$archive" "$listing"
+    return 1
+  }
 
   if ! _aur_guard_download "$_AUR_GUARD_GITHUB_ARCHIVE_URL" "$archive" \
       || [[ ! -s "$archive" ]]; then
-    rm -f "$archive" "$listing"
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   fi
 
   archive_size=$(stat -c %s "$archive" 2>/dev/null) || {
-    rm -f "$archive" "$listing"
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   }
   if (( archive_size > _AUR_GUARD_GITHUB_ARCHIVE_MAX_BYTES )); then
     printf 'AUR Guard: GitHub fallback archive exceeded the %d-byte safety limit.\n' \
       "$_AUR_GUARD_GITHUB_ARCHIVE_MAX_BYTES" >&2
-    rm -f "$archive" "$listing"
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   fi
 
   if ! /usr/bin/bsdtar -tf "$archive" > "$listing" 2>/dev/null; then
-    rm -f "$archive" "$listing"
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   fi
 
-  mapfile -t candidates < <(
-    LC_ALL=C /usr/bin/grep -E \
-      '^[A-Za-z0-9._-]+(/[-A-Za-z0-9._]+)*/package_list\.txt$' \
-      "$listing"
+  mapfile -t archive_entries < <(
+    LC_ALL=C grep -E "/${_AUR_GUARD_GITHUB_MANIFEST_PATH//\//\\/}$" "$listing"
   )
-
-  if (( ${#candidates[@]} != 1 )); then
-    printf 'AUR Guard: GitHub fallback found %d valid package_list.txt candidates; refusing ambiguous repository data.\n' \
-      "${#candidates[@]}" >&2
-    rm -f "$archive" "$listing"
+  if (( ${#archive_entries[@]} != 1 )); then
+    printf 'AUR Guard: GitHub fallback found %d campaign manifests; refusing ambiguous repository data.\n' \
+      "${#archive_entries[@]}" >&2
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   fi
 
-  candidate=${candidates[0]}
-  if ! /usr/bin/bsdtar -xOf "$archive" "$candidate" > "$output" 2>/dev/null \
-      || [[ ! -s "$output" ]]; then
-    rm -f "$archive" "$listing" "$output"
+  archive_entry=${archive_entries[0]}
+  archive_root=${archive_entry%/$_AUR_GUARD_GITHUB_MANIFEST_PATH}
+  if ! /usr/bin/bsdtar -xOf "$archive" "$archive_entry" > "$archive_manifest" 2>/dev/null \
+      || [[ ! -s "$archive_manifest" ]]; then
+    rm -f "$archive" "$listing" "$archive_manifest"
     return 1
   fi
 
-  rm -f "$archive" "$listing"
-  printf 'AUR Guard: resolved moved GitHub package list at %s.\n' \
-    "${candidate#*/}" >&2
+  mapfile -t list_paths < <(_aur_guard_github_campaign_list_paths "$archive_manifest")
+  if (( ${#list_paths[@]} == 0 )); then
+    rm -f "$archive" "$listing" "$archive_manifest"
+    return 1
+  fi
+
+  : > "$output"
+  for list_path in "${list_paths[@]}"; do
+    archive_entry="$archive_root/$list_path"
+    if ! grep -Fqx -- "$archive_entry" "$listing"; then
+      rm -f "$archive" "$listing" "$archive_manifest" "$output"
+      return 1
+    fi
+    if ! /usr/bin/bsdtar -xOf "$archive" "$archive_entry" >> "$output" 2>/dev/null; then
+      rm -f "$archive" "$listing" "$archive_manifest" "$output"
+      return 1
+    fi
+    printf '\n' >> "$output"
+  done
+
+  rm -f "$archive" "$listing" "$archive_manifest"
+  printf 'AUR Guard: loaded %d campaign package lists from the GitHub archive fallback.\n' \
+    "${#list_paths[@]}" >&2
 }
 
 _aur_guard_cache_is_fresh() {
@@ -589,6 +742,12 @@ _aur_guard_confirm_guarded_install() {
 
   _aur_guard_print_historical_summary
   _aur_guard_print_context_summary
+
+  if _aur_guard_installer_warnings_are_routine; then
+    printf '\nAwtarchy installer mode: automatically acknowledging routine package conflict/replacement metadata.\n' >&2
+    return 0
+  fi
+
   printf '\nThe exact package revisions passed automated inspection, but the warnings above require manual acknowledgement.\n' >&2
   printf 'Install %s? [y/N]: ' "$requested_pkg" >&2
 
@@ -1464,6 +1623,223 @@ _aur_guard_assert_tracked_files_unchanged() {
   fi
 }
 
+
+_aur_guard_has_recorded_git_snapshot() {
+  local pkgbase="$1"
+
+  [[ -n "${_AUR_GUARD_VCS_SNAPSHOTS:-}" && -f "$_AUR_GUARD_VCS_SNAPSHOTS" ]] || return 1
+  awk -F '\t' -v pkgbase="$pkgbase" '$1 == pkgbase { found=1; exit } END { exit !found }' \
+    "$_AUR_GUARD_VCS_SNAPSHOTS"
+}
+
+_aur_guard_prepare_pkgbuild_mutation_state() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local state_dir="$pkgdir/.awtarchy-pkgbuild-state"
+
+  [[ -f "$pkgdir/PKGBUILD" ]] || {
+    _aur_guard_fail "$pkgbase has no PKGBUILD before source preparation"
+    return 1
+  }
+
+  rm -rf -- "$state_dir"
+  mkdir -p -- "$state_dir" || return 1
+  cp -a -- "$pkgdir/PKGBUILD" "$state_dir/original"
+}
+
+_aur_guard_accept_prepared_pkgver_update() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local state_dir="$pkgdir/.awtarchy-pkgbuild-state"
+  local diff_file="$state_dir/pkgbuild.diff"
+  local numstat
+  local additions=0 deletions=0 other_changes=0
+  local pkgver_additions=0 pkgver_deletions=0
+  local pkgrel_additions=0 pkgrel_deletions=0
+  local -a changed_files=()
+  local added_pkgver_assignment='' added_pkgrel_assignment=''
+  local pkgver_value='' pkgrel_value='' accepted_detail='pkgver update'
+
+  [[ -f "$state_dir/original" ]] || {
+    _aur_guard_fail "$pkgbase has no saved pre-preparation PKGBUILD state"
+    return 1
+  }
+
+  if ! command git -C "$pkgdir" diff --cached --quiet -- .; then
+    command git -C "$pkgdir" diff --cached -- . >&2 || true
+    _aur_guard_fail "$pkgbase staged tracked AUR-file changes during source preparation"
+    return 1
+  fi
+
+  mapfile -t changed_files < <(
+    command git -C "$pkgdir" diff --name-only -- . | LC_ALL=C sort -u
+  )
+
+  if (( ${#changed_files[@]} == 0 )); then
+    cp -a -- "$pkgdir/PKGBUILD" "$state_dir/prepared"
+    return 0
+  fi
+
+  if (( ${#changed_files[@]} != 1 )) || [[ "${changed_files[0]}" != PKGBUILD ]]; then
+    command git -C "$pkgdir" diff -- . >&2 || true
+    _aur_guard_fail "$pkgbase modified tracked AUR files other than PKGBUILD during source preparation"
+    return 1
+  fi
+
+  _aur_guard_has_recorded_git_snapshot "$pkgbase" || {
+    command git -C "$pkgdir" diff -- PKGBUILD >&2 || true
+    _aur_guard_fail "$pkgbase changed PKGBUILD without a recorded Git source snapshot"
+    return 1
+  }
+
+  grep -Eq '^[[:space:]]*(function[[:space:]]+)?pkgver[[:space:]]*(\(\))?[[:space:]]*\{' \
+      "$state_dir/original" || {
+    command git -C "$pkgdir" diff -- PKGBUILD >&2 || true
+    _aur_guard_fail "$pkgbase changed PKGBUILD but does not define pkgver()"
+    return 1
+  }
+
+  numstat=$(command git -C "$pkgdir" diff --numstat -- PKGBUILD)
+  case "$numstat" in
+    $'1\t1\tPKGBUILD'|$'2\t2\tPKGBUILD')
+      ;;
+    *)
+      command git -C "$pkgdir" diff -- PKGBUILD >&2 || true
+      _aur_guard_fail "$pkgbase changed more than the allowed pkgver/pkgrel lines while resolving its VCS version"
+      return 1
+      ;;
+  esac
+
+  command git -C "$pkgdir" diff --unified=0 -- PKGBUILD > "$diff_file"
+
+  while IFS= read -r line; do
+    case "$line" in
+      '--- '*|'+++ '*|'@@ '*|'diff --git '*|'index '*)
+        ;;
+      -*)
+        ((deletions++)) || true
+        if [[ "${line#-}" =~ ^[[:space:]]*pkgver[[:space:]]*= ]]; then
+          ((pkgver_deletions++)) || true
+        elif [[ "${line#-}" =~ ^[[:space:]]*pkgrel[[:space:]]*= ]]; then
+          ((pkgrel_deletions++)) || true
+        else
+          ((other_changes++)) || true
+        fi
+        ;;
+      +*)
+        ((additions++)) || true
+        if [[ "${line#+}" =~ ^[[:space:]]*pkgver[[:space:]]*= ]]; then
+          ((pkgver_additions++)) || true
+          added_pkgver_assignment="${line#+}"
+        elif [[ "${line#+}" =~ ^[[:space:]]*pkgrel[[:space:]]*= ]]; then
+          ((pkgrel_additions++)) || true
+          added_pkgrel_assignment="${line#+}"
+        else
+          ((other_changes++)) || true
+        fi
+        ;;
+    esac
+  done < "$diff_file"
+
+  if (( pkgver_additions != 1 || pkgver_deletions != 1 ||
+        pkgrel_additions != pkgrel_deletions || pkgrel_additions > 1 ||
+        additions != deletions || other_changes != 0 )); then
+    cat "$diff_file" >&2
+    _aur_guard_fail "$pkgbase made a PKGBUILD change other than pkgver and an optional pkgrel reset"
+    return 1
+  fi
+
+  pkgver_value=${added_pkgver_assignment#*=}
+  pkgver_value="${pkgver_value#"${pkgver_value%%[![:space:]]*}"}"
+  pkgver_value="${pkgver_value%"${pkgver_value##*[![:space:]]}"}"
+  if [[ "$pkgver_value" == \"*\" || "$pkgver_value" == \'*\' ]]; then
+    pkgver_value=${pkgver_value:1:${#pkgver_value}-2}
+  fi
+  if [[ -z "$pkgver_value" || ! "$pkgver_value" =~ ^[0-9A-Za-z._+]+$ ]]; then
+    cat "$diff_file" >&2
+    _aur_guard_fail "$pkgbase produced an unsafe or invalid static pkgver assignment"
+    return 1
+  fi
+
+  if (( pkgrel_additions == 1 )); then
+    pkgrel_value=${added_pkgrel_assignment#*=}
+    pkgrel_value="${pkgrel_value#"${pkgrel_value%%[![:space:]]*}"}"
+    pkgrel_value="${pkgrel_value%"${pkgrel_value##*[![:space:]]}"}"
+    if [[ "$pkgrel_value" == \"*\" || "$pkgrel_value" == \'*\' ]]; then
+      pkgrel_value=${pkgrel_value:1:${#pkgrel_value}-2}
+    fi
+    if [[ "$pkgrel_value" != 1 ]]; then
+      cat "$diff_file" >&2
+      _aur_guard_fail "$pkgbase changed pkgrel to a value other than makepkg's deterministic reset to 1"
+      return 1
+    fi
+    accepted_detail='pkgver update and pkgrel reset to 1'
+  fi
+
+  cp -a -- "$pkgdir/PKGBUILD" "$state_dir/prepared"
+  printf 'AUR Guard: accepted deterministic %s for %s after pinning its Git source snapshot.\n' \
+    "$accepted_detail" "$pkgbase"
+}
+
+_aur_guard_assert_prepared_pkgbuild_state() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local state_dir="$pkgdir/.awtarchy-pkgbuild-state"
+  local -a changed_files=()
+
+  [[ -f "$state_dir/prepared" ]] || {
+    _aur_guard_fail "$pkgbase has no saved prepared PKGBUILD state"
+    return 1
+  }
+
+  if ! command git -C "$pkgdir" diff --cached --quiet -- .; then
+    command git -C "$pkgdir" diff --cached -- . >&2 || true
+    _aur_guard_fail "$pkgbase staged tracked AUR-file changes during the build"
+    return 1
+  fi
+
+  mapfile -t changed_files < <(
+    command git -C "$pkgdir" diff --name-only -- . | LC_ALL=C sort -u
+  )
+
+  case "${#changed_files[@]}" in
+    0)
+      cmp -s "$pkgdir/PKGBUILD" "$state_dir/prepared" || {
+        _aur_guard_fail "$pkgbase PKGBUILD no longer matches its prepared state"
+        return 1
+      }
+      ;;
+    1)
+      [[ "${changed_files[0]}" == PKGBUILD ]] \
+        && cmp -s "$pkgdir/PKGBUILD" "$state_dir/prepared" || {
+        command git -C "$pkgdir" diff -- . >&2 || true
+        _aur_guard_fail "$pkgbase changed tracked AUR files after source preparation"
+        return 1
+      }
+      ;;
+    *)
+      command git -C "$pkgdir" diff -- . >&2 || true
+      _aur_guard_fail "$pkgbase changed tracked AUR files after source preparation"
+      return 1
+      ;;
+  esac
+}
+
+_aur_guard_restore_original_pkgbuild() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local state_dir="$pkgdir/.awtarchy-pkgbuild-state"
+
+  [[ -f "$state_dir/original" ]] || {
+    _aur_guard_fail "$pkgbase has no original PKGBUILD state to restore"
+    return 1
+  }
+
+  cp -a -- "$state_dir/original" "$pkgdir/PKGBUILD"
+  _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir"
+}
+
+
 _aur_guard_source_candidate() {
   local file="$1"
   local relative="$2"
@@ -1538,11 +1914,44 @@ _aur_guard_file_is_text_scannable() {
   return 1
 }
 
+_aur_guard_file_hard_block_matches() {
+  local file="$1"
+  local pattern="$2"
+  local relative="${3:-${file##*/}}"
+  local line
+  local line_number=0
+  local matched=false
+
+  if [[ ${relative##*/} != PKGBUILD ]]; then
+    /usr/bin/grep --binary-files=without-match -HnEi "$pattern" "$file"
+    return $?
+  fi
+
+  # Maintainer and Contributor lines are inert PKGBUILD comments. Some old AUR
+  # packages obfuscate email addresses in those comments to reduce scraping.
+  # Ignore only the complete comment line; executable PKGBUILD content remains
+  # subject to the normal hard-block patterns.
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    ((line_number += 1))
+
+    if [[ "$line" =~ ^[[:space:]]*#[[:space:]]*(Maintainer|Contributor): ]]; then
+      continue
+    fi
+
+    if /usr/bin/grep -Eqi "$pattern" <<< "$line"; then
+      printf '%s:%d:%s\n' "$file" "$line_number" "$line"
+      matched=true
+    fi
+  done < "$file"
+
+  $matched
+}
+
 _aur_guard_scan_source_tree() {
   local pkg="$1"
   local root="$2"
   local mode="${3:-recursive}"
-  local file relative size pkgbuild
+  local file relative size pkgbuild hard_block_matches
   local scanned=0
   local source_scanned=0
   local dependency_scanned=0
@@ -1607,6 +2016,11 @@ _aur_guard_scan_source_tree() {
     fi
 
     ((scanned += 1))
+    if (( scanned % _AUR_GUARD_PROGRESS_FILE_INTERVAL == 0 )); then
+      printf 'AUR Verify: scanned %d script/build candidates for %s so far.\n' \
+        "$scanned" "$pkg" >&2
+    fi
+
     if $dependency_candidate; then
       ((dependency_scanned += 1))
       if (( dependency_scanned > _AUR_GUARD_DEPENDENCY_SCAN_MAX_FILES )); then
@@ -1631,14 +2045,16 @@ _aur_guard_scan_source_tree() {
       return 1
     fi
 
-    if /usr/bin/grep -Eq "$_AUR_GUARD_SOURCE_HARD_BLOCK_RE" "$file"; then
+    hard_block_matches=$(_aur_guard_file_hard_block_matches \
+      "$file" "$_AUR_GUARD_SOURCE_HARD_BLOCK_RE" "$relative" || true)
+    if [[ -n "$hard_block_matches" ]]; then
       if [[ -n "$pkgbuild" ]] \
           && _aur_guard_unreferenced_development_metadata "$pkgbuild" "$relative"; then
         _aur_guard_note_context_warning \
           "$pkg:development-metadata:$relative" \
           "$relative contains a normally blocked execution pattern inside unreferenced development metadata; the offline build and final artifact scan must confirm it is unused"
       else
-        /usr/bin/grep -HnEi "$_AUR_GUARD_SOURCE_HARD_BLOCK_RE" "$file" || true
+        printf '%s\n' "$hard_block_matches"
         matched=true
       fi
     fi
@@ -1814,6 +2230,104 @@ _aur_guard_forge_project_key() {
   printf '%s/%s/%s\n' "$host" "${owner,,}" "${project,,}"
 }
 
+
+_aur_guard_git_source_name() {
+  local source_value="$1"
+  local source_url clean name
+
+  if [[ "$source_value" == *::* ]]; then
+    name=${source_value%%::*}
+  else
+    source_url=${source_value#*::}
+    clean=${source_url#git+}
+    clean=${clean%%#*}
+    clean=${clean%%\?*}
+    clean=${clean%/}
+    name=${clean##*/}
+    name=${name%.git}
+  fi
+
+  [[ -n "$name" && "$name" != */* && "$name" != . && "$name" != .. ]] || return 1
+  printf '%s\n' "$name"
+}
+
+_aur_guard_capture_git_snapshots() {
+  local pkgbase="$1"
+  local srcinfo="$2"
+  local pkgdir="$3"
+  local source_value source_url source_name repo relative commit remote
+  local captured=0
+
+  while IFS= read -r source_value; do
+    [[ -n "$source_value" ]] || continue
+    source_url=${source_value#*::}
+    [[ "$source_url" == git+* ]] || continue
+
+    source_name=$(_aur_guard_git_source_name "$source_value") || {
+      _aur_guard_fail "$pkgbase has an invalid Git source name: $source_value"
+      return 1
+    }
+    repo="$pkgdir/$source_name"
+    [[ -e "$repo" ]] || {
+      _aur_guard_fail "$pkgbase Git source was not fetched at the expected path: $source_name"
+      return 1
+    }
+
+    commit=$(git -C "$repo" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) || {
+      _aur_guard_fail "$pkgbase could not resolve the fetched Git source commit: $source_name"
+      return 1
+    }
+    remote=$(git -C "$repo" remote get-url origin 2>/dev/null) || {
+      _aur_guard_fail "$pkgbase fetched Git source has no origin remote: $source_name"
+      return 1
+    }
+    relative=${repo#"$pkgdir"/}
+
+    printf '%s\t%s\t%s\t%s\n' "$pkgbase" "$relative" "$commit" "$remote" \
+      >> "$_AUR_GUARD_VCS_SNAPSHOTS"
+    printf 'AUR Verify: snapshot-pinned %s Git source %s at %s.\n' \
+      "$pkgbase" "$source_name" "${commit:0:12}"
+    ((captured++)) || true
+  done < <(
+    awk -F ' = ' '/^[[:space:]]*source(_[[:alnum:]_]+)? = / {print $2}' "$srcinfo"
+  )
+
+  return 0
+}
+
+_aur_guard_verify_git_snapshots() {
+  local pkgbase="$1"
+  local pkgdir="$2"
+  local recorded_base relative expected_commit expected_remote repo current_commit current_remote
+
+  [[ -f "$_AUR_GUARD_VCS_SNAPSHOTS" ]] || return 0
+
+  while IFS=$'\t' read -r recorded_base relative expected_commit expected_remote; do
+    [[ "$recorded_base" == "$pkgbase" ]] || continue
+    repo="$pkgdir/$relative"
+
+    current_commit=$(git -C "$repo" rev-parse --verify 'HEAD^{commit}' 2>/dev/null) || {
+      _aur_guard_fail "$pkgbase Git source snapshot disappeared before the build: $relative"
+      return 1
+    }
+    current_remote=$(git -C "$repo" remote get-url origin 2>/dev/null) || {
+      _aur_guard_fail "$pkgbase Git source origin disappeared before the build: $relative"
+      return 1
+    }
+
+    if [[ "$current_commit" != "$expected_commit" ]]; then
+      _aur_guard_fail "$pkgbase Git source changed after verification: $relative"
+      printf 'Expected commit: %s\nCurrent commit:  %s\n' \
+        "$expected_commit" "$current_commit" >&2
+      return 1
+    fi
+    if [[ "$current_remote" != "$expected_remote" ]]; then
+      _aur_guard_fail "$pkgbase Git source origin changed after verification: $relative"
+      return 1
+    fi
+  done < "$_AUR_GUARD_VCS_SNAPSHOTS"
+}
+
 _aur_guard_validate_source_origins() {
   local pkgbase="$1"
   local srcinfo="$2"
@@ -1840,9 +2354,15 @@ _aur_guard_validate_source_origins() {
     source_url="${source_value#*::}"
 
     case "$source_url" in
-      git+*|hg+*|svn+*|bzr+*)
+      git+*)
         if [[ ! "$source_url" =~ \#commit=[0-9A-Fa-f]{40,64}([\&].*)?$ ]]; then
-          _aur_guard_fail "$pkgbase has a VCS source that is not pinned to an exact commit hash: $source_value"
+          printf 'AUR Verify: %s moving Git source will be snapshot-pinned before the clean build: %s\n' \
+            "$pkgbase" "$source_value"
+        fi
+        ;;
+      hg+*|svn+*|bzr+*)
+        if [[ ! "$source_url" =~ \#commit=[0-9A-Fa-f]{40,64}([\&].*)?$ ]]; then
+          _aur_guard_fail "$pkgbase has a non-Git VCS source that is not pinned to an exact commit hash: $source_value"
           return 1
         fi
         ;;
@@ -1987,11 +2507,16 @@ _aur_guard_validate_skipped_integrity() {
           value = source[key]
           name = local_name(value)
 
-          if (!is_remote(value) || exact_vcs(value) || strong[key] \
-              || content_addressed_pypi(value)) continue
+          # Moving Git sources are fetched once, recorded by exact commit, and
+          # then held with makepkg --holdver through preparation and build.
+          if (!is_remote(value) || exact_vcs(value) \
+              || strip_alias(value) ~ /^git\+/ \
+              || strong[key] || content_addressed_pypi(value)) continue
 
-          if (valid_pgp && is_signature(name) \
-              && source_name[suffix SUBSEP signed_name(name)]) continue
+          # Detached signature sidecars do not need their own checksum. They
+          # cannot authenticate another source unless that payload independently
+          # matches the sidecar naming rule and validpgpkeys is pinned.
+          if (valid_pgp && is_signature(name)) continue
 
           if (valid_pgp && signature_for[suffix SUBSEP name]) continue
 
@@ -2209,16 +2734,30 @@ _aur_guard_scan_package_files() {
   local pkg="$1"
   local pkgdir="$2"
   local matched=false
+  local package_file relative hard_block_matches
 
   printf 'AUR Verify: scanning %s for known malicious patterns.\n' "$pkg"
 
-  if grep -rInE \
+  hard_block_matches=$(grep -rInE \
       --exclude-dir='.git' \
+      --exclude='PKGBUILD' \
       --binary-files=without-match \
       "$_AUR_GUARD_HARD_BLOCK_RE" \
-      "$pkgdir"; then
+      "$pkgdir" || true)
+  if [[ -n "$hard_block_matches" ]]; then
+    printf '%s\n' "$hard_block_matches"
     matched=true
   fi
+
+  while IFS= read -r -d '' package_file; do
+    relative="${package_file#"$pkgdir"/}"
+    hard_block_matches=$(_aur_guard_file_hard_block_matches \
+      "$package_file" "$_AUR_GUARD_HARD_BLOCK_RE" "$relative" || true)
+    if [[ -n "$hard_block_matches" ]]; then
+      printf '%s\n' "$hard_block_matches"
+      matched=true
+    fi
+  done < <(find "$pkgdir" -type f -name PKGBUILD ! -path '*/.git/*' -print0)
 
   local hook_matches package_json_matches
 
@@ -2251,10 +2790,30 @@ _aur_guard_scan_package_files() {
   _aur_guard_scan_source_tree "$pkg" "$pkgdir" recursive
 }
 
+_aur_guard_normalize_srcinfo() {
+  local file="$1"
+
+  # makepkg may discard trailing spaces and trailing blank lines when writing
+  # .SRCINFO. Preserve all actual metadata and internal blank lines while
+  # removing only those insignificant end-of-line/end-of-file differences.
+  LC_ALL=C awk '
+    {
+      sub(/[[:space:]]+$/, "")
+      lines[NR] = $0
+      if ($0 !~ /^[[:space:]]*$/) last = NR
+    }
+    END {
+      for (i = 1; i <= last; i++) print lines[i]
+    }
+  ' "$file"
+}
+
 _aur_guard_verify_srcinfo() {
   local pkg="$1"
   local pkgdir="$2"
   local generated="$pkgdir/.SRCINFO.awtarchy"
+  local committed_normalized="$pkgdir/.SRCINFO.committed-normalized"
+  local generated_normalized="$pkgdir/.SRCINFO.generated-normalized"
 
   [[ -f "$pkgdir/.SRCINFO" ]] || {
     _aur_guard_fail "$pkg has no committed .SRCINFO"
@@ -2273,12 +2832,22 @@ _aur_guard_verify_srcinfo() {
     return 1
   }
 
-  if ! diff -u "$pkgdir/.SRCINFO" "$generated"; then
-    rm -f "$generated"
+  _aur_guard_normalize_srcinfo "$pkgdir/.SRCINFO" > "$committed_normalized"
+  _aur_guard_normalize_srcinfo "$generated" > "$generated_normalized"
+
+  if ! diff -u "$committed_normalized" "$generated_normalized"; then
+    diff -u "$pkgdir/.SRCINFO" "$generated" >&2 || true
+    rm -f "$generated" "$committed_normalized" "$generated_normalized"
     _aur_guard_fail "$pkg has a PKGBUILD/.SRCINFO mismatch"
     return 1
   fi
 
+  if ! cmp -s "$pkgdir/.SRCINFO" "$generated"; then
+    printf 'AUR Verify: %s committed .SRCINFO differs only by insignificant trailing whitespace or trailing blank lines.\n' \
+      "$pkg"
+  fi
+
+  rm -f "$committed_normalized" "$generated_normalized"
   mv -f "$generated" "$pkgdir/.SRCINFO.verified"
 }
 
@@ -2522,6 +3091,12 @@ _aur_guard_verify_package_recursive() {
     return 1
   }
 
+  _aur_guard_capture_git_snapshots "$pkgbase" "$srcinfo" "$pkgdir" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
   _aur_guard_verify_content_addressed_sources "$pkgbase" "$srcinfo" "$pkgdir" || {
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
@@ -2540,6 +3115,11 @@ _aur_guard_verify_package_recursive() {
 
     printf 'AUR Verify: deep mode is extracting and recursively scanning verified upstream sources for %s.\n' \
       "$pkgbase"
+    _aur_guard_prepare_pkgbuild_mutation_state "$pkgbase" "$pkgdir" || {
+      _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+      _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+      return 1
+    }
     if ! _aur_guard_makepkg_sandbox "$pkgdir" deny writable \
         --nobuild --noprepare --nodeps --holdver --noconfirm --nocolor; then
       _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
@@ -2548,7 +3128,12 @@ _aur_guard_verify_package_recursive() {
       return 1
     fi
 
-    _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || {
+    _aur_guard_accept_prepared_pkgver_update "$pkgbase" "$pkgdir" || {
+      _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+      _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+      return 1
+    }
+    _aur_guard_restore_original_pkgbuild "$pkgbase" "$pkgdir" || {
       _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
       _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
       return 1
@@ -3313,6 +3898,11 @@ _aur_guard_review_installed_pkgbuilds() {
     printf '%sMaintainer ownership changed. PKGBUILD display is mandatory.%s\n' \
       "$red" "$reset"
   else
+    if _aur_guard_is_installer_mode; then
+      printf 'Awtarchy installer mode: skipping optional PKGBUILD display.\n'
+      return 0
+    fi
+
     if [[ ! -r /dev/tty ]]; then
       printf 'No readable terminal is available; skipping optional PKGBUILD display.\n'
       return 0
@@ -3617,12 +4207,171 @@ _aur_guard_artifact_path_is_blocked() {
   return 1
 }
 
+_aur_guard_pkginfo_has_dependency() {
+  local pkginfo="$1"
+  local expected="$2"
+
+  [[ -f "$pkginfo" && ! -L "$pkginfo" ]] || return 1
+
+  LC_ALL=C awk -F ' = ' -v expected="$expected" '
+    $1 == "depend" {
+      dependency = $2
+      sub(/[<>=].*$/, "", dependency)
+      if (dependency == expected) found = 1
+    }
+    END { exit found ? 0 : 1 }
+  ' "$pkginfo"
+}
+
+_aur_guard_absolute_license_link_is_safe() {
+  local entry="$1"
+  local target="$2"
+  local scan_root="$3"
+  local pkgname="$4"
+  local relative target_pkg
+
+  relative=${entry#"$scan_root"/}
+  [[ "$relative" == "usr/share/licenses/$pkgname" ]] || return 1
+  [[ "$target" =~ ^/usr/share/licenses/([a-zA-Z0-9@._+:-]+)$ ]] || return 1
+  target_pkg=${BASH_REMATCH[1]}
+  [[ "$target_pkg" != "$pkgname" ]] || return 1
+  _aur_guard_validate_package_name "$target_pkg" >/dev/null || return 1
+  _aur_guard_pkginfo_has_dependency "$scan_root/.PKGINFO" "$target_pkg"
+}
+
+_aur_guard_analyze_artifact_listing() {
+  local pkgbase="$1"
+  local listing="$2"
+  local report="$3"
+  local icon_candidate=0
+
+  case "$pkgbase" in
+    *icon-theme*) icon_candidate=1 ;;
+  esac
+
+  LC_ALL=C awk -v icon_candidate="$icon_candidate" '
+    BEGIN {
+      icon_only = icon_candidate
+      has_pkginfo = 0
+      has_buildinfo = 0
+      has_mtree = 0
+      unsafe = 0
+      duplicate = 0
+    }
+    {
+      raw = $0
+      count += 1
+
+      if (raw ~ /^\// || raw == ".." || raw ~ /^\.\.\// \
+          || raw ~ /\/\.\.\// || raw ~ /\/\.\.$/) {
+        unsafe = 1
+      }
+
+      normalized = raw
+      sub(/^\.\//, "", normalized)
+      sub(/\/+$/, "", normalized)
+
+      if (normalized != "") {
+        if (seen[normalized]++) duplicate = 1
+      }
+
+      if (normalized == ".PKGINFO") has_pkginfo = 1
+      if (normalized == ".BUILDINFO") has_buildinfo = 1
+      if (normalized == ".MTREE") has_mtree = 1
+
+      if (icon_only \
+          && normalized != ".PKGINFO" \
+          && normalized != ".BUILDINFO" \
+          && normalized != ".MTREE" \
+          && normalized != "usr" \
+          && normalized != "usr/share" \
+          && normalized !~ /^usr\/share\/(icons|themes|licenses)(\/|$)/) {
+        icon_only = 0
+      }
+    }
+    END {
+      printf "file_count\t%d\n", count
+      printf "icon_theme_only\t%d\n", icon_only
+      printf "unsafe_path\t%d\n", unsafe
+      printf "duplicate_path\t%d\n", duplicate
+      printf "has_pkginfo\t%d\n", has_pkginfo
+      printf "has_buildinfo\t%d\n", has_buildinfo
+      printf "has_mtree\t%d\n", has_mtree
+    }
+  ' "$listing" > "$report"
+}
+
+_aur_guard_artifact_report_value() {
+  local report="$1"
+  local key="$2"
+
+  LC_ALL=C awk -F '\t' -v key="$key" '
+    $1 == key { print $2; found = 1; exit }
+    END { if (!found) exit 1 }
+  ' "$report"
+}
+
+_aur_guard_normalize_link_target() {
+  local link_path="$1"
+  local target="$2"
+  local output_name="$3"
+  local combined remaining component
+  local last_index
+  local -a normalized=()
+  local -n output_ref="$output_name"
+
+  output_ref=''
+
+  if [[ "$target" == /* ]]; then
+    combined="${target#/}"
+  elif [[ "$link_path" == */* ]]; then
+    combined="${link_path%/*}/$target"
+  else
+    combined="$target"
+  fi
+
+  remaining="$combined"
+  while :; do
+    if [[ "$remaining" == */* ]]; then
+      component="${remaining%%/*}"
+      remaining="${remaining#*/}"
+    else
+      component="$remaining"
+      remaining=''
+    fi
+
+    case "$component" in
+      ''|.)
+        ;;
+      ..)
+        (( ${#normalized[@]} > 0 )) || return 1
+        last_index=$(( ${#normalized[@]} - 1 ))
+        unset "normalized[$last_index]"
+        ;;
+      *)
+        normalized+=("$component")
+        ;;
+    esac
+
+    [[ -n "$remaining" ]] || break
+  done
+
+  if (( ${#normalized[@]} > 0 )); then
+    local IFS=/
+    output_ref="${normalized[*]}"
+  fi
+}
+
 _aur_guard_scan_artifact() {
   local pkgbase="$1"
   local artifact="$2"
   local scan_root="$3"
-  local entry relative target resolved artifact_size file_count listing verbose_listing
-  local metadata pkgbase_metadata pkgname_metadata metadata_value duplicate_path
+  local entry relative target resolved normalized_target
+  local artifact_size file_count artifact_file_limit listing verbose_listing analysis_report
+  local icon_theme_only unsafe_path duplicate_path has_pkginfo has_buildinfo has_mtree
+  local pkginfo_archive pkgbase_metadata pkgname_metadata metadata_value
+  local checked_entries=0
+  local checked_links=0
   local copied_artifact="$scan_root/.artifact.pkg"
 
   artifact_size=$(stat -c %s "$artifact" 2>/dev/null) || return 1
@@ -3635,52 +4384,91 @@ _aur_guard_scan_artifact() {
   mkdir -p "$scan_root" || return 1
   listing="$scan_root/.archive-list"
   verbose_listing="$scan_root/.archive-list-verbose"
+  analysis_report="$scan_root/.archive-analysis"
+  pkginfo_archive="$scan_root/.archive-pkginfo"
 
-  if ! command bsdtar -tf "$artifact" > "$listing" \
-      || ! command bsdtar -tvf "$artifact" > "$verbose_listing"; then
+  printf 'AUR Verify: inspecting %s artifact %s (%s bytes).\n' \
+    "$pkgbase" "${artifact##*/}" "$artifact_size" >&2
+
+  if ! _aur_guard_run_with_progress \
+      "reading $pkgbase archive paths" \
+      command bsdtar -tf "$artifact" > "$listing"; then
     _aur_guard_fail "$pkgbase produced an unreadable package archive"
     return 1
   fi
 
-  file_count=$(wc -l < "$listing") || return 1
-  if (( file_count > _AUR_GUARD_ARTIFACT_MAX_FILES )); then
+  if ! _aur_guard_analyze_artifact_listing \
+      "$pkgbase" "$listing" "$analysis_report"; then
+    _aur_guard_fail "$pkgbase archive path analysis failed"
+    return 1
+  fi
+
+  file_count=$(_aur_guard_artifact_report_value "$analysis_report" file_count) || return 1
+  icon_theme_only=$(_aur_guard_artifact_report_value "$analysis_report" icon_theme_only) || return 1
+  unsafe_path=$(_aur_guard_artifact_report_value "$analysis_report" unsafe_path) || return 1
+  duplicate_path=$(_aur_guard_artifact_report_value "$analysis_report" duplicate_path) || return 1
+  has_pkginfo=$(_aur_guard_artifact_report_value "$analysis_report" has_pkginfo) || return 1
+  has_buildinfo=$(_aur_guard_artifact_report_value "$analysis_report" has_buildinfo) || return 1
+  has_mtree=$(_aur_guard_artifact_report_value "$analysis_report" has_mtree) || return 1
+
+  printf 'AUR Verify: %s artifact contains %d archive entries.\n' \
+    "$pkgbase" "$file_count" >&2
+
+  if (( unsafe_path != 0 )); then
+    _aur_guard_fail "$pkgbase produced an archive with an unsafe parent or absolute path"
+    return 1
+  fi
+  if (( duplicate_path != 0 )); then
+    _aur_guard_fail "$pkgbase produced an archive with a duplicate normalized path"
+    return 1
+  fi
+  if (( has_pkginfo == 0 )); then
+    _aur_guard_fail "$pkgbase produced an artifact without required package metadata: .PKGINFO"
+    return 1
+  fi
+  if (( has_buildinfo == 0 )); then
+    _aur_guard_fail "$pkgbase produced an artifact without required package metadata: .BUILDINFO"
+    return 1
+  fi
+  if (( has_mtree == 0 )); then
+    _aur_guard_fail "$pkgbase produced an artifact without required package metadata: .MTREE"
+    return 1
+  fi
+
+  if (( icon_theme_only != 0 )); then
+    artifact_file_limit=$_AUR_GUARD_ICON_THEME_ARTIFACT_MAX_FILES
+  else
+    artifact_file_limit=$_AUR_GUARD_ARTIFACT_MAX_FILES
+  fi
+
+  if (( file_count > artifact_file_limit )); then
     _aur_guard_fail "$pkgbase produced an artifact containing too many archive entries"
     return 1
   fi
+  if (( file_count > _AUR_GUARD_ARTIFACT_MAX_FILES )); then
+    printf 'AUR Verify: %s is a path-constrained icon-theme artifact; applying the dedicated %d-entry ceiling.\n' \
+      "$pkgbase" "$_AUR_GUARD_ICON_THEME_ARTIFACT_MAX_FILES" >&2
+  fi
 
-  while IFS= read -r entry; do
-    case "$entry" in
-      /*|..|../*|*/../*|*/..)
-        _aur_guard_fail "$pkgbase produced an archive with an unsafe path: $entry"
-        return 1
-        ;;
-    esac
-  done < "$listing"
-
-  for metadata in .PKGINFO .BUILDINFO .MTREE; do
-    if ! grep -Fxq -- "$metadata" "$listing"; then
-      _aur_guard_fail "$pkgbase produced an artifact without required package metadata: $metadata"
-      return 1
-    fi
-  done
-
-  duplicate_path=$(
-    sed -e 's#^\./##' -e 's#/*$##' "$listing" \
-      | awk 'NF && seen[$0]++ {print; exit}'
-  )
-  if [[ -n "$duplicate_path" ]]; then
-    _aur_guard_fail "$pkgbase produced an archive with a duplicate normalized path: $duplicate_path"
+  if ! _aur_guard_run_with_progress \
+      "reading $pkgbase archive link metadata" \
+      command bsdtar -tvf "$artifact" > "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced unreadable archive link metadata"
     return 1
   fi
 
-  pkgbase_metadata=$(
-    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
-      | awk -F ' = ' '$1 == "pkgbase" {print $2; exit}'
-  )
-  pkgname_metadata=$(
-    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
-      | awk -F ' = ' '$1 == "pkgname" {print $2; exit}'
-  )
+  if grep -E ' link to /' "$verbose_listing"; then
+    _aur_guard_fail "$pkgbase produced an archive with an absolute hard-link target"
+    return 1
+  fi
+
+  if ! command bsdtar -xOf "$artifact" .PKGINFO > "$pkginfo_archive" 2>/dev/null; then
+    _aur_guard_fail "$pkgbase package metadata could not be extracted"
+    return 1
+  fi
+
+  pkgbase_metadata=$(awk -F ' = ' '$1 == "pkgbase" {print $2; exit}' "$pkginfo_archive")
+  pkgname_metadata=$(awk -F ' = ' '$1 == "pkgname" {print $2; exit}' "$pkginfo_archive")
   if [[ -z "$pkgbase_metadata" || "$pkgbase_metadata" != "$pkgbase" ]]; then
     _aur_guard_fail "$pkgbase produced an artifact claiming unexpected pkgbase: ${pkgbase_metadata:-missing}"
     return 1
@@ -3692,40 +4480,25 @@ _aur_guard_scan_artifact() {
     _aur_guard_note_context_warning \
       "$pkgname_metadata package replacement" \
       "Built metadata declares replaces=$metadata_value; pacman may remove or supersede another package."
-  done < <(
-    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
-      | awk -F ' = ' '$1 == "replaces" {print $2}'
-  )
+  done < <(awk -F ' = ' '$1 == "replaces" {print $2}' "$pkginfo_archive")
 
   while IFS= read -r metadata_value; do
     [[ -n "$metadata_value" ]] || continue
     _aur_guard_note_context_warning \
       "$pkgname_metadata package conflict" \
       "Built metadata declares conflict=$metadata_value; pacman may require removing a conflicting package."
-  done < <(
-    command bsdtar -xOf "$artifact" .PKGINFO 2>/dev/null \
-      | awk -F ' = ' '$1 == "conflict" {print $2}'
-  )
+  done < <(awk -F ' = ' '$1 == "conflict" {print $2}' "$pkginfo_archive")
 
-  # Relative package links such as usr/lib/debug/.build-id/* commonly contain
-  # ../ components. They are validated after sandboxed extraction by resolving
-  # each link against its containing directory and requiring it to remain inside
-  # the package root. Absolute hard links remain forbidden because extraction
-  # would bind archive content to a host-root path. Absolute symbolic links are
-  # validated after extraction as package-root paths such as /opt/example/AppRun.
-  if grep -E ' link to /' "$verbose_listing"; then
-    _aur_guard_fail "$pkgbase produced an archive with an absolute hard-link target"
-    return 1
-  fi
-
-  rm -f "$listing" "$verbose_listing"
+  rm -f "$listing" "$verbose_listing" "$analysis_report" "$pkginfo_archive"
   ln "$artifact" "$copied_artifact" 2>/dev/null \
     || cp --reflink=auto -- "$artifact" "$copied_artifact" \
     || return 1
 
-  if ! _aur_guard_sandbox_exec \
-      "$scan_root" deny writable / \
-      /usr/bin/bsdtar -xf /work/.artifact.pkg -C /work; then
+  if ! _aur_guard_run_with_progress \
+      "extracting $pkgbase artifact for sandboxed inspection" \
+      _aur_guard_sandbox_exec \
+        "$scan_root" deny writable / \
+        /usr/bin/bsdtar -xf /work/.artifact.pkg -C /work; then
     rm -f "$copied_artifact"
     _aur_guard_fail "could not safely extract built artifact for inspection: $artifact"
     return 1
@@ -3737,13 +4510,27 @@ _aur_guard_scan_artifact() {
     return 1
   fi
 
-  while IFS= read -r -d '' entry; do
-    relative="${entry#"$scan_root"/}"
-    if _aur_guard_artifact_path_is_blocked "$relative"; then
-      _aur_guard_fail "$pkgbase installs a blocked privileged or auto-activation path: $relative"
-      return 1
-    fi
-  done < <(find -P "$scan_root" -mindepth 1 -print0)
+  if (( icon_theme_only != 0 )); then
+    printf 'AUR Verify: %s path policy was already validated in one archive-list pass; skipping the redundant extracted-tree path loop.\n' \
+      "$pkgbase" >&2
+  else
+    printf 'AUR Verify: validating extracted paths for %s.\n' "$pkgbase" >&2
+    while IFS= read -r -d '' entry; do
+      ((checked_entries += 1))
+      if (( checked_entries % _AUR_GUARD_PROGRESS_ENTRY_INTERVAL == 0 )); then
+        printf 'AUR Verify: validated %d extracted paths for %s so far.\n' \
+          "$checked_entries" "$pkgbase" >&2
+      fi
+
+      relative="${entry#"$scan_root"/}"
+      if _aur_guard_artifact_path_is_blocked "$relative"; then
+        _aur_guard_fail "$pkgbase installs a blocked privileged or auto-activation path: $relative"
+        return 1
+      fi
+    done < <(find -P "$scan_root" -mindepth 1 -print0)
+    printf 'AUR Verify: validated %d extracted paths for %s.\n' \
+      "$checked_entries" "$pkgbase" >&2
+  fi
 
   if find -P "$scan_root" -xdev \( -type b -o -type c -o -type p -o -type s \) \
       -print -quit | grep -q .; then
@@ -3756,31 +4543,39 @@ _aur_guard_scan_artifact() {
     return 1
   fi
 
-  while IFS= read -r -d '' entry; do
-    target=$(readlink -- "$entry") || return 1
-    case "$target" in
-      /*)
-        resolved=$(realpath -m -- "$scan_root/${target#/}") || return 1
-        ;;
-      *)
-        resolved=$(realpath -m -- "$(dirname -- "$entry")/$target") || return 1
-        ;;
-    esac
+  printf 'AUR Verify: validating symbolic links for %s.\n' "$pkgbase" >&2
+  while IFS= read -r -d '' relative \
+      && IFS= read -r -d '' target; do
+    ((checked_links += 1))
+    if (( checked_links % _AUR_GUARD_PROGRESS_ENTRY_INTERVAL == 0 )); then
+      printf 'AUR Verify: validated %d symbolic links for %s so far.\n' \
+        "$checked_links" "$pkgbase" >&2
+    fi
 
-    case "$resolved" in
-      "$scan_root"|"$scan_root"/*)
-        ;;
-      *)
-        _aur_guard_fail "$pkgbase generated a symbolic link escaping the package root: ${entry#"$scan_root"/} -> $target"
-        return 1
-        ;;
-    esac
-
-    if [[ "$target" == /* && ! -e "$resolved" && ! -L "$resolved" ]]; then
-      _aur_guard_fail "$pkgbase generated an absolute symbolic link to a path not provided by the package: ${entry#"$scan_root"/} -> $target"
+    normalized_target=''
+    if ! _aur_guard_normalize_link_target \
+        "$relative" "$target" normalized_target; then
+      _aur_guard_fail "$pkgbase generated a symbolic link escaping the package root: $relative -> $target"
       return 1
     fi
-  done < <(find -P "$scan_root" -xdev -type l -print0)
+
+    resolved="$scan_root"
+    [[ -n "$normalized_target" ]] && resolved+="/$normalized_target"
+    entry="$scan_root/$relative"
+
+    if [[ "$target" == /* && ! -e "$resolved" && ! -L "$resolved" ]]; then
+      if _aur_guard_absolute_license_link_is_safe \
+          "$entry" "$target" "$scan_root" "$pkgname_metadata"; then
+        printf 'AUR Verify: accepted dependency-owned license link: %s -> %s\n' \
+          "$relative" "$target"
+      else
+        _aur_guard_fail "$pkgbase generated an absolute symbolic link to a path not provided by the package: $relative -> $target"
+        return 1
+      fi
+    fi
+  done < <(find -P "$scan_root" -xdev -type l -printf '%P\0%l\0')
+  printf 'AUR Verify: validated %d symbolic links for %s.\n' \
+    "$checked_links" "$pkgbase" >&2
 
   if type -P getcap >/dev/null 2>&1; then
     if command getcap -r "$scan_root" 2>/dev/null | grep -q .; then
@@ -3791,7 +4586,9 @@ _aur_guard_scan_artifact() {
   fi
 
   if type -P clamscan >/dev/null 2>&1; then
-    if ! command clamscan --infected --recursive --no-summary "$scan_root"; then
+    if ! _aur_guard_run_with_progress \
+        "running optional ClamAV scan for $pkgbase" \
+        command clamscan --infected --recursive --no-summary "$scan_root"; then
       _aur_guard_fail "$pkgbase artifact failed the optional ClamAV scan"
       return 1
     fi
@@ -3840,6 +4637,11 @@ _aur_guard_build_verified_artifacts() {
       return 1
     }
 
+    _aur_guard_prepare_pkgbuild_mutation_state "$pkgbase" "$pkgdir" || {
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
+
     _AUR_GUARD_SANDBOX_ROOTFS="$build_root"
     if ! _aur_guard_makepkg_sandbox "$pkgdir" allow writable \
         --nobuild --nodeps --holdver --noconfirm --nocolor; then
@@ -3849,7 +4651,13 @@ _aur_guard_build_verified_artifacts() {
       return 1
     fi
 
-    _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || {
+    _aur_guard_accept_prepared_pkgver_update "$pkgbase" "$pkgdir" || {
+      unset _AUR_GUARD_SANDBOX_ROOTFS
+      sudo rm -rf -- "$build_root"
+      return 1
+    }
+
+    _aur_guard_verify_git_snapshots "$pkgbase" "$pkgdir" || {
       unset _AUR_GUARD_SANDBOX_ROOTFS
       sudo rm -rf -- "$build_root"
       return 1
@@ -3897,7 +4705,9 @@ _aur_guard_build_verified_artifacts() {
     unset _AUR_GUARD_SANDBOX_ROOTFS
     sudo rm -rf -- "$build_root"
 
-    _aur_guard_assert_tracked_files_unchanged "$pkgbase" "$pkgdir" || return 1
+    _aur_guard_assert_prepared_pkgbuild_state "$pkgbase" "$pkgdir" || return 1
+    _aur_guard_verify_git_snapshots "$pkgbase" "$pkgdir" || return 1
+    _aur_guard_restore_original_pkgbuild "$pkgbase" "$pkgdir" || return 1
 
     if _aur_guard_is_deep_mode; then
       _aur_guard_scan_source_tree \
@@ -4148,19 +4958,21 @@ _aur_guard_verify_tree() {
 
   _aur_guard_refresh_blacklists || return 1
 
-  _AUR_GUARD_WORK_DIR=$(mktemp -d) || return 1
+  _AUR_GUARD_WORK_DIR=$(_aur_guard_create_work_dir) || return 1
   _AUR_GUARD_MANIFEST="$_AUR_GUARD_WORK_DIR/verified-packages.tsv"
   _AUR_GUARD_REQUIRED_PACKAGES="$_AUR_GUARD_WORK_DIR/required-packages.tsv"
   _AUR_GUARD_REPO_DEPS="$_AUR_GUARD_WORK_DIR/repository-dependencies.txt"
   _AUR_GUARD_ARTIFACTS="$_AUR_GUARD_WORK_DIR/built-artifacts.tsv"
   _AUR_GUARD_AUR_METADATA="$_AUR_GUARD_WORK_DIR/aur-metadata.tsv"
   _AUR_GUARD_IDENTITY_CHANGES="$_AUR_GUARD_WORK_DIR/maintainer-changes.tsv"
+  _AUR_GUARD_VCS_SNAPSHOTS="$_AUR_GUARD_WORK_DIR/vcs-snapshots.tsv"
   : > "$_AUR_GUARD_MANIFEST"
   : > "$_AUR_GUARD_REQUIRED_PACKAGES"
   : > "$_AUR_GUARD_REPO_DEPS"
   : > "$_AUR_GUARD_ARTIFACTS"
   : > "$_AUR_GUARD_AUR_METADATA"
   : > "$_AUR_GUARD_IDENTITY_CHANGES"
+  : > "$_AUR_GUARD_VCS_SNAPSHOTS"
 
   declare -gA _AUR_GUARD_REQUEST_STATE=()
   declare -gA _AUR_GUARD_BASE_STATE=()
@@ -4182,6 +4994,40 @@ _aur_guard_verify_tree() {
   fi
 }
 
+_aur_guard_create_work_dir() {
+  local parent="$_AUR_GUARD_WORK_PARENT"
+
+  case "$parent" in
+    /*)
+      ;;
+    *)
+      _aur_guard_fail "AUR Guard work parent must be an absolute path: $parent"
+      return 1
+      ;;
+  esac
+
+  if [[ -L "$parent" ]]; then
+    _aur_guard_fail "AUR Guard work parent must not be a symbolic link: $parent"
+    return 1
+  fi
+
+  mkdir -p -- "$parent" || {
+    _aur_guard_fail "could not create AUR Guard work parent: $parent"
+    return 1
+  }
+  chmod 0700 -- "$parent" || {
+    _aur_guard_fail "could not secure AUR Guard work parent: $parent"
+    return 1
+  }
+
+  [[ -d "$parent" && ! -L "$parent" ]] || {
+    _aur_guard_fail "AUR Guard work parent is not a secure directory: $parent"
+    return 1
+  }
+
+  mktemp -d "$parent/session.XXXXXX"
+}
+
 _aur_guard_cleanup_work() {
   if [[ -n ${_AUR_GUARD_WORK_DIR:-} && -d $_AUR_GUARD_WORK_DIR/build-roots ]]; then
     sudo rm -rf -- "$_AUR_GUARD_WORK_DIR/build-roots" 2>/dev/null || true
@@ -4193,6 +5039,7 @@ _aur_guard_cleanup_work() {
   unset _AUR_GUARD_SANDBOX_ROOTFS _AUR_GUARD_INSTALL_STARTED
   unset _AUR_GUARD_REQUIRED_PACKAGES _AUR_GUARD_REPO_DEPS _AUR_GUARD_ARTIFACTS
   unset _AUR_GUARD_AUR_METADATA _AUR_GUARD_IDENTITY_CHANGES
+  unset _AUR_GUARD_VCS_SNAPSHOTS
   unset _AUR_GUARD_IDENTITY_ASSESSED
   unset _AUR_GUARD_REQUEST_STATE _AUR_GUARD_BASE_STATE
   _AUR_GUARD_HISTORICAL_MATCHES=()
@@ -4435,6 +5282,30 @@ AUR_GUARD_TEST_PGP_INTEGRITY
     return 1
   }
 
+  cat > "$test_root/pgp-sidecar.SRCINFO" <<'AUR_GUARD_TEST_PGP_SIDECAR'
+pkgbase = pgp-sidecar
+	pkgname = pgp-sidecar
+	source = source.tar.xz::https://example.invalid/source.tar.xz
+	source = source.tar.sign::https://example.invalid/source.tar.sign
+	sha256sums = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+	sha256sums = SKIP
+	validpgpkeys = 0123456789ABCDEF0123456789ABCDEF01234567
+AUR_GUARD_TEST_PGP_SIDECAR
+  _aur_guard_validate_skipped_integrity \
+    'pgp-sidecar' "$test_root/pgp-sidecar.SRCINFO" || {
+    _aur_guard_fail 'self-test failed: checksum-protected payload with a detached signature sidecar was rejected'
+    return 1
+  }
+
+  sed -i \
+    's/sha256sums = 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef/sha256sums = SKIP/' \
+    "$test_root/pgp-sidecar.SRCINFO"
+  if _aur_guard_validate_skipped_integrity \
+      'pgp-sidecar-unverified' "$test_root/pgp-sidecar.SRCINFO"; then
+    _aur_guard_fail 'self-test failed: detached signature sidecar authenticated an unmatched unverified payload'
+    return 1
+  fi
+
   printf '\nAUR Guard self-test: content-addressed PyPI sources require matching BLAKE2b-256 content.\n'
   local pypi_digest
   mkdir -p "$test_root/pypi-content"
@@ -4486,6 +5357,149 @@ AUR_GUARD_TEST_PYPI_INTEGRITY
     return 1
   fi
   rm -f "$test_root/checkout/escape"
+
+  printf '\nAUR Guard self-test: inert Maintainer and Contributor comments do not hide executable PKGBUILD payloads.\n'
+  mkdir -p "$test_root/identity-comments"
+  cat > "$test_root/identity-comments/PKGBUILD" <<'AUR_GUARD_TEST_IDENTITY_COMMENTS'
+# Maintainer: Example <echo ZXhhbXBsZUBleGFtcGxlLmludmFsaWQK | base64 -d>
+# Contributor: Example <`echo ZXhhbXBsZUBleGFtcGxlLmludmFsaWQK | base64 -d`>
+pkgname=identity-comment-self-test
+pkgver=1
+pkgrel=1
+package() {
+  install -Dm644 /dev/null "$pkgdir/usr/share/identity-comment-self-test/marker"
+}
+AUR_GUARD_TEST_IDENTITY_COMMENTS
+
+  if ! wrapper_output=$(_aur_guard_scan_package_files \
+      'identity-comment-self-test' "$test_root/identity-comments" 2>&1); then
+    printf '%s\n' "$wrapper_output"
+    _aur_guard_fail 'self-test failed: an inert Maintainer or Contributor comment was hard-blocked'
+    return 1
+  fi
+
+  cat >> "$test_root/identity-comments/PKGBUILD" <<'AUR_GUARD_TEST_EXECUTABLE_PAYLOAD'
+malicious_payload() {
+  printf '%s' ZWNobyB1bnNhZmU= | base64 -d
+}
+AUR_GUARD_TEST_EXECUTABLE_PAYLOAD
+
+  if wrapper_output=$(_aur_guard_scan_package_files \
+      'identity-comment-self-test' "$test_root/identity-comments" 2>&1); then
+    _aur_guard_fail 'self-test failed: executable PKGBUILD base64 decoding was hidden by the identity-comment exception'
+    return 1
+  fi
+  printf '%s\n' "$wrapper_output"
+
+  printf '\nAUR Guard self-test: artifact analysis is single-pass, path-constrained, and duplicate-aware.\n'
+  local icon_listing="$test_root/icon-theme.list"
+  local icon_report="$test_root/icon-theme.report"
+  local normalized_link
+  printf '%s\n' \
+    '.PKGINFO' \
+    '.BUILDINFO' \
+    '.MTREE' \
+    'usr/' \
+    'usr/share/' \
+    'usr/share/icons/' \
+    'usr/share/icons/Example/index.theme' \
+    'usr/share/icons/Example/apps/example.svg' \
+    'usr/share/licenses/example-icon-theme/LICENSE' \
+    > "$icon_listing"
+
+  _aur_guard_analyze_artifact_listing \
+    'example-icon-theme' "$icon_listing" "$icon_report" || {
+    _aur_guard_fail 'self-test failed: valid icon-theme listing analysis failed'
+    return 1
+  }
+
+  if [[ $(_aur_guard_artifact_report_value "$icon_report" file_count) != 9 \
+      || $(_aur_guard_artifact_report_value "$icon_report" icon_theme_only) != 1 \
+      || $(_aur_guard_artifact_report_value "$icon_report" unsafe_path) != 0 \
+      || $(_aur_guard_artifact_report_value "$icon_report" duplicate_path) != 0 \
+      || $(_aur_guard_artifact_report_value "$icon_report" has_pkginfo) != 1 \
+      || $(_aur_guard_artifact_report_value "$icon_report" has_buildinfo) != 1 \
+      || $(_aur_guard_artifact_report_value "$icon_report" has_mtree) != 1 ]]; then
+    _aur_guard_fail 'self-test failed: valid icon-theme archive analysis returned incorrect policy results'
+    return 1
+  fi
+
+  _aur_guard_analyze_artifact_listing \
+    'example-package' "$icon_listing" "$icon_report" || return 1
+  if [[ $(_aur_guard_artifact_report_value "$icon_report" icon_theme_only) != 0 ]]; then
+    _aur_guard_fail 'self-test failed: a non-icon-theme package received icon-theme path classification'
+    return 1
+  fi
+
+  printf '%s\n' 'usr/bin/payload' >> "$icon_listing"
+  _aur_guard_analyze_artifact_listing \
+    'example-icon-theme' "$icon_listing" "$icon_report" || return 1
+  if [[ $(_aur_guard_artifact_report_value "$icon_report" icon_theme_only) != 0 ]]; then
+    _aur_guard_fail 'self-test failed: executable paths retained icon-theme-only classification'
+    return 1
+  fi
+
+  printf '%s\n' 'usr/bin/payload' '../escape' >> "$icon_listing"
+  _aur_guard_analyze_artifact_listing \
+    'example-icon-theme' "$icon_listing" "$icon_report" || return 1
+  if [[ $(_aur_guard_artifact_report_value "$icon_report" duplicate_path) != 1 \
+      || $(_aur_guard_artifact_report_value "$icon_report" unsafe_path) != 1 ]]; then
+    _aur_guard_fail 'self-test failed: duplicate or unsafe archive paths were not detected'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: symbolic-link targets are normalized in-process without per-link subprocesses.\n'
+  normalized_link=''
+  _aur_guard_normalize_link_target \
+    'usr/share/icons/Example/scalable/app.svg' '../shared.svg' normalized_link || {
+    _aur_guard_fail 'self-test failed: safe relative symbolic-link target was rejected'
+    return 1
+  }
+  [[ "$normalized_link" == 'usr/share/icons/Example/shared.svg' ]] || {
+    _aur_guard_fail 'self-test failed: relative symbolic-link target normalized incorrectly'
+    return 1
+  }
+
+  normalized_link=''
+  _aur_guard_normalize_link_target \
+    'usr/share/icons/Example/app.svg' '/usr/share/icons/Example/shared.svg' normalized_link || {
+    _aur_guard_fail 'self-test failed: package-root absolute symbolic-link target was rejected'
+    return 1
+  }
+  [[ "$normalized_link" == 'usr/share/icons/Example/shared.svg' ]] || {
+    _aur_guard_fail 'self-test failed: absolute symbolic-link target normalized incorrectly'
+    return 1
+  }
+
+  if _aur_guard_normalize_link_target \
+      'usr/share/icons/app.svg' '../../../../etc/passwd' normalized_link; then
+    _aur_guard_fail 'self-test failed: escaping symbolic-link target was accepted'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: build work uses a private disk-backed parent instead of implicit /tmp storage.\n'
+  local saved_work_parent="$_AUR_GUARD_WORK_PARENT"
+  local created_work_dir
+  _AUR_GUARD_WORK_PARENT="$test_root/work-parent"
+  created_work_dir=$(_aur_guard_create_work_dir) || {
+    _AUR_GUARD_WORK_PARENT="$saved_work_parent"
+    _aur_guard_fail 'self-test failed: private AUR Guard work directory creation failed'
+    return 1
+  }
+  _AUR_GUARD_WORK_PARENT="$saved_work_parent"
+
+  case "$created_work_dir" in
+    "$test_root/work-parent"/session.*)
+      ;;
+    *)
+      _aur_guard_fail 'self-test failed: AUR Guard work directory escaped its configured parent'
+      return 1
+      ;;
+  esac
+  if [[ $(stat -c '%a' "$test_root/work-parent") != 700 ]]; then
+    _aur_guard_fail 'self-test failed: AUR Guard work parent was not private'
+    return 1
+  fi
 
   printf '\nAUR Guard self-test: opaque executable binaries warn instead of entering text-size checks.\n'
   mkdir -p "$test_root/binary-source"
@@ -4930,6 +5944,172 @@ AUR_GUARD_TEST_IDENTITY_PACMAN
   fi
   _AUR_GUARD_MODE='practical'
 
+  printf '
+AUR Guard self-test: insignificant .SRCINFO endings and dependency-owned license links are accepted.
+'
+  cat > "$test_root/srcinfo-committed" <<'AUR_GUARD_TEST_SRCINFO_COMMITTED'
+pkgbase = metadata-self-test  
+	pkgname = metadata-self-test
+
+
+AUR_GUARD_TEST_SRCINFO_COMMITTED
+  cat > "$test_root/srcinfo-generated" <<'AUR_GUARD_TEST_SRCINFO_GENERATED'
+pkgbase = metadata-self-test
+	pkgname = metadata-self-test
+AUR_GUARD_TEST_SRCINFO_GENERATED
+  _aur_guard_normalize_srcinfo "$test_root/srcinfo-committed" \
+    > "$test_root/srcinfo-committed.normalized"
+  _aur_guard_normalize_srcinfo "$test_root/srcinfo-generated" \
+    > "$test_root/srcinfo-generated.normalized"
+  if ! cmp -s \
+      "$test_root/srcinfo-committed.normalized" \
+      "$test_root/srcinfo-generated.normalized"; then
+    _aur_guard_fail 'self-test failed: insignificant .SRCINFO trailing whitespace or blank lines remained significant'
+    return 1
+  fi
+
+  mkdir -p "$test_root/license-link/usr/share/licenses"
+  cat > "$test_root/license-link/.PKGINFO" <<'AUR_GUARD_TEST_LICENSE_PKGINFO'
+pkgname = license-self-test
+depend = dependency-license>=1
+AUR_GUARD_TEST_LICENSE_PKGINFO
+  ln -s /usr/share/licenses/dependency-license \
+    "$test_root/license-link/usr/share/licenses/license-self-test"
+  if ! _aur_guard_absolute_license_link_is_safe \
+      "$test_root/license-link/usr/share/licenses/license-self-test" \
+      /usr/share/licenses/dependency-license \
+      "$test_root/license-link" \
+      license-self-test; then
+    _aur_guard_fail 'self-test failed: dependency-owned license link was rejected'
+    return 1
+  fi
+  if _aur_guard_absolute_license_link_is_safe \
+      "$test_root/license-link/usr/share/licenses/license-self-test" \
+      /usr/share/licenses/undeclared-package \
+      "$test_root/license-link" \
+      license-self-test; then
+    _aur_guard_fail 'self-test failed: license link to an undeclared dependency was accepted'
+    return 1
+  fi
+
+  printf '\nAUR Guard self-test: VCS pkgver() updates may change only the pkgver assignment.\n'
+  local vcs_test_dir="$test_root/vcs-pkgver"
+  local saved_vcs_snapshots="${_AUR_GUARD_VCS_SNAPSHOTS:-}"
+  local saved_test_path="$PATH"
+  PATH=/usr/bin:/bin
+  mkdir -p "$vcs_test_dir"
+  cat > "$vcs_test_dir/PKGBUILD" <<'AUR_GUARD_TEST_VCS_PKGBUILD'
+pkgname=vcs-self-test
+pkgver=1
+pkgrel=3
+arch=('any')
+source=('example::git+https://example.invalid/project.git')
+sha256sums=('SKIP')
+
+pkgver() {
+  printf '2'
+}
+
+package() {
+  :
+}
+AUR_GUARD_TEST_VCS_PKGBUILD
+  (
+    cd "$vcs_test_dir"
+    git init -q
+    git config user.name 'AUR Guard Self Test'
+    git config user.email 'aur-guard@example.invalid'
+    git add PKGBUILD
+    git commit -qm 'baseline'
+  )
+  _AUR_GUARD_VCS_SNAPSHOTS="$test_root/vcs-snapshots.tsv"
+  printf 'vcs-self-test\texample\t%s\thttps://example.invalid/project.git\n' \
+    '1111111111111111111111111111111111111111' > "$_AUR_GUARD_VCS_SNAPSHOTS"
+
+  _aur_guard_prepare_pkgbuild_mutation_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  sed -i 's/^pkgver=1$/pkgver=2/' "$vcs_test_dir/PKGBUILD"
+  _aur_guard_accept_prepared_pkgver_update 'vcs-self-test' "$vcs_test_dir" || {
+    _aur_guard_fail 'self-test failed: deterministic VCS pkgver update was rejected'
+    return 1
+  }
+  _aur_guard_assert_prepared_pkgbuild_state 'vcs-self-test' "$vcs_test_dir" || return 1
+
+  printf '\n# unexpected mutation\n' >> "$vcs_test_dir/PKGBUILD"
+  if _aur_guard_assert_prepared_pkgbuild_state 'vcs-self-test' "$vcs_test_dir"; then
+    _aur_guard_fail 'self-test failed: non-pkgver PKGBUILD mutation was accepted after preparation'
+    return 1
+  fi
+  cp -a "$vcs_test_dir/.awtarchy-pkgbuild-state/prepared" "$vcs_test_dir/PKGBUILD"
+  _aur_guard_restore_original_pkgbuild 'vcs-self-test' "$vcs_test_dir" || return 1
+
+  _aur_guard_prepare_pkgbuild_mutation_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  sed -i -e 's/^pkgver=1$/pkgver=2/' -e 's/^pkgrel=3$/pkgrel=1/' \
+    "$vcs_test_dir/PKGBUILD"
+  _aur_guard_accept_prepared_pkgver_update 'vcs-self-test' "$vcs_test_dir" || {
+    _aur_guard_fail 'self-test failed: deterministic VCS pkgver update with pkgrel reset was rejected'
+    return 1
+  }
+  _aur_guard_assert_prepared_pkgbuild_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  _aur_guard_restore_original_pkgbuild 'vcs-self-test' "$vcs_test_dir" || return 1
+
+  _aur_guard_prepare_pkgbuild_mutation_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  sed -i -e 's/^pkgver=1$/pkgver=2/' -e 's/^pkgrel=3$/pkgrel=2/' \
+    "$vcs_test_dir/PKGBUILD"
+  if _aur_guard_accept_prepared_pkgver_update 'vcs-self-test' "$vcs_test_dir"; then
+    _aur_guard_fail 'self-test failed: nonstandard VCS pkgrel change was accepted'
+    return 1
+  fi
+  _aur_guard_restore_original_pkgbuild 'vcs-self-test' "$vcs_test_dir" || return 1
+
+  _aur_guard_prepare_pkgbuild_mutation_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  sed -i 's/^pkgver=1$/pkgver=$(touch unsafe)/' "$vcs_test_dir/PKGBUILD"
+  if _aur_guard_accept_prepared_pkgver_update 'vcs-self-test' "$vcs_test_dir"; then
+    _aur_guard_fail 'self-test failed: unsafe generated pkgver assignment was accepted'
+    return 1
+  fi
+  _aur_guard_restore_original_pkgbuild 'vcs-self-test' "$vcs_test_dir" || return 1
+
+  _AUR_GUARD_VCS_SNAPSHOTS="$saved_vcs_snapshots"
+  PATH="$saved_test_path"
+
+  printf '\nAUR Guard self-test: installer mode auto-accepts only routine conflict/replacement metadata.\n'
+  local saved_installer_mode
+  saved_installer_mode=${_AUR_GUARD_INSTALLER_MODE:-0}
+  _AUR_GUARD_INSTALLER_MODE=1
+  _AUR_GUARD_HISTORICAL_MATCHES=()
+  _AUR_GUARD_CONTEXT_WARNINGS=()
+  _AUR_GUARD_CONTEXT_WARNINGS['bootstrap package conflict']='conflict=example'
+
+  if ! wrapper_output=$(_aur_guard_confirm_guarded_install 'bootstrap-demo' </dev/null 2>&1); then
+    printf '%s\n' "$wrapper_output"
+    _aur_guard_fail 'self-test failed: installer mode rejected a routine package conflict warning'
+    return 1
+  fi
+  if ! grep -Fq 'automatically acknowledging routine package conflict/replacement metadata' \
+      <<< "$wrapper_output"; then
+    _aur_guard_fail 'self-test failed: installer-mode routine-warning acknowledgement was not reported'
+    return 1
+  fi
+
+  _AUR_GUARD_CONTEXT_WARNINGS=()
+  _AUR_GUARD_CONTEXT_WARNINGS['bootstrap source-host']='source host requires review'
+  if _aur_guard_confirm_guarded_install 'bootstrap-demo' </dev/null >/dev/null 2>&1; then
+    _aur_guard_fail 'self-test failed: installer mode auto-accepted a non-routine source warning'
+    return 1
+  fi
+
+  _AUR_GUARD_CONTEXT_WARNINGS=()
+  _AUR_GUARD_HISTORICAL_MATCHES=()
+  _AUR_GUARD_HISTORICAL_MATCHES['bootstrap-demo']='historical-test-source'
+  if _aur_guard_confirm_guarded_install 'bootstrap-demo' </dev/null >/dev/null 2>&1; then
+    _aur_guard_fail 'self-test failed: installer mode auto-accepted a historical incident warning'
+    return 1
+  fi
+
+  _AUR_GUARD_HISTORICAL_MATCHES=()
+  _AUR_GUARD_CONTEXT_WARNINGS=()
+  _AUR_GUARD_INSTALLER_MODE=$saved_installer_mode
+
   mkdir -p "$test_root/benign-source"
   cat > "$test_root/benign-source/reference.sh" <<'AUR_GUARD_TEST_REFERENCE'
 #!/bin/bash
@@ -4950,7 +6130,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, safe internal symlinks, clean line-numbered PKGBUILD review rendering, maintainer-change tracking and confirmation, recent-revision risk summaries, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, separate dependency-cache scan limits, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, detached signature sidecars, normalized .SRCINFO endings, safe internal and dependency-license symlinks, inert identity-comment handling, single-pass artifact analysis, progress reporting, in-process symlink normalization, constrained icon-theme archive limits, private disk-backed work storage, clean line-numbered PKGBUILD review rendering, maintainer-change tracking and confirmation, recent-revision risk summaries, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, deterministic VCS pkgver/pkgrel handling, installer-safe routine warning handling, separate dependency-cache scan limits, and no-crawl behavior worked'
 )
 
 aurhelp() {
@@ -5193,8 +6373,14 @@ aurup() {
 
     printf 'AUR Guard: %s is available from enabled pacman repo [%s].\n' "$pkg" "$repo_name"
     printf 'Historical AUR incident lists do not apply to this repository package.\n'
-    printf 'Installing with pacman:\n  sudo pacman -S %s\n\n' "$pkg"
-    sudo pacman -S "$pkg"
+
+    if _aur_guard_is_installer_mode; then
+      printf 'Awtarchy installer mode: installing with pacman --needed --noconfirm.\n'
+      sudo pacman -S --needed --noconfirm "$pkg"
+    else
+      printf 'Installing with pacman:\n  sudo pacman -S %s\n\n' "$pkg"
+      sudo pacman -S "$pkg"
+    fi
     return $?
   fi
 
