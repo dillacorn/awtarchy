@@ -880,6 +880,7 @@ _aur_guard_block_message() {
   printf '  %s -Ss package      search packages\n\n' "$helper"
   printf 'Use:\n'
   printf '  aurinstalled         list installed foreign/AUR packages and versions\n'
+  printf '  aurremove package    uninstall an installed foreign/AUR package\n'
   printf '  sysupdate            update enabled pacman repo packages\n'
   printf '  aurcheck             show AUR updates, emergency blocks, and historical warnings\n'
   printf '  aurverify package         practical packaging and upstream-source verification\n'
@@ -6214,6 +6215,45 @@ aurinstalled() {
 
   printf 'Installed foreign/AUR packages and versions:\n'
   printf '%s\n' "$output"
+}
+
+aurremove() {
+  local pkg
+  local -a packages=()
+
+  if (( $# == 0 )); then
+    printf 'Usage: aurremove package_name [package_name ...]\n' >&2
+    printf 'Alias: auruninstall package_name [package_name ...]\n' >&2
+    return 1
+  fi
+
+  for pkg in "$@"; do
+    _aur_guard_validate_package_name "$pkg" || return 1
+
+    if ! command pacman -Q "$pkg" >/dev/null 2>&1; then
+      printf 'AUR Guard: package is not installed: %s\n' "$pkg" >&2
+      return 1
+    fi
+
+    if ! command pacman -Qm "$pkg" >/dev/null 2>&1; then
+      printf 'AUR Guard: %s is not currently a foreign/AUR package.\n' "$pkg" >&2
+      printf 'For repository packages, use:\n' >&2
+      printf '  sudo pacman -Rns -- %q\n' "$pkg" >&2
+      return 1
+    fi
+
+    packages+=("$pkg")
+  done
+
+  printf 'AUR Guard: removing foreign/AUR package(s) with pacman -Rns:\n'
+  printf '  %s\n' "${packages[@]}"
+  printf '\n'
+
+  sudo pacman -Rns -- "${packages[@]}"
+}
+
+auruninstall() {
+  aurremove "$@"
 }
 
 sysupdate() {
