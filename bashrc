@@ -2461,6 +2461,11 @@ _aur_guard_validate_skipped_integrity() {
         && length(digest) == 64 \
         && digest !~ /[^0-9A-Fa-f]/
     }
+    function github_release_asset(value, clean) {
+      clean = strip_alias(value)
+      sub(/[?#].*$/, "", clean)
+      return clean ~ /^https:\/\/github\.com\/[^\/]+\/[^\/]+\/releases\/download\/[^\/]+\/[^\/]+$/
+    }
     function is_signature(name) {
       return name ~ /\.(sig|sign|asc)$/
     }
@@ -2512,7 +2517,8 @@ _aur_guard_validate_skipped_integrity() {
           # then held with makepkg --holdver through preparation and build.
           if (!is_remote(value) || exact_vcs(value) \
               || strip_alias(value) ~ /^git\+/ \
-              || strong[key] || content_addressed_pypi(value)) continue
+              || strong[key] || content_addressed_pypi(value) \
+              || github_release_asset(value)) continue
 
           # Detached signature sidecars do not need their own checksum. They
           # cannot authenticate another source unless that payload independently
@@ -2600,6 +2606,116 @@ _aur_guard_verify_content_addressed_sources() {
 
   if (( verified > 0 )); then
     printf 'AUR Verify: verified %d content-addressed PyPI source file(s) with BLAKE2b-256.\n' \
+      "$verified"
+  fi
+}
+
+_aur_guard_verify_github_release_asset_digests() {
+  local pkgbase="$1"
+  local srcinfo="$2"
+  local pkgdir="$3"
+  local source_value source_url clean_url local_name source_file actual
+  local owner repo tag asset tag_api api_url api_json api_key digest digest_value
+  local arch
+  local verified=0
+
+  arch=$(uname -m) || return 1
+
+  while IFS= read -r source_value; do
+    [[ -n "$source_value" ]] || continue
+    source_url=${source_value#*::}
+    clean_url=${source_url%%\#*}
+    clean_url=${clean_url%%\?*}
+
+    if [[ ! "$clean_url" =~ ^https://github\.com/([^/]+)/([^/]+)/releases/download/([^/]+)/([^/]+)$ ]]; then
+      continue
+    fi
+
+    owner=${BASH_REMATCH[1]}
+    repo=${BASH_REMATCH[2]}
+    tag=${BASH_REMATCH[3]}
+    asset=${BASH_REMATCH[4]}
+
+    case "$owner/$repo/$tag/$asset" in
+      *$'\n'*|*$'\r'*|*'..'*|*'//'*)
+        _aur_guard_fail "$pkgbase has an unsafe GitHub release asset URL: $clean_url"
+        return 1
+        ;;
+    esac
+
+    if [[ "$source_value" == *::* ]]; then
+      local_name=${source_value%%::*}
+    else
+      local_name=${clean_url##*/}
+    fi
+
+    case "$local_name" in
+      ''|.|..|*/*)
+        _aur_guard_fail "$pkgbase has an unsafe local name for a GitHub release asset: $local_name"
+        return 1
+        ;;
+    esac
+
+    source_file="$pkgdir/$local_name"
+    if [[ ! -f "$source_file" || -L "$source_file" ]]; then
+      _aur_guard_fail "$pkgbase GitHub release asset is missing or not a regular file: $local_name"
+      return 1
+    fi
+
+    tag_api=$(_aur_guard_urlencode "$tag") || return 1
+    api_url="https://api.github.com/repos/${owner}/${repo}/releases/tags/${tag_api}"
+
+    mkdir -p "$pkgdir/.awtarchy-github-digests" || return 1
+    api_key=$(printf '%s\n' "$owner/$repo/$tag" | sha256sum | awk '{print $1}') || return 1
+    api_json="$pkgdir/.awtarchy-github-digests/${api_key}.json"
+
+    if [[ ! -s "$api_json" ]]; then
+      if ! _aur_guard_download "$api_url" "$api_json" || [[ ! -s "$api_json" ]]; then
+        _aur_guard_fail "$pkgbase could not retrieve GitHub release asset digest metadata for $clean_url"
+        return 1
+      fi
+    fi
+
+    digest=$(
+      jq -er --arg url "$clean_url" --arg name "$asset" '
+        .assets[]?
+        | select(.browser_download_url == $url or .name == $name)
+        | .digest
+      ' "$api_json" 2>/dev/null | head -n 1
+    ) || digest=''
+
+    if [[ ! "$digest" =~ ^sha256:[0-9A-Fa-f]{64}$ ]]; then
+      _aur_guard_fail "$pkgbase GitHub release asset has no usable SHA256 digest in GitHub metadata: $clean_url"
+      return 1
+    fi
+
+    digest_value=${digest#sha256:}
+    digest_value=${digest_value,,}
+    actual=$(sha256sum -- "$source_file" | awk '{print $1}') || {
+      _aur_guard_fail "could not calculate SHA256 for $pkgbase GitHub release asset: $local_name"
+      return 1
+    }
+    actual=${actual,,}
+
+    if [[ "$actual" != "$digest_value" ]]; then
+      _aur_guard_fail "$pkgbase GitHub release asset SHA256 does not match GitHub metadata: $local_name"
+      printf 'Expected: %s\nActual:   %s\n' "$digest_value" "$actual" >&2
+      return 1
+    fi
+
+    ((verified += 1))
+  done < <(
+    awk -F ' = ' -v arch="$arch" '
+      {
+        key = $1
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", key)
+        if (key == "source" || key == "source_" arch) print $2
+      }
+    ' "$srcinfo"
+  )
+
+  if (( verified > 0 )); then
+    printf 'AUR Verify: verified %d GitHub release asset source file(s) with GitHub SHA256 digest metadata.\n' \
       "$verified"
   fi
 }
@@ -3093,6 +3209,12 @@ _aur_guard_verify_package_recursive() {
   }
 
   _aur_guard_capture_git_snapshots "$pkgbase" "$srcinfo" "$pkgdir" || {
+    _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
+    _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
+    return 1
+  }
+
+  _aur_guard_verify_github_release_asset_digests "$pkgbase" "$srcinfo" "$pkgdir" || {
     _AUR_GUARD_BASE_STATE[$pkgbase]='failed'
     _AUR_GUARD_REQUEST_STATE[$pkg]='failed'
     return 1
