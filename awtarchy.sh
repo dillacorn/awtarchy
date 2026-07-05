@@ -47,6 +47,7 @@ declare -a PACKAGES_AUR=(
   qimgv-git
   alacritty-graphics
   waybar-git
+  obs-pipewire-audio-capture
 )
 
 # Format: selected|friendly name|Flathub app ID
@@ -2226,6 +2227,109 @@ ensure_yay() {
   run_aur_guard_as_target aurup yay
 }
 
+obs_pipewire_audio_capture_user_plugin_installed() {
+  [[ -f "${HOME_DIR}/.config/obs-studio/plugins/linux-pipewire-audio/bin/64bit/linux-pipewire-audio.so" ]]
+}
+
+obs_pipewire_audio_capture_release_url() {
+  local url=""
+
+  url="$(
+    curl -fsSL --max-time 12 \
+      -H "Accept: application/vnd.github+json" \
+      -H "User-Agent: awtarchy-installer" \
+      "https://api.github.com/repos/dimtpap/obs-pipewire-audio-capture/releases/latest" \
+      | jq -r '
+          .assets[]
+          | select(.name | test("^linux-pipewire-audio-.*\\.tar\\.gz$"))
+          | select((.name | test("flatpak|obs-27")) | not)
+          | .browser_download_url
+        ' \
+      | head -n 1
+  )" || true
+
+  if [[ -n "$url" && "$url" != "null" ]]; then
+    printf '%s\n' "$url"
+    return 0
+  fi
+
+  return 1
+}
+
+install_obs_pipewire_audio_capture_user_plugin() {
+  local plugin_dir="${HOME_DIR}/.config/obs-studio/plugins"
+  local plugin_root="${plugin_dir}/linux-pipewire-audio"
+  local tmp_dir=""
+  local archive=""
+  local release_url=""
+
+  if obs_pipewire_audio_capture_user_plugin_installed; then
+    printf '%s\n' "${COLOR_YELLOW}obs-pipewire-audio-capture already installed in OBS user plugins. Skipping fallback...${COLOR_RESET}"
+    return 0
+  fi
+
+  log "Installing OBS PipeWire audio capture plugin with upstream per-user fallback..."
+
+  pacman -S --needed --noconfirm \
+    obs-studio wireplumber pipewire pipewire-pulse curl ca-certificates jq
+
+  if ! release_url="$(obs_pipewire_audio_capture_release_url)"; then
+    release_url="https://github.com/dimtpap/obs-pipewire-audio-capture/releases/download/1.2.1/linux-pipewire-audio-1.2.1.tar.gz"
+    warn "Could not query latest OBS PipeWire audio capture release. Falling back to 1.2.1 archive."
+  fi
+
+  tmp_dir="$(mktemp -d /tmp/awtarchy-obs-pipewire-audio.XXXXXX)"
+  archive="${tmp_dir}/linux-pipewire-audio.tar.gz"
+
+  curl -fL --retry 3 --retry-delay 2 -o "$archive" "$release_url"
+
+  if tar -tzf "$archive" | grep -qE '(^/|(^|/)\.\.(/|$))'; then
+    rm -rf -- "$tmp_dir"
+    die "OBS PipeWire audio capture archive contains unsafe paths."
+  fi
+
+  if ! tar -tzf "$archive" | grep -q '^linux-pipewire-audio/'; then
+    rm -rf -- "$tmp_dir"
+    die "OBS PipeWire audio capture archive has unexpected layout."
+  fi
+
+  rm -rf -- "$plugin_root"
+  install -d -m 0755 -o "$TARGET_USER" -g "$TARGET_USER" "$plugin_dir"
+
+  tar -xzf "$archive" -C "$plugin_dir"
+  chown -R "$TARGET_USER:$TARGET_USER" "$plugin_root"
+  chmod -R u+rwX,go+rX "$plugin_root"
+
+  rm -rf -- "$tmp_dir"
+
+  if ! obs_pipewire_audio_capture_user_plugin_installed; then
+    die "OBS PipeWire audio capture fallback install did not produce the expected plugin file."
+  fi
+
+  ok "OBS PipeWire audio capture plugin installed to ${plugin_root}"
+}
+
+install_obs_pipewire_audio_capture_package() {
+  local pkg="obs-pipewire-audio-capture"
+
+  if pacman -Q "$pkg" >/dev/null 2>&1; then
+    printf '%s\n' "${COLOR_YELLOW}${pkg} already installed through pacman. Skipping...${COLOR_RESET}"
+    return 0
+  fi
+
+  if obs_pipewire_audio_capture_user_plugin_installed; then
+    printf '%s\n' "${COLOR_YELLOW}${pkg} already installed in OBS user plugins. Skipping...${COLOR_RESET}"
+    return 0
+  fi
+
+  if run_aur_guard_as_target aurup "$pkg"; then
+    return 0
+  fi
+
+  warn "${pkg} failed through AUR Guard. Falling back to upstream per-user OBS plugin install."
+  install_obs_pipewire_audio_capture_user_plugin
+}
+
 install_aur_repo_apps_stage() {
   (( INSTALL_AUR == 1 )) || { warn "Skipping AUR application install."; return 0; }
 
@@ -2243,7 +2347,11 @@ install_aur_repo_apps_stage() {
         printf '%s\n' "${COLOR_YELLOW}${pkg} already installed. Skipping...${COLOR_RESET}"
       else
         printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
-        run_aur_guard_as_target aurup "$pkg"
+        if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
+          install_obs_pipewire_audio_capture_package
+        else
+          run_aur_guard_as_target aurup "$pkg"
+        fi
         printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
       fi
     done
