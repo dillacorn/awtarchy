@@ -4272,6 +4272,13 @@ pkg_equivalent_installed_pacman() {
   local pkg="$1"
   command -v pacman >/dev/null 2>&1 || return 1
 
+  case "$pkg" in
+    obs-pipewire-audio-capture)
+      obs_pipewire_audio_capture_user_plugin_installed && return 0
+      return 1
+      ;;
+  esac
+
   local -a equivalents=()
   case "$pkg" in
     alacritty|alacritty-graphics)
@@ -4371,6 +4378,24 @@ install_missing_arch_repo_packages() {
   pacman -S --needed --noconfirm "${pkgs[@]}"
 }
 
+run_update_aur_guard_package() {
+  local guard_bashrc="$1"
+  local pkg="$2"
+
+  # The single-quoted script expands inside the child Bash process.
+  # shellcheck disable=SC2016
+  run_target env \
+    HOME="$HOME_DIR" \
+    USER="$TARGET_USER" \
+    LOGNAME="$TARGET_USER" \
+    bash --noprofile --norc -c '
+      guard_bashrc=$1
+      pkg=$2
+      source <(sed -n "/^# --- AUR Guard ---/,$p" "$guard_bashrc")
+      aurup "$pkg"
+    ' awtarchy-update-aur "$guard_bashrc" "$pkg"
+}
+
 install_missing_aur_packages() {
   local guard_bashrc="$1"
   shift
@@ -4416,18 +4441,21 @@ install_missing_aur_packages() {
 
     local pkg=""
     for pkg in "${pkgs[@]}"; do
-      # The single-quoted script expands inside the child Bash process.
-      # shellcheck disable=SC2016
-      run_target env \
-        HOME="$HOME_DIR" \
-        USER="$TARGET_USER" \
-        LOGNAME="$TARGET_USER" \
-        bash --noprofile --norc -c '
-          guard_bashrc=$1
-          pkg=$2
-          source <(sed -n "/^# --- AUR Guard ---/,\$p" "$guard_bashrc")
-          aurup "$pkg"
-        ' awtarchy-update-aur "$guard_bashrc" "$pkg"
+      if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
+        if obs_pipewire_audio_capture_user_plugin_installed; then
+          printf '%s\n' "${COLOR_YELLOW}${pkg} already installed in OBS user plugins. Skipping...${COLOR_RESET}"
+          continue
+        fi
+
+        if run_update_aur_guard_package "$guard_bashrc" "$pkg"; then
+          continue
+        fi
+
+        warn "${pkg} failed through AUR Guard during update missing-package restoration. Falling back to upstream per-user OBS plugin install."
+        install_obs_pipewire_audio_capture_user_plugin
+      else
+        run_update_aur_guard_package "$guard_bashrc" "$pkg"
+      fi
     done
   )
 }
