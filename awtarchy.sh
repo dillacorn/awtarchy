@@ -174,6 +174,63 @@ run_as_target() {
   fi
 }
 
+run_target_gsettings() {
+  local target_uid runtime_dir
+  target_uid="$(id -u "${TARGET_USER}" 2>/dev/null || true)"
+  runtime_dir="/run/user/${target_uid}"
+
+  local -a user_env=(
+    env
+    "HOME=${HOME_DIR}"
+    "USER=${TARGET_USER}"
+    "LOGNAME=${TARGET_USER}"
+  )
+
+  if [[ "$target_uid" =~ ^[0-9]+$ && -S "${runtime_dir}/bus" ]]; then
+    user_env+=(
+      "XDG_RUNTIME_DIR=${runtime_dir}"
+      "DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus"
+    )
+    run_as_target "${user_env[@]}" gsettings "$@"
+  elif have dbus-run-session; then
+    run_as_target "${user_env[@]}" dbus-run-session -- gsettings "$@"
+  else
+    run_as_target "${user_env[@]}" gsettings "$@"
+  fi
+}
+
+apply_awtarchy_gsettings_defaults() {
+  local schema="org.gnome.nm-applet"
+  local key="disable-connected-notifications"
+  local current=""
+
+  if ! have gsettings; then
+    warn "gsettings is unavailable; skipping Awtarchy desktop defaults."
+    return 0
+  fi
+
+  if ! run_target_gsettings list-schemas 2>/dev/null | grep -Fxq "$schema"; then
+    log "nm-applet settings schema is unavailable; skipping its notification default."
+    return 0
+  fi
+
+  current="$(run_target_gsettings get "$schema" "$key" 2>/dev/null || true)"
+  if [[ "$current" == "true" ]]; then
+    return 0
+  fi
+
+  log "Disabling routine NetworkManager connected notifications for ${TARGET_USER}..."
+  if ! run_target_gsettings set "$schema" "$key" true; then
+    warn "Could not set ${schema} ${key} for ${TARGET_USER}."
+    return 0
+  fi
+
+  current="$(run_target_gsettings get "$schema" "$key" 2>/dev/null || true)"
+  if [[ "$current" != "true" ]]; then
+    warn "NetworkManager connected-notification default did not persist for ${TARGET_USER}."
+  fi
+}
+
 create_directory() {
   local dir="$1"
   if [[ ! -d "$dir" ]]; then
@@ -1804,6 +1861,7 @@ print_install_review() {
   if (( ENABLE_KEYRING_PAM == 1 )); then printf '  - Enable GNOME Keyring PAM integration\n'; else printf '  - Skip GNOME Keyring PAM integration\n'; fi
   if (( INSTALL_LY == 1 )); then printf '  - Enable Ly on tty2 for next boot only\n'; else printf '  - Skip Ly\n'; fi
   printf '  - Copy awtarchy-managed config files into %s/.config\n' "$HOME_DIR"
+  printf '  - Apply Awtarchy desktop defaults\n'
   printf '  - Repair ownership and permissions\n'
 
   if (( INSTALL_ARCH == 1 )); then print_dry_run_list "Arch repo packages (${#ARCH_SELECTED[@]})" "${ARCH_SELECTED[@]}"; fi
@@ -2768,6 +2826,7 @@ run_install() {
   enable_keyring_pam_stage
   install_ly_stage
   copy_awtarchy_configs_stage
+  apply_awtarchy_gsettings_defaults
   repair_home_ownership_stage
 
   ok "Setup complete. Rebooting now."
@@ -4710,6 +4769,7 @@ main() {
   write_version_stamp "$tag"
   maybe_hyprctl_reload
   check_and_offer_missing_installs "${repo_dir}"
+  apply_awtarchy_gsettings_defaults
 
   if (( ${#BACKUPS[@]} )); then
     warn "Backups created:"
