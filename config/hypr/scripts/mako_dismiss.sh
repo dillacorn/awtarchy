@@ -7,16 +7,19 @@
 
 set -euo pipefail
 
-# current cursor position
+# Save the current cursor position.
 read -r CX CY < <(hyprctl -j cursorpos | jq -r '"\(.x) \(.y)"')
 
-# move cursor to a corner to force a redraw in Hyprland
-# https://wiki.hypr.land/Configuring/Dispatchers/ (movecursortocorner) :contentReference[oaicite:0]{index=0}
-hyprctl dispatch movecursortocorner 2
+restore_cursor() {
+    hyprctl dispatch "hl.dsp.cursor.move({ x = ${CX}, y = ${CY} })" >/dev/null 2>&1 || true
+}
 
-# dismiss the last notification
-# mako 1.x ships makoctl; if you renamed it, fix this line
+# Always restore the cursor, including when makoctl fails.
+trap restore_cursor EXIT
+
+# Move the cursor to a corner to force a redraw in Hyprland.
+# Failure here must not prevent the notification from being dismissed.
+hyprctl dispatch 'hl.dsp.cursor.move_to_corner({ corner = 2 })' >/dev/null 2>&1 || true
+
+# Dismiss the first visible notification.
 makoctl dismiss
-
-# put cursor back where it was
-hyprctl dispatch movecursor "$CX" "$CY"
