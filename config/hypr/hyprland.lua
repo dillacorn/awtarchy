@@ -564,49 +564,12 @@ local btop = "~/.config/hypr/scripts/launch_handler.sh btop \"alacritty --class 
 local smtty_O = "sh -lc 'if hyprctl clients | grep -q \"class: smtty-O\"; then hyprctl dispatch closewindow class:smtty-O; else alacritty --class smtty-O -e sh -lc '\"'\"'smtty -O; printf \"\\n[smtty -O finished]\\nPress ENTER to close...\"; read -r _'\"'\"'; fi'"
 
 -- Submap references (Toggle on)  [write name to file on entry]
--- Optional regression patch:
--- If ~/.config/hypr/regression_temp_patch.lua exists, submap enter/exit commands
--- are wrapped with temporary Hyprland mouse/submap regression workarounds.
--- If the patch file is missing, this behaves normally.
-local regression_temp_patch = nil
-do
-    local patch_path = (os.getenv("HOME") or "") .. "/.config/hypr/regression_temp_patch.lua"
-    local patch_loader = loadfile(patch_path)
-
-    if patch_loader then
-        local ok, patch = pcall(patch_loader, hl)
-        if ok and type(patch) == "table" then
-            regression_temp_patch = patch
-        end
-    end
-end
-
-local function _submap_on_base(name)
+local function _submap_on_cmd(name)
     return "sh -c 'echo " .. name .. " > /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"" .. name .. " mode: ON\"; hyprctl dispatch \"hl.dsp.submap(\\\"" .. name .. "\\\")\"'"
 end
 
-local function _submap_off_base(name)
-    return "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"" .. name .. " mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
-end
-
-local function _submap_on_cmd(name)
-    local cmd = _submap_on_base(name)
-
-    if regression_temp_patch and regression_temp_patch.on then
-        return regression_temp_patch.on(name, cmd)
-    end
-
-    return cmd
-end
-
 local function _submap_off_cmd(name)
-    local cmd = _submap_off_base(name)
-
-    if regression_temp_patch and regression_temp_patch.off then
-        return regression_temp_patch.off(name, cmd)
-    end
-
-    return cmd
+    return "sh -c 'truncate -s 0 /tmp/hypr-submap; notify-send -a Hyprland -t 1000 \"" .. name .. " mode: OFF\"; hyprctl dispatch \"hl.dsp.submap(\\\"reset\\\")\"'"
 end
 
 local noalt_on = _submap_on_cmd("noalt")
