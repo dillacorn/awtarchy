@@ -1091,11 +1091,54 @@ dedicated_video_on_visible_workspace() {
         >/dev/null 2>&1
 }
 
+# Native Wayland video players such as mpv can inhibit idle without exposing
+# an MPRIS player to playerctl. Hypridle intentionally ignores those inhibitors
+# globally, so honor them selectively for visible dedicated video windows.
+dedicated_video_native_inhibit_on_visible_workspace() {
+    local visible clients
+
+    visible="$(visible_workspaces_json)"
+    clients="$(get_clients)"
+
+    [[ "$visible" != "[]" ]] || return 1
+    [[ -n "$clients" ]] || return 1
+
+    jq -e \
+        --argjson visible "$visible" \
+        --arg regex "$VIDEO_PLAYER_CLASS_REGEX" \
+        '
+        any(
+            .[];
+            (.mapped == true)
+            and
+            ((.inhibitingIdle // false) == true)
+            and
+            (
+                (.workspace.id // -999999) as $workspace_id
+                |
+                ($visible | index($workspace_id)) != null
+            )
+            and
+            (
+                ((.class // "") | test($regex; "i"))
+                or
+                ((.initialClass // "") | test($regex; "i"))
+            )
+        )
+        ' \
+        <<<"$clients" \
+        >/dev/null 2>&1
+}
+
 video_is_playing() {
     local player status metadata
     local title url album artist
     local separator=$'\x1f'
     local player_lower
+
+    if dedicated_video_native_inhibit_on_visible_workspace; then
+        return 0
+    fi
 
     playerctl_available || return 1
 
@@ -1181,10 +1224,13 @@ video_diagnose() {
                 ((.initialClass // "") | test($video; "i"))
             )
             |
-            "class=\(.class) workspace=\(.workspace.id) mapped=\(.mapped) fullscreen=\(.fullscreen // "missing") title=\(.title)"
+            "class=\(.class) workspace=\(.workspace.id) mapped=\(.mapped) fullscreen=\(.fullscreen // "missing") inhibiting_idle=\(.inhibitingIdle // "missing") title=\(.title)"
             ' \
             2>/dev/null ||
         true
+
+    printf '\nnative_visible_video_inhibitor=%s\n' \
+        "$(dedicated_video_native_inhibit_on_visible_workspace && printf yes || printf no)"
 
     printf '\n%s\n' 'mpris_players:'
 
