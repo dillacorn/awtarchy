@@ -2252,7 +2252,7 @@ create_temp_sudoers_for_aur() {
 ensure_aur_guard_requirements() {
   log "Installing AUR Guard requirements..."
   pacman -S --needed --noconfirm \
-    base-devel git bubblewrap passt devtools gnupg coreutils jq libarchive file curl
+    base-devel git bubblewrap devtools gnupg coreutils jq libarchive file curl
 }
 
 run_aur_guard_as_target() {

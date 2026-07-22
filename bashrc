@@ -1122,8 +1122,8 @@ _aur_guard_add_ro_path() {
 _aur_guard_run_sandbox_command() {
   local network="$1"
   shift
-  local uid gid sandbox_status i
-  local -a systemd_args command_line sandbox_command fallback_command
+  local uid gid i
+  local -a systemd_args command_line sandbox_command
 
   sandbox_command=("$@")
   uid=$(id -u) || return 1
@@ -1153,146 +1153,25 @@ _aur_guard_run_sandbox_command() {
       systemd_args+=(
         --property='IPAddressDeny=0.0.0.0/8 10.0.0.0/8 100.64.0.0/10 127.0.0.0/8 169.254.0.0/16 172.16.0.0/12 192.168.0.0/16 224.0.0.0/4 240.0.0.0/4 ::1/128 ::ffff:0:0/96 fc00::/7 fe80::/10 ff00::/8'
       )
-      # Variables in this embedded script intentionally expand only in the child Bash.
-      # shellcheck disable=SC2016
-      command_line=(
-        /usr/bin/bash
-        -c
-        '
-          set -Eeuo pipefail
 
-          state_dir=$(mktemp -d "${TMPDIR:-/tmp}/awtarchy-netns.XXXXXX")
-          gate="$state_dir/gate"
-          status_file="$state_dir/bwrap-status.jsonl"
-          pasta_pid_file="$state_dir/pasta.pid"
-          pasta_stderr="$state_dir/pasta.stderr"
-          bwrap_pid=
-          pasta_pid=
-
-          report_pasta_stderr() {
-            local line
-
-            [[ -s $pasta_stderr ]] || return 0
-            while IFS= read -r line; do
-              case "$line" in
-                Couldn?t\ get\ any\ nameserver\ address)
-                  ;;
-                *)
-                  printf "%s\n" "$line" >&2
-                  ;;
-              esac
-            done < "$pasta_stderr"
-          }
-
-          cleanup() {
-            local rc=$?
-            trap - EXIT HUP INT TERM
-            exec 8>&- 2>/dev/null || true
-            exec 9>&- 2>/dev/null || true
-
-            if [[ -n ${bwrap_pid:-} ]] && kill -0 "$bwrap_pid" 2>/dev/null; then
-              kill "$bwrap_pid" 2>/dev/null || true
-              wait "$bwrap_pid" 2>/dev/null || true
-            fi
-            if [[ -n ${pasta_pid:-} ]] && kill -0 "$pasta_pid" 2>/dev/null; then
-              kill "$pasta_pid" 2>/dev/null || true
-              wait "$pasta_pid" 2>/dev/null || true
-            fi
-
-            rm -rf -- "$state_dir"
-            exit "$rc"
-          }
-          trap cleanup EXIT HUP INT TERM
-
-          mkfifo "$gate"
-          : > "$status_file"
-          exec 8<>"$gate"
-          exec 9>"$status_file"
-
-          "$@" &
-          bwrap_pid=$!
-          exec 9>&-
-
-          child_pid=
-          for ((attempt = 0; attempt < 200; attempt++)); do
-            child_pid=$(jq -r '\''select(type == "object" and has("child-pid")) | .["child-pid"]'\'' "$status_file" 2>/dev/null | head -n 1 || true)
-            if [[ $child_pid =~ ^[0-9]+$ ]]; then
-              break
-            fi
-
-            if ! kill -0 "$bwrap_pid" 2>/dev/null; then
-              set +e
-              wait "$bwrap_pid"
-              rc=$?
-              set -e
-              exit "$rc"
-            fi
-            sleep 0.05
-          done
-
-          if [[ ! $child_pid =~ ^[0-9]+$ ]]; then
-            printf "AUR Guard: timed out waiting for the bubblewrap namespace.\n" >&2
-            exit 1
-          fi
-
-          /usr/bin/pasta \
-            --quiet \
-            --foreground \
-            --config-net \
-            --dns 9.9.9.9 \
-            --dns-host 9.9.9.9 \
-            --dns-forward 9.9.9.9 \
-            --no-map-gw \
-            --map-host-loopback none \
-            --map-guest-addr none \
-            --no-splice \
-            --tcp-ports none \
-            --udp-ports none \
-            --tcp-ns none \
-            --udp-ns none \
-            --pid "$pasta_pid_file" \
-            "$child_pid" 2>"$pasta_stderr" &
-          pasta_pid=$!
-
-          for ((attempt = 0; attempt < 200; attempt++)); do
-            if [[ -s $pasta_pid_file ]]; then
-              break
-            fi
-
-            if ! kill -0 "$pasta_pid" 2>/dev/null; then
-              set +e
-              wait "$pasta_pid"
-              set -e
-              report_pasta_stderr
-              printf "AUR Guard: pasta could not attach to the private network namespace.\n" >&2
-              exit 125
-            fi
-
-            if (( attempt == 40 )); then
-              printf "AUR Guard: isolated network setup is taking longer than expected.\n" >&2
-            fi
-            sleep 0.05
-          done
-
-          if [[ ! -s $pasta_pid_file ]]; then
-            report_pasta_stderr
-            printf "AUR Guard: timed out attaching pasta to the bubblewrap namespace.\n" >&2
-            exit 125
-          fi
-
-          report_pasta_stderr
-          printf "1" >&8
-          exec 8>&-
-
-          set +e
-          wait "$bwrap_pid"
-          rc=$?
-          set -e
-          exit "$rc"
-        '
-        awtarchy-network-sandbox
-        "${sandbox_command[@]}"
-      )
+      # Public-network sandboxes inherit the transient systemd service network
+      # namespace. systemd IPAddressDeny blocks loopback, LAN, link-local,
+      # Tailscale CGNAT, multicast, and other non-public ranges. Do not combine
+      # bwrap --disable-userns with a later pasta setns() attachment: that nested
+      # user-namespace layout can fail with EPERM on otherwise valid systems.
+      command_line=()
+      for ((i = 0; i < ${#sandbox_command[@]}; i++)); do
+        case "${sandbox_command[i]}" in
+          --unshare-net)
+            ;;
+          --block-fd|--json-status-fd)
+            ((i++)) || true
+            ;;
+          *)
+            command_line+=("${sandbox_command[i]}")
+            ;;
+        esac
+      done
       ;;
     deny)
       command_line=("${sandbox_command[@]}")
@@ -1303,40 +1182,11 @@ _aur_guard_run_sandbox_command() {
       ;;
   esac
 
-  if command timeout \
-      --foreground \
-      --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
-      "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
-      "${systemd_args[@]}" "${command_line[@]}"; then
-    return 0
-  else
-    sandbox_status=$?
-  fi
-
-  if [[ "$network" != allow || $sandbox_status -ne 125 ]]; then
-    return "$sandbox_status"
-  fi
-
-  printf 'AUR Guard: pasta namespace attachment is unavailable; falling back to systemd-enforced public-network filtering.\n' >&2
-  fallback_command=()
-  for ((i = 0; i < ${#sandbox_command[@]}; i++)); do
-    case "${sandbox_command[i]}" in
-      --unshare-net)
-        ;;
-      --block-fd|--json-status-fd)
-        ((i++)) || true
-        ;;
-      *)
-        fallback_command+=("${sandbox_command[i]}")
-        ;;
-    esac
-  done
-
   command timeout \
     --foreground \
     --kill-after="${_AUR_GUARD_SANDBOX_KILL_AFTER_SECONDS}s" \
     "${_AUR_GUARD_SANDBOX_TIMEOUT_SECONDS}s" \
-    "${systemd_args[@]}" "${fallback_command[@]}"
+    "${systemd_args[@]}" "${command_line[@]}"
 }
 
 _aur_guard_sandbox_exec() {
@@ -4980,10 +4830,6 @@ _aur_guard_verify_tree() {
     return 127
   }
 
-  type -P pasta >/dev/null 2>&1 || {
-    _aur_guard_fail 'pasta from passt is required for an isolated network namespace. Install it with: sudo pacman -S passt'
-    return 127
-  }
 
   if [[ ${_AUR_GUARD_BUILD_REQUESTED:-0} == 1 ]]; then
     type -P mkarchroot >/dev/null 2>&1 || {
@@ -5183,7 +5029,7 @@ aurguardtest() (
   historical_output="$test_root/historical-output.log"
   mkdir -p "$test_bin" "$test_root/cache"
 
-  for tool in makepkg git jq bwrap gpg timeout bsdtar systemd-run pasta mkarchroot arch-nspawn sha256sum realpath; do
+  for tool in makepkg git jq bwrap gpg timeout bsdtar systemd-run mkarchroot arch-nspawn sha256sum realpath; do
     printf '%s\n' '#!/bin/sh' 'exit 0' > "$test_bin/$tool"
   done
 
@@ -5225,6 +5071,24 @@ AUR_GUARD_TEST_HELPER
   _aur_guard_refresh_blacklists() {
     return 0
   }
+
+  printf '\nAUR Guard self-test: public-network sandboxes avoid pasta namespace attachment.\n'
+  local network_sandbox_definition
+  network_sandbox_definition=$(declare -f _aur_guard_run_sandbox_command) || return 1
+
+  if grep -Fq '/usr/bin/pasta' <<< "$network_sandbox_definition" \
+      || grep -Fq 'pasta namespace attachment is unavailable' <<< "$network_sandbox_definition"; then
+    _aur_guard_fail 'self-test failed: public-network sandbox still contains pasta namespace attachment logic'
+    return 1
+  fi
+
+  if ! grep -Fq 'IPAddressDeny=0.0.0.0/8' <<< "$network_sandbox_definition" \
+      || ! grep -Fq -- '--unshare-net' <<< "$network_sandbox_definition" \
+      || ! grep -Fq -- '--block-fd' <<< "$network_sandbox_definition" \
+      || ! grep -Fq -- '--json-status-fd' <<< "$network_sandbox_definition"; then
+    _aur_guard_fail 'self-test failed: public-network sandbox does not retain systemd filtering and bwrap network-argument removal'
+    return 1
+  fi
 
   printf 'AUR Guard self-test: emergency-blocked packages must be refused.\n'
   if aurup_output=$(aurup vesktop-bin-patched 2>&1); then
