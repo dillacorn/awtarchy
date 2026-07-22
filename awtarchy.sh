@@ -4478,7 +4478,7 @@ install_missing_aur_packages() {
   log "Installing AUR Guard requirements for missing-package restoration..."
   pacman -S --needed --noconfirm \
     base-devel git bubblewrap devtools gnupg coreutils jq libarchive file curl sudo
-    
+
   local sudoers_tmp="" sudoers_file=""
   sudoers_tmp="$(mktemp /tmp/awtarchy-update-aur-sudoers.XXXXXX)"
   sudoers_file="/etc/sudoers.d/awtarchy_update_aur_${TARGET_USER}_$$"

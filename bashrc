@@ -478,7 +478,7 @@ _aur_guard_download_github_package_list() {
   fi
 
   archive_entry=${archive_entries[0]}
-  archive_root=${archive_entry%/$_AUR_GUARD_GITHUB_MANIFEST_PATH}
+  archive_root=${archive_entry%/"$_AUR_GUARD_GITHUB_MANIFEST_PATH"}
   if ! /usr/bin/bsdtar -xOf "$archive" "$archive_entry" > "$archive_manifest" 2>/dev/null \
       || [[ ! -s "$archive_manifest" ]]; then
     rm -f "$archive" "$listing" "$archive_manifest"
@@ -1661,12 +1661,12 @@ _aur_guard_assert_prepared_pkgbuild_state() {
       }
       ;;
     1)
-      [[ "${changed_files[0]}" == PKGBUILD ]] \
-        && cmp -s "$pkgdir/PKGBUILD" "$state_dir/prepared" || {
+      if [[ "${changed_files[0]}" != PKGBUILD ]] \
+          || ! cmp -s "$pkgdir/PKGBUILD" "$state_dir/prepared"; then
         command git -C "$pkgdir" diff -- . >&2 || true
         _aur_guard_fail "$pkgbase changed tracked AUR files after source preparation"
         return 1
-      }
+      fi
       ;;
     *)
       command git -C "$pkgdir" diff -- . >&2 || true
@@ -4331,6 +4331,8 @@ _aur_guard_normalize_link_target() {
 
   if (( ${#normalized[@]} > 0 )); then
     local IFS=/
+    # output_ref is a nameref that writes to the caller.
+    # shellcheck disable=SC2034
     output_ref="${normalized[*]}"
   fi
 }
@@ -4830,7 +4832,6 @@ _aur_guard_verify_tree() {
     return 127
   }
 
-
   if [[ ${_AUR_GUARD_BUILD_REQUESTED:-0} == 1 ]]; then
     type -P mkarchroot >/dev/null 2>&1 || {
       _aur_guard_fail 'mkarchroot from devtools is required for clean-root builds. Install it with: sudo pacman -S devtools'
@@ -5075,13 +5076,11 @@ AUR_GUARD_TEST_HELPER
   printf '\nAUR Guard self-test: public-network sandboxes avoid pasta namespace attachment.\n'
   local network_sandbox_definition
   network_sandbox_definition=$(declare -f _aur_guard_run_sandbox_command) || return 1
-
   if grep -Fq '/usr/bin/pasta' <<< "$network_sandbox_definition" \
       || grep -Fq 'pasta namespace attachment is unavailable' <<< "$network_sandbox_definition"; then
     _aur_guard_fail 'self-test failed: public-network sandbox still contains pasta namespace attachment logic'
     return 1
   fi
-
   if ! grep -Fq 'IPAddressDeny=0.0.0.0/8' <<< "$network_sandbox_definition" \
       || ! grep -Fq -- '--unshare-net' <<< "$network_sandbox_definition" \
       || ! grep -Fq -- '--block-fd' <<< "$network_sandbox_definition" \
@@ -6002,7 +6001,7 @@ package() {
 }
 AUR_GUARD_TEST_VCS_PKGBUILD
   (
-    cd "$vcs_test_dir"
+    cd "$vcs_test_dir" || exit 1
     git init -q
     git config user.name 'AUR Guard Self Test'
     git config user.email 'aur-guard@example.invalid'
@@ -6049,6 +6048,8 @@ AUR_GUARD_TEST_VCS_PKGBUILD
   _aur_guard_restore_original_pkgbuild 'vcs-self-test' "$vcs_test_dir" || return 1
 
   _aur_guard_prepare_pkgbuild_mutation_state 'vcs-self-test' "$vcs_test_dir" || return 1
+  # This test intentionally writes a literal command substitution.
+  # shellcheck disable=SC2016
   sed -i 's/^pkgver=1$/pkgver=$(touch unsafe)/' "$vcs_test_dir/PKGBUILD"
   if _aur_guard_accept_prepared_pkgver_update 'vcs-self-test' "$vcs_test_dir"; then
     _aur_guard_fail 'self-test failed: unsafe generated pkgver assignment was accepted'
@@ -6117,7 +6118,7 @@ AUR_GUARD_TEST_REFERENCE
     return 1
   fi
 
-  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, detached signature sidecars, normalized .SRCINFO endings, safe internal and dependency-license symlinks, inert identity-comment handling, single-pass artifact analysis, progress reporting, in-process symlink normalization, constrained icon-theme archive limits, private disk-backed work storage, clean line-numbered PKGBUILD review rendering, maintainer-change tracking and confirmation, recent-revision risk summaries, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, deterministic VCS pkgver/pkgrel handling, installer-safe routine warning handling, separate dependency-cache scan limits, and no-crawl behavior worked'
+  _aur_guard_pass 'dry-run passed: emergency blocks, read-only helper queries, blocked helper transactions, package-name validation, strong and content-addressed integrity, detached signature sidecars, normalized .SRCINFO endings, safe internal and dependency-license symlinks, inert identity-comment handling, single-pass artifact analysis, progress reporting, in-process symlink normalization, constrained icon-theme archive limits, private disk-backed work storage, clean line-numbered PKGBUILD review rendering, maintainer-change tracking and confirmation, recent-revision risk summaries, practical/deep mode selection, exact repository-package preference, persistent AUR artifact staging, locked pnpm prefetching, deterministic VCS pkgver/pkgrel handling, installer-safe routine warning handling, public-network sandbox filtering without pasta namespace attachment, separate dependency-cache scan limits, and no-crawl behavior worked'
 )
 
 aurhelp() {
