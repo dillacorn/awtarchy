@@ -44,10 +44,10 @@ declare -a PACKAGES_AUR=(
   awtwall
   mpvpaper
   wlogout
-  qimgv-git
+  qimgv
   alacritty-graphics
   waybar-git
-  obs-pipewire-audio-capture
+  obs-pipewire-audio-capture-bin
 )
 
 # Format: selected|friendly name|Flathub app ID
@@ -2261,7 +2261,7 @@ run_aur_guard_as_target() {
 
   local guard_bashrc="${REPO_DIR}/bashrc"
   [[ -f "$guard_bashrc" ]] || die "Missing AUR Guard configuration: ${guard_bashrc}"
-  grep -q '^aurup()' "$guard_bashrc" || die "${guard_bashrc} does not contain the AUR Guard aurup function."
+  grep -q '^aurinstall()' "$guard_bashrc" || die "${guard_bashrc} does not contain the AUR Guard aurinstall function."
 
   # Variables in this embedded script intentionally expand in the child Bash.
   # shellcheck disable=SC2016
@@ -2282,11 +2282,41 @@ ensure_yay() {
   if run_as_target bash -lc 'command -v yay >/dev/null 2>&1'; then return 0; fi
 
   warn "yay not found. Installing it through AUR Guard practical mode..."
-  run_aur_guard_as_target aurup yay
+  run_aur_guard_as_target aurinstall yay
 }
 
 obs_pipewire_audio_capture_user_plugin_installed() {
   [[ -f "${HOME_DIR}/.config/obs-studio/plugins/linux-pipewire-audio/bin/64bit/linux-pipewire-audio.so" ]]
+}
+
+aur_selected_package_installed() {
+  local pkg="$1" alt=""
+
+  case "$pkg" in
+    alacritty|alacritty-graphics)
+      for alt in alacritty alacritty-graphics; do
+        pacman -Q "$alt" >/dev/null 2>&1 && return 0
+      done
+      return 1
+      ;;
+    qimgv|qimgv-git)
+      for alt in qimgv qimgv-git; do
+        pacman -Q "$alt" >/dev/null 2>&1 && return 0
+      done
+      return 1
+      ;;
+    obs-pipewire-audio-capture|obs-pipewire-audio-capture-bin)
+      for alt in         obs-pipewire-audio-capture         obs-pipewire-audio-capture-bin
+      do
+        pacman -Q "$alt" >/dev/null 2>&1 && return 0
+      done
+
+      obs_pipewire_audio_capture_user_plugin_installed
+      ;;
+    *)
+      pacman -Q "$pkg" >/dev/null 2>&1
+      ;;
+  esac
 }
 
 obs_pipewire_audio_capture_release_url() {
@@ -2380,7 +2410,7 @@ install_obs_pipewire_audio_capture_package() {
     return 0
   fi
 
-  if run_aur_guard_as_target aurup "$pkg"; then
+  if run_aur_guard_as_target aurinstall "$pkg"; then
     return 0
   fi
 
@@ -2401,14 +2431,14 @@ install_aur_repo_apps_stage() {
     log "Installing selected AUR packages through AUR Guard practical mode..."
     local pkg
     for pkg in "${AUR_SELECTED[@]}"; do
-      if pacman -Q "$pkg" >/dev/null 2>&1; then
-        printf '%s\n' "${COLOR_YELLOW}${pkg} already installed. Skipping...${COLOR_RESET}"
+      if aur_selected_package_installed "$pkg"; then
+        printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
       else
         printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
         if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
           install_obs_pipewire_audio_capture_package
         else
-          run_aur_guard_as_target aurup "$pkg"
+          run_aur_guard_as_target aurinstall "$pkg"
         fi
         printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
       fi
@@ -2420,7 +2450,7 @@ install_aur_repo_apps_stage() {
       printf '%s\n' "${COLOR_YELLOW}tlpui already installed. Skipping...${COLOR_RESET}"
     else
       log "Installing tlpui through AUR Guard practical mode..."
-      run_aur_guard_as_target aurup tlpui || true
+      run_aur_guard_as_target aurinstall tlpui || true
     fi
   fi
 
@@ -4332,8 +4362,10 @@ pkg_equivalent_installed_pacman() {
   command -v pacman >/dev/null 2>&1 || return 1
 
   case "$pkg" in
-    obs-pipewire-audio-capture)
-      obs_pipewire_audio_capture_user_plugin_installed && return 0
+    obs-pipewire-audio-capture|obs-pipewire-audio-capture-bin)
+      pacman -Qq obs-pipewire-audio-capture >/dev/null 2>&1         && return 0
+      pacman -Qq obs-pipewire-audio-capture-bin >/dev/null 2>&1         && return 0
+      obs_pipewire_audio_capture_user_plugin_installed         && return 0
       return 1
       ;;
   esac
@@ -4342,6 +4374,9 @@ pkg_equivalent_installed_pacman() {
   case "$pkg" in
     alacritty|alacritty-graphics)
       equivalents=(alacritty alacritty-graphics)
+      ;;
+    qimgv|qimgv-git)
+      equivalents=(qimgv qimgv-git)
       ;;
     *)
       return 1
@@ -4451,7 +4486,7 @@ run_update_aur_guard_package() {
       guard_bashrc=$1
       pkg=$2
       source <(sed -n "/^# --- AUR Guard ---/,$p" "$guard_bashrc")
-      aurup "$pkg"
+      aurinstall "$pkg"
     ' awtarchy-update-aur "$guard_bashrc" "$pkg"
 }
 
@@ -4470,8 +4505,8 @@ install_missing_aur_packages() {
     warn "AUR Guard configuration not found: ${guard_bashrc}"
     return 1
   }
-  grep -q '^aurup()' "$guard_bashrc" || {
-    warn "AUR Guard aurup function not found in: ${guard_bashrc}"
+  grep -q '^aurinstall()' "$guard_bashrc" || {
+    warn "AUR Guard aurinstall function not found in: ${guard_bashrc}"
     return 1
   }
 

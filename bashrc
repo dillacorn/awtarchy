@@ -117,8 +117,8 @@ unset -f yay paru 2>/dev/null
 #   aurcheck                  list available AUR updates, emergency blocks, and historical warnings
 #   aurverify package         practical packaging and upstream-source verification
 #   aurverify --deep package  add exhaustive upstream and dependency-cache scanning
-#   aurup package             practical clean-root build and install
-#   aurup --deep package      exhaustive offline build and artifact inspection
+#   aurinstall package             practical clean-root build and install
+#   aurinstall --deep package      exhaustive offline build and artifact inspection
 #
 # Direct read-only yay/paru queries are allowed. Package-changing operations remain blocked.
 
@@ -885,8 +885,8 @@ _aur_guard_block_message() {
   printf '  aurcheck             show AUR updates, emergency blocks, and historical warnings\n'
   printf '  aurverify package         practical packaging and upstream-source verification\n'
   printf '  aurverify --deep package  exhaustive upstream and dependency-cache scanning\n'
-  printf '  aurup package             practical clean-root build and install\n'
-  printf '  aurup --deep package      exhaustive offline build and artifact inspection\n\n'
+  printf '  aurinstall package             practical clean-root build and install\n'
+  printf '  aurinstall --deep package      exhaustive offline build and artifact inspection\n\n'
   printf 'Unsafe manual override:\n'
   printf '  aurunsafe %s [arguments]\n' "$helper"
 }
@@ -5090,7 +5090,7 @@ AUR_GUARD_TEST_HELPER
   fi
 
   printf 'AUR Guard self-test: emergency-blocked packages must be refused.\n'
-  if aurup_output=$(aurup vesktop-bin-patched 2>&1); then
+  if aurup_output=$(aurinstall vesktop-bin-patched 2>&1); then
     aurup_status=0
   else
     aurup_status=$?
@@ -5098,7 +5098,7 @@ AUR_GUARD_TEST_HELPER
   printf '%s\n' "$aurup_output"
 
   if (( aurup_status == 0 )); then
-    _aur_guard_fail 'self-test failed: aurup returned success for an emergency-blocked package'
+    _aur_guard_fail 'self-test failed: aurinstall returned success for an emergency-blocked package'
     return 1
   fi
 
@@ -5896,7 +5896,7 @@ AUR_GUARD_TEST_IDENTITY_PACMAN
 
   local aurup_definition identity_assess_line deep_restart_line build_line
   local install_line snapshot_line
-  aurup_definition=$(declare -f aurup) || return 1
+  aurup_definition=$(declare -f aurinstall) || return 1
   identity_assess_line=$(grep -n -m1 '_aur_guard_assess_aur_identity' \
     <<< "$aurup_definition" | cut -d: -f1)
   deep_restart_line=$(grep -n -m1 'Discarding practical-mode work and restarting automatically in deep mode' \
@@ -6125,6 +6125,11 @@ aurhelp() {
   cat <<'AUR_GUARD_HELP'
 AUR Guard quick help
 
+Help commands:
+  aur
+  aurguard
+  aurhelp
+
 Allowed direct helper queries:
   yay -Qiu                  inspect installed packages with available upgrades
   yay -Qm                   list installed foreign/AUR packages
@@ -6140,12 +6145,12 @@ Safe workflow:
   aurcheck                  show AUR updates, emergency blocks, and historical warnings
   aurverify package         practical packaging and upstream-source verification
   aurverify --deep package  add exhaustive upstream and dependency-cache scanning
-  aurup package             practical clean-root build and install
-  aurup --deep package      exhaustive offline build and artifact inspection
+  aurinstall package             practical clean-root build and install
+  aurinstall --deep package      exhaustive offline build and artifact inspection
   aurguardtest              run the offline AUR Guard self-test
 
 Upgrade review:
-  For already-installed AUR packages, aurup shows maintainer identity, AUR
+  For already-installed AUR packages, aurinstall shows maintainer identity, AUR
   revision age, PKGBUILD change status, and flagged additions before building.
   Normal PKGBUILD changes remain optional to display. A maintainer change forces
   deep verification, mandatory PKGBUILD display, and exact confirmation.
@@ -6159,8 +6164,8 @@ Examples:
   aurcheck
   aurverify awtwall
   aurverify --deep awtwall
-  aurup awtwall
-  aurup --deep awtwall
+  aurinstall awtwall
+  aurinstall --deep awtwall
 
 Unsafe override:
   aurunsafe yay -S package
@@ -6294,7 +6299,7 @@ aurcheck() {
 
   if _aur_guard_has_historical_matches; then
     _aur_guard_print_historical_summary
-    _aur_guard_pass 'no emergency-blocked updates found; historical matches require full aurup verification and confirmation'
+    _aur_guard_pass 'no emergency-blocked updates found; historical matches require full aurinstall verification and confirmation'
   else
     _aur_guard_pass 'no available AUR update names matched the emergency or historical incident lists'
   fi
@@ -6361,7 +6366,7 @@ aurverify() {
   return "$status"
 }
 
-aurup() {
+aurinstall() {
   local pkg status recheck_status identity_status review_status
   local restart_count=0
   local _AUR_GUARD_MODE='practical'
@@ -6373,16 +6378,16 @@ aurup() {
       ;;
     2)
       if [[ "$1" != '--deep' ]]; then
-        printf 'Usage: aurup [--deep] package_name\n' >&2
+        printf 'Usage: aurinstall [--deep] package_name\n' >&2
         return 1
       fi
       _AUR_GUARD_MODE='deep'
       pkg="$2"
       ;;
     *)
-      printf 'Usage: aurup [--deep] package_name\n' >&2
-      printf 'Example: aurup awtwall\n' >&2
-      printf 'Deep:    aurup --deep awtwall\n' >&2
+      printf 'Usage: aurinstall [--deep] package_name\n' >&2
+      printf 'Example: aurinstall awtwall\n' >&2
+      printf 'Deep:    aurinstall --deep awtwall\n' >&2
       return 1
       ;;
   esac
@@ -6524,6 +6529,24 @@ aurup() {
     _aur_guard_cleanup_work
     return 0
   done
+}
+
+# Backward-compatible AUR Guard install command.
+aurup() {
+  aurinstall "$@"
+}
+
+aur() {
+  if (( $# != 0 )); then
+    printf 'Usage: aur\n' >&2
+    return 1
+  fi
+
+  aurhelp
+}
+
+aurguard() {
+  aur "$@"
 }
 
 aurunsafe() {
