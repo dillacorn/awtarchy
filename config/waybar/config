@@ -22,7 +22,7 @@
       "cpu",
       "custom/cputemp",
       "memory",
-      "backlight",
+      "custom/ddc-brightness",
       "battery",
       "wireplumber",
       "custom/clock-toggle",
@@ -216,19 +216,17 @@
       "format": "{}",
       "tooltip": false
     },
-    "backlight": {
-      "format": "{icon} {percent}",
-      "format-icons": [
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        "",
-        ""
-      ]
+    "custom/ddc-brightness": {
+      "exec": "~/.config/waybar/scripts/ddc_brightness.sh status",
+      "interval": 5,
+      "return-type": "json",
+      "signal": 15,
+      "exec-on-event": true,
+      "on-click": "~/.config/waybar/scripts/ddc_brightness.sh menu",
+      "on-click-right": "~/.config/waybar/scripts/ddc_brightness.sh menu",
+      "on-scroll-up": "~/.config/waybar/scripts/ddc_brightness.sh up",
+      "on-scroll-down": "~/.config/waybar/scripts/ddc_brightness.sh down",
+      "tooltip": true
     },
     "battery": {
       "states": {
@@ -251,8 +249,6 @@
     "wireplumber": {
       "scroll-step": 5,
       "format": "{icon}   {volume}",
-      "format-bluetooth": "{icon} {volume} ",
-      "format-bluetooth-muted": " {icon}",
       "format-muted": " mute",
       "format-icons": {
         "headphone": "",

@@ -159,13 +159,13 @@ start_inhibitor() {
 
     stop_managed_processes
 
+    # $0 intentionally expands inside the child Bash.
+    # shellcheck disable=SC2016
     setsid systemd-inhibit \
         --what=idle \
         --who="$WHO" \
         --why="$WHY" \
         --mode=block \
-        # $0 intentionally expands inside the child Bash.
-        # shellcheck disable=SC2016
         bash -c 'trap "exit 0" TERM INT HUP; exec -a "$0" sleep infinity' "$PROC_NAME" \
         9>&- >/dev/null 2>&1 &
 

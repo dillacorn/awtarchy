@@ -93,12 +93,12 @@ proc_match_pid() {
   [[ -z "$pid" || "$pid" == "0" ]] && return 1
   if [[ -r "/proc/$pid/comm" ]]; then
     local comm
-    comm="$(tr -d '\n' </proc/$pid/comm 2>/dev/null || true)"
+    comm="$(tr -d '\n' <"/proc/$pid/comm" 2>/dev/null || true)"
     [[ "$(printf %s "$comm" | to_lc)" == "$want" ]] && return 0
   fi
   if [[ -r "/proc/$pid/cmdline" ]]; then
     local cmd first
-    cmd="$(tr '\0' ' ' </proc/$pid/cmdline 2>/dev/null || true)"
+    cmd="$(tr '\0' ' ' <"/proc/$pid/cmdline" 2>/dev/null || true)"
     read -r first _ <<<"$cmd"
     first="${first##*/}"
     [[ "$(printf %s "$first" | to_lc)" == "$want" ]] && return 0

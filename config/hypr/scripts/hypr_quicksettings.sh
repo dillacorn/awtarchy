@@ -2,6 +2,7 @@
 set -euo pipefail
 
 BRIGHTNESS_SCRIPT="${HYPR_BRIGHTNESS_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/hypr-ddc-brightness.sh}"
+BRIGHTNESS_MONITOR="${HYPR_BRIGHTNESS_MONITOR:-}"
 SUNSET_SCRIPT="${HYPR_SUNSET_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/hyprsunset_ctl.sh}"
 VIBRANCE_SCRIPT="${HYPR_VIBRANCE_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/vibrance_shader.sh}"
 HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
@@ -11,7 +12,7 @@ VIBRANCE_SHADER="${VIBRANCE_SHADER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/
 BRIGHTNESS_STEP="${HYPR_BRIGHTNESS_STEP:-5}"
 CMD_TIMEOUT="${HYPR_SETTINGS_TIMEOUT:-6}"
 TITLE="Hypr Quick Settings"
-TERM_CLASS="hypr-quicksettings"
+TERM_CLASS="hypr_quicksettings"
 
 MENU_ITEMS=("Brightness" "Night Light" "Vibrance" "sched-ext" "Stop sched-ext")
 SEL=0
@@ -66,6 +67,22 @@ run_capture() {
   fi
   printf '%s' "$out"
   return "$rc"
+}
+
+brightness_capture() {
+  if [[ -n "$BRIGHTNESS_MONITOR" ]]; then
+    run_capture "$BRIGHTNESS_SCRIPT" --monitor "$BRIGHTNESS_MONITOR" "$@"
+  else
+    run_capture "$BRIGHTNESS_SCRIPT" "$@"
+  fi
+}
+
+brightness_quiet() {
+  if [[ -n "$BRIGHTNESS_MONITOR" ]]; then
+    run_quiet "$BRIGHTNESS_SCRIPT" --monitor "$BRIGHTNESS_MONITOR" "$@"
+  else
+    run_quiet "$BRIGHTNESS_SCRIPT" "$@"
+  fi
 }
 
 have_cmd() {
@@ -131,7 +148,7 @@ refresh_brightness() {
   BR_CONN="N/A"
   BR_CUR="N/A"
   BR_MAX="N/A"
-  out="$(run_capture "$BRIGHTNESS_SCRIPT" status)" || rc=$?
+  out="$(brightness_capture status)" || rc=$?
   if (( rc == 0 )) && [[ -n "$out" ]]; then
     local BR_conn="N/A" BR_cur="N/A" BR_max="N/A"
     parse_kv_into "$out" BR
@@ -1141,7 +1158,7 @@ sched_ext_menu() {
 }
 
 brightness_set_abs() {
-  run_quiet "$BRIGHTNESS_SCRIPT" set "$1"
+  brightness_quiet set "$1"
 }
 
 brightness_adjust() {

@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # ~/.config/hypr/scripts/hypr-ddc-brightness.sh
-# DDC/CI brightness for the focused Hyprland monitor with notify-send (mako).
+# DDC/CI brightness for a focused or explicitly selected Hyprland monitor.
 #
 # Usage:
-#   hypr-ddc-brightness.sh up [step]
-#   hypr-ddc-brightness.sh down [step]
-#   hypr-ddc-brightness.sh status
-#   hypr-ddc-brightness.sh set <absolute_value>
+#   hypr-ddc-brightness.sh [--monitor CONNECTOR] up [step]
+#   hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
+#   hypr-ddc-brightness.sh [--monitor CONNECTOR] status
+#   hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
 
 set -euo pipefail
 
@@ -78,10 +78,17 @@ need_cmd() {
 }
 
 get_focused_monitor_tsv() {
-  hyprctl -j monitors 2>/dev/null | jq -r '
-    .[] | select(.focused==true or .focused=="yes") |
-    [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
-  ' | head -n1
+  if [[ -n "${TARGET_CONN:-}" ]]; then
+    hyprctl -j monitors 2>/dev/null | jq -r --arg conn "$TARGET_CONN" '
+      .[] | select(.name == $conn) |
+      [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
+    ' | head -n1
+  else
+    hyprctl -j monitors 2>/dev/null | jq -r '
+      .[] | select(.focused==true or .focused=="yes") |
+      [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
+    ' | head -n1
+  fi
 }
 
 parse_vcp_any() {
@@ -101,6 +108,17 @@ parse_vcp_any() {
 
 MODE="client"
 WORKER_CONN=""
+TARGET_CONN="${HYPR_DDC_MONITOR:-}"
+
+if [[ "${1:-}" == "--monitor" ]]; then
+  [[ -n "${2:-}" ]] || {
+    echo "hypr-ddc-brightness: --monitor requires a connector name" >&2
+    exit 2
+  }
+  TARGET_CONN="$2"
+  shift 2
+fi
+
 cmd="${1:-}"
 
 case "$cmd" in
@@ -124,10 +142,10 @@ case "$cmd" in
   ""|-h|--help|help)
     cat <<'EOF'
 Usage:
-  hypr-ddc-brightness.sh up [step]
-  hypr-ddc-brightness.sh down [step]
-  hypr-ddc-brightness.sh status
-  hypr-ddc-brightness.sh set <absolute_value>
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] up [step]
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] status
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
 EOF
     exit 0
     ;;
@@ -318,9 +336,16 @@ build_ddc_safe_cmd() {
 }
 
 must_focused_info() {
-  local line
+  local line target
+
   line="$(get_focused_monitor_tsv || true)"
-  [[ -n "${line:-}" ]] || { echo "hypr-ddc-brightness: no focused monitor" >&2; exit 1; }
+  target="${TARGET_CONN:-focused monitor}"
+
+  [[ -n "${line:-}" ]] || {
+    echo "hypr-ddc-brightness: monitor not found: $target" >&2
+    exit 1
+  }
+
   printf '%s\n' "$line"
 }
 
@@ -484,10 +509,13 @@ while :; do
   fi
   idle_loops=0
 
-  focused="$(get_focused_monitor_tsv || true)"
+  monitor_info="$(
+    TARGET_CONN="$conn" get_focused_monitor_tsv || true
+  )"
   hypr_make="" hypr_model="" hypr_serial="" hypr_desc=""
-  if [[ -n "${focused:-}" ]]; then
-    IFS=$'\t' read -r _conn hypr_make hypr_model hypr_serial hypr_desc <<<"$focused"
+
+  if [[ -n "${monitor_info:-}" ]]; then
+    IFS=$'\t' read -r _conn hypr_make hypr_model hypr_serial hypr_desc <<<"$monitor_info"
   fi
 
   bus="$(get_bus_for_conn "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc" || true)"
