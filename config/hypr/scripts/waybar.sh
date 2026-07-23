@@ -474,9 +474,9 @@ base as $b
              .["wireplumber#v_icon"] =
                (.wireplumber
                  * {"format":"{icon}",
-                    "format-bluetooth":"{icon}",
+                    "format-bluetooth":"{icon}",
                     "format-muted":"",
-                    "format-bluetooth-muted":""})
+                    "format-bluetooth-muted":""})
              | .["wireplumber#v_val"] =
                (.wireplumber
                  * {"format":"{volume}",
