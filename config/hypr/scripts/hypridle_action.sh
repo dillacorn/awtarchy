@@ -19,6 +19,7 @@ SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 SYSTEMD_RUN_BIN="${SYSTEMD_RUN_BIN:-systemd-run}"
 LOGINCTL_BIN="${LOGINCTL_BIN:-loginctl}"
 NOHUP_BIN="${NOHUP_BIN:-nohup}"
+SYSTEMD_INHIBIT_BIN="${SYSTEMD_INHIBIT_BIN:-systemd-inhibit}"
 
 OBS_LOG_FILE_OVERRIDE="${OBS_LOG_FILE_OVERRIDE:-}"
 OBS_PROCESS_REQUIRED="${OBS_PROCESS_REQUIRED:-1}"
@@ -46,6 +47,9 @@ PRODUCTIVE_COMM_REGEX="${PRODUCTIVE_COMM_REGEX:-^(makepkg|pacman|paru|yay|pikaur
 
 # Keep synchronized with the game classes in hyprland.lua.
 GAME_CLASS_REGEX='^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|chiaki|moonlight|com\.moonlight_stream\.Moonlight|.*\.exe)$'
+
+# Teams for Linux may legitimately keep the PC awake during calls.
+TEAMS_CLASS_REGEX='^(com\.github\.IsmaelMartinez\.teams_for_linux|teams[-_]?for[-_]?linux|microsoft[-_ ]?teams)$'
 
 BROWSER_CLASS_REGEX='^(firefox|org\.mozilla\.firefox|firefoxdeveloperedition|librewolf|floorp|zen|zen-browser|chromium|chromium-browser|org\.chromium\.Chromium|google-chrome.*|brave-browser.*|com\.brave\.Browser|vivaldi.*|microsoft-edge.*)$'
 BROWSER_MPRIS_REGEX='^(firefox|librewolf|floorp|zen|chromium|google-chrome|chrome|brave|vivaldi|microsoft-edge|edge)([._-]|$)'
@@ -180,6 +184,45 @@ game_is_running() {
         >/dev/null 2>&1
 }
 
+
+teams_wayland_inhibitor_is_active() {
+    local clients
+
+    clients="$(get_clients)"
+    [[ -n "$clients" ]] || return 1
+
+    jq -e \
+        --arg regex "$TEAMS_CLASS_REGEX" \
+        '
+        any(
+            .[];
+            (.mapped == true)
+            and
+            (
+                ((.class // "") | test($regex; "i"))
+                or
+                ((.initialClass // "") | test($regex; "i"))
+            )
+            and
+            ((.inhibitingIdle // false) == true)
+        )
+        ' \
+        <<<"$clients" \
+        >/dev/null 2>&1
+}
+
+teams_systemd_inhibitor_is_active() {
+    command_is_available "$SYSTEMD_INHIBIT_BIN" || return 1
+
+    timeout 2 "$SYSTEMD_INHIBIT_BIN" --list --no-pager 2>/dev/null |
+        grep -Eqi \
+            'teams[-_ ]?for[-_ ]?linux|com\.github\.IsmaelMartinez\.teams_for_linux|Microsoft Teams'
+}
+
+teams_inhibitor_is_active() {
+    teams_wayland_inhibitor_is_active ||
+        teams_systemd_inhibitor_is_active
+}
 
 obs_pids() {
     {
@@ -641,6 +684,11 @@ suspend_watch_reason() {
         return 0
     fi
 
+    if teams_inhibitor_is_active; then
+        printf '%s\n' 'Teams inhibitor active'
+        return 0
+    fi
+
     if obs_output_is_active; then
         states="$(obs_output_states || printf unknown)"
         printf 'OBS output active: %s\n' "$states"
@@ -667,6 +715,8 @@ suspend_guard_diagnose() {
 
     printf 'manual_inhibitor=%s\n' \
         "$(manual_inhibitor_is_active && printf yes || printf no)"
+    printf 'teams_inhibitor=%s\n' \
+        "$(teams_inhibitor_is_active && printf yes || printf no)"
     printf 'obs_output=%s\n' \
         "$(obs_output_is_active && printf yes || printf no)"
     printf 'game=%s\n' \
@@ -697,6 +747,8 @@ suspend_guard_diagnose() {
 
     if manual_inhibitor_is_active; then
         reason='Waybar inhibitor active'
+    elif teams_inhibitor_is_active; then
+        reason='Teams inhibitor active'
     elif obs_output_is_active; then
         reason="OBS output active: $(obs_output_states || printf unknown)"
     elif game_is_running; then
@@ -889,6 +941,7 @@ start_suspend_watch() {
         SYSTEMD_RUN_BIN \
         LOGINCTL_BIN \
         NOHUP_BIN \
+        SYSTEMD_INHIBIT_BIN \
         OBS_LOG_FILE_OVERRIDE \
         OBS_PROCESS_REQUIRED \
         SUSPEND_RUNTIME_DIR \
@@ -901,7 +954,8 @@ start_suspend_watch() {
         SUSPEND_CPU_HIGH_PERCENT \
         SUSPEND_EXEC_OVERRIDE \
         PROC_STAT_FILE \
-        PRODUCTIVE_COMM_REGEX
+        PRODUCTIVE_COMM_REGEX \
+        TEAMS_CLASS_REGEX
     do
         if [[ -n "${!variable:-}" ]]; then
             environment_args+=("--setenv=${variable}=${!variable}")
@@ -1291,6 +1345,11 @@ case "$action" in
         exec "$HYPRCTL_BIN" dispatch 'hl.dsp.dpms({ action = "enable" })'
         ;;
 
+    teams-inhibit-active)
+        teams_inhibitor_is_active
+        exit
+        ;;
+
     game-active)
         game_is_running
         exit
@@ -1351,6 +1410,11 @@ fi
 if [[ -x "$INHIBITOR_SH" ]] &&
    "$INHIBITOR_SH" is-active >/dev/null 2>&1; then
     log "blocked timeout action: ${action:-missing}; Waybar inhibitor active"
+    exit 0
+fi
+
+if teams_inhibitor_is_active; then
+    log "blocked timeout action: ${action:-missing}; Teams inhibitor active"
     exit 0
 fi
 
