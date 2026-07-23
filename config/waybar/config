@@ -217,15 +217,15 @@
       "tooltip": false
     },
     "custom/ddc-brightness": {
-      "exec": "~/.config/waybar/scripts/ddc_brightness.sh status",
+      "exec": "bash ~/.config/waybar/scripts/ddc_brightness.sh status",
       "interval": 5,
       "return-type": "json",
       "signal": 15,
       "exec-on-event": true,
-      "on-click": "~/.config/waybar/scripts/ddc_brightness.sh menu",
-      "on-click-right": "~/.config/waybar/scripts/ddc_brightness.sh menu",
-      "on-scroll-up": "~/.config/waybar/scripts/ddc_brightness.sh up",
-      "on-scroll-down": "~/.config/waybar/scripts/ddc_brightness.sh down",
+      "on-click": "bash ~/.config/waybar/scripts/ddc_brightness.sh menu",
+      "on-click-right": "bash ~/.config/waybar/scripts/ddc_brightness.sh menu",
+      "on-scroll-up": "bash ~/.config/waybar/scripts/ddc_brightness.sh up",
+      "on-scroll-down": "bash ~/.config/waybar/scripts/ddc_brightness.sh down",
       "tooltip": true
     },
     "battery": {

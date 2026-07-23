@@ -1217,7 +1217,7 @@ hl.window_rule({ match = { class = "^(Wiremix)$" }, size = { "(monitor_w*0.65)",
 hl.window_rule({ match = { class = "^(Wiremix)$" }, center = true })
 
 hl.window_rule({ match = { class = "^(hypr_quicksettings)$" }, float = true })
-hl.window_rule({ match = { class = "^(hypr_quicksettings)$" }, size = { "(monitor_w*0.70)", "(monitor_h*0.40)" } })
+hl.window_rule({ match = { class = "^(hypr_quicksettings)$" }, size = { "(monitor_w*0.70)", "(monitor_h*0.50)" } })
 hl.window_rule({ match = { class = "^(hypr_quicksettings)$" }, center = true })
 
 hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, float = true })

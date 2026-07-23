@@ -8,13 +8,16 @@ VIBRANCE_SCRIPT="${HYPR_VIBRANCE_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/
 HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
 HYPR_CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
 VIBRANCE_SHADER="${VIBRANCE_SHADER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance}"
+AWTWALL_CMD="${HYPR_AWTWALL_CMD:-awtwall}"
+LAUNCH_HANDLER="${HYPR_LAUNCH_HANDLER:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/launch_handler.sh}"
+SUBMAP_STATE_FILE="${HYPR_SUBMAP_STATE_FILE:-/tmp/hypr-submap}"
 
 BRIGHTNESS_STEP="${HYPR_BRIGHTNESS_STEP:-5}"
 CMD_TIMEOUT="${HYPR_SETTINGS_TIMEOUT:-6}"
-TITLE="Hypr Quick Settings"
+TITLE="Awtarchy Quick Settings"
 TERM_CLASS="hypr_quicksettings"
 
-MENU_ITEMS=("Brightness" "Night Light" "Vibrance" "sched-ext" "Stop sched-ext")
+MENU_ITEMS=("Brightness" "Display" "Night Light" "Vibrance" "Submap" "Wallpaper Picker" "sched-ext" "Stop sched-ext")
 SEL=0
 MSG=""
 SHOULD_QUIT=0
@@ -27,6 +30,13 @@ SUN_IDENTITY="unknown"
 SUN_ENABLED="0"
 VIB_VAL="N/A"
 VIB_ENABLED="?"
+SUBMAP_CURRENT="reset"
+
+DISPLAY_FOCUSED=""
+DISPLAY_LAYOUT_AVAILABLE=0
+declare -a DISPLAY_CHOICES=()
+declare -a DISPLAY_LABELS=()
+declare -a DISPLAY_GEOMETRIES=()
 
 SCHED_EXT_ITEMS=(
   "scx_beerland"
@@ -59,6 +69,18 @@ declare -a BRIGHTNESS_CLICK_STARTS=()
 declare -a BRIGHTNESS_CLICK_ENDS=()
 declare -a BRIGHTNESS_CLICK_VALUES=()
 
+OPTION_MENU_TOP=0
+OPTION_MENU_LIST_START=5
+OPTION_MENU_LIST_END=5
+OPTION_MENU_VISIBLE_ROWS=1
+OPTION_MENU_LAYOUT_BOTTOM=4
+OPTION_MENU_VALUE=""
+declare -a OPTION_MENU_LAYOUT_HIT_INDEX=()
+declare -a OPTION_MENU_LAYOUT_HIT_ROW_START=()
+declare -a OPTION_MENU_LAYOUT_HIT_ROW_END=()
+declare -a OPTION_MENU_LAYOUT_HIT_COL_START=()
+declare -a OPTION_MENU_LAYOUT_HIT_COL_END=()
+
 mouse_enable() {
   printf '\033[?1000h\033[?1006h'
 }
@@ -70,6 +92,26 @@ mouse_disable() {
 cleanup() {
   mouse_disable
   printf '\033[?25h\033[0m\033[2J\033[H'
+}
+
+set_terminal_title() {
+  printf '\033]0;%s\007' "$TITLE"
+}
+
+term_cols() {
+  tput cols 2>/dev/null || printf '80'
+}
+
+term_lines() {
+  tput lines 2>/dev/null || printf '24'
+}
+
+ui_goto() {
+  printf '\033[%s;%sH' "$1" "$2"
+}
+
+ui_clear_line() {
+  printf '\033[2K'
 }
 
 run_quiet() {
@@ -482,10 +524,141 @@ refresh_sched_ext() {
   fi
 }
 
+refresh_display_choices() {
+  local current item found=0
+  local json name width height refresh x y logical_w logical_h focused label
+
+  current="${BRIGHTNESS_MONITOR:-Focused display}"
+  DISPLAY_CHOICES=("Focused display")
+  DISPLAY_LABELS=("Focused display - follows Hyprland focus")
+  DISPLAY_GEOMETRIES=("")
+  DISPLAY_FOCUSED=""
+  DISPLAY_LAYOUT_AVAILABLE=0
+
+  if have_cmd hyprctl && have_cmd jq; then
+    json="$(hyprctl -j monitors 2>/dev/null || true)"
+    if jq -e 'type == "array"' >/dev/null 2>&1 <<<"$json"; then
+      while IFS=$'\t' read -r name width height refresh x y logical_w logical_h focused; do
+        [[ -n "$name" ]] || continue
+        label="${name} - ${width}x${height}"
+        (( refresh > 0 )) && label+="@${refresh}Hz"
+        label+=" - pos ${x},${y}"
+        if [[ "$focused" == "true" ]]; then
+          label+=" - focused"
+          DISPLAY_FOCUSED="$name"
+        fi
+        DISPLAY_CHOICES+=("$name")
+        DISPLAY_LABELS+=("$label")
+        DISPLAY_GEOMETRIES+=("${x}:${y}:${logical_w}:${logical_h}")
+        DISPLAY_LAYOUT_AVAILABLE=1
+      done < <(
+        jq -r '
+          .[]
+          | select((.disabled // false) == false)
+          | (.scale // 1) as $scale
+          | [
+              (.name // ""),
+              (.width // 0),
+              (.height // 0),
+              ((.refreshRate // 0) | round),
+              (.x // 0),
+              (.y // 0),
+              (if $scale > 0 then (((.width // 0) / $scale) | round) else (.width // 0) end),
+              (if $scale > 0 then (((.height // 0) / $scale) | round) else (.height // 0) end),
+              (.focused // false)
+            ]
+          | @tsv
+        ' <<<"$json" 2>/dev/null || true
+      )
+    fi
+  elif have_cmd hyprctl; then
+    while IFS= read -r name; do
+      [[ -n "$name" ]] || continue
+      DISPLAY_CHOICES+=("$name")
+      DISPLAY_LABELS+=("$name")
+      DISPLAY_GEOMETRIES+=("")
+    done < <(hyprctl monitors 2>/dev/null | sed -n 's/^Monitor \([^ ]*\) (ID .*/\1/p' || true)
+  fi
+
+  for item in "${DISPLAY_CHOICES[@]}"; do
+    if [[ "$item" == "$current" ]]; then
+      found=1
+      break
+    fi
+  done
+
+  if (( found == 0 )); then
+    BRIGHTNESS_MONITOR=""
+  fi
+}
+
+refresh_submap() {
+  local current=""
+
+  if [[ -r "$SUBMAP_STATE_FILE" ]]; then
+    IFS= read -r current < "$SUBMAP_STATE_FILE" || true
+  fi
+
+  case "$current" in
+    noalt|mouse|vm)
+      SUBMAP_CURRENT="$current"
+      ;;
+    *)
+      SUBMAP_CURRENT="reset"
+      ;;
+  esac
+}
+
+set_submap() {
+  local target="$1" notify_state
+
+  have_cmd hyprctl || {
+    MSG='submap: hyprctl not found'
+    return 1
+  }
+
+  case "$target" in
+    reset)
+      if ! run_quiet hyprctl dispatch 'hl.dsp.submap("reset")'; then
+        MSG='submap: reset failed'
+        return 1
+      fi
+      mkdir -p "$(dirname "$SUBMAP_STATE_FILE")" 2>/dev/null || true
+      : > "$SUBMAP_STATE_FILE" 2>/dev/null || true
+      notify_state='OFF'
+      ;;
+    noalt|mouse|vm)
+      if ! run_quiet hyprctl dispatch "hl.dsp.submap(\"${target}\")"; then
+        MSG="submap: ${target} failed"
+        return 1
+      fi
+      mkdir -p "$(dirname "$SUBMAP_STATE_FILE")" 2>/dev/null || true
+      printf '%s\n' "$target" > "$SUBMAP_STATE_FILE" 2>/dev/null || true
+      notify_state='ON'
+      ;;
+    *)
+      MSG='submap: invalid mode'
+      return 1
+      ;;
+  esac
+
+  SUBMAP_CURRENT="$target"
+  if have_cmd notify-send; then
+    if [[ "$target" == 'reset' ]]; then
+      run_quiet notify-send -a Hyprland -t 1000 'submap mode: OFF'
+    else
+      run_quiet notify-send -a Hyprland -t 1000 "${target} mode: ${notify_state}"
+    fi
+  fi
+  return 0
+}
+
 refresh_all() {
+  refresh_display_choices
   refresh_brightness
   refresh_sunset
   refresh_vibrance
+  refresh_submap
   refresh_sched_ext
 }
 
@@ -823,6 +996,419 @@ sched_ext_show_help() {
   done
 }
 
+format_display_target() {
+  if [[ -n "$BRIGHTNESS_MONITOR" ]]; then
+    printf '%s' "$BRIGHTNESS_MONITOR"
+  elif [[ "$BR_CONN" != 'N/A' ]]; then
+    printf 'Focused display (%s)' "$BR_CONN"
+  else
+    printf 'Focused display'
+  fi
+}
+
+format_submap() {
+  if [[ "$SUBMAP_CURRENT" == 'reset' ]]; then
+    printf 'off'
+  else
+    printf '%s (on)' "$SUBMAP_CURRENT"
+  fi
+}
+
+draw_monitor_layout() {
+  local selected="$1" start_row="$2" max_height="$3"
+  local cols diagram_width diagram_height min_x=0 min_y=0 max_x=0 max_y=0
+  local geometry x y width height i count=0 first=1 total_width total_height
+  local sx sy ex ey box_width box_height row border label label_width highlight
+
+  OPTION_MENU_LAYOUT_BOTTOM=$(( start_row - 1 ))
+  OPTION_MENU_LAYOUT_HIT_INDEX=()
+  OPTION_MENU_LAYOUT_HIT_ROW_START=()
+  OPTION_MENU_LAYOUT_HIT_ROW_END=()
+  OPTION_MENU_LAYOUT_HIT_COL_START=()
+  OPTION_MENU_LAYOUT_HIT_COL_END=()
+  (( DISPLAY_LAYOUT_AVAILABLE == 1 )) || return 1
+
+  for i in "${!DISPLAY_CHOICES[@]}"; do
+    geometry="${DISPLAY_GEOMETRIES[$i]:-}"
+    [[ -n "$geometry" ]] || continue
+    IFS=: read -r x y width height <<<"$geometry"
+    [[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ && "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || continue
+    (( width > 0 && height > 0 )) || continue
+
+    if (( first == 1 )); then
+      min_x=$x
+      min_y=$y
+      max_x=$(( x + width ))
+      max_y=$(( y + height ))
+      first=0
+    else
+      (( x < min_x )) && min_x=$x
+      (( y < min_y )) && min_y=$y
+      (( x + width > max_x )) && max_x=$(( x + width ))
+      (( y + height > max_y )) && max_y=$(( y + height ))
+    fi
+    count=$(( count + 1 ))
+  done
+
+  (( count > 0 )) || return 1
+  total_width=$(( max_x - min_x ))
+  total_height=$(( max_y - min_y ))
+  (( total_width > 0 && total_height > 0 )) || return 1
+
+  cols="$(term_cols)"
+  diagram_width=$(( cols - 6 ))
+  (( diagram_width > 88 )) && diagram_width=88
+  (( diagram_width >= 18 )) || return 1
+
+  diagram_height=$max_height
+  (( diagram_height > 7 )) && diagram_height=7
+  (( diagram_height >= 4 )) || return 1
+  OPTION_MENU_LAYOUT_BOTTOM=$(( start_row + diagram_height - 1 ))
+
+  highlight="$selected"
+  if [[ "$highlight" == 'Focused display' ]]; then
+    highlight="$DISPLAY_FOCUSED"
+  fi
+
+  for i in "${!DISPLAY_CHOICES[@]}"; do
+    geometry="${DISPLAY_GEOMETRIES[$i]:-}"
+    [[ -n "$geometry" ]] || continue
+    IFS=: read -r x y width height <<<"$geometry"
+    [[ "$x" =~ ^-?[0-9]+$ && "$y" =~ ^-?[0-9]+$ && "$width" =~ ^[0-9]+$ && "$height" =~ ^[0-9]+$ ]] || continue
+    (( width > 0 && height > 0 )) || continue
+
+    sx=$(( 3 + (x - min_x) * (diagram_width - 1) / total_width ))
+    ex=$(( 3 + (x + width - min_x) * (diagram_width - 1) / total_width ))
+    sy=$(( start_row + (y - min_y) * (diagram_height - 1) / total_height ))
+    ey=$(( start_row + (y + height - min_y) * (diagram_height - 1) / total_height ))
+
+    (( ex <= sx + 3 )) && ex=$(( sx + 4 ))
+    (( ey <= sy + 1 )) && ey=$(( sy + 2 ))
+    (( ex > cols - 2 )) && ex=$(( cols - 2 ))
+    (( ey > OPTION_MENU_LAYOUT_BOTTOM )) && ey=$OPTION_MENU_LAYOUT_BOTTOM
+
+    box_width=$(( ex - sx + 1 ))
+    box_height=$(( ey - sy + 1 ))
+    (( box_width >= 5 && box_height >= 3 )) || continue
+
+    OPTION_MENU_LAYOUT_HIT_INDEX+=("$i")
+    OPTION_MENU_LAYOUT_HIT_ROW_START+=("$sy")
+    OPTION_MENU_LAYOUT_HIT_ROW_END+=("$ey")
+    OPTION_MENU_LAYOUT_HIT_COL_START+=("$sx")
+    OPTION_MENU_LAYOUT_HIT_COL_END+=("$ex")
+
+    printf -v border '%*s' "$(( box_width - 2 ))" ''
+    border="${border// /-}"
+    ui_goto "$sy" "$sx"
+    printf '+%s+' "$border"
+    for (( row = sy + 1; row < ey; row++ )); do
+      ui_goto "$row" "$sx"
+      printf '|'
+      ui_goto "$row" "$ex"
+      printf '|'
+    done
+    ui_goto "$ey" "$sx"
+    printf '+%s+' "$border"
+
+    label="$(( i + 1 )). ${DISPLAY_CHOICES[$i]}"
+    label_width=$(( box_width - 2 ))
+    ui_goto "$(( sy + 1 ))" "$(( sx + 1 ))"
+    if [[ "${DISPLAY_CHOICES[$i]}" == "$highlight" ]]; then
+      printf '\033[7m%-*.*s\033[0m' "$label_width" "$label_width" "$label"
+    else
+      printf '%-*.*s' "$label_width" "$label_width" "$label"
+    fi
+  done
+
+  return 0
+}
+
+option_menu_layout_index_at() {
+  local y="$1" x="$2" i count="${#OPTION_MENU_LAYOUT_HIT_INDEX[@]}"
+
+  for (( i = 0; i < count; i++ )); do
+    if (( y >= OPTION_MENU_LAYOUT_HIT_ROW_START[i] &&
+          y <= OPTION_MENU_LAYOUT_HIT_ROW_END[i] &&
+          x >= OPTION_MENU_LAYOUT_HIT_COL_START[i] &&
+          x <= OPTION_MENU_LAYOUT_HIT_COL_END[i] )); then
+      printf '%s\n' "${OPTION_MENU_LAYOUT_HIT_INDEX[$i]}"
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+draw_option_menu() {
+  local title="$1" current="$2" selected="$3" requested_top="$4"
+  local values_name="$5" labels_name="$6" show_layout="${7:-0}"
+  local -n menu_values="$values_name"
+  local -n menu_labels="$labels_name"
+  local cols lines list_start available_rows count top end i row key_hint marker text width
+  local layout_height=0 subtitle
+
+  cols="$(term_cols)"
+  lines="$(term_lines)"
+  count=${#menu_values[@]}
+  printf '\033[2J\033[H\033[?25l'
+
+  width=$(( cols - 4 ))
+  (( width < 1 )) && width=1
+  ui_goto 2 3
+  ui_clear_line
+  printf '\033[1m%-*.*s\033[0m' "$width" "$width" "$title"
+
+  if (( show_layout == 1 )); then
+    subtitle='Live Hyprland outputs'
+  else
+    subtitle="Current: ${current}"
+  fi
+  ui_goto 3 3
+  ui_clear_line
+  printf '\033[2m%-*.*s\033[0m' "$width" "$width" "$subtitle"
+
+  list_start=5
+  if (( show_layout == 1 && DISPLAY_LAYOUT_AVAILABLE == 1 && lines >= 18 )); then
+    layout_height=$(( lines - 12 ))
+    (( layout_height > 7 )) && layout_height=7
+    if draw_monitor_layout "${menu_values[$selected]}" 5 "$layout_height"; then
+      list_start=$(( OPTION_MENU_LAYOUT_BOTTOM + 2 ))
+    fi
+  fi
+
+  available_rows=$(( lines - list_start - 2 ))
+  (( available_rows < 1 )) && available_rows=1
+  (( available_rows > count )) && available_rows=$count
+
+  top=$requested_top
+  (( top < 0 )) && top=0
+  if (( selected < top )); then
+    top=$selected
+  elif (( selected >= top + available_rows )); then
+    top=$(( selected - available_rows + 1 ))
+  fi
+  (( top < 0 )) && top=0
+  if (( top + available_rows > count )); then
+    top=$(( count - available_rows ))
+  fi
+  (( top < 0 )) && top=0
+
+  end=$(( top + available_rows - 1 ))
+  OPTION_MENU_TOP=$top
+  OPTION_MENU_LIST_START=$list_start
+  OPTION_MENU_LIST_END=$(( list_start + available_rows - 1 ))
+  OPTION_MENU_VISIBLE_ROWS=$available_rows
+
+  row=$list_start
+  for (( i = top; i <= end; i++ )); do
+    if (( i < 9 )); then
+      key_hint=$(( i + 1 ))
+    elif (( i == 9 )); then
+      key_hint=0
+    else
+      key_hint='-'
+    fi
+    marker=' '
+    [[ "${menu_values[$i]}" == "$current" ]] && marker='*'
+    text=" ${marker} [${key_hint}] ${menu_labels[$i]}"
+    ui_goto "$row" 3
+    ui_clear_line
+    if (( i == selected )); then
+      printf '\033[7m%-*.*s\033[0m' "$width" "$width" "$text"
+    else
+      printf '%-*.*s' "$width" "$width" "$text"
+    fi
+    row=$(( row + 1 ))
+  done
+
+  ui_goto "$(( lines - 1 ))" 1
+  ui_clear_line
+  printf '\033[2m%-*.*s\033[0m' "$cols" "$cols" ' arrows/jk move | 1-9/0 select | Enter/Space/click select | wheel moves | Esc/q cancel | * current '
+}
+
+option_menu() {
+  local title="$1" current="$2" values_name="$3" labels_name="$4" show_layout="${5:-0}"
+  local -n menu_values="$values_name"
+  local -n menu_labels="$labels_name"
+  local selected=0 top=0 key count i idx
+
+  OPTION_MENU_VALUE=""
+  count=${#menu_values[@]}
+  (( count > 0 )) || return 1
+  (( ${#menu_labels[@]} == count )) || return 1
+
+  for i in "${!menu_values[@]}"; do
+    if [[ "${menu_values[$i]}" == "$current" ]]; then
+      selected=$i
+      break
+    fi
+  done
+
+  while true; do
+    draw_option_menu "$title" "$current" "$selected" "$top" "$values_name" "$labels_name" "$show_layout"
+    top=$OPTION_MENU_TOP
+    key="$(read_key)" || return 1
+
+    if [[ "$key" == $'\e[<'* ]] && parse_mouse_event "$key"; then
+      (( MOUSE_RELEASE == 0 )) || continue
+
+      case "$MOUSE_BUTTON" in
+        64)
+          (( selected-- )) || true
+          (( selected < 0 )) && selected=0
+          continue
+          ;;
+        65)
+          (( selected < count - 1 )) && (( selected++ )) || true
+          continue
+          ;;
+      esac
+
+      (( (MOUSE_BUTTON & 3) == 0 )) || continue
+
+      if (( show_layout == 1 )); then
+        idx="$(option_menu_layout_index_at "$MOUSE_Y" "$MOUSE_X" || true)"
+        if [[ "$idx" =~ ^[0-9]+$ ]] && (( idx >= 0 && idx < count )); then
+          OPTION_MENU_VALUE="${menu_values[$idx]}"
+          return 0
+        fi
+      fi
+
+      if (( MOUSE_Y >= OPTION_MENU_LIST_START && MOUSE_Y <= OPTION_MENU_LIST_END )); then
+        idx=$(( OPTION_MENU_TOP + MOUSE_Y - OPTION_MENU_LIST_START ))
+        if (( idx >= 0 && idx < count )); then
+          OPTION_MENU_VALUE="${menu_values[$idx]}"
+          return 0
+        fi
+      fi
+      continue
+    fi
+
+    case "$key" in
+      q|Q|$'\e')
+        return 1
+        ;;
+      $'\e[A'|k|$'\e[D'|h)
+        (( selected-- )) || true
+        (( selected < 0 )) && selected=0
+        ;;
+      $'\e[B'|j|$'\e[C'|l)
+        (( selected < count - 1 )) && (( selected++ )) || true
+        ;;
+      $'\e[5~')
+        selected=$(( selected - OPTION_MENU_VISIBLE_ROWS ))
+        (( selected < 0 )) && selected=0
+        ;;
+      $'\e[6~')
+        selected=$(( selected + OPTION_MENU_VISIBLE_ROWS ))
+        (( selected >= count )) && selected=$(( count - 1 ))
+        ;;
+      $'\e[H'|$'\e[1~'|$'\eOH')
+        selected=0
+        ;;
+      $'\e[F'|$'\e[4~'|$'\eOF')
+        selected=$(( count - 1 ))
+        ;;
+      __ENTER__|' ')
+        OPTION_MENU_VALUE="${menu_values[$selected]}"
+        return 0
+        ;;
+      [1-9])
+        idx=$(( key - 1 ))
+        if (( idx < count )); then
+          OPTION_MENU_VALUE="${menu_values[$idx]}"
+          return 0
+        fi
+        ;;
+      0)
+        if (( count >= 10 )); then
+          OPTION_MENU_VALUE="${menu_values[9]}"
+          return 0
+        fi
+        ;;
+    esac
+  done
+}
+
+select_brightness_display() {
+  local current
+
+  refresh_display_choices
+  current="${BRIGHTNESS_MONITOR:-Focused display}"
+  if ! option_menu 'Select brightness display' "$current" DISPLAY_CHOICES DISPLAY_LABELS 1; then
+    MSG="display unchanged: ${current}"
+    return 0
+  fi
+
+  if [[ "$OPTION_MENU_VALUE" == 'Focused display' ]]; then
+    BRIGHTNESS_MONITOR=""
+  else
+    BRIGHTNESS_MONITOR="$OPTION_MENU_VALUE"
+  fi
+
+  refresh_brightness
+  MSG="display: $(format_display_target)"
+}
+
+select_submap() {
+  local target
+  # Passed by variable name to option_menu through Bash namerefs.
+  # shellcheck disable=SC2034
+  local -a values=(reset noalt mouse vm)
+  # shellcheck disable=SC2034
+  local -a labels=(
+    'Off / normal bindings'
+    'noalt - use SUPER alternatives for most ALT binds'
+    'mouse - mouse buttons move, resize, and float windows'
+    'vm - preserve shortcuts for a virtual machine'
+  )
+
+  refresh_submap
+  if ! option_menu 'Select Hyprland submap' "$SUBMAP_CURRENT" values labels 0; then
+    MSG="submap unchanged: $(format_submap)"
+    return 0
+  fi
+
+  target="$OPTION_MENU_VALUE"
+  if [[ "$target" == "$SUBMAP_CURRENT" && "$target" != 'reset' ]]; then
+    target='reset'
+  fi
+
+  if set_submap "$target"; then
+    SHOULD_QUIT=1
+  fi
+}
+
+launch_awtwall() {
+  local awtwall_path launch_cmd
+
+  awtwall_path="$(command -v "$AWTWALL_CMD" 2>/dev/null || true)"
+  if [[ -z "$awtwall_path" ]]; then
+    MSG='awtwall is not installed'
+    return 1
+  fi
+  if ! have_cmd alacritty; then
+    MSG='wallpaper picker: alacritty not found'
+    return 1
+  fi
+
+  printf -v launch_cmd 'alacritty --class wallpicker -e %q --resume' "$awtwall_path"
+  if [[ -x "$LAUNCH_HANDLER" ]]; then
+    if have_cmd setsid; then
+      setsid -f "$LAUNCH_HANDLER" wallpicker "$launch_cmd" >/dev/null 2>&1
+    else
+      "$LAUNCH_HANDLER" wallpicker "$launch_cmd" >/dev/null 2>&1 &
+    fi
+  elif have_cmd setsid; then
+    setsid -f alacritty --class wallpicker -e "$awtwall_path" --resume >/dev/null 2>&1
+  else
+    alacritty --class wallpicker -e "$awtwall_path" --resume >/dev/null 2>&1 &
+  fi
+
+  SHOULD_QUIT=1
+  return 0
+}
+
 format_brightness() {
   printf '%s %s/%s' "$BR_CONN" "$BR_CUR" "$BR_MAX"
 }
@@ -896,7 +1482,7 @@ format_sched_ext() {
 build_brightness_line() {
   local base line plain_len sep token start end pct current_pct current_step
 
-  printf -v base '%-15s %s  [' 'Brightness' "$(format_brightness)"
+  printf -v base '%-16s %s  [' 'Brightness' "$(format_brightness)"
   line="$base"
   plain_len=${#base}
   BRIGHTNESS_CLICK_STARTS=()
@@ -949,21 +1535,33 @@ draw_ui() {
         build_brightness_line
         line="$REPLY"
         ;;
+      Display)
+        value="$(format_display_target)"
+        printf -v line '%-16s %s' "$label" "$value"
+        ;;
       'Night Light')
         value="$(format_sunset)"
-        printf -v line '%-15s %s' "$label" "$value"
+        printf -v line '%-16s %s' "$label" "$value"
         ;;
       Vibrance)
         value="$(format_vibrance)"
-        printf -v line '%-15s %s' "$label" "$value"
+        printf -v line '%-16s %s' "$label" "$value"
+        ;;
+      Submap)
+        value="$(format_submap)"
+        printf -v line '%-16s %s' "$label" "$value"
+        ;;
+      'Wallpaper Picker')
+        value='open awtwall'
+        printf -v line '%-16s %s' "$label" "$value"
         ;;
       'sched-ext')
         value="$(format_sched_ext)"
-        printf -v line '%-15s %s' "$label" "$value"
+        printf -v line '%-16s %s' "$label" "$value"
         ;;
       'Stop sched-ext')
         value='restore default scheduler'
-        printf -v line '%-15s %s' "$label" "$value"
+        printf -v line '%-16s %s' "$label" "$value"
         ;;
       *)
         line="$label"
@@ -1475,18 +2073,54 @@ brightness_adjust() {
 }
 
 prompt_number() {
-  local prompt="$1" default="$2" input
+  local prompt="$1" default="$2" input="" key
+
   mouse_disable
   printf '\033[2J\033[H\033[?25h'
   printf '%s\n\n' "$TITLE"
-  printf '%s [%s]: ' "$prompt" "$default"
-  IFS= read -r input || true
-  mouse_enable
-  if [[ -z "$input" ]]; then
-    REPLY="$default"
-  else
-    REPLY="$input"
-  fi
+
+  while true; do
+    ui_goto 3 1
+    ui_clear_line
+    printf '%s [%s]  Esc: cancel' "$prompt" "$default"
+    ui_goto 4 1
+    ui_clear_line
+    printf '> %s' "$input"
+
+    key="$(read_key)" || {
+      mouse_enable
+      printf '\033[?25l'
+      return 1
+    }
+
+    case "$key" in
+      $'\e')
+        mouse_enable
+        printf '\033[?25l'
+        REPLY=""
+        return 1
+        ;;
+      __ENTER__)
+        mouse_enable
+        printf '\033[?25l'
+        if [[ -z "$input" ]]; then
+          REPLY="$default"
+        else
+          REPLY="$input"
+        fi
+        return 0
+        ;;
+      $'\177'|$'\b')
+        input="${input%?}"
+        ;;
+      $'\025')
+        input=""
+        ;;
+      [0-9])
+        input+="$key"
+        ;;
+    esac
+  done
 }
 
 do_action() {
@@ -1499,7 +2133,10 @@ do_action() {
         MSG='brightness: bad status'
         return
       fi
-      prompt_number "Set brightness (0-$BR_MAX)" "$BR_CUR"
+      if ! prompt_number "Set brightness (0-$BR_MAX)" "$BR_CUR"; then
+        MSG='brightness: cancelled'
+        return
+      fi
       if [[ ! "$REPLY" =~ ^[0-9]+$ ]]; then
         MSG='brightness: numbers only'
         return
@@ -1513,6 +2150,9 @@ do_action() {
         MSG='brightness: failed'
         refresh_brightness
       fi
+      ;;
+    Display)
+      select_brightness_display
       ;;
     'Night Light')
       if run_quiet "$SUNSET_SCRIPT" toggle; then
@@ -1529,6 +2169,12 @@ do_action() {
         MSG='vibrance: failed'
         refresh_vibrance
       fi
+      ;;
+    Submap)
+      select_submap
+      ;;
+    'Wallpaper Picker')
+      launch_awtwall
       ;;
     'sched-ext')
       sched_ext_menu
@@ -1591,6 +2237,7 @@ do_right() {
 
 ui_loop() {
   trap cleanup EXIT INT TERM
+  set_terminal_title
   require_files || exit 1
   sched_ext_state_load
   refresh_all

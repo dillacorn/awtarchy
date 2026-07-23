@@ -4,7 +4,7 @@
 [Desktop Entry]
 Type=Application
 Terminal=false
-Name=hypr_quicksettings
+Name=Awtarchy Quick Settings
 Icon=utilities-terminal
-Exec=/bin/sh -lc 'exec alacritty --class hypr_quicksettings,hypr_quicksettings --title hypr_quicksettings -e "$HOME/.config/hypr/scripts/hypr_quicksettings.sh"'
+Exec=/bin/sh -lc 'exec alacritty --class hypr_quicksettings,hypr_quicksettings --title "Awtarchy Quick Settings" -e bash "$HOME/.config/hypr/scripts/hypr_quicksettings.sh" --ui'
 StartupWMClass=hypr_quicksettings

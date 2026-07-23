@@ -241,8 +241,9 @@ toggle_quick_settings() {
   # attempting to launch a second terminal.
   HYPR_BRIGHTNESS_MONITOR="$monitor" \
     alacritty \
-      --class hypr_quicksettings \
-      -e "$QUICK_SETTINGS" --ui \
+      --class hypr_quicksettings,hypr_quicksettings \
+      --title "Awtarchy Quick Settings" \
+      -e bash "$QUICK_SETTINGS" --ui \
       >/dev/null 2>&1 8>&- &
 
   # Release the lock immediately once the actual window becomes visible.
