@@ -45,6 +45,7 @@ WAYBAR_VERTICAL_WIDTH="${WAYBAR_VERTICAL_WIDTH:-36}"
 WAYBAR_HORIZONTAL_HEIGHT_DEFAULT="${WAYBAR_HORIZONTAL_HEIGHT_DEFAULT:-28}"
 
 CPU_TEMP_V="${CPU_TEMP_V:-$CONF/waybar/scripts/cpu_temp_vertical.sh}"
+DDC_BRIGHTNESS_V="${DDC_BRIGHTNESS_V:-$CONF/waybar/scripts/ddc_brightness_vertical.sh}"
 CLOCK_TOGGLE_V="${CLOCK_TOGGLE_V:-$CONF/waybar/scripts/clock_toggle_vertical.sh}"
 
 TRACE="${TRACE:-0}"
@@ -430,6 +431,7 @@ def expand_one($m):
   elif $m == "memory" then ["memory#v_icon","memory#v_val"]
   elif $m == "wireplumber" then ["wireplumber#v_icon","wireplumber#v_val"]
   elif $m == "custom/cputemp" then ["custom/cputemp#v_icon","custom/cputemp#v_val"]
+  elif $m == "custom/ddc-brightness" then ["custom/ddc-brightness#v_icon","custom/ddc-brightness#v_val"]
   elif $m == "custom/clock-toggle" then ["custom/clock-toggle#v_icon","custom/clock-toggle#v_a","custom/clock-toggle#v_b"]
   else [$m] end;
 
@@ -490,6 +492,15 @@ base as $b
                ($b["custom/cputemp"] * {"exec": ($cputemp_exec_v + " temp"), "format":"{}"})
            else . end)
 
+        | (if ($b["custom/ddc-brightness"]? != null) then
+             .["custom/ddc-brightness#v_icon"] =
+               ($b["custom/ddc-brightness"]
+                 * {"exec": ($ddc_brightness_exec_v + " icon"), "return-type":"json"})
+             | .["custom/ddc-brightness#v_val"] =
+               ($b["custom/ddc-brightness"]
+                 * {"exec": ($ddc_brightness_exec_v + " value"), "return-type":"json"})
+           else . end)
+
         | (if ($b["custom/clock-toggle"]? != null) then
              .["custom/clock-toggle#v_icon"] =
                ($b["custom/clock-toggle"]
@@ -515,6 +526,7 @@ JQ
     --arg mon "$mon" \
     --arg pos "$pos" \
     --arg cputemp_exec_v "$CPU_TEMP_V" \
+    --arg ddc_brightness_exec_v "$DDC_BRIGHTNESS_V" \
     --arg clock_toggle_exec_v "$CLOCK_TOGGLE_V" \
     --argjson vwidth "$WAYBAR_VERTICAL_WIDTH" \
     --argjson hdef "$WAYBAR_HORIZONTAL_HEIGHT_DEFAULT" \

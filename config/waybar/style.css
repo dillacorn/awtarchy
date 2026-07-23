@@ -112,6 +112,7 @@ window#waybar.bottom {
 #memory,
 #custom-apps,
 #custom-cputemp,
+#custom-ddc-brightness,
 #custom-clipboard,
 #custom-mako_dnd,
 #custom-power,
@@ -284,6 +285,7 @@ window#waybar.left #cpu,
 window#waybar.left #memory,
 window#waybar.left #custom-apps,
 window#waybar.left #custom-cputemp,
+window#waybar.left #custom-ddc-brightness,
 window#waybar.left #custom-clipboard,
 window#waybar.left #custom-mako_dnd,
 window#waybar.left #custom-power,
@@ -302,6 +304,7 @@ window#waybar.right #cpu,
 window#waybar.right #memory,
 window#waybar.right #custom-apps,
 window#waybar.right #custom-cputemp,
+window#waybar.right #custom-ddc-brightness,
 window#waybar.right #custom-clipboard,
 window#waybar.right #custom-mako_dnd,
 window#waybar.right #custom-power,
@@ -311,30 +314,96 @@ window#waybar.right #custom-clock-toggle {
   margin: 0;
 }
 
-/* workspaces buttons: vertical-friendly */
+/* vertical workspace controls: remove horizontal spacing that widens the bar */
+window#waybar.left #group-ws-arrows,
+window#waybar.right #group-ws-arrows {
+  margin: 0;
+  padding: 0;
+}
+
+window#waybar.left #custom-ws-hub,
+window#waybar.left #custom-ws-up,
+window#waybar.left #custom-ws-down,
+window#waybar.left #custom-ws-left,
+window#waybar.left #custom-ws-right,
+window#waybar.right #custom-ws-hub,
+window#waybar.right #custom-ws-up,
+window#waybar.right #custom-ws-down,
+window#waybar.right #custom-ws-left,
+window#waybar.right #custom-ws-right,
 window#waybar.left #workspaces button,
 window#waybar.right #workspaces button {
   padding: 6px 0;
+  margin: 0;
 }
 
-/* vertical fixed-width columns so icons/values visually align */
+/* Vertical custom modules:
+ * Keep the total module width at 36px:
+ *   20px content + 8px padding on each side.
+ * This centers both icons and values without widening the bar. */
+window#waybar.left #custom-apps,
+window#waybar.right #custom-apps,
+window#waybar.left #custom-ws-hub,
+window#waybar.right #custom-ws-hub,
+window#waybar.left #custom-ws-up,
+window#waybar.right #custom-ws-up,
+window#waybar.left #custom-ws-down,
+window#waybar.right #custom-ws-down,
+window#waybar.left #custom-ws-left,
+window#waybar.right #custom-ws-left,
+window#waybar.left #custom-ws-right,
+window#waybar.right #custom-ws-right,
+window#waybar.left #custom-hypr-submap,
+window#waybar.right #custom-hypr-submap,
 window#waybar.left #custom-idle_inhibitor,
 window#waybar.right #custom-idle_inhibitor,
 window#waybar.left #custom-cputemp,
 window#waybar.right #custom-cputemp,
-window#waybar.left #wireplumber,
-window#waybar.right #wireplumber,
+window#waybar.left #custom-ddc-brightness,
+window#waybar.right #custom-ddc-brightness,
+window#waybar.left #custom-clock-toggle,
+window#waybar.right #custom-clock-toggle,
+window#waybar.left #custom-clipboard,
+window#waybar.right #custom-clipboard,
 window#waybar.left #custom-mako_dnd,
 window#waybar.right #custom-mako_dnd,
-window#waybar.left #custom-clock-toggle,
-window#waybar.right #custom-clock-toggle {
-  min-width: 36px;
+window#waybar.left #custom-power,
+window#waybar.right #custom-power {
+  min-width: 20px;
+  padding: 6px 8px;
+  margin: 0;
 }
 
-/* tiny nudge for the thermostat glyph so it doesn't look left-biased */
-window#waybar.left #custom-cputemp,
-window#waybar.right #custom-cputemp {
-  padding-left: 1px;
+window#waybar.left #custom-apps label,
+window#waybar.right #custom-apps label,
+window#waybar.left #custom-ws-hub label,
+window#waybar.right #custom-ws-hub label,
+window#waybar.left #custom-ws-up label,
+window#waybar.right #custom-ws-up label,
+window#waybar.left #custom-ws-down label,
+window#waybar.right #custom-ws-down label,
+window#waybar.left #custom-ws-left label,
+window#waybar.right #custom-ws-left label,
+window#waybar.left #custom-ws-right label,
+window#waybar.right #custom-ws-right label,
+window#waybar.left #custom-hypr-submap label,
+window#waybar.right #custom-hypr-submap label,
+window#waybar.left #custom-idle_inhibitor label,
+window#waybar.right #custom-idle_inhibitor label,
+window#waybar.left #custom-cputemp label,
+window#waybar.right #custom-cputemp label,
+window#waybar.left #custom-ddc-brightness label,
+window#waybar.right #custom-ddc-brightness label,
+window#waybar.left #custom-clock-toggle label,
+window#waybar.right #custom-clock-toggle label,
+window#waybar.left #custom-clipboard label,
+window#waybar.right #custom-clipboard label,
+window#waybar.left #custom-mako_dnd label,
+window#waybar.right #custom-mako_dnd label,
+window#waybar.left #custom-power label,
+window#waybar.right #custom-power label {
+  min-width: 20px;
+  margin: 0;
 }
 
 /* idle inhibitor state override */
