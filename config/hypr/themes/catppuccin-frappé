@@ -212,7 +212,7 @@ sed -i \
     "$MAKO_CONF"
 
 # Micro
-sed -i '2s|.*|    "colorscheme": "catppuccin-frappe-transparent"|' "$MICRO_SETTINGS"
+sed -i '2s|.*|    "colorscheme": "catppuccin-frappe-transparent",|' "$MICRO_SETTINGS"
 
 # Alacritty
 sed -i '331s|.*|  "~\/.config\/alacritty\/themes\/themes\/catppuccin_frappe.toml"|' "$ALACRITTY_CONF"

@@ -48,7 +48,27 @@ declare -A SCHED_EXT_PROFILE_MAP=()
 declare -A SCHED_EXT_CUSTOM_ARGS_MAP=()
 declare -A SCHED_EXT_LAVD_AUTOPOWER_MAP=()
 
+MOUSE_BUTTON=0
+MOUSE_X=0
+MOUSE_Y=0
+MOUSE_RELEASE=0
+UI_MENU_FIRST_ROW=4
+SCHED_MENU_FIRST_ROW=4
+SCHED_EDITOR_FIRST_ROW=5
+declare -a BRIGHTNESS_CLICK_STARTS=()
+declare -a BRIGHTNESS_CLICK_ENDS=()
+declare -a BRIGHTNESS_CLICK_VALUES=()
+
+mouse_enable() {
+  printf '\033[?1000h\033[?1006h'
+}
+
+mouse_disable() {
+  printf '\033[?1000l\033[?1006l'
+}
+
 cleanup() {
+  mouse_disable
   printf '\033[?25h\033[0m\033[2J\033[H'
 }
 
@@ -89,9 +109,48 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+close_existing_quicksettings() {
+  local clients address
+  local closed=1
+
+  have_cmd hyprctl || return 1
+  have_cmd python || return 1
+
+  clients="$(hyprctl -j clients 2>/dev/null)" || return 1
+  while IFS= read -r address; do
+    [[ -n "$address" ]] || continue
+    if run_quiet hyprctl dispatch "hl.dsp.window.close({ window = \"address:${address}\" })"; then
+      closed=0
+    fi
+  done < <(
+    printf '%s' "$clients" | python -c '
+import json
+import sys
+
+window_class = sys.argv[1]
+try:
+    clients = json.load(sys.stdin)
+except Exception:
+    raise SystemExit(1)
+
+for client in clients:
+    if client.get("class") == window_class or client.get("initialClass") == window_class:
+        address = client.get("address")
+        if address:
+            print(address)
+' "$TERM_CLASS"
+  )
+
+  return "$closed"
+}
+
 launch_terminal() {
   local self
   self="$(readlink -f "${BASH_SOURCE[0]}")"
+
+  if close_existing_quicksettings; then
+    return 0
+  fi
 
   if [[ -t 1 ]]; then
     exec "$self" --ui
@@ -643,15 +702,13 @@ sched_ext_reset_config() {
 
 prompt_text() {
   local prompt="$1" default="$2" input
-  printf '[2J[H'
-  printf '%s
-
-' "$TITLE"
-  printf '%s
-' "$prompt"
-  printf 'Current [%s]
-> ' "$default"
+  mouse_disable
+  printf '\033[2J\033[H\033[?25h'
+  printf '%s\n\n' "$TITLE"
+  printf '%s\n' "$prompt"
+  printf 'Current [%s]\n> ' "$default"
   IFS= read -r input || true
+  mouse_enable
   if [[ -z "$input" ]]; then
     REPLY="$default"
   else
@@ -660,7 +717,7 @@ prompt_text() {
 }
 
 sched_ext_show_help() {
-  local sched="$1" out rc=0 key rest lines cols view_cols height offset end i max_offset total_lines
+  local sched="$1" out rc=0 key lines cols view_cols height offset end i max_offset total_lines
   local line
   local -a help_lines=() view_lines=()
 
@@ -684,7 +741,6 @@ sched_ext_show_help() {
 
   mapfile -t help_lines < <(printf '%s\n' "$out")
   offset=0
-  printf '\033[?1000h\033[?1006h'
 
   while true; do
     lines=$(tput lines 2>/dev/null || printf '24')
@@ -714,41 +770,26 @@ sched_ext_show_help() {
 
     printf '\033[2J\033[H\033[?25l'
     printf '%s\n' "$TITLE"
-    printf 'Local help: %s   mouse wheel/arrows scroll   PgUp/PgDn jump   q: quit   b/Esc: back\n' "$sched"
+    printf 'Local help: %s   wheel/arrows scroll   PgUp/PgDn jump   b: back   Esc/q: close\n' "$sched"
     printf 'Showing %d-%d of %d\n\n' "$(( total_lines == 0 ? 0 : offset + 1 ))" "$end" "$total_lines"
     for (( i=offset; i<end; i++ )); do
       printf '%s\n' "${view_lines[$i]}"
     done
 
-    IFS= read -rsN1 key || break
-    if [[ "$key" == $'\e' ]]; then
-      while IFS= read -rsN1 -t 0.02 rest; do
-        key+="$rest"
-        case "$key" in
-          $'\e[A'|$'\e[B'|$'\e[5~'|$'\e[6~'|$'\e[H'|$'\e[F'|$'\e[1~'|$'\e[4~'|$'\eOH'|$'\eOF')
-            break
-            ;;
-        esac
-        if [[ "$key" == $'\e[<'* ]] && [[ "$rest" == 'M' || "$rest" == 'm' ]]; then
-          break
-        fi
-      done
-    fi
-
+    key="$(read_key)" || break
     case "$key" in
-      q|Q)
-        printf '\033[?1000l\033[?1006l'
+      q|Q|$'\e')
         SHOULD_QUIT=1
         return 0
         ;;
-      b|B|$'\e')
+      b|B)
         break
         ;;
-      $'\e[A'|k|$'\e[<64;'*M|$'\e[<64;'*m)
+      $'\e[A'|k)
         (( offset-- )) || true
         (( offset < 0 )) && offset=0
         ;;
-      $'\e[B'|j|$'\e[<65;'*M|$'\e[<65;'*m)
+      $'\e[B'|j)
         (( offset < max_offset )) && (( offset++ )) || true
         ;;
       $'\e[5~')
@@ -765,38 +806,78 @@ sched_ext_show_help() {
       $'\e[F'|$'\e[4~'|$'\eOF')
         offset=$max_offset
         ;;
+      $'\e[<'*)
+        if parse_mouse_event "$key" && (( MOUSE_RELEASE == 0 )); then
+          case "$MOUSE_BUTTON" in
+            64)
+              (( offset-- )) || true
+              (( offset < 0 )) && offset=0
+              ;;
+            65)
+              (( offset < max_offset )) && (( offset++ )) || true
+              ;;
+          esac
+        fi
+        ;;
     esac
   done
-
-  printf '\033[?1000l\033[?1006l'
 }
 
 format_brightness() {
-
   printf '%s %s/%s' "$BR_CONN" "$BR_CUR" "$BR_MAX"
 }
 
-format_sunset() {
-  local onoff
+sunset_is_on() {
   case "$SUN_IDENTITY" in
-    true) onoff='off' ;;
-    false) onoff='on' ;;
-    *)
-      if [[ "$SUN_ENABLED" == '1' ]]; then
-        onoff='on'
-      else
-        onoff='off'
-      fi
-      ;;
+    true) return 1 ;;
+    false) return 0 ;;
   esac
-  printf '%s (%s)' "$SUN_TEMP" "$onoff"
+  [[ "$SUN_ENABLED" == '1' ]]
+}
+
+format_sunset() {
+  local onoff mood r g b temp
+
+  if sunset_is_on; then
+    onoff='on'
+    temp=0
+    if [[ "$SUN_TEMP" =~ ([0-9]{3,5}) ]]; then
+      temp=${BASH_REMATCH[1]}
+    fi
+
+    if (( temp >= 5500 )); then
+      mood='cool'
+      r=170 g=205 b=255
+    elif (( temp >= 4500 )); then
+      mood='soft'
+      r=255 g=221 b=170
+    elif (( temp >= 3500 )); then
+      mood='warm'
+      r=255 g=170 b=95
+    else
+      mood='cozy'
+      r=255 g=105 b=55
+    fi
+  else
+    onoff='off'
+    mood='idle'
+    r=90 g=90 b=90
+  fi
+
+  printf '%s (%s) %-5s \033[48;2;%d;%d;%dm   \033[0m' "$SUN_TEMP" "$onoff" "$mood" "$r" "$g" "$b"
 }
 
 format_vibrance() {
   case "$VIB_ENABLED" in
-    1) printf '%s (on)' "$VIB_VAL" ;;
-    0) printf '%s (off)' "$VIB_VAL" ;;
-    *) printf '%s (unknown)' "$VIB_VAL" ;;
+    1)
+      printf '%s (on)  \033[48;2;255;0;150m \033[48;2;140;60;255m \033[48;2;0;220;255m \033[48;2;70;255;130m \033[48;2;255;220;0m \033[0m' "$VIB_VAL"
+      ;;
+    0)
+      printf '%s (off) \033[48;2;75;75;75m     \033[0m' "$VIB_VAL"
+      ;;
+    *)
+      printf '%s (unknown) \033[48;2;75;75;75m     \033[0m' "$VIB_VAL"
+      ;;
   esac
 }
 
@@ -812,28 +893,85 @@ format_sched_ext() {
   fi
 }
 
+build_brightness_line() {
+  local base line plain_len sep token start end pct current_pct current_step
+
+  printf -v base '%-15s %s  [' 'Brightness' "$(format_brightness)"
+  line="$base"
+  plain_len=${#base}
+  BRIGHTNESS_CLICK_STARTS=()
+  BRIGHTNESS_CLICK_ENDS=()
+  BRIGHTNESS_CLICK_VALUES=()
+
+  current_step=-1
+  if [[ "$BR_CUR" =~ ^[0-9]+$ ]] && [[ "$BR_MAX" =~ ^[0-9]+$ ]] && (( BR_MAX > 0 )); then
+    current_pct=$(( (BR_CUR * 100 + BR_MAX / 2) / BR_MAX ))
+    current_step=$(( ((current_pct + BRIGHTNESS_STEP / 2) / BRIGHTNESS_STEP) * BRIGHTNESS_STEP ))
+    (( current_step > 100 )) && current_step=100
+  fi
+
+  for (( pct=0; pct<=100; pct+=BRIGHTNESS_STEP )); do
+    sep=' '
+    token="$pct"
+    start=$(( 2 + plain_len + ${#sep} + 1 ))
+    end=$(( start + ${#token} - 1 ))
+    BRIGHTNESS_CLICK_STARTS+=("$start")
+    BRIGHTNESS_CLICK_ENDS+=("$end")
+    BRIGHTNESS_CLICK_VALUES+=("$pct")
+
+    line+="$sep"
+    if (( pct == current_step )); then
+      line+=$'\033[1;4m'
+      line+="$token"
+      line+=$'\033[0m'
+    else
+      line+="$token"
+    fi
+    plain_len=$(( plain_len + ${#sep} + ${#token} ))
+  done
+
+  line+=' ]'
+  REPLY="$line"
+}
+
 draw_ui() {
   local i label value line cols
   cols=$(tput cols 2>/dev/null || printf '80')
 
   printf '\033[2J\033[H\033[?25l'
   printf '%s\n' "$TITLE"
-  printf '%s\n\n' 'Up/Down: select   Left/Right: adjust   Space: toggle/edit   r: refresh   q: quit'
+  printf '%s\n\n' 'Click or Up/Down: select   Left/Right: adjust   Enter: toggle/edit   Esc/q: close'
 
   for i in "${!MENU_ITEMS[@]}"; do
     label=${MENU_ITEMS[$i]}
     case "$label" in
-      Brightness) value="$(format_brightness)" ;;
-      'Night Light') value="$(format_sunset)" ;;
-      Vibrance) value="$(format_vibrance)" ;;
-      'sched-ext') value="$(format_sched_ext)" ;;
-      'Stop sched-ext') value='restore default scheduler' ;;
-      *) value='' ;;
+      Brightness)
+        build_brightness_line
+        line="$REPLY"
+        ;;
+      'Night Light')
+        value="$(format_sunset)"
+        printf -v line '%-15s %s' "$label" "$value"
+        ;;
+      Vibrance)
+        value="$(format_vibrance)"
+        printf -v line '%-15s %s' "$label" "$value"
+        ;;
+      'sched-ext')
+        value="$(format_sched_ext)"
+        printf -v line '%-15s %s' "$label" "$value"
+        ;;
+      'Stop sched-ext')
+        value='restore default scheduler'
+        printf -v line '%-15s %s' "$label" "$value"
+        ;;
+      *)
+        line="$label"
+        ;;
     esac
 
-    printf -v line '%-15s %s' "$label" "$value"
     if (( i == SEL )); then
-      printf '\033[7m> %s\033[0m\n' "$line"
+      printf '\033[1;7m> \033[0m%s\n' "$line"
     else
       printf '  %s\n' "$line"
     fi
@@ -848,17 +986,99 @@ draw_ui() {
 read_key() {
   local key rest
   IFS= read -rsN1 key || return 1
-  if [[ "$key" == $'\e' ]]; then
-    if IFS= read -rsN1 -t 0.001 rest; then
+
+  case "$key" in
+    $'\r'|$'\n')
+      printf '%s' '__ENTER__'
+      return 0
+      ;;
+    $'\e')
+      ;;
+    *)
+      printf '%s' "$key"
+      return 0
+      ;;
+  esac
+
+  if ! IFS= read -rsN1 -t 0.03 rest; then
+    printf '%s' "$key"
+    return 0
+  fi
+
+  key+="$rest"
+  if [[ "$rest" == '[' ]]; then
+    while IFS= read -rsN1 -t 0.03 rest; do
       key+="$rest"
-      if [[ "$rest" == '[' ]]; then
-        if IFS= read -rsN1 -t 0.001 rest; then
-          key+="$rest"
-        fi
+      if [[ "$rest" =~ [A-Za-z~] ]]; then
+        break
       fi
+    done
+  elif [[ "$rest" == 'O' ]]; then
+    if IFS= read -rsN1 -t 0.03 rest; then
+      key+="$rest"
     fi
   fi
+
   printf '%s' "$key"
+}
+
+parse_mouse_event() {
+  local seq="$1" payload final button x y
+
+  [[ "$seq" == $'\e[<'* ]] || return 1
+  final=${seq: -1}
+  [[ "$final" == 'M' || "$final" == 'm' ]] || return 1
+
+  payload=${seq#$'\e[<'}
+  payload=${payload%M}
+  payload=${payload%m}
+  IFS=';' read -r button x y <<< "$payload"
+  [[ "$button" =~ ^[0-9]+$ && "$x" =~ ^[0-9]+$ && "$y" =~ ^[0-9]+$ ]] || return 1
+
+  MOUSE_BUTTON=$button
+  MOUSE_X=$x
+  MOUSE_Y=$y
+  MOUSE_RELEASE=0
+  [[ "$final" == 'm' ]] && MOUSE_RELEASE=1
+  return 0
+}
+
+handle_main_mouse() {
+  local key="$1" idx i
+
+  parse_mouse_event "$key" || return 1
+  (( MOUSE_RELEASE == 0 )) || return 0
+
+  if (( MOUSE_Y >= UI_MENU_FIRST_ROW && MOUSE_Y < UI_MENU_FIRST_ROW + ${#MENU_ITEMS[@]} )); then
+    idx=$(( MOUSE_Y - UI_MENU_FIRST_ROW ))
+    SEL=$idx
+  else
+    return 0
+  fi
+
+  case "$MOUSE_BUTTON" in
+    64)
+      do_right
+      return 0
+      ;;
+    65)
+      do_left
+      return 0
+      ;;
+  esac
+
+  (( (MOUSE_BUTTON & 3) == 0 )) || return 0
+
+  if (( SEL == 0 )); then
+    for i in "${!BRIGHTNESS_CLICK_VALUES[@]}"; do
+      if (( MOUSE_X >= BRIGHTNESS_CLICK_STARTS[i] && MOUSE_X <= BRIGHTNESS_CLICK_ENDS[i] )); then
+        brightness_set_percent "${BRIGHTNESS_CLICK_VALUES[$i]}"
+        return 0
+      fi
+    done
+  fi
+
+  do_action
 }
 
 move_sel_up() {
@@ -931,10 +1151,9 @@ draw_sched_ext_menu() {
   local idx="$1" i label line cols summary
   cols=$(tput cols 2>/dev/null || printf '80')
 
-  printf '[2J[H[?25l'
-  printf '%s
-' "$TITLE"
-  printf '%s\n\n' 'sched-ext picker   Up/Down: select   Space: apply   e: edit   h: help   q: quit   b/Esc: back'
+  printf '\033[2J\033[H\033[?25l'
+  printf '%s\n' "$TITLE"
+  printf '%s\n\n' 'sched-ext picker   Enter/click: apply   e: edit   h: help   b: back   Esc/q: close'
 
   for i in "${!SCHED_EXT_ITEMS[@]}"; do
     label="${SCHED_EXT_ITEMS[$i]}"
@@ -944,18 +1163,14 @@ draw_sched_ext_menu() {
       line+="  [running]"
     fi
     if (( i == idx )); then
-      printf '[7m> %s[0m
-' "$line"
+      printf '\033[1;7m> \033[0m%s\n' "$line"
     else
-      printf '  %s
-' "$line"
+      printf '  %s\n' "$line"
     fi
   done
 
-  printf '
-'
-  printf '%.*s
-' "$cols" 'Preset flags come from the current CachyOS sched-ext guide. Custom args are appended via scxctl --args.'
+  printf '\n'
+  printf '%.*s\n' "$cols" 'Preset flags come from the current CachyOS sched-ext guide. Custom args are appended via scxctl --args.'
   printf '%.*s' "$cols" 'Custom args may be comma-separated or space-separated. Press h for local scheduler help.'
 }
 
@@ -982,29 +1197,23 @@ draw_sched_ext_editor() {
   entries+=("Reset saved config")
   entries+=("Back")
 
-  printf '[2J[H[?25l'
-  printf '%s
-' "$TITLE"
-  printf 'sched-ext editor: %s
-' "$sched"
-  printf '%s\n\n' 'Up/Down: select   Left/Right: change/toggle   Space: apply/toggle   e: edit custom args   h: help   q: quit   b/Esc: back'
+  printf '\033[2J\033[H\033[?25l'
+  printf '%s\n' "$TITLE"
+  printf 'sched-ext editor: %s\n' "$sched"
+  printf '%s\n\n' 'Click or Up/Down: select   Left/Right: change   Enter: apply   b: back   Esc/q: close'
 
   local i line
   for i in "${!entries[@]}"; do
     line="${entries[$i]}"
     if (( i == idx )); then
-      printf '[7m> %s[0m
-' "$line"
+      printf '\033[1;7m> \033[0m%s\n' "$line"
     else
-      printf '  %s
-' "$line"
+      printf '  %s\n' "$line"
     fi
   done
 
-  printf '
-'
-  printf '%.*s
-' "$cols" "Effective args: ${effective:-<none>}"
+  printf '\n'
+  printf '%.*s\n' "$cols" "Effective args: ${effective:-<none>}"
   printf '%.*s' "$cols" 'Use custom args for any scheduler-specific flags not covered by the preset profiles.'
 }
 
@@ -1018,8 +1227,30 @@ sched_ext_toggle_lavd_autopower() {
   sched_ext_state_save
 }
 
+sched_ext_editor_activate() {
+  local sched="$1" idx="$2" help_idx="$3" reset_idx="$4" back_idx="$5"
+  SCHED_EDITOR_BACK=0
+
+  if (( idx == 0 )); then
+    sched_ext_profile_cycle "$sched" 1
+  elif (( idx == 1 )); then
+    prompt_text 'Enter custom scxctl args. Comma-separated is preferred. Blank clears them.' "$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
+    SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]="$(sched_ext_normalize_args "$REPLY")"
+    sched_ext_state_save
+  elif [[ "$sched" == 'scx_lavd' ]] && (( idx == 2 )); then
+    sched_ext_toggle_lavd_autopower "$sched"
+  elif (( idx == help_idx )); then
+    sched_ext_show_help "$sched"
+  elif (( idx == reset_idx )); then
+    sched_ext_reset_config "$sched"
+    MSG="sched-ext: reset ${sched} config"
+  elif (( idx == back_idx )); then
+    SCHED_EDITOR_BACK=1
+  fi
+}
+
 sched_ext_edit_menu() {
-  local sched="$1" idx=0 key count help_idx reset_idx back_idx
+  local sched="$1" idx=0 key count help_idx reset_idx back_idx clicked_idx
   if [[ "$sched" == 'scx_lavd' ]]; then
     count=6
     help_idx=3
@@ -1034,11 +1265,11 @@ sched_ext_edit_menu() {
     draw_sched_ext_editor "$sched" "$idx"
     key="$(read_key)" || break
     case "$key" in
-      q|Q)
+      q|Q|$'\e')
         SHOULD_QUIT=1
         return 0
         ;;
-      b|B|$'\e')
+      b|B)
         break
         ;;
       $'\e[A'|k)
@@ -1067,24 +1298,10 @@ sched_ext_edit_menu() {
           sched_ext_toggle_lavd_autopower "$sched"
         fi
         ;;
-      $' ')
-        if (( idx == 0 )); then
-          sched_ext_profile_cycle "$sched" 1
-        elif (( idx == 1 )); then
-          prompt_text 'Enter custom scxctl args. Comma-separated is preferred. Blank clears them.' "$(sched_ext_normalize_args "${SCHED_EXT_CUSTOM_ARGS_MAP[$sched]:-}")"
-          SCHED_EXT_CUSTOM_ARGS_MAP["$sched"]="$(sched_ext_normalize_args "$REPLY")"
-          sched_ext_state_save
-        elif [[ "$sched" == 'scx_lavd' ]] && (( idx == 2 )); then
-          sched_ext_toggle_lavd_autopower "$sched"
-        elif (( idx == help_idx )); then
-          sched_ext_show_help "$sched"
-          (( SHOULD_QUIT == 1 )) && return 0
-        elif (( idx == reset_idx )); then
-          sched_ext_reset_config "$sched"
-          MSG="sched-ext: reset ${sched} config"
-        elif (( idx == back_idx )); then
-          break
-        fi
+      __ENTER__|' ')
+        sched_ext_editor_activate "$sched" "$idx" "$help_idx" "$reset_idx" "$back_idx"
+        (( SHOULD_QUIT == 1 )) && return 0
+        (( SCHED_EDITOR_BACK == 1 )) && break
         ;;
       e|E)
         if (( idx == 1 )); then
@@ -1095,8 +1312,29 @@ sched_ext_edit_menu() {
         ;;
       h|H)
         sched_ext_show_help "$sched"
-        if (( SHOULD_QUIT == 1 )); then
-          return 0
+        (( SHOULD_QUIT == 1 )) && return 0
+        ;;
+      $'\e[<'*)
+        if parse_mouse_event "$key" && (( MOUSE_RELEASE == 0 )); then
+          case "$MOUSE_BUTTON" in
+            64)
+              (( idx-- )) || true
+              (( idx < 0 )) && idx=$(( count - 1 ))
+              ;;
+            65)
+              (( idx++ )) || true
+              (( idx >= count )) && idx=0
+              ;;
+            *)
+              if (( (MOUSE_BUTTON & 3) == 0 )) && (( MOUSE_Y >= SCHED_EDITOR_FIRST_ROW && MOUSE_Y < SCHED_EDITOR_FIRST_ROW + count )); then
+                clicked_idx=$(( MOUSE_Y - SCHED_EDITOR_FIRST_ROW ))
+                idx=$clicked_idx
+                sched_ext_editor_activate "$sched" "$idx" "$help_idx" "$reset_idx" "$back_idx"
+                (( SHOULD_QUIT == 1 )) && return 0
+                (( SCHED_EDITOR_BACK == 1 )) && break
+              fi
+              ;;
+          esac
         fi
         ;;
     esac
@@ -1104,7 +1342,7 @@ sched_ext_edit_menu() {
 }
 
 sched_ext_menu() {
-  local idx=0 key current i
+  local idx=0 key current i clicked_idx
 
   current="$SCHED_EXT_RUNNING"
   for i in "${!SCHED_EXT_ITEMS[@]}"; do
@@ -1119,11 +1357,11 @@ sched_ext_menu() {
     key="$(read_key)" || break
 
     case "$key" in
-      q|Q)
+      q|Q|$'\e')
         SHOULD_QUIT=1
         return 0
         ;;
-      b|B|$'\e')
+      b|B)
         break
         ;;
       $'\e[A'|k)
@@ -1138,7 +1376,7 @@ sched_ext_menu() {
           idx=0
         fi
         ;;
-      $' ')
+      __ENTER__|' ')
         if ! sched_ext_deps_ok; then
           break
         fi
@@ -1153,12 +1391,63 @@ sched_ext_menu() {
         sched_ext_show_help "${SCHED_EXT_ITEMS[$idx]}"
         (( SHOULD_QUIT == 1 )) && return 0
         ;;
+      $'\e[<'*)
+        if parse_mouse_event "$key" && (( MOUSE_RELEASE == 0 )); then
+          case "$MOUSE_BUTTON" in
+            64)
+              (( idx-- )) || true
+              (( idx < 0 )) && idx=$((${#SCHED_EXT_ITEMS[@]} - 1))
+              ;;
+            65)
+              (( idx++ )) || true
+              (( idx >= ${#SCHED_EXT_ITEMS[@]} )) && idx=0
+              ;;
+            *)
+              if (( (MOUSE_BUTTON & 3) == 0 )) && (( MOUSE_Y >= SCHED_MENU_FIRST_ROW && MOUSE_Y < SCHED_MENU_FIRST_ROW + ${#SCHED_EXT_ITEMS[@]} )); then
+                clicked_idx=$(( MOUSE_Y - SCHED_MENU_FIRST_ROW ))
+                idx=$clicked_idx
+                if ! sched_ext_deps_ok; then
+                  break
+                fi
+                sched_ext_switch_or_start "${SCHED_EXT_ITEMS[$idx]}"
+                break
+              fi
+              ;;
+          esac
+        fi
+        ;;
     esac
   done
 }
 
 brightness_set_abs() {
   brightness_quiet set "$1"
+}
+
+brightness_set_percent() {
+  local percent="$1" target
+
+  if [[ ! "$BR_MAX" =~ ^[0-9]+$ ]]; then
+    refresh_brightness
+  fi
+  if [[ ! "$BR_MAX" =~ ^[0-9]+$ ]]; then
+    MSG='brightness: bad status'
+    return 1
+  fi
+
+  (( percent < 0 )) && percent=0
+  (( percent > 100 )) && percent=100
+  target=$(( (BR_MAX * percent + 50) / 100 ))
+
+  if brightness_set_abs "$target"; then
+    BR_CUR="$target"
+    MSG="brightness: ${percent}%"
+    return 0
+  fi
+
+  MSG='brightness: failed'
+  refresh_brightness
+  return 1
 }
 
 brightness_adjust() {
@@ -1187,10 +1476,12 @@ brightness_adjust() {
 
 prompt_number() {
   local prompt="$1" default="$2" input
-  printf '\033[2J\033[H'
+  mouse_disable
+  printf '\033[2J\033[H\033[?25h'
   printf '%s\n\n' "$TITLE"
   printf '%s [%s]: ' "$prompt" "$default"
   IFS= read -r input || true
+  mouse_enable
   if [[ -z "$input" ]]; then
     REPLY="$default"
   else
@@ -1303,6 +1594,7 @@ ui_loop() {
   require_files || exit 1
   sched_ext_state_load
   refresh_all
+  mouse_enable
 
   while true; do
     draw_ui
@@ -1311,18 +1603,33 @@ ui_loop() {
     key="$(read_key)" || break
 
     case "$key" in
-      q|Q) break ;;
-      r|R) refresh_all ;;
-      $' ')
+      q|Q|$'\e')
+        break
+        ;;
+      r|R)
+        refresh_all
+        ;;
+      __ENTER__|' ')
         do_action
         if (( SHOULD_QUIT == 1 )); then
           break
         fi
         ;;
-      $'\e[A'|k) move_sel_up ;;
-      $'\e[B'|j) move_sel_down ;;
-      $'\e[D'|h) do_left ;;
-      $'\e[C'|l) do_right ;;
+      $'\e[A'|k)
+        move_sel_up
+        ;;
+      $'\e[B'|j)
+        move_sel_down
+        ;;
+      $'\e[D'|h)
+        do_left
+        ;;
+      $'\e[C'|l)
+        do_right
+        ;;
+      $'\e[<'*)
+        handle_main_mouse "$key"
+        ;;
     esac
 
     if (( SHOULD_QUIT == 1 )); then

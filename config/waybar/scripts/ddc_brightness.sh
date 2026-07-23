@@ -197,7 +197,7 @@ quick_settings_addresses() {
 }
 
 toggle_quick_settings() {
-  local monitor runtime_dir lock_file lock_dir address lua_expr
+  local monitor runtime_dir lock_file lock_dir address
   local -a addresses=()
 
   runtime_dir="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}"
@@ -222,11 +222,7 @@ toggle_quick_settings() {
     for address in "${addresses[@]}"; do
       [[ -n "$address" ]] || continue
 
-      printf -v lua_expr \
-        'hl.dsp.window.close({ window = "address:%s" })' \
-        "$address"
-
-      hyprctl dispatch "$lua_expr" >/dev/null 2>&1 || true
+      hyprctl dispatch "hl.dsp.window.close({ window = \"address:${address}\" })" >/dev/null 2>&1 || true
     done
 
     # Hold the nonblocking lock only until Hyprland removes the window.
@@ -247,7 +243,7 @@ toggle_quick_settings() {
     alacritty \
       --class hypr_quicksettings \
       -e "$QUICK_SETTINGS" --ui \
-      >/dev/null 2>&1 &
+      >/dev/null 2>&1 8>&- &
 
   # Release the lock immediately once the actual window becomes visible.
   for _ in {1..40}; do
