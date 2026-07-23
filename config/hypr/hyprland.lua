@@ -517,7 +517,7 @@ local yazi = "alacritty -e yazi"
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/fuzzel_toggle.sh"
 local wlogout = "~/.config/hypr/scripts/wlogout_toggle.sh"
-local hypr_quicksettings = "~/.config/hypr/scripts/launch_handler.sh hypr_quicksettings \"alacritty --class hypr_quicksettings -e ~/.config/hypr/scripts/hypr_quicksettings.sh\""
+local hypr_quicksettings = "~/.config/hypr/scripts/launch_handler.sh hypr_quicksettings \"alacritty --class hypr_quicksettings -e bash ~/.config/hypr/scripts/hypr_quicksettings.sh --ui\""
 local awtarchy_tips_tui = "~/.config/hypr/scripts/launch_handler.sh awtarchy-tips-tui \"alacritty --class awtarchy-tips-tui -e ~/.config/hypr/scripts/awtarchy-tips-tui.sh\""
 
 -- Audio
