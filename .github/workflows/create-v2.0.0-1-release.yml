@@ -1,0 +1,106 @@
+name: Create v2.0.0-1 release
+
+on:
+  push:
+    branches:
+      - agent/waybar-ddc-scroll-debounce
+    paths:
+      - .github/workflows/create-v2.0.0-1-release.yml
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish v2.0.0-1
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TARGET_SHA: 515fd2e2cf042d9ac0416831061d3039efb7ee75
+        run: |
+          set -euo pipefail
+
+          cat > /tmp/release-notes.md <<'EOF'
+          # Awtarchy v2.0.0-1
+
+          ## Patch notes for v2.0.0-1
+
+          - Waybar DDC brightness scrolling is now debounced so rapid scroll inputs are collected and the display brightness is applied once, 1 second after scrolling stops.
+          - Brightness still moves in 5-point increments, but the Waybar value now updates immediately while scrolling so brightness selection feels interactive before the physical display changes.
+          - The shared Hyprland brightness helper keeps its existing defaults outside Waybar.
+
+          ## Start Here
+
+          Awtarchy is not a Linux distribution. It is an overlay built to run on top of a fresh, vanilla Arch Linux installation.
+
+          1. Download the latest [Arch Linux ISO](https://archlinux.org/download/).
+          2. Put the ISO on a bootable USB. [Ventoy](https://www.ventoy.net/en/download.html) is recommended because you can copy ISOs directly to the drive and reuse it without reflashing each time.
+          3. Boot the Arch ISO and install Arch manually, or use `archinstall`.
+
+          `archinstall` is included on the Arch ISO. To refresh it before starting the installer:
+
+          ```bash
+          pacman -Sy archinstall
+          archinstall
+          ```
+
+          Choose the **Minimal** profile. Complete the Arch installation, reboot, and log into the new system before installing Awtarchy.
+
+          ## Install Awtarchy
+
+          Install Git:
+
+          ```bash
+          sudo pacman -S git --noconfirm
+          ```
+
+          Clone the repository and run the installer:
+
+          ```bash
+          git clone https://github.com/dillacorn/awtarchy
+          cd awtarchy
+          sudo ./awtarchy-install.sh
+          ```
+
+          The installer collects your choices before making changes and shows a final review before installation begins.
+
+          ## After Installation
+
+          Reboot after the installer completes.
+
+          If Ly was enabled during installation, log in through Ly. Otherwise, log in from the TTY and start Hyprland with:
+
+          ```bash
+          hypr
+          ```
+
+          For future updates and system maintenance, run:
+
+          ```bash
+          awtarchy
+          ```
+
+          The `awtarchy` menu handles command updates, configuration maintenance, version checks, and backup cleanup.
+
+          ## Existing Awtarchy Users
+
+          Existing users need one final repository-based migration:
+
+          ```bash
+          cd ~/awtarchy
+          git pull --ff-only
+          sudo ./awtarchy-install.sh
+          ```
+
+          The migration installs the new maintenance command, runtime, and version state without reinstalling packages or replacing managed configs. After migration, future maintenance starts with `awtarchy`.
+          EOF
+
+          gh release create v2.0.0-1 \
+            --repo "$REPO" \
+            --target "$TARGET_SHA" \
+            --title "Awtarchy v2.0.0-1" \
+            --notes-file /tmp/release-notes.md
+
+          gh release view v2.0.0-1 --repo "$REPO" --json tagName,name,isDraft,isPrerelease --jq .
