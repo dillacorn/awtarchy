@@ -26,7 +26,7 @@ def patch_cargo(root: pathlib.Path) -> None:
     text = replace_once(
         text,
         'dirs = "5.0"\n',
-        'dirs = "5.0"\nlibc.workspace = true\n',
+        'dirs = "5.0"\nlibc.workspace = true\ntempfile = "3.14"\n',
         "cli libc dependency",
     )
     path.write_text(text, encoding="utf-8")
@@ -84,7 +84,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Write};
 use std::os::fd::AsRawFd;
-use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
+use std::os::unix::fs::{MetadataExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 '''
@@ -452,10 +452,10 @@ pub fn run_broker(workspace: PathBuf) -> Result<()> {
         anyhow::bail!("broker workspace is not a directory: {}", workspace.display());
     }
 
-    let staging = std::env::temp_dir().join(format!("aur-scan-broker-{}", std::process::id()));
-    fs::create_dir(&staging)
-        .with_context(|| format!("creating broker staging directory {}", staging.display()))?;
-    fs::set_permissions(&staging, fs::Permissions::from_mode(0o700))?;
+    let staging = tempfile::Builder::new()
+        .prefix("aur-scan-broker-")
+        .tempdir_in("/var/tmp")
+        .context("creating secure root broker staging directory in /var/tmp")?;
 
     let stdin = io::stdin();
     let stdout = io::stdout();
@@ -478,7 +478,7 @@ pub fn run_broker(workspace: PathBuf) -> Result<()> {
                 BrokerRequest::Repo { packages, .. } => broker_install_repo(&packages),
                 BrokerRequest::Local {
                     paths, asdeps, ..
-                } => broker_install_local(&workspace, &staging, id, &paths, asdeps),
+                } => broker_install_local(&workspace, staging.path(), id, &paths, asdeps),
                 BrokerRequest::Finish { .. } => Ok(()),
             };
             let ok = broker_response(&mut writer, id, operation)?;
@@ -488,7 +488,6 @@ pub fn run_broker(workspace: PathBuf) -> Result<()> {
         }
         Ok(())
     })();
-    let _ = fs::remove_dir_all(&staging);
     result
 }
 
@@ -637,6 +636,36 @@ pub async fn run(args: InstallArgs) -> Result<()> {
     if tests_end not in text:
         raise SystemExit("test insertion marker missing")
     extra_tests = r'''    #[test]
+    fn packagelist_rejects_output_outside_scanned_base() {
+        let base = tempfile::tempdir().unwrap();
+        let outside = tempfile::tempdir().unwrap();
+        let artifact = outside.path().join("escape.pkg.tar.zst");
+        std::fs::write(&artifact, b"pkg").unwrap();
+        let output = format!("{}\n", artifact.display());
+        assert!(package_paths_from_packagelist(output.as_bytes(), base.path()).is_err());
+    }
+
+    #[test]
+    fn local_package_staging_rejects_symlink() {
+        use std::os::unix::fs::symlink;
+
+        let workspace = tempfile::tempdir().unwrap();
+        let staging = tempfile::tempdir().unwrap();
+        let real = workspace.path().join("real.pkg.tar.zst");
+        let link = workspace.path().join("link.pkg.tar.zst");
+        std::fs::write(&real, b"pkg").unwrap();
+        symlink(&real, &link).unwrap();
+        assert!(stage_local_package(
+            workspace.path(),
+            staging.path(),
+            1,
+            0,
+            &link,
+        )
+        .is_err());
+    }
+
+    #[test]
     fn package_base_root_is_explicit() {
         use aur_scanner_core::depgraph::{DepKind, DependencyGraph, PackageNode, PackageSource};
         let mut nodes = BTreeMap::new();
