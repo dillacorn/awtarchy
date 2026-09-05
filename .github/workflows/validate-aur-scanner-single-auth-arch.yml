@@ -19,7 +19,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-      - name: Run one-password AUR install in ephemeral Arch
+      - name: Run exactly-one-password AUR install in ephemeral Arch
         run: |
           set -Eeuo pipefail
           docker run --rm \
@@ -75,6 +75,8 @@ jobs:
           EXPECT
               chmod 0644 /tmp/run-single-auth.exp
 
+              # This package also exercises makepkg listing an optional debug
+              # archive that may not actually be emitted by the completed build.
               su - tester -c "sudo -k"
               su - tester -c "expect /tmp/run-single-auth.exp"
               su - tester -c "pacman -Q xdg-terminal-exec"
