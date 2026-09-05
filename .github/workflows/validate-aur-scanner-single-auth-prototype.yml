@@ -24,13 +24,25 @@ jobs:
         run: python3 tools/aur-scanner-single-auth-prototype.py upstream
       - name: Reject unsafe privilege shortcuts
         run: |
-          ! grep -R -n -F 'PACMAN_AUTH' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
-          ! grep -R -n -F 'SUDO_ASKPASS' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
-          ! grep -R -n -F 'NOPASSWD' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
-          ! grep -R -n -F 'cmd.arg("-si")' upstream/crates/aur-scanner-cli/src/commands/install.rs
-          grep -F 'sudo -k' <(git -C upstream diff)
-          grep -F 'O_NOFOLLOW' <(git -C upstream diff)
-          grep -F -- '--packagelist' <(git -C upstream diff)
+          set -Eeuo pipefail
+          changed='upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml'
+          for forbidden in PACMAN_AUTH SUDO_ASKPASS NOPASSWD; do
+            if grep -R -n -F "$forbidden" $changed; then
+              printf 'unsafe privilege shortcut found: %s\n' "$forbidden" >&2
+              exit 1
+            fi
+          done
+          if grep -R -n -F 'cmd.arg("-si")' upstream/crates/aur-scanner-cli/src/commands/install.rs; then
+            printf '%s\n' 'prototype still invokes makepkg -si' >&2
+            exit 1
+          fi
+          diff="$(git -C upstream diff)"
+          grep -F '.arg("-k")' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'prototype does not invalidate the normal sudo timestamp' >&2; exit 1; }
+          grep -F 'O_NOFOLLOW' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'prototype does not protect local package opens against symlinks' >&2; exit 1; }
+          grep -F -- '--packagelist' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'prototype does not enumerate build artifacts explicitly' >&2; exit 1; }
       - name: Rust format
         working-directory: upstream
         run: cargo fmt --all --check
