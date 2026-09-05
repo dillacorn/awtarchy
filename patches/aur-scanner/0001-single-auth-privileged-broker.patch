@@ -24,7 +24,7 @@ index aea91de..7e85231 100644
 +libc.workspace = true
 +tempfile = "3.14"
 diff --git a/crates/aur-scanner-cli/src/commands/install.rs b/crates/aur-scanner-cli/src/commands/install.rs
-index 1f2fc86..8b358d1 100644
+index 1f2fc86..c98483e 100644
 --- a/crates/aur-scanner-cli/src/commands/install.rs
 +++ b/crates/aur-scanner-cli/src/commands/install.rs
 @@ -10,9 +10,14 @@
@@ -45,7 +45,7 @@ index 1f2fc86..8b358d1 100644
  
  use aur_scanner_core::aur::AurClient;
  use aur_scanner_core::depgraph::{self, ResolveOptions};
-@@ -155,6 +160,554 @@ where
+@@ -155,6 +160,551 @@ where
      env
  }
  
@@ -550,10 +550,7 @@ index 1f2fc86..8b358d1 100644
 +fn archive_package_name(path: &Path) -> Result<String> {
 +    let pacman = absolute_binary(&["/usr/bin/pacman", "/bin/pacman"], "pacman")?;
 +    let output = Command::new(pacman)
-+        .arg("-Qp")
-+        .arg("--print-format")
-+        .arg("%n")
-+        .arg("--")
++        .arg("-Qqp")
 +        .arg(path)
 +        .env_clear()
 +        .env("PATH", "/usr/bin:/bin:/usr/local/bin")
@@ -600,7 +597,7 @@ index 1f2fc86..8b358d1 100644
  pub async fn run(args: InstallArgs) -> Result<()> {
      if args.package_names.is_empty() {
          anyhow::bail!("no packages specified");
-@@ -378,8 +931,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -378,8 +928,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          }
      }
  
@@ -620,7 +617,7 @@ index 1f2fc86..8b358d1 100644
      for name in &order {
          let base = match node_base.get(name) {
              Some(b) => b.clone(),
-@@ -398,23 +961,23 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -398,23 +958,23 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          println!();
          println!("{} {}", "Building:".cyan().bold(), base.white().bold());
          // Resolve makepkg to an absolute path rather than letting it be looked
@@ -656,7 +653,7 @@ index 1f2fc86..8b358d1 100644
          if args.noconfirm {
              cmd.arg("--noconfirm");
          }
-@@ -432,8 +995,30 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -432,8 +992,30 @@ pub async fn run(args: InstallArgs) -> Result<()> {
                      .join(", ")
              );
          }
@@ -687,7 +684,7 @@ index 1f2fc86..8b358d1 100644
      // 6. Tidy up after a successful install: remove the per-package build dirs we
      //    created in the workspace (large clones + build trees that otherwise just
      //    accumulate). Only on full success, and only dirs that are direct children
-@@ -572,6 +1157,127 @@ mod tests {
+@@ -572,6 +1154,127 @@ mod tests {
          }
      }
  
