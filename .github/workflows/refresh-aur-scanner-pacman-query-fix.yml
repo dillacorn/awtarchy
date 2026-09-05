@@ -1,0 +1,49 @@
+name: Refresh aur-scanner pacman archive query
+
+on:
+  push:
+    branches:
+      - feature/aur-scanner-single-auth-prototype
+
+permissions:
+  contents: write
+
+jobs:
+  refresh:
+    if: github.event.head_commit.message == 'Refresh aur-scanner pacman archive query'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/aur-scanner-single-auth-prototype
+      - name: Apply frozen patch and pacman query fix
+        run: |
+          set -Eeuo pipefail
+          git clone https://github.com/KiefStudioMA/ks-aur-scanner.git upstream
+          git -C upstream checkout 07893f5c1a71252a8c2b584016eb6e24627a249e
+          git -C upstream apply "$GITHUB_WORKSPACE/patches/aur-scanner/0001-single-auth-privileged-broker.patch"
+          python3 tools/fix-aur-scanner-pacman-archive-query.py upstream
+          cargo fmt --manifest-path upstream/Cargo.toml --all
+          git -C upstream diff --check
+      - name: CLI tests
+        working-directory: upstream
+        run: cargo test -p aur-scanner-cli
+      - name: Workspace tests
+        working-directory: upstream
+        run: cargo test --workspace
+      - name: Clippy
+        working-directory: upstream
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Refresh frozen patch
+        run: |
+          set -Eeuo pipefail
+          git -C upstream diff --binary > patches/aur-scanner/0001-single-auth-privileged-broker.patch
+          test -s patches/aur-scanner/0001-single-auth-privileged-broker.patch
+          git diff --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add patches/aur-scanner/0001-single-auth-privileged-broker.patch
+          git diff --cached --check
+          git commit -m 'Use pacman quiet package-file query'
+          git push origin HEAD:feature/aur-scanner-single-auth-prototype
