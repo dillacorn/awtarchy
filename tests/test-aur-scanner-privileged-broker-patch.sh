@@ -31,13 +31,14 @@ for required in \
     || fail "patch is missing required security/install contract: ${required}"
 done
 
+added_lines="$(grep '^+' "$PATCH" | grep -v '^+++' || true)"
 for forbidden in \
   'PACMAN_AUTH' \
   'SUDO_ASKPASS' \
   'NOPASSWD' \
   'cmd.arg("-si")'; do
-  if grep -Fq -- "$forbidden" "$PATCH"; then
-    fail "patch contains forbidden privilege shortcut: ${forbidden}"
+  if grep -Fq -- "$forbidden" <<<"$added_lines"; then
+    fail "patch adds forbidden privilege shortcut: ${forbidden}"
   fi
 done
 
