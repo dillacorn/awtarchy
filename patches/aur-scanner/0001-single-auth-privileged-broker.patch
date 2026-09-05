@@ -1,3 +1,18 @@
+diff --git a/Cargo.lock b/Cargo.lock
+index f0bd882..f8a9cf0 100644
+--- a/Cargo.lock
++++ b/Cargo.lock
+@@ -114,8 +114,10 @@ dependencies = [
+  "clap",
+  "colored",
+  "dirs 5.0.1",
++ "libc",
+  "serde",
+  "serde_json",
++ "tempfile",
+  "tokio",
+  "tracing",
+  "tracing-subscriber",
 diff --git a/crates/aur-scanner-cli/Cargo.toml b/crates/aur-scanner-cli/Cargo.toml
 index aea91de..7e85231 100644
 --- a/crates/aur-scanner-cli/Cargo.toml
@@ -9,7 +24,7 @@ index aea91de..7e85231 100644
 +libc.workspace = true
 +tempfile = "3.14"
 diff --git a/crates/aur-scanner-cli/src/commands/install.rs b/crates/aur-scanner-cli/src/commands/install.rs
-index 1f2fc86..84b0d74 100644
+index 1f2fc86..8b358d1 100644
 --- a/crates/aur-scanner-cli/src/commands/install.rs
 +++ b/crates/aur-scanner-cli/src/commands/install.rs
 @@ -10,9 +10,14 @@
@@ -30,7 +45,7 @@ index 1f2fc86..84b0d74 100644
  
  use aur_scanner_core::aur::AurClient;
  use aur_scanner_core::depgraph::{self, ResolveOptions};
-@@ -155,6 +160,464 @@ where
+@@ -155,6 +160,554 @@ where
      env
  }
  
@@ -472,6 +487,7 @@ index 1f2fc86..84b0d74 100644
 +    let text =
 +        std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;
 +    let mut paths = Vec::new();
++    let mut missing = Vec::new();
 +    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
 +        let path = PathBuf::from(line);
 +        if !path.is_absolute() {
@@ -484,18 +500,107 @@ index 1f2fc86..84b0d74 100644
 +        if !canonical_parent.starts_with(&canonical_base) {
 +            anyhow::bail!("makepkg package output escaped scanned base directory: {line}");
 +        }
-+        paths.push(path);
++        match fs::symlink_metadata(&path) {
++            Ok(meta) if meta.file_type().is_file() => paths.push(path),
++            Ok(_) => anyhow::bail!(
++                "makepkg package output is not a regular file: {}",
++                path.display()
++            ),
++            Err(error) if error.kind() == io::ErrorKind::NotFound => missing.push(path),
++            Err(error) => {
++                return Err(error)
++                    .with_context(|| format!("stat package output {}", path.display()))
++            }
++        }
 +    }
 +    if paths.is_empty() {
-+        anyhow::bail!("makepkg --packagelist returned no package archives");
++        anyhow::bail!("makepkg completed but none of its listed package archives exist");
++    }
++    if !missing.is_empty() {
++        eprintln!(
++            "{} makepkg listed {} package archive(s) that were not produced; ignoring absent optional outputs: {}",
++            "warning:".yellow(),
++            missing.len(),
++            missing
++                .iter()
++                .map(|path| path.display().to_string())
++                .collect::<Vec<_>>()
++                .join(", ")
++        );
 +    }
 +    Ok(paths)
++}
++
++fn required_aur_package_names_for_base(
++    graph: &depgraph::DependencyGraph,
++    node_base: &BTreeMap<String, String>,
++    base: &str,
++) -> Vec<String> {
++    graph
++        .nodes
++        .values()
++        .filter(|node| {
++            node.source == depgraph::PackageSource::Aur
++                && node_base.get(&node.name).is_some_and(|value| value == base)
++        })
++        .map(|node| node.name.clone())
++        .collect()
++}
++
++fn archive_package_name(path: &Path) -> Result<String> {
++    let pacman = absolute_binary(&["/usr/bin/pacman", "/bin/pacman"], "pacman")?;
++    let output = Command::new(pacman)
++        .arg("-Qp")
++        .arg("--print-format")
++        .arg("%n")
++        .arg("--")
++        .arg(path)
++        .env_clear()
++        .env("PATH", "/usr/bin:/bin:/usr/local/bin")
++        .stdin(Stdio::null())
++        .output()
++        .with_context(|| format!("querying built package archive {}", path.display()))?;
++    if !output.status.success() {
++        anyhow::bail!(
++            "pacman could not query built package archive {}",
++            path.display()
++        );
++    }
++    let name = std::str::from_utf8(&output.stdout)
++        .context("pacman returned non-UTF-8 package metadata")?
++        .trim();
++    validate_package_name(name)
++        .with_context(|| format!("built archive returned illegal package name {name:?}"))?;
++    Ok(name.to_string())
++}
++
++fn missing_required_package_names(required: &[String], produced: &BTreeSet<String>) -> Vec<String> {
++    required
++        .iter()
++        .filter(|name| !produced.contains(name.as_str()))
++        .cloned()
++        .collect()
++}
++
++fn ensure_required_package_archives(paths: &[PathBuf], required: &[String]) -> Result<()> {
++    let mut produced = BTreeSet::new();
++    for path in paths {
++        produced.insert(archive_package_name(path)?);
++    }
++    let missing = missing_required_package_names(required, &produced);
++    if !missing.is_empty() {
++        anyhow::bail!(
++            "successful makepkg build did not produce required AUR package archive(s): {}",
++            missing.join(", ")
++        );
++    }
++    Ok(())
 +}
 +
  pub async fn run(args: InstallArgs) -> Result<()> {
      if args.package_names.is_empty() {
          anyhow::bail!("no packages specified");
-@@ -378,8 +841,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -378,8 +931,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          }
      }
  
@@ -515,7 +620,7 @@ index 1f2fc86..84b0d74 100644
      for name in &order {
          let base = match node_base.get(name) {
              Some(b) => b.clone(),
-@@ -398,23 +871,23 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -398,23 +961,23 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          println!();
          println!("{} {}", "Building:".cyan().bold(), base.white().bold());
          // Resolve makepkg to an absolute path rather than letting it be looked
@@ -551,7 +656,7 @@ index 1f2fc86..84b0d74 100644
          if args.noconfirm {
              cmd.arg("--noconfirm");
          }
-@@ -432,8 +905,28 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -432,8 +995,30 @@ pub async fn run(args: InstallArgs) -> Result<()> {
                      .join(", ")
              );
          }
@@ -571,6 +676,8 @@ index 1f2fc86..84b0d74 100644
 +            anyhow::bail!("makepkg --packagelist failed for '{base}'");
 +        }
 +        let paths = package_paths_from_packagelist(&output.stdout, &dir)?;
++        let required = required_aur_package_names_for_base(&graph, &node_base, &base);
++        ensure_required_package_archives(&paths, &required)?;
 +        let asdeps = !package_base_is_explicit(&graph, &node_base, &base);
 +        broker.install_local(paths, asdeps)?;
      }
@@ -580,7 +687,7 @@ index 1f2fc86..84b0d74 100644
      // 6. Tidy up after a successful install: remove the per-package build dirs we
      //    created in the workspace (large clones + build trees that otherwise just
      //    accumulate). Only on full success, and only dirs that are direct children
-@@ -572,6 +1065,83 @@ mod tests {
+@@ -572,6 +1157,127 @@ mod tests {
          }
      }
  
@@ -592,6 +699,50 @@ index 1f2fc86..84b0d74 100644
 +        std::fs::write(&artifact, b"pkg").unwrap();
 +        let output = format!("{}\n", artifact.display());
 +        assert!(package_paths_from_packagelist(output.as_bytes(), base.path()).is_err());
++    }
++
++    #[test]
++    fn packagelist_ignores_absent_optional_output() {
++        let base = tempfile::tempdir().unwrap();
++        let output_dir = base.path().join("pkgdest");
++        std::fs::create_dir(&output_dir).unwrap();
++        let main = output_dir.join("example-1-1-any.pkg.tar.zst");
++        let debug = output_dir.join("example-debug-1-1-any.pkg.tar.zst");
++        std::fs::write(&main, b"pkg").unwrap();
++        let output = format!("{}\n{}\n", main.display(), debug.display());
++        let paths = package_paths_from_packagelist(output.as_bytes(), base.path()).unwrap();
++        assert_eq!(paths, vec![main]);
++    }
++
++    #[test]
++    fn packagelist_fails_when_no_listed_archive_exists() {
++        let base = tempfile::tempdir().unwrap();
++        let output_dir = base.path().join("pkgdest");
++        std::fs::create_dir(&output_dir).unwrap();
++        let missing = output_dir.join("example-1-1-any.pkg.tar.zst");
++        let output = format!("{}\n", missing.display());
++        assert!(package_paths_from_packagelist(output.as_bytes(), base.path()).is_err());
++    }
++
++    #[test]
++    fn packagelist_rejects_existing_non_regular_output() {
++        let base = tempfile::tempdir().unwrap();
++        let output_dir = base.path().join("pkgdest");
++        std::fs::create_dir(&output_dir).unwrap();
++        let directory = output_dir.join("example-1-1-any.pkg.tar.zst");
++        std::fs::create_dir(&directory).unwrap();
++        let output = format!("{}\n", directory.display());
++        assert!(package_paths_from_packagelist(output.as_bytes(), base.path()).is_err());
++    }
++
++    #[test]
++    fn required_package_names_detect_missing_real_package() {
++        let required = vec!["main".to_string(), "split".to_string()];
++        let produced = BTreeSet::from(["main".to_string(), "main-debug".to_string()]);
++        assert_eq!(
++            missing_required_package_names(&required, &produced),
++            vec!["split".to_string()]
++        );
 +    }
 +
 +    #[test]
