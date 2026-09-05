@@ -45,7 +45,9 @@ jobs:
             || { printf '%s\n' 'prototype does not enumerate build artifacts explicitly' >&2; exit 1; }
       - name: Rust format
         working-directory: upstream
-        run: cargo fmt --all --check
+        run: |
+          cargo fmt --all
+          cargo fmt --all --check
       - name: CLI tests
         working-directory: upstream
         run: cargo test -p aur-scanner-cli
