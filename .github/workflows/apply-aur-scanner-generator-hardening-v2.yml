@@ -1,0 +1,64 @@
+name: Apply aur-scanner generator hardening v2
+
+on:
+  push:
+    branches:
+      - feature/aur-scanner-single-auth-prototype
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.event.head_commit.message == 'Apply aur-scanner generator hardening v2'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Harden generator
+        run: |
+          python3 <<'PY'
+          from pathlib import Path
+
+          path = Path('tools/aur-scanner-single-auth-prototype.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = 'use std::fs::{self, File, OpenOptions};'
+          if text.count(old) != 1:
+              raise SystemExit(f'unused File import marker count: {text.count(old)}')
+          text = text.replace(old, 'use std::fs::{self, OpenOptions};', 1)
+
+          old = 'fn pacman_stdio(command: &mut Command) -> Result<()> {\n    let terminal = OpenOptions::new()'
+          if text.count(old) != 1:
+              raise SystemExit(f'pacman stdin marker count: {text.count(old)}')
+          text = text.replace(
+              old,
+              'fn pacman_stdio(command: &mut Command) -> Result<()> {\n    command.stdin(Stdio::null());\n    let terminal = OpenOptions::new()',
+              1,
+          )
+
+          old = 'fn package_paths_from_packagelist(output: &[u8], base_dir: &Path) -> Result<Vec<PathBuf>> {\n    let text = std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;'
+          if text.count(old) != 1:
+              raise SystemExit(f'packagelist canonicalization marker count: {text.count(old)}')
+          text = text.replace(
+              old,
+              'fn package_paths_from_packagelist(output: &[u8], base_dir: &Path) -> Result<Vec<PathBuf>> {\n    let canonical_base = fs::canonicalize(base_dir)\n        .with_context(|| format!("canonicalizing scanned base directory {}", base_dir.display()))?;\n    let text = std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;',
+              1,
+          )
+
+          old = 'if !canonical_parent.starts_with(base_dir) {'
+          if text.count(old) != 1:
+              raise SystemExit(f'canonical base comparison marker count: {text.count(old)}')
+          text = text.replace(old, 'if !canonical_parent.starts_with(&canonical_base) {', 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python3 -m py_compile tools/aur-scanner-single-auth-prototype.py
+          git diff --check
+          git config user.name 'dillacorn'
+          git config user.email '28743863+dillacorn@users.noreply.github.com'
+          git add tools/aur-scanner-single-auth-prototype.py
+          git commit -m 'Harden aur-scanner broker generator'
+          git push origin HEAD:feature/aur-scanner-single-auth-prototype
