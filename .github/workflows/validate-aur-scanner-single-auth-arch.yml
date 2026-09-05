@@ -1,0 +1,81 @@
+name: Validate aur-scanner single-auth on Arch
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/aur-scanner-single-auth-prototype
+    paths:
+      - 'patches/aur-scanner/**'
+      - '.github/workflows/validate-aur-scanner-single-auth-arch.yml'
+  pull_request:
+    paths:
+      - 'patches/aur-scanner/**'
+      - '.github/workflows/validate-aur-scanner-single-auth-arch.yml'
+
+jobs:
+  arch-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Run one-password AUR install in ephemeral Arch
+        run: |
+          set -Eeuo pipefail
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/work:ro" \
+            archlinux:base-devel \
+            bash -lc '
+              set -Eeuo pipefail
+
+              pacman -Syu --noconfirm --needed git rust sudo expect
+
+              useradd -m -G wheel tester
+              printf "%s\n" "tester:testpass" | chpasswd
+              install -d -m 0750 /etc/sudoers.d
+              printf "%%wheel ALL=(ALL:ALL) ALL\n" >/etc/sudoers.d/10-wheel
+              chmod 0440 /etc/sudoers.d/10-wheel
+
+              su - tester -c "git clone https://github.com/KiefStudioMA/ks-aur-scanner.git /home/tester/upstream"
+              su - tester -c "git -C /home/tester/upstream checkout 07893f5c1a71252a8c2b584016eb6e24627a249e"
+              su - tester -c "git -C /home/tester/upstream apply /work/patches/aur-scanner/0001-single-auth-privileged-broker.patch"
+              su - tester -c "cd /home/tester/upstream && cargo build --release -p aur-scanner-cli"
+
+              install -o root -g root -m 0755 \
+                /home/tester/upstream/target/release/aur-scan \
+                /usr/local/bin/aur-scan-single-auth-test
+
+              cat >/tmp/run-single-auth.exp <<"EXPECT"
+          set timeout 900
+          set prompts 0
+          log_user 1
+          spawn /usr/local/bin/aur-scan-single-auth-test install xdg-terminal-exec --noconfirm
+          expect {
+              -re {\[sudo\] password for tester:} {
+                  incr prompts
+                  send "testpass\r"
+                  exp_continue
+              }
+              timeout {
+                  puts stderr "timed out waiting for aur-scan install"
+                  exit 124
+              }
+              eof
+          }
+          set wait_result [wait]
+          set exit_code [lindex $wait_result 3]
+          puts "SUDO_PROMPTS=$prompts"
+          if {$exit_code != 0} {
+              exit $exit_code
+          }
+          if {$prompts != 1} {
+              puts stderr "expected exactly one sudo password prompt, got $prompts"
+              exit 90
+          }
+          EXPECT
+              chmod 0644 /tmp/run-single-auth.exp
+
+              su - tester -c "sudo -k"
+              su - tester -c "expect /tmp/run-single-auth.exp"
+              su - tester -c "pacman -Q xdg-terminal-exec"
+            '
