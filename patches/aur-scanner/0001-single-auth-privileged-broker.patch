@@ -9,7 +9,7 @@ index aea91de..7e85231 100644
 +libc.workspace = true
 +tempfile = "3.14"
 diff --git a/crates/aur-scanner-cli/src/commands/install.rs b/crates/aur-scanner-cli/src/commands/install.rs
-index 1f2fc86..84b0d74 100644
+index 1f2fc86..bb36b4d 100644
 --- a/crates/aur-scanner-cli/src/commands/install.rs
 +++ b/crates/aur-scanner-cli/src/commands/install.rs
 @@ -10,9 +10,14 @@
@@ -30,7 +30,7 @@ index 1f2fc86..84b0d74 100644
  
  use aur_scanner_core::aur::AurClient;
  use aur_scanner_core::depgraph::{self, ResolveOptions};
-@@ -155,6 +160,464 @@ where
+@@ -155,6 +160,440 @@ where
      env
  }
  
@@ -207,14 +207,9 @@ index 1f2fc86..84b0d74 100644
 +            .stdin
 +            .as_mut()
 +            .context("privileged broker is already closed")?;
-+        serde_json::to_writer(&mut *writer, &request)
-+            .context("encoding privileged broker request")?;
-+        writer
-+            .write_all(b"\n")
-+            .context("writing privileged broker request")?;
-+        writer
-+            .flush()
-+            .context("flushing privileged broker request")?;
++        serde_json::to_writer(&mut *writer, &request).context("encoding privileged broker request")?;
++        writer.write_all(b"\n").context("writing privileged broker request")?;
++        writer.flush().context("flushing privileged broker request")?;
 +        self.read_response(id)
 +    }
 +
@@ -297,9 +292,7 @@ index 1f2fc86..84b0d74 100644
 +    command.args(["-S", "--needed", "--asdeps", "--noconfirm", "--"]);
 +    command.args(packages);
 +    pacman_stdio(&mut command)?;
-+    let status = command
-+        .status()
-+        .context("installing official repository dependencies")?;
++    let status = command.status().context("installing official repository dependencies")?;
 +    if !status.success() {
 +        anyhow::bail!("pacman failed while installing official repository dependencies");
 +    }
@@ -329,9 +322,7 @@ index 1f2fc86..84b0d74 100644
 +        .custom_flags(libc::O_NOFOLLOW | libc::O_CLOEXEC)
 +        .open(path)
 +        .with_context(|| format!("opening local package {}", path.display()))?;
-+    let metadata = source
-+        .metadata()
-+        .context("reading local package metadata")?;
++    let metadata = source.metadata().context("reading local package metadata")?;
 +    if !metadata.is_file() {
 +        anyhow::bail!("local package is not a regular file: {}", path.display());
 +    }
@@ -370,9 +361,7 @@ index 1f2fc86..84b0d74 100644
 +    }
 +    let mut staged = Vec::with_capacity(paths.len());
 +    for (index, path) in paths.iter().enumerate() {
-+        staged.push(stage_local_package(
-+            workspace, staging, request_id, index, path,
-+        )?);
++        staged.push(stage_local_package(workspace, staging, request_id, index, path)?);
 +    }
 +
 +    let pacman = absolute_binary(&["/usr/bin/pacman", "/bin/pacman"], "pacman")?;
@@ -402,10 +391,7 @@ index 1f2fc86..84b0d74 100644
 +    let workspace = fs::canonicalize(&workspace)
 +        .with_context(|| format!("canonicalizing broker workspace {}", workspace.display()))?;
 +    if !workspace.is_dir() {
-+        anyhow::bail!(
-+            "broker workspace is not a directory: {}",
-+            workspace.display()
-+        );
++        anyhow::bail!("broker workspace is not a directory: {}", workspace.display());
 +    }
 +
 +    let staging = tempfile::Builder::new()
@@ -423,11 +409,7 @@ index 1f2fc86..84b0d74 100644
 +        let mut line = String::new();
 +        loop {
 +            line.clear();
-+            if reader
-+                .read_line(&mut line)
-+                .context("reading broker request")?
-+                == 0
-+            {
++            if reader.read_line(&mut line).context("reading broker request")? == 0 {
 +                break;
 +            }
 +            let request: BrokerRequest =
@@ -436,9 +418,9 @@ index 1f2fc86..84b0d74 100644
 +            let finish = matches!(request, BrokerRequest::Finish { .. });
 +            let operation = match request {
 +                BrokerRequest::Repo { packages, .. } => broker_install_repo(&packages),
-+                BrokerRequest::Local { paths, asdeps, .. } => {
-+                    broker_install_local(&workspace, staging.path(), id, &paths, asdeps)
-+                }
++                BrokerRequest::Local {
++                    paths, asdeps, ..
++                } => broker_install_local(&workspace, staging.path(), id, &paths, asdeps),
 +                BrokerRequest::Finish { .. } => Ok(()),
 +            };
 +            let ok = broker_response(&mut writer, id, operation)?;
@@ -463,14 +445,9 @@ index 1f2fc86..84b0d74 100644
 +}
 +
 +fn package_paths_from_packagelist(output: &[u8], base_dir: &Path) -> Result<Vec<PathBuf>> {
-+    let canonical_base = fs::canonicalize(base_dir).with_context(|| {
-+        format!(
-+            "canonicalizing scanned base directory {}",
-+            base_dir.display()
-+        )
-+    })?;
-+    let text =
-+        std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;
++    let canonical_base = fs::canonicalize(base_dir)
++        .with_context(|| format!("canonicalizing scanned base directory {}", base_dir.display()))?;
++    let text = std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;
 +    let mut paths = Vec::new();
 +    for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
 +        let path = PathBuf::from(line);
@@ -478,9 +455,8 @@ index 1f2fc86..84b0d74 100644
 +            anyhow::bail!("makepkg --packagelist returned non-absolute path: {line}");
 +        }
 +        let parent = path.parent().context("package list path has no parent")?;
-+        let canonical_parent = fs::canonicalize(parent).with_context(|| {
-+            format!("canonicalizing package output parent {}", parent.display())
-+        })?;
++        let canonical_parent = fs::canonicalize(parent)
++            .with_context(|| format!("canonicalizing package output parent {}", parent.display()))?;
 +        if !canonical_parent.starts_with(&canonical_base) {
 +            anyhow::bail!("makepkg package output escaped scanned base directory: {line}");
 +        }
@@ -495,7 +471,7 @@ index 1f2fc86..84b0d74 100644
  pub async fn run(args: InstallArgs) -> Result<()> {
      if args.package_names.is_empty() {
          anyhow::bail!("no packages specified");
-@@ -378,8 +841,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -378,8 +817,18 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          }
      }
  
@@ -515,7 +491,7 @@ index 1f2fc86..84b0d74 100644
      for name in &order {
          let base = match node_base.get(name) {
              Some(b) => b.clone(),
-@@ -398,23 +871,23 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -398,23 +847,22 @@ pub async fn run(args: InstallArgs) -> Result<()> {
          println!();
          println!("{} {}", "Building:".cyan().bold(), base.white().bold());
          // Resolve makepkg to an absolute path rather than letting it be looked
@@ -530,9 +506,8 @@ index 1f2fc86..84b0d74 100644
 +        // up relative to the attacker-controlled package directory.
 +        let makepkg_bin = absolute_binary(&["/usr/bin/makepkg", "/bin/makepkg"], "makepkg")?;
 +        let pkgdest = dir.join(".aur-scan-pkgdest");
-+        fs::create_dir_all(&pkgdest).with_context(|| {
-+            format!("creating trusted package output dir {}", pkgdest.display())
-+        })?;
++        fs::create_dir_all(&pkgdest)
++            .with_context(|| format!("creating trusted package output dir {}", pkgdest.display()))?;
 +
          let mut cmd = tokio::process::Command::new(makepkg_bin);
 -        cmd.arg("-si").current_dir(&dir);
@@ -551,7 +526,7 @@ index 1f2fc86..84b0d74 100644
          if args.noconfirm {
              cmd.arg("--noconfirm");
          }
-@@ -432,8 +905,28 @@ pub async fn run(args: InstallArgs) -> Result<()> {
+@@ -432,8 +880,28 @@ pub async fn run(args: InstallArgs) -> Result<()> {
                      .join(", ")
              );
          }
@@ -580,7 +555,7 @@ index 1f2fc86..84b0d74 100644
      // 6. Tidy up after a successful install: remove the per-package build dirs we
      //    created in the workspace (large clones + build trees that otherwise just
      //    accumulate). Only on full success, and only dirs that are direct children
-@@ -572,6 +1065,83 @@ mod tests {
+@@ -572,6 +1040,90 @@ mod tests {
          }
      }
  
@@ -604,7 +579,14 @@ index 1f2fc86..84b0d74 100644
 +        let link = workspace.path().join("link.pkg.tar.zst");
 +        std::fs::write(&real, b"pkg").unwrap();
 +        symlink(&real, &link).unwrap();
-+        assert!(stage_local_package(workspace.path(), staging.path(), 1, 0, &link,).is_err());
++        assert!(stage_local_package(
++            workspace.path(),
++            staging.path(),
++            1,
++            0,
++            &link,
++        )
++        .is_err());
 +    }
 +
 +    #[test]
