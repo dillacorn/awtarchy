@@ -25,6 +25,10 @@ for required in \
   'canonical_base' \
   'tempdir_in("/var/tmp")' \
   '--packagelist' \
+  'symlink_metadata' \
+  'archive_package_name' \
+  'missing_required_package_names' \
+  '.arg("-Qp")' \
   'pacman' \
   'PKGDEST'; do
   grep -Fq -- "$required" "$PATCH" \
