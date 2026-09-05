@@ -19,39 +19,3 @@ jobs:
         run: |
           bash -n tests/test-awtarchy-update-session.sh
           bash tests/test-awtarchy-update-session.sh
-
-  apply-postrelease-delivery:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.repository == 'dillacorn/awtarchy' &&
-      github.actor == 'dillacorn' &&
-      github.event.pull_request.title == 'TEMP: Sony v3.5.4 post-release patch bridge' &&
-      github.event.pull_request.head.ref == 'automation/sony-v354-postrelease-patch'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          ref: fix/sony-battery-disable
-          fetch-depth: 0
-      - name: Guard exact target head
-        run: test "$(git rev-parse HEAD)" = "715e370a3abd310ea0e64f98c341322fd10359d4"
-      - name: Apply v3.5.4 delivery implementation
-        run: |
-          printf '%s' 'ZnJvbSBwYXRobGliIGltcG9ydCBQYXRoCgpydW50aW1lID0gUGF0aCgibG9jYWwvc2hhcmUvYXd0YXJjaHkvYXd0YXJjaHktcnVudGltZS5zaCIpCnRleHQgPSBydW50aW1lLnJlYWRfdGV4dChlbmNvZGluZz0idXRmLTgiKQoKZnVuY3Rpb25fYW5jaG9yID0gIiIiICBsb2cgIkFwcGxpZWQgdjMuNS4zIHVwZGF0ZS1ub3RpZmllciBwb3N0LXJlbGVhc2UgcmVwYWlyIHRvIGdlbmVyYXRlZCB0YXJnZXQuIgp9CgpwcmVwYXJlX3F1aWNrc2hlbGxfdXBkYXRlX3RhcmdldCgpIHsKIiIiCgpmdW5jdGlvbl9yZXBsYWNlbWVudCA9ICcnJyAgbG9nICJBcHBsaWVkIHYzLjUuMyB1cGRhdGUtbm90aWZpZXIgcG9zdC1yZWxlYXNlIHJlcGFpciB0byBnZW5lcmF0ZWQgdGFyZ2V0LiIKfQoKcmVwYWlyX3YzNTRfc29ueV9iYXR0ZXJ5X2Rpc2FibGVfcmVwbygpIHsKICBsb2NhbCByZXBvX2Rpcj0iJDEiIHRhZz0iJDIiCiAgbG9jYWwgaGVscGVyPSIke3JlcG9fZGlyfS9sb2NhbC9saWJleGVjL2F3dGFyY2h5L3Bvd2VyLXByb2ZpbGUtaGVscGVyIgoKICBbWyAiJHRhZyIgPT0gInYzLjUuNCIgXV0gfHwgcmV0dXJuIDAKICBbWyAtZiAiJGhlbHBlciIgJiYgISAtTCAiJGhlbHBlciIgXV0gXAogICAgfHwgZGllICJ2My41LjQgcG9zdC1yZWxlYXNlIGJhdHRlcnkgaGVscGVyIHNvdXJjZSBpcyB1bmF2YWlsYWJsZS4iCgogIHB5dGhvbjMgLSAiJGhlbHBlciIgPDwnUFlfVjM1NF9TT05ZX0JBVFRFUlknCmZyb20gcGF0aGxpYiBpbXBvcnQgUGF0aAppbXBvcnQgc3lzCgpwYXRoID0gUGF0aChzeXMuYXJndlsxXSkKdGV4dCA9IHBhdGgucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCm9sZCA9ICIiIiAgICBodWF3ZWkpCiAgICAgIC91c3IvYmluL2dyZXAgLUVxICdjaGFyZ2VfY29udHJvbF90aHJlc2hvbGRzW149XSo9W1s6c3BhY2U6XV0qWzAtOV0rW1s6c3BhY2U6XV0rMTAwKFteMC05XXwkKScgPDw8IiRyZXBvcnQiCiAgICAgIDs7CiAgICAqKQoiIiIKbmV3ID0gIiIiICAgIGh1YXdlaSkKICAgICAgL3Vzci9iaW4vZ3JlcCAtRXEgJ2NoYXJnZV9jb250cm9sX3RocmVzaG9sZHNbXj1dKj1bWzpzcGFjZTpdXSpbMC05XStbWzpzcGFjZTpdXSsxMDAoW14wLTldfCQpJyA8PDwiJHJlcG9ydCIKICAgICAgOzsKICAgIHNvbnkpCiAgICAgIC91c3IvYmluL2dyZXAgLUVxICdiYXR0ZXJ5X2NhcmVfbGltaXRlcltePV0qPVtbOnNwYWNlOl1dKjAoW14wLTldfCQpJyA8PDwiJHJlcG9ydCIKICAgICAgOzsKICAgICopCiIiIgppZiBuZXcgaW4gdGV4dDoKICAgIHJhaXNlIFN5c3RlbUV4aXQoMCkKaWYgdGV4dC5jb3VudChvbGQpICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJ2My41LjQgU29ueSBiYXR0ZXJ5IGhlbHBlciByZXBhaXIgY291bGQgbm90IGZpbmQgdGhlIGV4cGVjdGVkIHJlbGVhc2Ugc291cmNlIikKcGF0aC53cml0ZV90ZXh0KHRleHQucmVwbGFjZShvbGQsIG5ldywgMSksIGVuY29kaW5nPSJ1dGYtOCIpClBZX1YzNTRfU09OWV9CQVRURVJZCiAgL3Vzci9iaW4vYmFzaCAtbiAiJGhlbHBlciIgXAogICAgfHwgZGllICJ2My41LjQgcG9zdC1yZWxlYXNlIFNvbnkgYmF0dGVyeSBoZWxwZXIgZmFpbGVkIEJhc2ggc3ludGF4IHZhbGlkYXRpb24uIgogIGxvZyAiQXBwbGllZCB2My41LjQgU29ueSBiYXR0ZXJ5LWRpc2FibGUgcG9zdC1yZWxlYXNlIHJlcGFpciB0byByZWxlYXNlIGhlbHBlciBzb3VyY2UuIgp9CgpwcmVwYXJlX3F1aWNrc2hlbGxfdXBkYXRlX3RhcmdldCgpIHsKJycnCgppZiB0ZXh0LmNvdW50KGZ1bmN0aW9uX2FuY2hvcikgIT0gMToKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJleHBlY3RlZCBvbmUgdjMuNS4zIHJlcGFpciBpbnNlcnRpb24gYW5jaG9yLCBmb3VuZCB7dGV4dC5jb3VudChmdW5jdGlvbl9hbmNob3IpfSIpCnRleHQgPSB0ZXh0LnJlcGxhY2UoZnVuY3Rpb25fYW5jaG9yLCBmdW5jdGlvbl9yZXBsYWNlbWVudCwgMSkKCmNhbGxfYW5jaG9yID0gIiIiICByZXBvX2Rpcj0iJHtUTVBEfS8ke3RvcH0iCiAgW1sgLWQgIiRyZXBvX2RpciIgXV0gfHwgZGllICJFeHRyYWN0ZWQgcmVwbyBkaXJlY3RvcnkgaXMgbWlzc2luZyIKCiAgdGFyZ2V0X2hvbWU9IiR7VE1QRH0vdGFyZ2V0LWhvbWUiCiIiIgpjYWxsX3JlcGxhY2VtZW50ID0gIiIiICByZXBvX2Rpcj0iJHtUTVBEfS8ke3RvcH0iCiAgW1sgLWQgIiRyZXBvX2RpciIgXV0gfHwgZGllICJFeHRyYWN0ZWQgcmVwbyBkaXJlY3RvcnkgaXMgbWlzc2luZyIKCiAgcmVwYWlyX3YzNTRfc29ueV9iYXR0ZXJ5X2Rpc2FibGVfcmVwbyAiJHJlcG9fZGlyIiAiJHRhZyIKCiAgdGFyZ2V0X2hvbWU9IiR7VE1QRH0vdGFyZ2V0LWhvbWUiCiIiIgoKaWYgdGV4dC5jb3VudChjYWxsX2FuY2hvcikgIT0gMToKICAgIHJhaXNlIFN5c3RlbUV4aXQoZiJleHBlY3RlZCBvbmUgc3RhYmxlLXJlbGVhc2UgcmVwbyBpbnNlcnRpb24gYW5jaG9yLCBmb3VuZCB7dGV4dC5jb3VudChjYWxsX2FuY2hvcil9IikKdGV4dCA9IHRleHQucmVwbGFjZShjYWxsX2FuY2hvciwgY2FsbF9yZXBsYWNlbWVudCwgMSkKcnVudGltZS53cml0ZV90ZXh0KHRleHQsIGVuY29kaW5nPSJ1dGYtOCIpCgpoZWxwZXIgPSBQYXRoKCJsb2NhbC9saWJleGVjL2F3dGFyY2h5L3Bvd2VyLXByb2ZpbGUtaGVscGVyIikKaGVscGVyX3RleHQgPSBoZWxwZXIucmVhZF90ZXh0KGVuY29kaW5nPSJ1dGYtOCIpCnNvbnlfY2FzZSA9ICIiIiAgICBzb255KQogICAgICAvdXNyL2Jpbi9ncmVwIC1FcSAnYmF0dGVyeV9jYXJlX2xpbWl0ZXJbXj1dKj1bWzpzcGFjZTpdXSowKFteMC05XXwkKScgPDw8IiRyZXBvcnQiCiAgICAgIDs7CiIiIgppZiBoZWxwZXJfdGV4dC5jb3VudChzb255X2Nhc2UpICE9IDE6CiAgICByYWlzZSBTeXN0ZW1FeGl0KCJ0ZXN0ZWQgU29ueSB2ZXJpZmljYXRpb24gY2FzZSBpcyBtaXNzaW5nIG9yIGR1cGxpY2F0ZWQiKQpoZWxwZXIud3JpdGVfdGV4dChoZWxwZXJfdGV4dC5yc3RyaXAoIlxuIikgKyAiXG4iLCBlbmNvZGluZz0idXRmLTgiKQo=' | base64 -d >/tmp/patch-green.py
-          python3 /tmp/patch-green.py
-          git diff --check
-          git diff --exit-code -- tests/test-battery-care-control.sh
-          bash -n local/share/awtarchy/awtarchy-runtime.sh
-          bash -n local/libexec/awtarchy/power-profile-helper
-          bash -n tests/test-battery-care-control.sh
-          sudo bash tests/test-battery-care-control.sh
-      - name: Commit validated delivery implementation
-        run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add local/share/awtarchy/awtarchy-runtime.sh local/libexec/awtarchy/power-profile-helper
-          git diff --cached --check
-          git commit -m 'Deliver Sony battery fix to v3.5.4 updates'
-          git push origin HEAD:fix/sony-battery-disable
