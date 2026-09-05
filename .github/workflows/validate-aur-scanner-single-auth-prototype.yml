@@ -43,6 +43,10 @@ jobs:
             || { printf '%s\n' 'prototype does not protect local package opens against symlinks' >&2; exit 1; }
           grep -F -- '--packagelist' <<<"$diff" >/dev/null \
             || { printf '%s\n' 'prototype does not enumerate build artifacts explicitly' >&2; exit 1; }
+          grep -F 'command.stdin(Stdio::null())' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'pacman broker command does not isolate protocol stdin' >&2; exit 1; }
+          grep -F 'canonical_base' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'package artifact validation does not canonicalize the approved base' >&2; exit 1; }
       - name: Rust format
         working-directory: upstream
         run: |
