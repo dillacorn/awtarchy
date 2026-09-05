@@ -1,6 +1,7 @@
 name: Validate aur-scanner privileged broker patch
 
 on:
+  workflow_dispatch:
   push:
     branches:
       - feature/aur-scanner-single-auth-prototype
