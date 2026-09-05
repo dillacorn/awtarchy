@@ -1,0 +1,48 @@
+name: Validate aur-scanner single-auth prototype
+
+on:
+  push:
+    branches:
+      - feature/aur-scanner-single-auth-prototype
+  pull_request:
+    paths:
+      - 'tools/aur-scanner-single-auth-prototype.py'
+      - 'patches/aur-scanner/**'
+      - '.github/workflows/validate-aur-scanner-single-auth-prototype.yml'
+      - 'tests/test-aur-scanner-privileged-broker-patch.sh'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Clone exact upstream aur-scanner
+        run: |
+          git clone https://github.com/KiefStudioMA/ks-aur-scanner.git upstream
+          git -C upstream checkout 07893f5c1a71252a8c2b584016eb6e24627a249e
+      - name: Apply privilege-broker prototype
+        run: python3 tools/aur-scanner-single-auth-prototype.py upstream
+      - name: Reject unsafe privilege shortcuts
+        run: |
+          ! grep -R -n -F 'PACMAN_AUTH' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
+          ! grep -R -n -F 'SUDO_ASKPASS' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
+          ! grep -R -n -F 'NOPASSWD' upstream/crates/aur-scanner-cli/src upstream/crates/aur-scanner-cli/Cargo.toml
+          ! grep -R -n -F 'cmd.arg("-si")' upstream/crates/aur-scanner-cli/src/commands/install.rs
+          grep -F 'sudo -k' <(git -C upstream diff)
+          grep -F 'O_NOFOLLOW' <(git -C upstream diff)
+          grep -F -- '--packagelist' <(git -C upstream diff)
+      - name: Rust format
+        working-directory: upstream
+        run: cargo fmt --all --check
+      - name: CLI tests
+        working-directory: upstream
+        run: cargo test -p aur-scanner-cli
+      - name: Workspace tests
+        working-directory: upstream
+        run: cargo test --workspace
+      - name: Clippy
+        working-directory: upstream
+        run: cargo clippy --workspace --all-targets -- -D warnings
+      - name: Show generated upstream patch
+        if: always()
+        run: git -C upstream diff --check && git -C upstream diff --stat && git -C upstream diff
