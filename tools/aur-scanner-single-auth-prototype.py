@@ -81,7 +81,7 @@ use std::path::PathBuf;
 use colored::Colorize;
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, OpenOptions};
 use std::io::{self, BufRead, BufReader, BufWriter, IsTerminal, Write};
 use std::os::fd::AsRawFd;
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
@@ -325,6 +325,7 @@ fn broker_response<W: Write>(writer: &mut W, id: u64, result: Result<()>) -> Res
 }
 
 fn pacman_stdio(command: &mut Command) -> Result<()> {
+    command.stdin(Stdio::null());
     let terminal = OpenOptions::new()
         .read(true)
         .write(true)
@@ -503,6 +504,8 @@ fn package_base_is_explicit(
 }
 
 fn package_paths_from_packagelist(output: &[u8], base_dir: &Path) -> Result<Vec<PathBuf>> {
+    let canonical_base = fs::canonicalize(base_dir)
+        .with_context(|| format!("canonicalizing scanned base directory {}", base_dir.display()))?;
     let text = std::str::from_utf8(output).context("makepkg --packagelist returned non-UTF-8 output")?;
     let mut paths = Vec::new();
     for line in text.lines().map(str::trim).filter(|line| !line.is_empty()) {
@@ -513,7 +516,7 @@ fn package_paths_from_packagelist(output: &[u8], base_dir: &Path) -> Result<Vec<
         let parent = path.parent().context("package list path has no parent")?;
         let canonical_parent = fs::canonicalize(parent)
             .with_context(|| format!("canonicalizing package output parent {}", parent.display()))?;
-        if !canonical_parent.starts_with(base_dir) {
+        if !canonical_parent.starts_with(&canonical_base) {
             anyhow::bail!("makepkg package output escaped scanned base directory: {line}");
         }
         paths.push(path);
