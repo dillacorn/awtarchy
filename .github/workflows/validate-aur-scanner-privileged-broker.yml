@@ -21,6 +21,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      # Revalidate the frozen patch after any bot-generated patch refresh.
       - name: Patch contract
         run: bash tests/test-aur-scanner-privileged-broker-patch.sh
       - name: Clone exact upstream aur-scanner
