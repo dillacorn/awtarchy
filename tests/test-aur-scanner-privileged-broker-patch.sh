@@ -28,7 +28,7 @@ for required in \
   'symlink_metadata' \
   'archive_package_name' \
   'missing_required_package_names' \
-  '.arg("-Qp")' \
+  '.arg("-Qqp")' \
   'pacman' \
   'PKGDEST'; do
   grep -Fq -- "$required" "$PATCH" \
