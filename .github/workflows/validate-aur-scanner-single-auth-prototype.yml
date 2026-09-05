@@ -47,6 +47,8 @@ jobs:
             || { printf '%s\n' 'pacman broker command does not isolate protocol stdin' >&2; exit 1; }
           grep -F 'canonical_base' <<<"$diff" >/dev/null \
             || { printf '%s\n' 'package artifact validation does not canonicalize the approved base' >&2; exit 1; }
+          grep -F 'tempdir_in("/var/tmp")' <<<"$diff" >/dev/null \
+            || { printf '%s\n' 'root broker staging is not a secure randomized /var/tmp directory' >&2; exit 1; }
       - name: Rust format
         working-directory: upstream
         run: |
