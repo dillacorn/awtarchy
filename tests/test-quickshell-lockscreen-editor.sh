@@ -210,8 +210,10 @@ require_text "$LOCK_SCENE" 'required property string wallpaperSource' \
     'LockScene has no local wallpaper source input'
 require_text "$LOCK_SCENE" 'root.backgroundMode === "color" ? root.backgroundColor : "#000000"' \
     'LockScene does not keep a black fallback under wallpaper rendering'
-require_text "$LOCK_SCENE" 'fillMode: Image.PreserveAspectCrop' \
-    'LockScene wallpaper is not aspect-filled'
+require_text "$LOCK_SCENE" 'function wallpaperGeometry()' \
+    'LockScene wallpaper has no Cover/Contain geometry path'
+require_text "$LOCK_SCENE" 'root.wallpaperFit === "contain"' \
+    'LockScene wallpaper does not preserve explicit Contain behavior'
 
 require_text "$WEATHER_CACHE" 'expires_at' \
     'lock weather cache does not validate expiry metadata'
@@ -248,8 +250,8 @@ require_text "$DESKTOP_WEATHER" 'BarState.lockscreenShowWeather()' \
     'unlocked weather refresh service is not gated by the Weather toggle'
 reject_text "$DESKTOP_WEATHER" '&& configuredLocation.length > 0' \
     'unlocked weather refresh still requires manual location configuration'
-require_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location])' \
-    'unlocked weather refresh does not pass blank location through for automatic mode'
+require_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location, units])' \
+    'unlocked weather refresh does not pass location and units through to the helper'
 
 for token in LockScene LockscreenEditor lockscreen_layout lockscreen_background \
     lockscreen_weather_location wallpaperSource weatherLocation; do
