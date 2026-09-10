@@ -19,8 +19,8 @@ def replace_once(old: str, new: str, label: str) -> None:
 
 
 replace_once(
-    "    property real heldScaleBoost: 1.0;\n",
-    "    property real heldScaleBoost: 1.0;\n"
+    "    property real heldScaleBoost: 1.0\n",
+    "    property real heldScaleBoost: 1.0\n"
     "    property bool showEditorGrid: false\n",
     "guide toggle property",
 )
