@@ -24,6 +24,22 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/tmp-apply-lockscreen-editor-tooling.py')
+          lines = path.read_text().splitlines(keepends=True)
+          label = next(i for i, line in enumerate(lines) if '"color selection coherence",' in line)
+          start = label
+          while start >= 0 and not lines[start].startswith('text = replace_once('):
+              start -= 1
+          end = label
+          while end < len(lines) and lines[end].strip() != ')':
+              end += 1
+          if start < 0 or end >= len(lines):
+              raise SystemExit('could not isolate redundant color selection rewrite')
+          del lines[start:end + 1]
+          path.write_text(''.join(lines))
+          PY
           python3 .github/scripts/tmp-apply-lockscreen-editor-tooling.py
 
           bash -n tests/test-quickshell-lockscreen-editor-tooling.sh
@@ -54,5 +70,3 @@ jobs:
           }
           git commit -m 'feat: add lockscreen editor layout tooling'
           git push origin HEAD:feature/lockscreen-interactive-effects
-
-# trigger
