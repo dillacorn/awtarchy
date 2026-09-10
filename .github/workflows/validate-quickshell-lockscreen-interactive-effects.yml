@@ -21,6 +21,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
           bash -n tests/test-quickshell-lockscreen-logo-cohesion.sh
           bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash -n tests/test-quickshell-lockscreen-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -51,6 +52,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
           shellcheck tests/test-quickshell-lockscreen-logo-cohesion.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
           shellcheck tests/test-quickshell-lockscreen-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -86,7 +88,9 @@ jobs:
       - name: Logo cohesion contracts
         run: bash tests/test-quickshell-lockscreen-logo-cohesion.sh
       - name: Runtime polish contracts
-        run: bash tests/test-quickshell-lockscreen-runtime-polish.sh
+        run: |
+          bash tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
       - name: Background composition contracts
         run: |
           bash tests/test-quickshell-lockscreen-background-composition.sh
