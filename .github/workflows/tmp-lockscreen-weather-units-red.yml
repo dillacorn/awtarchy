@@ -25,3 +25,5 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-weather-units.sh
           bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash tests/test-quickshell-lockscreen-weather-units.sh
+
+# rerun after test lint cleanup
