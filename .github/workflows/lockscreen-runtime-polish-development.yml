@@ -38,9 +38,14 @@ jobs:
           from pathlib import Path
           path = Path('.github/scripts/apply-lockscreen-runtime-polish.py')
           text = path.read_text()
-          text = text.replace("' '''", "''''")
+          needle = "' ''',"
+          count = text.count(needle)
+          if count != 4:
+              raise SystemExit(f'expected 4 multiline template endings, found {count}')
+          text = text.replace(needle, "'\n''',")
           path.write_text(text)
           PY
+          python3 -m py_compile .github/scripts/apply-lockscreen-runtime-polish.py
           set +e
           python3 .github/scripts/apply-lockscreen-runtime-polish.py 2>&1 | tee /tmp/runtime-polish-patcher.txt
           rc=${PIPESTATUS[0]}
