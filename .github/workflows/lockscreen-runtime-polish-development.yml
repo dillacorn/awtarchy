@@ -73,7 +73,8 @@ jobs:
         run: |
           shellcheck config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
-          shellcheck tests/test-bibata-cursor-migration.sh
+          # This test intentionally searches source for literal "$theme"/"$CURSOR_SIZE" text.
+          shellcheck -e SC2016 tests/test-bibata-cursor-migration.sh
           shellcheck tests/test-quickshell-lockscreen-logo-cohesion.sh
 
       - name: Validate runtime polish contracts
