@@ -1,5 +1,6 @@
 name: Lockscreen runtime polish development
 
+# Temporary branch-only TDD executor. Remove after the validated implementation commit.
 on:
   push:
     branches:
