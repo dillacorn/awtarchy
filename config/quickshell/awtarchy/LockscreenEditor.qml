@@ -504,10 +504,10 @@ Singleton {
         });
     }
 
-    function writeDraftPoint(name, x, y, selectElement) {
+    function writeDraftPoint(name, x, y, selectPrimary) {
         if (elementNames.indexOf(name) < 0)
             return;
-        if (selectElement)
+        if (selectPrimary)
             recordUndoBeforeChange();
         const next = cloneLayout(draftLayout);
         const point = clampPoint(name, Number(x), Number(y));
@@ -518,7 +518,7 @@ Singleton {
             color: next[name].color
         });
         draftLayout = next;
-        if (selectElement)
+        if (selectPrimary)
             selectElement(name, false);
         scheduleContrastRefresh();
     }
