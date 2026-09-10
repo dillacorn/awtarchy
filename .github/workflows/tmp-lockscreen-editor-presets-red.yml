@@ -1,9 +1,10 @@
 name: TEMP Apply lockscreen editor presets
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/lockscreen-interactive-effects
+      - main
+    types: [synchronize]
     paths:
       - .github/workflows/tmp-lockscreen-editor-presets-red.yml
 
