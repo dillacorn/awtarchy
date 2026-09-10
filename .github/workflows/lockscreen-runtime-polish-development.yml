@@ -32,7 +32,21 @@ jobs:
           test "$rc" -ne 0
 
       - name: Apply runtime polish implementation
-        run: python3 .github/scripts/apply-lockscreen-runtime-polish.py
+        shell: bash
+        run: |
+          set +e
+          python3 .github/scripts/apply-lockscreen-runtime-polish.py 2>&1 | tee /tmp/runtime-polish-patcher.txt
+          rc=${PIPESTATUS[0]}
+          set -e
+          test "$rc" -eq 0
+
+      - name: Upload patcher diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lockscreen-runtime-polish-patcher
+          path: /tmp/runtime-polish-patcher.txt
+          if-no-files-found: ignore
 
       - name: Validate changed shell syntax
         shell: bash
