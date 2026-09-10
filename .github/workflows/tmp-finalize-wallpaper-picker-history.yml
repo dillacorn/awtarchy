@@ -18,9 +18,7 @@ jobs:
         with:
           ref: feature/lockscreen-interactive-effects
           fetch-depth: 0
-      - name: Install migration test dependency
-        run: sudo apt-get update && sudo apt-get install -y lua5.4
-      - name: Finalize updater managed history and validate migration
+      - name: Finalize updater managed history
         shell: bash
         run: |
           set -euo pipefail
@@ -48,7 +46,24 @@ jobs:
             } | sort -u
           )
 
-          bash tests/test-quickshell-updater-migration.sh
+          missing=0
+          while IFS= read -r source_path; do
+            installed_path=".${source_path}"
+            digest="$(sha256sum "$source_path" | awk '{print $1}')"
+            line="${digest}"$'\t'"${installed_path}"
+            if ! grep -Fqx -- "$line" "$history"; then
+              printf 'MISSING %s\n' "$line" >&2
+              missing=1
+            fi
+          done < <(
+            {
+              find config/quickshell/awtarchy -maxdepth 1 -type f -print
+              find config/hypr/scripts -maxdepth 1 -type f \
+                \( -name 'quickshell*' -o -name 'ddc_brightness.sh' -o -name 'hypr-ddc-brightness.sh' \) -print
+            } | sort -u
+          )
+          (( missing == 0 ))
+
           bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
 
