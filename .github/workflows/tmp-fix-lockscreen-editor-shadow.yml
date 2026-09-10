@@ -70,3 +70,5 @@ jobs:
           git add config/quickshell/awtarchy/LockscreenEditor.qml local/share/awtarchy/quickshell-managed-history.sha256
           git commit -m 'fix: avoid lockscreen editor selection shadow'
           git push origin HEAD:feature/lockscreen-interactive-effects
+
+# trigger
