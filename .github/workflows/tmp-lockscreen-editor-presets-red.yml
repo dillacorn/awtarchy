@@ -24,3 +24,5 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-editor-presets.sh
           shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
           bash tests/test-quickshell-lockscreen-editor-presets.sh
+
+# rerun from current aligned branch head
