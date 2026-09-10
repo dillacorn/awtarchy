@@ -34,6 +34,13 @@ jobs:
       - name: Apply runtime polish implementation
         shell: bash
         run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/apply-lockscreen-runtime-polish.py')
+          text = path.read_text()
+          text = text.replace("' '''", "''''")
+          path.write_text(text)
+          PY
           set +e
           python3 .github/scripts/apply-lockscreen-runtime-polish.py 2>&1 | tee /tmp/runtime-polish-patcher.txt
           rc=${PIPESTATUS[0]}
