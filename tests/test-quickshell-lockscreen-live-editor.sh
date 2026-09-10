@@ -6,6 +6,7 @@ APP_STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
 BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
+INLINE_COLOR="${ROOT}/config/quickshell/awtarchy/InlineColorPicker.qml"
 SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
 SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 LOCK_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
@@ -58,7 +59,7 @@ require_text "$APP_STATE" 'color' \
 
 valid_layout='{"logo":{"x":0.5,"y":0.34,"scale":1.25,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":0.8,"color":"#ff6600"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1.1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1.4,"color":"auto"}}'
 valid_visibility='{"logo":true,"time":true,"date":false,"username":true,"weather":false,"password":true}'
-run_state save-lockscreen-editor "$valid_layout" "$valid_visibility"
+run_state save-lockscreen-editor "$valid_layout" "$valid_visibility" black '#000000' ''
 jq -e '
     .lockscreen_layout.logo.scale == 1.25
     and .lockscreen_layout.logo.color == "auto"
@@ -76,12 +77,12 @@ for invalid_layout in \
     '{"logo":{"x":0.5,"y":0.34,"scale":0.49,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"color":"auto"}}' \
     '{"logo":{"x":0.5,"y":0.34,"scale":1,"color":"banana"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"color":"auto"}}' \
     '{"logo":{"x":0.5,"y":0.34,"scale":1,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":2.01,"color":"auto"}}'; do
-    if run_state save-lockscreen-editor "$invalid_layout" "$valid_visibility" >/dev/null 2>&1; then
+    if run_state save-lockscreen-editor "$invalid_layout" "$valid_visibility" black '#000000' '' >/dev/null 2>&1; then
         fail "invalid element scale/color was accepted: $invalid_layout"
     fi
 done
 invalid_visibility='{"logo":true,"time":true,"date":false,"username":true,"weather":false,"password":false}'
-if run_state save-lockscreen-editor "$valid_layout" "$invalid_visibility" >/dev/null 2>&1; then
+if run_state save-lockscreen-editor "$valid_layout" "$invalid_visibility" black '#000000' '' >/dev/null 2>&1; then
     fail 'editor allowed the password element to be hidden'
 fi
 [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$state_before" ]] \
@@ -91,14 +92,14 @@ fi
 # exact visual dimensions needed by the unlocked editor selection frames.
 require_text "$SCENE" 'required property bool showLogo' \
     'shared scene has no logo visibility input'
-require_text "$SCENE" 'required property color autoAccent' \
-    'shared scene has no automatic black/white contrast input'
+require_text "$SCENE" 'required property var autoAccents' \
+    'shared scene has no per-element automatic black/white contrast input'
 require_text "$SCENE" 'function elementScale(name)' \
     'shared scene has no normalized element scale reader'
 require_text "$SCENE" 'function elementColor(name)' \
     'shared scene has no per-element color reader'
-require_text "$SCENE" 'return value === "auto" ? root.autoAccent' \
-    'auto element color does not use the wallpaper-derived contrast color'
+require_text "$SCENE" 'return value === "auto" ? safeAuto' \
+    'auto element color does not use the per-element cached contrast color'
 require_text "$SCENE" 'property bool editorMode: false' \
     'shared scene has no editor-only presentation mode'
 require_text "$SCENE" 'property var editorVisibility: ({})' \
@@ -166,8 +167,10 @@ require_text "$EDITOR" 'label: "White"' \
     'editor has no explicit white color option'
 require_text "$EDITOR" 'label: "Black"' \
     'editor has no explicit black color option'
-require_text "$EDITOR" 'placeholderText: "#RRGGBB"' \
-    'editor has no custom hex color input'
+require_text "$EDITOR" 'InlineColorPicker {' \
+    'editor does not use the reusable inline color picker'
+require_text "$INLINE_COLOR" 'placeholderText: "#RRGGBB"' \
+    'inline color picker has no custom hex color input'
 require_text "$EDITOR" 'editorMode: true' \
     'LockscreenEditor does not activate editor-only presentation behavior'
 require_text "$EDITOR" 'editorVisibility: root.draftVisibility' \
@@ -211,18 +214,18 @@ require_text "$CONTRAST_HELPER" '#ffffff' \
     'automatic wallpaper contrast cannot choose white'
 require_text "$DESKTOP_CONTRAST" 'quickshell_lockscreen_contrast.sh' \
     'unlocked contrast service does not use the bounded helper'
-require_text "$DESKTOP_CONTRAST" 'backend_state.tsv' \
-    'unlocked contrast service does not react to Awtwall selections'
-require_text "$LOCK_CONTRAST" 'lockscreen-contrast.txt' \
-    'secure contrast reader does not consume the local cache'
+require_text "$DESKTOP_CONTRAST" 'target: BarState' \
+    'unlocked contrast service does not react to persisted lockscreen state changes'
+require_text "$LOCK_CONTRAST" 'lockscreen-contrast.json' \
+    'secure contrast reader does not consume the local per-element cache'
 for forbidden in Process magick backend_state.tsv; do
     reject_text "$LOCK_CONTRAST" "$forbidden" \
         "secure contrast cache performs unlocked-only work: $forbidden"
 done
 require_text "$LOCK_SHELL" 'LockContrastCache {' \
     'secure lock shell does not construct the cache-only contrast reader'
-require_text "$SURFACE" 'required property color autoAccent' \
-    'secure lock surface does not receive automatic contrast color'
+require_text "$SURFACE" 'required property var autoAccents' \
+    'secure lock surface does not receive per-element automatic contrast colors'
 
 require_text "$BAR_STATE" 'function lockscreenShowLogo()' \
     'BarState has no normalized logo visibility reader'
