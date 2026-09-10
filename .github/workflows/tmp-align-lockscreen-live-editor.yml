@@ -28,6 +28,8 @@ jobs:
           path = Path('tests/test-quickshell-lockscreen-live-editor.sh')
           text = path.read_text()
           replacements = [
+              ('EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"',
+               'EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"\nINLINE_COLOR="${ROOT}/config/quickshell/awtarchy/InlineColorPicker.qml"'),
               ('run_state save-lockscreen-editor "$valid_layout" "$valid_visibility"',
                'run_state save-lockscreen-editor "$valid_layout" "$valid_visibility" black \'#000000\' \'\''),
               ('run_state save-lockscreen-editor "$invalid_layout" "$valid_visibility" >/dev/null 2>&1',
@@ -38,6 +40,8 @@ jobs:
                "require_text \"$SCENE\" 'required property var autoAccents' \\\n    'shared scene has no per-element automatic black/white contrast input'"),
               ("require_text \"$SCENE\" 'return value === \"auto\" ? root.autoAccent' \\\n    'auto element color does not use the wallpaper-derived contrast color'",
                "require_text \"$SCENE\" 'return value === \"auto\" ? safeAuto' \\\n    'auto element color does not use the per-element cached contrast color'"),
+              ("require_text \"$EDITOR\" 'placeholderText: \"#RRGGBB\"' \\\n    'editor has no custom hex color input'",
+               "require_text \"$EDITOR\" 'InlineColorPicker {' \\\n    'editor does not use the reusable inline color picker'\nrequire_text \"$INLINE_COLOR\" 'placeholderText: \"#RRGGBB\"' \\\n    'inline color picker has no custom hex color input'"),
               ("require_text \"$DESKTOP_CONTRAST\" 'backend_state.tsv' \\\n    'unlocked contrast service does not react to Awtwall selections'",
                "require_text \"$DESKTOP_CONTRAST\" 'target: BarState' \\\n    'unlocked contrast service does not react to persisted lockscreen state changes'"),
               ("require_text \"$LOCK_CONTRAST\" 'lockscreen-contrast.txt' \\\n    'secure contrast reader does not consume the local cache'",
