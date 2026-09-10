@@ -27,6 +27,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-live-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-flick.sh
           bash -n tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
           bash -n tests/test-quickshell-lockscreen-background-composition.sh
           bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash -n tests/test-quickshell-lockscreen-weather.sh
@@ -56,6 +57,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-live-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-flick.sh
           shellcheck tests/test-quickshell-lockscreen-editor-tooling.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
           shellcheck tests/test-quickshell-lockscreen-background-composition.sh
           shellcheck tests/test-quickshell-lockscreen-background-save-dispatch.sh
           shellcheck tests/test-quickshell-lockscreen-weather.sh
@@ -106,5 +108,6 @@ jobs:
           bash tests/test-quickshell-lockscreen-live-editor.sh
           bash tests/test-quickshell-lockscreen-editor-flick.sh
           bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
       - name: Managed history contracts
         run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
