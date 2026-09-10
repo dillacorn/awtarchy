@@ -16,24 +16,27 @@ Singleton {
     readonly property string configuredLocation:
         String(BarState.lockscreenWeatherLocation() || "").trim()
     readonly property bool refreshEnabled: BarState.lockscreenShowWeather()
+    readonly property string configuredUnits: BarState.lockscreenWeatherUnits()
 
-    property string lastRequestedLocation: ""
+    property string lastRequestIdentity: ""
     property double lastRequestMs: 0
 
     function requestRefresh() {
         const location = String(root.configuredLocation || "").trim();
+        const units = String(root.configuredUnits || "auto");
         if (!root.refreshEnabled || refreshProcess.running)
             return;
 
         const now = Date.now();
-        const locationChanged = location !== root.lastRequestedLocation;
-        if (!locationChanged && root.lastRequestMs > 0
+        const requestIdentity = location + "|" + units;
+        const requestChanged = requestIdentity !== root.lastRequestIdentity;
+        if (!requestChanged && root.lastRequestMs > 0
                 && now - root.lastRequestMs < root.minimumRefreshIntervalMs)
             return;
 
-        root.lastRequestedLocation = location;
+        root.lastRequestIdentity = requestIdentity;
         root.lastRequestMs = now;
-        refreshProcess.exec([root.weatherHelper, "refresh", location]);
+        refreshProcess.exec([root.weatherHelper, "refresh", location, units]);
     }
 
     Process {

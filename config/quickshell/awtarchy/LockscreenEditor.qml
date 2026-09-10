@@ -31,6 +31,7 @@ Singleton {
     property string draftOverlayMode: "none"
     property int draftOverlayStrength: 0
     property int draftWallpaperBlur: 0
+    property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
     property string selectedElement: "logo"
     property string statusMessage: ""
@@ -117,7 +118,8 @@ Singleton {
             wallpaperFocalY: draftWallpaperFocalY,
             overlayMode: draftOverlayMode,
             overlayStrength: draftOverlayStrength,
-            wallpaperBlur: draftWallpaperBlur
+            wallpaperBlur: draftWallpaperBlur,
+            weatherUnits: draftWeatherUnits
         });
     }
 
@@ -166,6 +168,8 @@ Singleton {
             ? Math.max(0, Math.min(100, Math.round(overlayStrength))) : 0;
         draftWallpaperBlur = Number.isFinite(wallpaperBlur)
             ? Math.max(0, Math.min(100, Math.round(wallpaperBlur))) : 0;
+        draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0
+            ? String(snapshot.weatherUnits) : "auto";
         scheduleContrastRefresh();
     }
 
@@ -457,6 +461,14 @@ Singleton {
         draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
     }
 
+    function setDraftWeatherUnits(value) {
+        const units = String(value || "");
+        if (["auto", "fahrenheit", "celsius"].indexOf(units) < 0)
+            return;
+        recordUndoBeforeChange();
+        draftWeatherUnits = units;
+    }
+
     function acceptWallpaperSelection(line) {
         if (!open)
             return;
@@ -704,6 +716,7 @@ Singleton {
         draftOverlayMode = "none";
         draftOverlayStrength = 0;
         draftWallpaperBlur = 0;
+        draftWeatherUnits = "auto";
         draftAutoAccents = defaultAutoAccents();
         selectedElement = "logo";
         selectedElements = ["logo"];
@@ -733,6 +746,7 @@ Singleton {
         draftOverlayMode = BarState.lockscreenOverlayMode();
         draftOverlayStrength = BarState.lockscreenOverlayStrength();
         draftWallpaperBlur = BarState.lockscreenWallpaperBlur();
+        draftWeatherUnits = BarState.lockscreenWeatherUnits();
         draftAutoAccents = defaultAutoAccents();
         selectedElement = elementNames.indexOf(selectedElement) >= 0 ? selectedElement : "logo";
         selectedElements = [selectedElement];
@@ -804,7 +818,8 @@ Singleton {
             String(draftWallpaperFocalY),
             draftOverlayMode,
             String(draftOverlayStrength),
-            String(draftWallpaperBlur)
+            String(draftWallpaperBlur),
+            draftWeatherUnits
         ]);
     }
 
@@ -995,7 +1010,8 @@ Singleton {
                 showDate: root.draftVisibility.date
                 showUsername: root.draftVisibility.username
                 showWeather: root.draftVisibility.weather
-                weatherText: "72°F · Clear"
+                weatherText: root.draftWeatherUnits === "celsius"
+                    ? "22°C · Clear" : "72°F · Clear"
                 backgroundMode: root.draftBackgroundMode
                 wallpaperSource: wallpaperState.source
                 backgroundColor: root.draftBackgroundColor
@@ -1258,7 +1274,7 @@ Singleton {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: 224 + ((root.elementPaletteOpen || root.backgroundPaletteOpen) ? 150 : 0)
+                height: 252 + ((root.elementPaletteOpen || root.backgroundPaletteOpen) ? 150 : 0)
                 color: Theme.popupBackground
                 border.width: 1
                 border.color: Theme.muted
@@ -1620,6 +1636,46 @@ Singleton {
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
                             Layout.preferredWidth: 34
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+
+                        Text {
+                            text: "Weather units"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                        }
+                        SettingsButton {
+                            label: "Auto"
+                            active: root.draftWeatherUnits === "auto"
+                            textSize: 9
+                            onClicked: root.setDraftWeatherUnits("auto")
+                        }
+                        SettingsButton {
+                            label: "°F"
+                            active: root.draftWeatherUnits === "fahrenheit"
+                            textSize: 9
+                            onClicked: root.setDraftWeatherUnits("fahrenheit")
+                        }
+                        SettingsButton {
+                            label: "°C"
+                            active: root.draftWeatherUnits === "celsius"
+                            textSize: 9
+                            onClicked: root.setDraftWeatherUnits("celsius")
+                        }
+
+                        Item { Layout.fillWidth: true }
+
+                        Text {
+                            text: "Auto follows the system measurement locale."
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            elide: Text.ElideRight
                         }
                     }
 

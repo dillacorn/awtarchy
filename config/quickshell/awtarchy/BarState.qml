@@ -713,6 +713,11 @@ Singleton {
         return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
     }
 
+    function lockscreenWeatherUnits() {
+        const value = String(data().lockscreen_weather_units || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(value) >= 0 ? value : "auto";
+    }
+
     function lockscreenWeatherLocation() {
         const value = data().lockscreen_weather_location;
         if (typeof value !== "string")

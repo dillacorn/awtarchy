@@ -179,8 +179,12 @@ require_text "$EDITOR" 'previewScene.elementVisualWidth(elementName)' \
     'editor selection frames do not follow rendered element widths'
 require_text "$EDITOR" 'previewScene.elementVisualHeight(elementName)' \
     'editor selection frames do not follow rendered element heights'
-require_text "$EDITOR" 'weatherText: "72°F · Clear"' \
-    'editor does not render a representative weather visual'
+require_text "$EDITOR" 'root.draftWeatherUnits === "celsius"' \
+    'editor weather preview does not react to Celsius selection'
+require_text "$EDITOR" '"22°C · Clear"' \
+    'editor does not render a representative Celsius weather visual'
+require_text "$EDITOR" '"72°F · Clear"' \
+    'editor does not render a representative Fahrenheit weather visual'
 reject_text "$EDITOR" 'text: root.elementLabel(parent.elementName)' \
     'editor still covers lockscreen elements with generic text-labelled handles'
 reject_text "$EDITOR" ' · Off' \

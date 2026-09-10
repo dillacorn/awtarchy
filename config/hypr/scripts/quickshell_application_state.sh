@@ -22,6 +22,7 @@ LOCKSCREEN_ANIMATIONS_JSON='["random","swarm","edges","center","split","off"]'
 LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
 LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
 LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
+LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"color":"auto"}}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
@@ -297,6 +298,17 @@ set_lockscreen_wallpaper() {
     commit_tmp
 }
 
+validate_lockscreen_weather_units() {
+    local value="$1"
+    if ! jq -e -n \
+        --arg value "$value" \
+        --argjson allowed "$LOCKSCREEN_WEATHER_UNITS_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen weather units: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
 normalize_lockscreen_weather_location() {
     local value="$1" normalized
     normalized="$(jq -nr --arg value "$value" '$value | gsub("^\\s+|\\s+$"; "")')"
@@ -408,6 +420,7 @@ save_lockscreen_editor() {
     local overlay_mode="${9:-none}"
     local overlay_strength="${10:-0}"
     local wallpaper_blur="${11:-0}"
+    local weather_units="${12:-auto}"
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout\n' >&2
         exit 2
@@ -417,6 +430,7 @@ save_lockscreen_editor() {
     validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
     validate_lockscreen_wallpaper_fit "$wallpaper_fit"
     validate_lockscreen_overlay_mode "$overlay_mode"
+    validate_lockscreen_weather_units "$weather_units"
     focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
     focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
     overlay_strength="$(normalize_percent_integer "$overlay_strength" 'lockscreen overlay strength')"
@@ -438,7 +452,8 @@ save_lockscreen_editor() {
         --argjson focal_y "$focal_y" \
         --arg overlay_mode "$overlay_mode" \
         --argjson overlay_strength "$overlay_strength" \
-        --argjson wallpaper_blur "$wallpaper_blur" '
+        --argjson wallpaper_blur "$wallpaper_blur" \
+        --arg weather_units "$weather_units" '
         .lockscreen_layout = $layout
         | .lockscreen_show_logo = $visibility.logo
         | .lockscreen_show_time = $visibility.time
@@ -454,6 +469,7 @@ save_lockscreen_editor() {
         | .lockscreen_overlay_mode = $overlay_mode
         | .lockscreen_overlay_strength = $overlay_strength
         | .lockscreen_wallpaper_blur = $wallpaper_blur
+        | .lockscreen_weather_units = $weather_units
     ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
@@ -477,6 +493,7 @@ reset_lockscreen_presentation() {
         | .lockscreen_overlay_mode = "none"
         | .lockscreen_overlay_strength = 0
         | .lockscreen_wallpaper_blur = 0
+        | .lockscreen_weather_units = "auto"
         | .lockscreen_weather_location = ""
         | .lockscreen_layout = $layout
     ' "$STATE_FILE" >"$TMP_FILE"
@@ -1328,8 +1345,11 @@ case "$cmd" in
         save_lockscreen_layout "$2"
         ;;
     save-lockscreen-editor)
-        [[ $# -eq 6 ]] || exit 2
-        save_lockscreen_editor "$2" "$3" "$4" "$5" "$6"
+        case "$#" in
+            6|12|13) ;;
+            *) exit 2 ;;
+        esac
+        save_lockscreen_editor "${@:2}"
         ;;
     reset-lockscreen-presentation)
         reset_lockscreen_presentation

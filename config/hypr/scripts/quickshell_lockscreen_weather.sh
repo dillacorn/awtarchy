@@ -32,6 +32,26 @@ validate_location() {
     fi
 }
 
+resolve_units() {
+    local requested="$1" locale
+    case "$requested" in
+        fahrenheit|celsius)
+            printf '%s' "$requested"
+            ;;
+        auto)
+            locale="${LC_ALL:-${LC_MEASUREMENT:-${LANG:-}}}"
+            case "$locale" in
+                *_US*) printf '%s' 'fahrenheit' ;;
+                *) printf '%s' 'celsius' ;;
+            esac
+            ;;
+        *)
+            printf 'invalid weather units: %s\n' "$requested" >&2
+            exit 2
+            ;;
+    esac
+}
+
 weather_description() {
     case "$1" in
         0) printf '%s' 'Clear' ;;
@@ -85,13 +105,14 @@ resolve_location() {
 }
 
 refresh_weather() {
-    local location="$1"
+    local location="$1" requested_units="$2" resolved_units
     local resolved latitude longitude display_location forecast_json
     local temperature unit code description summary fetched_at expires_at
 
     need curl
     need jq
     validate_location "$location"
+    resolved_units="$(resolve_units "$requested_units")"
 
     resolved="$(resolve_location "$location")"
     IFS=$'\t' read -r latitude longitude display_location <<<"$resolved"
@@ -106,7 +127,7 @@ refresh_weather() {
         --data-urlencode "latitude=$latitude" \
         --data-urlencode "longitude=$longitude" \
         --data 'current=temperature_2m,weather_code' \
-        --data 'temperature_unit=fahrenheit' \
+        --data-urlencode "temperature_unit=$resolved_units" \
         --data 'timezone=auto')"
 
     temperature="$(jq -er '.current.temperature_2m | select(type == "number")' <<<"$forecast_json")"
@@ -124,11 +145,13 @@ refresh_weather() {
     jq -n \
         --arg summary "$summary" \
         --arg location "$display_location" \
+        --arg units "$resolved_units" \
         --argjson fetched_at "$fetched_at" \
         --argjson expires_at "$expires_at" \
         '{
             summary: $summary,
             location: $location,
+            units: $units,
             fetched_at: $fetched_at,
             expires_at: $expires_at,
             provider: "open-meteo"
@@ -140,6 +163,7 @@ refresh_weather() {
         and (.summary | length) >= 1
         and (.summary | length) <= 96
         and (.location | type) == "string"
+        and (.units == "fahrenheit" or .units == "celsius")
         and (.fetched_at | type) == "number"
         and (.expires_at | type) == "number"
         and .expires_at > .fetched_at
@@ -151,14 +175,14 @@ refresh_weather() {
 
 case "${1:-}" in
     refresh)
-        [[ $# -eq 2 ]] || {
-            printf 'usage: %s refresh [location]\n' "${0##*/}" >&2
+        (( $# >= 2 && $# <= 3 )) || {
+            printf 'usage: %s refresh [location] [auto|fahrenheit|celsius]\n' "${0##*/}" >&2
             exit 2
         }
-        refresh_weather "$2"
+        refresh_weather "$2" "${3:-auto}"
         ;;
     *)
-        printf 'usage: %s refresh [location]\n' "${0##*/}" >&2
+        printf 'usage: %s refresh [location] [auto|fahrenheit|celsius]\n' "${0##*/}" >&2
         exit 2
         ;;
 esac
