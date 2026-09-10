@@ -48,12 +48,16 @@ require_text "$EDITOR" 'readonly property real flickBounceDamping: 0.38' \
     'editor edge bounce is not damped'
 require_text "$EDITOR" 'readonly property real flickStopSpeed: 0.04' \
     'editor flick motion has no deterministic settle threshold'
+require_text "$EDITOR" 'readonly property int flickReleaseFreshnessMs: 80' \
+    'editor has no recent-motion window to distinguish a flick from a careful paused release'
 require_text "$EDITOR" 'function shouldStartFlick(vx, vy)' \
     'editor has no explicit slow-release/flick gate'
 require_text "$EDITOR" 'return Math.sqrt(vx * vx + vy * vy) >= flickThreshold;' \
     'slow drags are not explicitly excluded from inertia'
 require_text "$EDITOR" 'Math.max(-flickVelocityCap, Math.min(flickVelocityCap' \
     'release velocity is not capped before inertia starts'
+require_text "$EDITOR" 'Date.now() - parent.lastSampleTime > root.flickReleaseFreshnessMs' \
+    'paused precise releases can still reuse stale high drag velocity'
 
 # Recent pointer samples drive velocity; the inertial timer advances only after
 # release and reflects/damps velocity when existing safe placement bounds clamp
