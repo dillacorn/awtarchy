@@ -23,7 +23,5 @@ jobs:
           set -euo pipefail
           bash -n tests/test-quickshell-lockscreen-weather-units.sh
           shellcheck tests/test-quickshell-lockscreen-weather-units.sh
-          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash tests/test-quickshell-lockscreen-weather-units.sh
-
-# rerun after test lint cleanup
+          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
