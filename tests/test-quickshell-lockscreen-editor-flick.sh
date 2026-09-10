@@ -62,6 +62,8 @@ require_text "$EDITOR" 'Date.now() - parent.lastSampleTime > root.flickReleaseFr
 # Recent pointer samples drive velocity; the inertial timer advances only after
 # release and reflects/damps velocity when existing safe placement bounds clamp
 # the proposed position.
+require_text "$EDITOR" 'function setDraftPointSilently(name, x, y)' \
+    'editor has no non-selecting position path for inertial motion'
 require_text "$EDITOR" 'property real lastSampleTime: 0' \
     'drag delegate does not track recent sample time'
 require_text "$EDITOR" 'property real flickVelocityX: 0' \
@@ -84,7 +86,7 @@ require_text "$EDITOR" 'parent.flickVelocityX *= root.flickFriction;' \
     'horizontal inertia does not lose energy'
 require_text "$EDITOR" 'parent.flickVelocityY *= root.flickFriction;' \
     'vertical inertia does not lose energy'
-require_text "$EDITOR" 'root.setDraftPoint(parent.elementName, clamped.x, clamped.y, false);' \
+require_text "$EDITOR" 'root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y);' \
     'inertia does not update the bounded draft position without stealing selection'
 
 printf '%s\n' 'PASS: lockscreen editor pickup, deliberate flick inertia, precision release, and damped edge bounce contracts'
