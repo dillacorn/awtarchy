@@ -1,0 +1,48 @@
+name: TEMP Finalize wallpaper picker history
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+    paths:
+      - .github/workflows/tmp-finalize-wallpaper-picker-history.yml
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Record picker stock hash and validate updater migration
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          source_path='config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh'
+          installed_path='.config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh'
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+          digest="$(sha256sum "$source_path" | awk '{print $1}')"
+          line="${digest}"$'\t'"${installed_path}"
+
+          if ! grep -Fqx -- "$line" "$history"; then
+            printf '%s\t%s\n' "$digest" "$installed_path" >> "$history"
+          fi
+
+          bash tests/test-quickshell-updater-migration.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          git diff --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add "$history"
+          git diff --cached --quiet && {
+            echo 'No managed history changes required.'
+            exit 0
+          }
+          git commit -m 'chore: record lockscreen wallpaper picker hash'
+          git push origin HEAD:feature/lockscreen-interactive-effects
