@@ -38,6 +38,7 @@ require_text 'function selectElement(name, additive)' 'editor has no additive se
 require_text 'function selectedContains(name)' 'editor cannot test group membership'
 require_text 'function translateSelectedElements(dx, dy, selectPrimary)' 'editor cannot move a selected group'
 require_text 'function clampedGroupDelta(dx, dy)' 'group movement does not clamp against all member bounds'
+require_text 'function writeDraftPoint(name, x, y, selectPrimary)' 'point writer shadows the selectElement() helper'
 require_text 'mouse.modifiers & Qt.ShiftModifier' 'Shift-click multi-selection is missing'
 require_text 'root.selectElement(parent.elementName, additive);' 'pointer selection does not use group selection helper'
 
