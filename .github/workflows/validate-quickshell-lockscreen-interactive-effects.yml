@@ -6,7 +6,7 @@ on:
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   validate:
@@ -111,43 +111,3 @@ jobs:
           bash tests/test-quickshell-lockscreen-editor-presets.sh
       - name: Managed history contracts
         run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-
-  apply-presets-green:
-    if: github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'feature/lockscreen-interactive-effects'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
-        with:
-          ref: feature/lockscreen-interactive-effects
-          fetch-depth: 0
-      - name: Apply production patch
-        run: python3 .github/tmp-apply-lockscreen-editor-presets.py
-      - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y shellcheck
-      - name: Validate GREEN contracts
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
-          bash tests/test-quickshell-lockscreen-editor-presets.sh
-          bash tests/test-quickshell-lockscreen-editor.sh
-          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
-          bash tests/test-quickshell-lockscreen-live-editor.sh
-          bash tests/test-quickshell-lockscreen-editor-flick.sh
-          bash tests/test-quickshell-lockscreen-editor-tooling.sh
-          bash tests/test-quickshell-lockscreen-background-composition.sh
-          bash tests/test-quickshell-lockscreen-weather-units.sh
-          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          git diff --check
-      - name: Commit tested production files
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name dillacorn
-          git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/quickshell/awtarchy/LockscreenEditor.qml \
-            local/share/awtarchy/quickshell-managed-history.sha256
-          git diff --cached --check
-          git commit -m "Add lockscreen editor guides and presets"
-          git push origin HEAD:feature/lockscreen-interactive-effects
