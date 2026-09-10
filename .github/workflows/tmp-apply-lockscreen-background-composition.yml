@@ -72,3 +72,5 @@ jobs:
           }
           git commit -m 'feat: add lockscreen background composition controls'
           git push origin HEAD:feature/lockscreen-interactive-effects
+
+# trigger
