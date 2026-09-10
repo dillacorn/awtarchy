@@ -84,7 +84,7 @@ require_text "$EDITOR" 'parent.flickVelocityX *= root.flickFriction;' \
     'horizontal inertia does not lose energy'
 require_text "$EDITOR" 'parent.flickVelocityY *= root.flickFriction;' \
     'vertical inertia does not lose energy'
-require_text "$EDITOR" 'root.setDraftPoint(parent.elementName, clamped.x, clamped.y);' \
-    'inertia does not update the same bounded draft position used by normal dragging'
+require_text "$EDITOR" 'root.setDraftPoint(parent.elementName, clamped.x, clamped.y, false);' \
+    'inertia does not update the bounded draft position without stealing selection'
 
 printf '%s\n' 'PASS: lockscreen editor pickup, deliberate flick inertia, precision release, and damped edge bounce contracts'
