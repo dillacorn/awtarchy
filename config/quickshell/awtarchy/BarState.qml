@@ -129,6 +129,14 @@ Singleton {
         { key: "split", label: "Split" },
         { key: "off", label: "Off" }
     ]
+    readonly property var defaultLockscreenComposition: ({
+        lockscreen_wallpaper_fit: "cover",
+        lockscreen_wallpaper_focal_x: 0.5,
+        lockscreen_wallpaper_focal_y: 0.5,
+        lockscreen_overlay_mode: "none",
+        lockscreen_overlay_strength: 0,
+        lockscreen_wallpaper_blur: 0
+    })
     readonly property var defaultLockscreenLayout: ({
         logo: ({ x: 0.50, y: 0.34, scale: 1.0, color: "auto" }),
         time: ({ x: 0.50, y: 0.51, scale: 1.0, color: "auto" }),
@@ -673,6 +681,36 @@ Singleton {
                 || value.indexOf("://") >= 0 || /[\u0000-\u001f\u007f-\u009f]/.test(value))
             return "";
         return value;
+    }
+
+    function lockscreenWallpaperFit() {
+        const value = String(data().lockscreen_wallpaper_fit || "");
+        return ["cover", "contain"].indexOf(value) >= 0 ? value : "cover";
+    }
+
+    function lockscreenWallpaperFocalX() {
+        const value = Number(data().lockscreen_wallpaper_focal_x);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+    }
+
+    function lockscreenWallpaperFocalY() {
+        const value = Number(data().lockscreen_wallpaper_focal_y);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+    }
+
+    function lockscreenOverlayMode() {
+        const value = String(data().lockscreen_overlay_mode || "");
+        return ["none", "dark", "light"].indexOf(value) >= 0 ? value : "none";
+    }
+
+    function lockscreenOverlayStrength() {
+        const value = Number(data().lockscreen_overlay_strength);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+    function lockscreenWallpaperBlur() {
+        const value = Number(data().lockscreen_wallpaper_blur);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
     }
 
     function lockscreenWeatherLocation() {

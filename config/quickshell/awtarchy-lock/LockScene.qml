@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Layouts
+import QtQuick.Effects
 import Quickshell
 
 Item {
@@ -23,6 +24,12 @@ Item {
     required property string backgroundMode
     required property string wallpaperSource
     required property color backgroundColor
+    required property string wallpaperFit
+    required property real wallpaperFocalX
+    required property real wallpaperFocalY
+    required property string overlayMode
+    required property real overlayStrength
+    required property real wallpaperBlur
     required property var autoAccents
     required property var layout
 
@@ -102,6 +109,36 @@ Item {
     property real audioPhase: 0
     property string timeText: ""
     property string dateText: ""
+
+    function wallpaperGeometry() {
+        const sourceWidth = Number(wallpaperImage.sourceSize.width);
+        const sourceHeight = Number(wallpaperImage.sourceSize.height);
+        if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)
+                || sourceWidth <= 0 || sourceHeight <= 0 || root.width <= 0 || root.height <= 0)
+            return ({ x: 0, y: 0, width: root.width, height: root.height });
+        const contain = root.wallpaperFit === "contain";
+        const factor = contain
+            ? Math.min(root.width / sourceWidth, root.height / sourceHeight)
+            : Math.max(root.width / sourceWidth, root.height / sourceHeight);
+        const targetWidth = sourceWidth * factor;
+        const targetHeight = sourceHeight * factor;
+        if (contain) {
+            return ({
+                x: (root.width - targetWidth) / 2,
+                y: (root.height - targetHeight) / 2,
+                width: targetWidth,
+                height: targetHeight
+            });
+        }
+        const focalX = Math.max(0, Math.min(1, Number(root.wallpaperFocalX)));
+        const focalY = Math.max(0, Math.min(1, Number(root.wallpaperFocalY)));
+        return ({
+            x: -(targetWidth - root.width) * focalX,
+            y: -(targetHeight - root.height) * focalY,
+            width: targetWidth,
+            height: targetHeight
+        });
+    }
 
     function normalizedPoint(name) {
         const value = root.layout && typeof root.layout === "object"
@@ -442,12 +479,38 @@ Item {
     }
 
     Image {
-        anchors.fill: parent
-        visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+        id: wallpaperImage
+        readonly property var geometry: root.wallpaperGeometry()
+        x: geometry.x
+        y: geometry.y
+        width: geometry.width
+        height: geometry.height
+        visible: false
         source: root.wallpaperSource
-        fillMode: Image.PreserveAspectCrop
+        fillMode: Image.Stretch
         asynchronous: true
         cache: true
+    }
+
+    MultiEffect {
+        x: wallpaperImage.x
+        y: wallpaperImage.y
+        width: wallpaperImage.width
+        height: wallpaperImage.height
+        visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+        source: wallpaperImage
+        autoPaddingEnabled: false
+        blurEnabled: root.wallpaperBlur > 0
+        blurMax: 32
+        blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+    }
+
+    Rectangle {
+        id: backgroundOverlay
+        anchors.fill: parent
+        visible: root.overlayMode !== "none" && root.overlayStrength > 0
+        color: root.overlayMode === "light" ? "#ffffff" : "#000000"
+        opacity: Math.max(0, Math.min(100, root.overlayStrength)) / 100
     }
 
     Item {

@@ -20,6 +20,8 @@ SAVE_VERSION=2
 QUICK_SETTINGS_LAYOUT_SAVE_VERSION=1
 LOCKSCREEN_ANIMATIONS_JSON='["random","swarm","edges","center","split","off"]'
 LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
+LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
+LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"color":"auto"}}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
@@ -171,6 +173,60 @@ set_lockscreen_option() {
     jq --arg field "$field" --argjson enabled "$enabled" '.[$field] = $enabled' \
         "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
+}
+
+lockscreen_composition_defaults() {
+    jq -cn '{
+        lockscreen_wallpaper_fit: "cover",
+        lockscreen_wallpaper_focal_x: 0.5,
+        lockscreen_wallpaper_focal_y: 0.5,
+        lockscreen_overlay_mode: "none",
+        lockscreen_overlay_strength: 0,
+        lockscreen_wallpaper_blur: 0
+    }'
+}
+
+validate_lockscreen_wallpaper_fit() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_WALLPAPER_FITS_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen wallpaper fit: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+validate_lockscreen_overlay_mode() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_OVERLAY_MODES_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen overlay mode: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+normalize_unit_interval() {
+    local value="$1" label="$2" normalized
+    if ! normalized="$(jq -er -n --arg value "$value" '
+        ($value | tonumber?) as $number
+        | if $number != null and $number >= 0 and $number <= 1 then $number
+          else error("out of range") end
+    ' 2>/dev/null)"; then
+        printf '%s must be 0-1\n' "$label" >&2
+        exit 2
+    fi
+    printf '%s' "$normalized"
+}
+
+normalize_percent_integer() {
+    local value="$1" label="$2"
+    [[ "$value" =~ ^[0-9]+$ ]] || {
+        printf '%s must be an integer\n' "$label" >&2
+        exit 2
+    }
+    local numeric=$((10#$value))
+    (( numeric >= 0 && numeric <= 100 )) || {
+        printf '%s must be 0-100\n' "$label" >&2
+        exit 2
+    }
+    printf '%d' "$numeric"
 }
 
 validate_lockscreen_background() {
@@ -346,6 +402,12 @@ validate_lockscreen_editor_visibility() {
 
 save_lockscreen_editor() {
     local normalized visibility="$2" background="$3" background_color="${4,,}" wallpaper="$5"
+    local wallpaper_fit="${6:-cover}"
+    local focal_x="${7:-0.5}"
+    local focal_y="${8:-0.5}"
+    local overlay_mode="${9:-none}"
+    local overlay_strength="${10:-0}"
+    local wallpaper_blur="${11:-0}"
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout\n' >&2
         exit 2
@@ -353,6 +415,12 @@ save_lockscreen_editor() {
     validate_lockscreen_editor_visibility "$visibility"
     validate_lockscreen_background "$background"
     validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
+    validate_lockscreen_wallpaper_fit "$wallpaper_fit"
+    validate_lockscreen_overlay_mode "$overlay_mode"
+    focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
+    focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
+    overlay_strength="$(normalize_percent_integer "$overlay_strength" 'lockscreen overlay strength')"
+    wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
     wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
     if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
         printf 'wallpaper background requires a selected local image\n' >&2
@@ -364,7 +432,13 @@ save_lockscreen_editor() {
         --argjson visibility "$visibility" \
         --arg background "$background" \
         --arg background_color "$background_color" \
-        --arg wallpaper "$wallpaper" '
+        --arg wallpaper "$wallpaper" \
+        --arg wallpaper_fit "$wallpaper_fit" \
+        --argjson focal_x "$focal_x" \
+        --argjson focal_y "$focal_y" \
+        --arg overlay_mode "$overlay_mode" \
+        --argjson overlay_strength "$overlay_strength" \
+        --argjson wallpaper_blur "$wallpaper_blur" '
         .lockscreen_layout = $layout
         | .lockscreen_show_logo = $visibility.logo
         | .lockscreen_show_time = $visibility.time
@@ -374,6 +448,12 @@ save_lockscreen_editor() {
         | .lockscreen_background = $background
         | .lockscreen_background_color = $background_color
         | .lockscreen_wallpaper_path = $wallpaper
+        | .lockscreen_wallpaper_fit = $wallpaper_fit
+        | .lockscreen_wallpaper_focal_x = $focal_x
+        | .lockscreen_wallpaper_focal_y = $focal_y
+        | .lockscreen_overlay_mode = $overlay_mode
+        | .lockscreen_overlay_strength = $overlay_strength
+        | .lockscreen_wallpaper_blur = $wallpaper_blur
     ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
@@ -391,6 +471,12 @@ reset_lockscreen_presentation() {
         | .lockscreen_background = "black"
         | .lockscreen_background_color = "#000000"
         | .lockscreen_wallpaper_path = ""
+        | .lockscreen_wallpaper_fit = "cover"
+        | .lockscreen_wallpaper_focal_x = 0.5
+        | .lockscreen_wallpaper_focal_y = 0.5
+        | .lockscreen_overlay_mode = "none"
+        | .lockscreen_overlay_strength = 0
+        | .lockscreen_wallpaper_blur = 0
         | .lockscreen_weather_location = ""
         | .lockscreen_layout = $layout
     ' "$STATE_FILE" >"$TMP_FILE"

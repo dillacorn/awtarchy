@@ -25,6 +25,12 @@ Singleton {
     property string draftBackgroundMode: "black"
     property string draftBackgroundColor: "#000000"
     property string draftWallpaperPath: ""
+    property string draftWallpaperFit: "cover"
+    property real draftWallpaperFocalX: 0.5
+    property real draftWallpaperFocalY: 0.5
+    property string draftOverlayMode: "none"
+    property int draftOverlayStrength: 0
+    property int draftWallpaperBlur: 0
     property var draftAutoAccents: defaultAutoAccents()
     property string selectedElement: "logo"
     property string statusMessage: ""
@@ -105,7 +111,13 @@ Singleton {
             visibility: cloneVisibility(draftVisibility),
             backgroundMode: draftBackgroundMode,
             backgroundColor: draftBackgroundColor,
-            wallpaperPath: draftWallpaperPath
+            wallpaperPath: draftWallpaperPath,
+            wallpaperFit: draftWallpaperFit,
+            wallpaperFocalX: draftWallpaperFocalX,
+            wallpaperFocalY: draftWallpaperFocalY,
+            overlayMode: draftOverlayMode,
+            overlayStrength: draftOverlayStrength,
+            wallpaperBlur: draftWallpaperBlur
         });
     }
 
@@ -140,6 +152,20 @@ Singleton {
             ? String(snapshot.backgroundColor).toLowerCase() : "#000000";
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
             ? snapshot.wallpaperPath : "";
+        draftWallpaperFit = ["cover", "contain"].indexOf(String(snapshot.wallpaperFit)) >= 0
+            ? String(snapshot.wallpaperFit) : "cover";
+        const focalX = Number(snapshot.wallpaperFocalX);
+        const focalY = Number(snapshot.wallpaperFocalY);
+        draftWallpaperFocalX = Number.isFinite(focalX) ? Math.max(0, Math.min(1, focalX)) : 0.5;
+        draftWallpaperFocalY = Number.isFinite(focalY) ? Math.max(0, Math.min(1, focalY)) : 0.5;
+        draftOverlayMode = ["none", "dark", "light"].indexOf(String(snapshot.overlayMode)) >= 0
+            ? String(snapshot.overlayMode) : "none";
+        const overlayStrength = Number(snapshot.overlayStrength);
+        const wallpaperBlur = Number(snapshot.wallpaperBlur);
+        draftOverlayStrength = Number.isFinite(overlayStrength)
+            ? Math.max(0, Math.min(100, Math.round(overlayStrength))) : 0;
+        draftWallpaperBlur = Number.isFinite(wallpaperBlur)
+            ? Math.max(0, Math.min(100, Math.round(wallpaperBlur))) : 0;
         scheduleContrastRefresh();
     }
 
@@ -393,6 +419,44 @@ Singleton {
         scheduleContrastRefresh();
     }
 
+    function setDraftWallpaperFit(value) {
+        const fit = String(value || "");
+        if (["cover", "contain"].indexOf(fit) < 0)
+            return;
+        recordUndoBeforeChange();
+        draftWallpaperFit = fit;
+    }
+
+    function setDraftWallpaperFocal(x, y) {
+        const nextX = Number(x);
+        const nextY = Number(y);
+        if (!Number.isFinite(nextX) || !Number.isFinite(nextY))
+            return;
+        recordUndoBeforeChange();
+        draftWallpaperFocalX = Math.max(0, Math.min(1, nextX));
+        draftWallpaperFocalY = Math.max(0, Math.min(1, nextY));
+        scheduleContrastRefresh();
+    }
+
+    function setDraftOverlay(mode, strength) {
+        const nextMode = String(mode || "");
+        const nextStrength = Number(strength);
+        if (["none", "dark", "light"].indexOf(nextMode) < 0 || !Number.isFinite(nextStrength))
+            return;
+        recordUndoBeforeChange();
+        draftOverlayMode = nextMode;
+        draftOverlayStrength = Math.max(0, Math.min(100, Math.round(nextStrength)));
+        scheduleContrastRefresh();
+    }
+
+    function setDraftWallpaperBlur(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next))
+            return;
+        recordUndoBeforeChange();
+        draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+    }
+
     function acceptWallpaperSelection(line) {
         if (!open)
             return;
@@ -634,6 +698,12 @@ Singleton {
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
         draftWallpaperPath = "";
+        draftWallpaperFit = "cover";
+        draftWallpaperFocalX = 0.5;
+        draftWallpaperFocalY = 0.5;
+        draftOverlayMode = "none";
+        draftOverlayStrength = 0;
+        draftWallpaperBlur = 0;
         draftAutoAccents = defaultAutoAccents();
         selectedElement = "logo";
         selectedElements = ["logo"];
@@ -657,6 +727,12 @@ Singleton {
         draftBackgroundMode = BarState.lockscreenBackground();
         draftBackgroundColor = BarState.lockscreenBackgroundColor();
         draftWallpaperPath = BarState.lockscreenWallpaperPath();
+        draftWallpaperFit = BarState.lockscreenWallpaperFit();
+        draftWallpaperFocalX = BarState.lockscreenWallpaperFocalX();
+        draftWallpaperFocalY = BarState.lockscreenWallpaperFocalY();
+        draftOverlayMode = BarState.lockscreenOverlayMode();
+        draftOverlayStrength = BarState.lockscreenOverlayStrength();
+        draftWallpaperBlur = BarState.lockscreenWallpaperBlur();
         draftAutoAccents = defaultAutoAccents();
         selectedElement = elementNames.indexOf(selectedElement) >= 0 ? selectedElement : "logo";
         selectedElements = [selectedElement];
@@ -722,7 +798,13 @@ Singleton {
             JSON.stringify(draftVisibility),
             draftBackgroundMode,
             draftBackgroundColor,
-            draftWallpaperPath
+            draftWallpaperPath,
+            draftWallpaperFit,
+            String(draftWallpaperFocalX),
+            String(draftWallpaperFocalY),
+            draftOverlayMode,
+            String(draftOverlayStrength),
+            String(draftWallpaperBlur)
         ]);
     }
 
@@ -917,6 +999,12 @@ Singleton {
                 backgroundMode: root.draftBackgroundMode
                 wallpaperSource: wallpaperState.source
                 backgroundColor: root.draftBackgroundColor
+                wallpaperFit: root.draftWallpaperFit
+                wallpaperFocalX: root.draftWallpaperFocalX
+                wallpaperFocalY: root.draftWallpaperFocalY
+                overlayMode: root.draftOverlayMode
+                overlayStrength: root.draftOverlayStrength
+                wallpaperBlur: root.draftWallpaperBlur
                 autoAccents: root.draftAutoAccents
                 layout: root.draftLayout
                 previewMode: true
@@ -924,6 +1012,47 @@ Singleton {
                 editorVisibility: root.draftVisibility
                 editorHeldElement: root.heldElement
                 editorHoldScale: root.heldScaleBoost
+            }
+
+            Rectangle {
+                id: wallpaperFocalHandle
+                visible: root.draftBackgroundMode === "wallpaper"
+                    && root.draftWallpaperFit === "cover"
+                    && root.draftWallpaperPath.length > 0
+                width: 22
+                height: 22
+                radius: width / 2
+                x: root.draftWallpaperFocalX * Math.max(0, parent.width - width)
+                y: root.draftWallpaperFocalY * Math.max(0, parent.height - height)
+                color: "transparent"
+                border.width: 2
+                border.color: Theme.focus
+                z: 190
+
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: 4
+                    height: 4
+                    radius: 2
+                    color: Theme.focus
+                }
+
+                MouseArea {
+                    anchors.fill: parent
+                    cursorShape: Qt.CrossCursor
+                    preventStealing: true
+                    onPressed: root.beginHistoryTransaction()
+                    onPositionChanged: mouse => {
+                        if (!pressed || editorFocus.width <= 0 || editorFocus.height <= 0)
+                            return;
+                        const scenePoint = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                        root.setDraftWallpaperFocal(
+                            scenePoint.x / editorFocus.width,
+                            scenePoint.y / editorFocus.height);
+                    }
+                    onReleased: root.commitHistoryTransaction()
+                    onCanceled: root.commitHistoryTransaction()
+                }
             }
 
             Repeater {
@@ -1129,7 +1258,7 @@ Singleton {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: 184 + ((root.elementPaletteOpen || root.backgroundPaletteOpen) ? 150 : 0)
+                height: 224 + ((root.elementPaletteOpen || root.backgroundPaletteOpen) ? 150 : 0)
                 color: Theme.popupBackground
                 border.width: 1
                 border.color: Theme.muted
@@ -1390,6 +1519,107 @@ Singleton {
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
                             elide: Text.ElideMiddle
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+
+                        Text {
+                            text: "Wallpaper fit"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                        }
+                        SettingsButton {
+                            label: "Cover"
+                            active: root.draftWallpaperFit === "cover"
+                            available: root.draftWallpaperPath.length > 0
+                            textSize: 9
+                            onClicked: root.setDraftWallpaperFit("cover")
+                        }
+                        SettingsButton {
+                            label: "Contain"
+                            active: root.draftWallpaperFit === "contain"
+                            available: root.draftWallpaperPath.length > 0
+                            textSize: 9
+                            onClicked: root.setDraftWallpaperFit("contain")
+                        }
+
+                        Text {
+                            text: "Overlay"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                        }
+                        SettingsButton {
+                            label: "None"
+                            active: root.draftOverlayMode === "none"
+                            textSize: 9
+                            onClicked: root.setDraftOverlay("none", root.draftOverlayStrength)
+                        }
+                        SettingsButton {
+                            label: "Darken"
+                            active: root.draftOverlayMode === "dark"
+                            textSize: 9
+                            onClicked: root.setDraftOverlay("dark",
+                                root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35)
+                        }
+                        SettingsButton {
+                            label: "Lighten"
+                            active: root.draftOverlayMode === "light"
+                            textSize: 9
+                            onClicked: root.setDraftOverlay("light",
+                                root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35)
+                        }
+                        Slider {
+                            id: overlaySlider
+                            Layout.preferredWidth: 120
+                            from: 0
+                            to: 100
+                            stepSize: 1
+                            value: root.draftOverlayStrength
+                            onPressedChanged: {
+                                if (pressed) root.beginHistoryTransaction();
+                                else root.commitHistoryTransaction();
+                            }
+                            onMoved: root.setDraftOverlay(root.draftOverlayMode, value)
+                        }
+                        Text {
+                            text: root.draftOverlayStrength + "%"
+                            color: Theme.foreground
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            Layout.preferredWidth: 34
+                        }
+
+                        Text {
+                            text: "Blur"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                        }
+                        Slider {
+                            id: blurSlider
+                            Layout.preferredWidth: 110
+                            from: 0
+                            to: 100
+                            stepSize: 1
+                            value: root.draftWallpaperBlur
+                            enabled: root.draftBackgroundMode === "wallpaper"
+                            onPressedChanged: {
+                                if (pressed) root.beginHistoryTransaction();
+                                else root.commitHistoryTransaction();
+                            }
+                            onMoved: root.setDraftWallpaperBlur(value)
+                        }
+                        Text {
+                            text: root.draftWallpaperBlur + "%"
+                            color: Theme.foreground
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            Layout.preferredWidth: 34
                         }
                     }
 

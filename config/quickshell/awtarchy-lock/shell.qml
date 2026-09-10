@@ -24,7 +24,19 @@ ShellRoot {
     property string lockBackground: "black"
     property color lockBackgroundColor: "#000000"
     property string lockWallpaperPath: ""
+    property string lockWallpaperFit: "cover"
+    property real lockWallpaperFocalX: 0.5
+    property real lockWallpaperFocalY: 0.5
+    property string lockOverlayMode: "none"
+    property int lockOverlayStrength: 0
+    property int lockWallpaperBlur: 0
     property string lockWeatherLocation: ""
+    readonly property string wallpaperFit: normalizedWallpaperFit(lockWallpaperFit)
+    readonly property real wallpaperFocalX: normalizedUnitInterval(lockWallpaperFocalX, 0.5)
+    readonly property real wallpaperFocalY: normalizedUnitInterval(lockWallpaperFocalY, 0.5)
+    readonly property string overlayMode: normalizedOverlayMode(lockOverlayMode)
+    readonly property int overlayStrength: normalizedPercent(lockOverlayStrength)
+    readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)
     property var lockLayout: defaultLockLayout()
     property int randomFormationMode: Math.floor(Math.random() * 4)
     readonly property var allowedAnimationPreferences: [
@@ -59,6 +71,26 @@ ShellRoot {
     function normalizedBackgroundColor(value) {
         const key = String(value || "#000000").toLowerCase();
         return /^#[0-9a-f]{6}$/.test(key) ? key : "#000000";
+    }
+
+    function normalizedWallpaperFit(value) {
+        const key = String(value || "");
+        return ["cover", "contain"].indexOf(key) >= 0 ? key : "cover";
+    }
+
+    function normalizedOverlayMode(value) {
+        const key = String(value || "");
+        return ["none", "dark", "light"].indexOf(key) >= 0 ? key : "none";
+    }
+
+    function normalizedUnitInterval(value, fallback) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : fallback;
+    }
+
+    function normalizedPercent(value) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.max(0, Math.min(100, Math.round(numeric))) : 0;
     }
 
     function normalizedWallpaperPath(value) {
@@ -124,6 +156,12 @@ ShellRoot {
         lockBackground = "black";
         lockBackgroundColor = "#000000";
         lockWallpaperPath = "";
+        lockWallpaperFit = "cover";
+        lockWallpaperFocalX = 0.5;
+        lockWallpaperFocalY = 0.5;
+        lockOverlayMode = "none";
+        lockOverlayStrength = 0;
+        lockWallpaperBlur = 0;
         lockWeatherLocation = "";
         lockLayout = defaultLockLayout();
     }
@@ -153,6 +191,12 @@ ShellRoot {
             lockBackground = normalizedBackground(parsed.lockscreen_background);
             lockBackgroundColor = normalizedBackgroundColor(parsed.lockscreen_background_color);
             lockWallpaperPath = normalizedWallpaperPath(parsed.lockscreen_wallpaper_path);
+            lockWallpaperFit = normalizedWallpaperFit(parsed.lockscreen_wallpaper_fit);
+            lockWallpaperFocalX = normalizedUnitInterval(parsed.lockscreen_wallpaper_focal_x, 0.5);
+            lockWallpaperFocalY = normalizedUnitInterval(parsed.lockscreen_wallpaper_focal_y, 0.5);
+            lockOverlayMode = normalizedOverlayMode(parsed.lockscreen_overlay_mode);
+            lockOverlayStrength = normalizedPercent(parsed.lockscreen_overlay_strength);
+            lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
         } catch (error) {
@@ -234,6 +278,12 @@ ShellRoot {
                 backgroundMode: root.lockBackground
                 wallpaperSource: lockWallpaperState.source
                 backgroundColor: root.lockBackgroundColor
+                wallpaperFit: root.wallpaperFit
+                wallpaperFocalX: root.wallpaperFocalX
+                wallpaperFocalY: root.wallpaperFocalY
+                overlayMode: root.overlayMode
+                overlayStrength: root.overlayStrength
+                wallpaperBlur: root.wallpaperBlur
                 autoAccents: lockContrastCache.colors
                 layout: root.lockLayout
             }

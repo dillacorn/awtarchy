@@ -24,6 +24,12 @@ WlSessionLockSurface {
     required property string backgroundMode
     required property string wallpaperSource
     required property color backgroundColor
+    required property string wallpaperFit
+    required property real wallpaperFocalX
+    required property real wallpaperFocalY
+    required property string overlayMode
+    required property real overlayStrength
+    required property real wallpaperBlur
     required property var autoAccents
     required property var layout
 
@@ -76,6 +82,12 @@ WlSessionLockSurface {
         backgroundMode: root.backgroundMode
         wallpaperSource: root.wallpaperSource
         backgroundColor: root.backgroundColor
+        wallpaperFit: root.wallpaperFit
+        wallpaperFocalX: root.wallpaperFocalX
+        wallpaperFocalY: root.wallpaperFocalY
+        overlayMode: root.overlayMode
+        overlayStrength: root.overlayStrength
+        wallpaperBlur: root.wallpaperBlur
         autoAccents: root.autoAccents
         layout: root.layout
         previewMode: false
