@@ -26,29 +26,17 @@ jobs:
           from pathlib import Path
           path = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
           text = path.read_text()
-          old = '''    function writeDraftPoint(name, x, y, selectElement) {
-              if (elementNames.indexOf(name) < 0)
-                  return;
-              if (selectElement)
-                  recordUndoBeforeChange();
-              const next = cloneLayout(draftLayout);
-              const point = clampPoint(name, Number(x), Number(y));
-              next[name] = ({
-                  x: point.x,
-                  y: point.y,
-                  scale: next[name].scale,
-                  color: next[name].color
-              });
-              draftLayout = next;
-              if (selectElement)
-                  selectElement(name, false);
-              scheduleContrastRefresh();
-          }
-          '''.replace('          ', '')
-          new = old.replace('selectElement) {', 'selectPrimary) {').replace('if (selectElement)', 'if (selectPrimary)')
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one point-writer block, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
+          header = '    function writeDraftPoint(name, x, y, selectElement) {'
+          start = text.find(header)
+          end = text.find('\n    function setDraftPoint(name, x, y)', start)
+          if start < 0 or end < 0:
+              raise SystemExit('could not isolate writeDraftPoint')
+          block = text[start:end]
+          if block.count('if (selectElement)') != 2:
+              raise SystemExit(f'unexpected selectElement guard count: {block.count("if (selectElement)")}')
+          block = block.replace(header, '    function writeDraftPoint(name, x, y, selectPrimary) {', 1)
+          block = block.replace('if (selectElement)', 'if (selectPrimary)')
+          path.write_text(text[:start] + block + text[end:])
           PY
 
           bash tests/test-quickshell-lockscreen-editor-tooling.sh
@@ -70,5 +58,3 @@ jobs:
           git add config/quickshell/awtarchy/LockscreenEditor.qml local/share/awtarchy/quickshell-managed-history.sha256
           git commit -m 'fix: avoid lockscreen editor selection shadow'
           git push origin HEAD:feature/lockscreen-interactive-effects
-
-# trigger
