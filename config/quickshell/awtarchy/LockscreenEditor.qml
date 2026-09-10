@@ -31,6 +31,15 @@ Singleton {
     property bool elementPaletteOpen: false
     property bool backgroundPaletteOpen: false
     property bool contrastRefreshPending: false
+    property string heldElement: ""
+    property real heldScaleBoost: 1.0
+
+    readonly property real flickThreshold: 0.80
+    readonly property real flickVelocityCap: 2.50
+    readonly property real flickFriction: 0.86
+    readonly property real flickBounceDamping: 0.38
+    readonly property real flickStopSpeed: 0.04
+    readonly property int flickReleaseFreshnessMs: 80
 
     function defaultLayout() {
         return ({
@@ -229,7 +238,7 @@ Singleton {
         });
     }
 
-    function setDraftPoint(name, x, y) {
+    function writeDraftPoint(name, x, y, selectElement) {
         if (elementNames.indexOf(name) < 0)
             return;
         const next = cloneLayout(draftLayout);
@@ -241,8 +250,53 @@ Singleton {
             color: next[name].color
         });
         draftLayout = next;
-        selectedElement = name;
+        if (selectElement)
+            selectedElement = name;
         scheduleContrastRefresh();
+    }
+
+    function setDraftPoint(name, x, y) {
+        writeDraftPoint(name, x, y, true);
+    }
+
+    function setDraftPointSilently(name, x, y) {
+        writeDraftPoint(name, x, y, false);
+    }
+
+    function cappedFlickVelocity(value) {
+        const numeric = Number(value);
+        const safe = Number.isFinite(numeric) ? numeric : 0;
+        return Math.max(-flickVelocityCap, Math.min(flickVelocityCap, safe));
+    }
+
+    function shouldStartFlick(vx, vy) {
+        return Math.sqrt(vx * vx + vy * vy) >= flickThreshold;
+    }
+
+    function animateHeldScale(targetScale, durationMs) {
+        heldScaleAnimation.stop();
+        heldScaleAnimation.from = heldScaleBoost;
+        heldScaleAnimation.to = targetScale;
+        heldScaleAnimation.duration = durationMs;
+        heldScaleAnimation.start();
+    }
+
+    function beginEditorHold(name) {
+        if (elementNames.indexOf(name) < 0)
+            return;
+        heldReleaseClear.stop();
+        heldSettle.stop();
+        heldElement = name;
+        animateHeldScale(1.10, 65);
+        heldSettle.restart();
+    }
+
+    function endEditorHold(name) {
+        if (heldElement !== name)
+            return;
+        heldSettle.stop();
+        animateHeldScale(1.0, 90);
+        heldReleaseClear.restart();
     }
 
     function elementScale(name) {
@@ -361,6 +415,11 @@ Singleton {
     }
 
     function close() {
+        heldSettle.stop();
+        heldReleaseClear.stop();
+        heldScaleAnimation.stop();
+        heldElement = "";
+        heldScaleBoost = 1.0;
         FlyoutManager.releaseOverlay("lockscreen-editor");
         editorWindow.visible = false;
         loadPersistedDraft();
@@ -419,6 +478,34 @@ Singleton {
         interval: 180
         repeat: false
         onTriggered: root.close()
+    }
+
+    NumberAnimation {
+        id: heldScaleAnimation
+        target: root
+        property: "heldScaleBoost"
+        duration: 70
+        easing.type: Easing.OutCubic
+    }
+
+    Timer {
+        id: heldSettle
+        interval: 70
+        repeat: false
+        onTriggered: {
+            if (root.heldElement.length > 0)
+                root.animateHeldScale(1.045, 70);
+        }
+    }
+
+    Timer {
+        id: heldReleaseClear
+        interval: 110
+        repeat: false
+        onTriggered: {
+            if (root.heldScaleBoost <= 1.005)
+                root.heldElement = "";
+        }
     }
 
     LockPreviewWallpaperState {
@@ -508,6 +595,8 @@ Singleton {
                 previewMode: true
                 editorMode: true
                 editorVisibility: root.draftVisibility
+                editorHeldElement: root.heldElement
+                editorHoldScale: root.heldScaleBoost
             }
 
             Repeater {
@@ -530,6 +619,12 @@ Singleton {
                     border.color: root.selectedElement === elementName ? Theme.focus : Theme.muted
                     opacity: 0.92
                     z: 200
+                    property real lastSampleTime: 0
+                    property real lastSampleX: 0
+                    property real lastSampleY: 0
+                    property real flickVelocityX: 0
+                    property real flickVelocityY: 0
+                    property bool inertiaActive: false
 
                     MouseArea {
                         id: dragArea
@@ -541,9 +636,18 @@ Singleton {
                         property real pressOffsetY: 0
 
                         onPressed: mouse => {
+                            parent.inertiaActive = false;
+                            parent.flickVelocityX = 0;
+                            parent.flickVelocityY = 0;
                             root.selectedElement = parent.elementName;
                             pressOffsetX = mouse.x;
                             pressOffsetY = mouse.y;
+                            const point = root.draftLayout[parent.elementName]
+                                || root.defaultLayout()[parent.elementName];
+                            parent.lastSampleX = Number(point.x);
+                            parent.lastSampleY = Number(point.y);
+                            parent.lastSampleTime = Date.now();
+                            root.beginEditorHold(parent.elementName);
                         }
 
                         onPositionChanged: mouse => {
@@ -552,9 +656,83 @@ Singleton {
                             const scenePoint = parent.mapToItem(editorFocus,
                                 mouse.x - pressOffsetX + parent.width / 2,
                                 mouse.y - pressOffsetY + parent.height / 2);
-                            root.setDraftPoint(parent.elementName,
+                            const clamped = root.clampPoint(parent.elementName,
                                 scenePoint.x / editorFocus.width,
                                 scenePoint.y / editorFocus.height);
+                            const now = Date.now();
+                            if (parent.lastSampleTime > 0 && now > parent.lastSampleTime) {
+                                const dt = Math.max(8, now - parent.lastSampleTime) / 1000;
+                                const sampleVX = (clamped.x - parent.lastSampleX) / dt;
+                                const sampleVY = (clamped.y - parent.lastSampleY) / dt;
+                                parent.flickVelocityX = parent.flickVelocityX * 0.30 + sampleVX * 0.70;
+                                parent.flickVelocityY = parent.flickVelocityY * 0.30 + sampleVY * 0.70;
+                            }
+                            parent.lastSampleX = clamped.x;
+                            parent.lastSampleY = clamped.y;
+                            parent.lastSampleTime = now;
+                            root.setDraftPoint(parent.elementName, clamped.x, clamped.y);
+                        }
+
+                        onReleased: mouse => {
+                            root.endEditorHold(parent.elementName);
+                            if (Date.now() - parent.lastSampleTime > root.flickReleaseFreshnessMs) {
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                            }
+                            parent.flickVelocityX = root.cappedFlickVelocity(parent.flickVelocityX);
+                            parent.flickVelocityY = root.cappedFlickVelocity(parent.flickVelocityY);
+                            if (root.shouldStartFlick(parent.flickVelocityX, parent.flickVelocityY))
+                                parent.inertiaActive = true;
+                            else {
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                                parent.inertiaActive = false;
+                            }
+                        }
+
+                        onCanceled: {
+                            parent.inertiaActive = false;
+                            parent.flickVelocityX = 0;
+                            parent.flickVelocityY = 0;
+                            root.endEditorHold(parent.elementName);
+                        }
+                    }
+
+                    Timer {
+                        id: inertiaTimer
+                        interval: 16
+                        repeat: true
+                        running: root.open && parent.inertiaActive
+                        onRunningChanged: {
+                            if (!root.open && !running) {
+                                parent.inertiaActive = false;
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                            }
+                        }
+                        onTriggered: {
+                            const point = root.draftLayout[parent.elementName]
+                                || root.defaultLayout()[parent.elementName];
+                            const dt = interval / 1000;
+                            const proposedX = Number(point.x) + parent.flickVelocityX * dt;
+                            const proposedY = Number(point.y) + parent.flickVelocityY * dt;
+                            const clamped = root.clampPoint(parent.elementName, proposedX, proposedY);
+
+                            if (Math.abs(clamped.x - proposedX) > 0.000001)
+                                parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping;
+                            if (Math.abs(clamped.y - proposedY) > 0.000001)
+                                parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping;
+
+                            root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y);
+                            parent.flickVelocityX *= root.flickFriction;
+                            parent.flickVelocityY *= root.flickFriction;
+
+                            if (Math.sqrt(parent.flickVelocityX * parent.flickVelocityX
+                                    + parent.flickVelocityY * parent.flickVelocityY) < root.flickStopSpeed) {
+                                parent.inertiaActive = false;
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                            }
                         }
                     }
                 }

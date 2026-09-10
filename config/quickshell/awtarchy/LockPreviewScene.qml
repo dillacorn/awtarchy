@@ -29,6 +29,8 @@ Item {
     property bool previewMode: false
     property bool editorMode: false
     property var editorVisibility: ({})
+    property string editorHeldElement: ""
+    property real editorHoldScale: 1.0
     property bool unlocking: false
     property bool entered: false
 
@@ -122,7 +124,11 @@ Item {
     function elementScale(name) {
         const point = normalizedPoint(name);
         const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
-        return Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
+        const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
+        const holdScale = root.editorMode && name === editorHeldElement ? editorHoldScale : 1.0;
+        const safeHoldScale = Number.isFinite(Number(holdScale))
+            ? Math.max(1.0, Math.min(1.12, Number(holdScale))) : 1.0;
+        return baseScale * safeHoldScale;
     }
 
     function elementColor(name) {
