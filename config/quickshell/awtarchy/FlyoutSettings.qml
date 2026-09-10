@@ -65,7 +65,6 @@ Item {
 
     implicitHeight: inlineCopy
         ? 139 + displayScaleSection.implicitHeight
-            + cursorThemeSection.implicitHeight
             + quickSettingsSectionControls.implicitHeight + 3 + (copyOpen ? 31 : 0)
         : (copyOpen ? 104 : 139)
 
@@ -512,13 +511,6 @@ Item {
             visible: root.surfaceLabel === "Quick Settings"
             active: visible
             monitorName: root.monitorName
-        }
-
-        CursorThemeSettings {
-            id: cursorThemeSection
-            Layout.fillWidth: true
-            visible: root.surfaceLabel === "Quick Settings"
-            active: visible
         }
 
         ColumnLayout {

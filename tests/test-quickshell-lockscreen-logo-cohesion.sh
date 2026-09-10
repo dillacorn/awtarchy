@@ -25,8 +25,9 @@ reject_text() {
 [[ -f "$SCENE" ]] || fail 'secure lock scene is missing'
 [[ -f "$PREVIEW" ]] || fail 'desktop lock preview scene is missing'
 
-# The connector experiment still exposed every rectangular cell while moving.
-# The corrected model keeps connected glyph regions moving coherently instead.
+# Pointer interaction is intentionally softer than rigid connected-letter
+# motion: each filled block gets a local target and neighboring blocks contribute
+# a smaller cohesion term so the wordmark stretches and reforms without bridges.
 for forbidden in logoBridgeCanvas logoBridgePairs logoBridgeMaxDistance \
     logoBridgeInteractionBoost buildLogoBridgePairs logoBridgeInteractionEnergy; do
     reject_text "$SCENE" "$forbidden" \
@@ -47,8 +48,16 @@ require_text "$SCENE" 'property real pointerFieldStrength:' \
     'logo hover deformation has no continuous field strength'
 require_text "$SCENE" 'property real clickFieldStrength:' \
     'logo click deformation has no bounded field strength'
-require_text "$SCENE" 'function logoDeformationOffset(' \
-    'logo does not calculate a shared radial deformation target'
+require_text "$SCENE" 'function directCellDeformationOffset(row, column)' \
+    'logo does not calculate direct per-block pointer deformation'
+require_text "$SCENE" 'function neighborCellDeformationOffset(row, column)' \
+    'logo does not blend neighboring block deformation'
+require_text "$SCENE" 'function logoCellDeformationOffset(row, column)' \
+    'logo does not calculate the final gooey per-block deformation target'
+require_text "$SCENE" 'root.logoCellDeformationOffset(wordmarkRow.rowIndex, columnIndex)' \
+    'wordmark blocks do not consume their local deformation target'
+reject_text "$SCENE" 'root.logoDeformationOffset(cohesionGroup)' \
+    'wordmark blocks still share one rigid connected-group pointer target'
 require_text "$SCENE" 'readonly property int pointerResponseDurationMs: 100' \
     'logo hover response is not the approved quick 100ms transition'
 require_text "$SCENE" 'readonly property int pointerReturnDurationMs: 180' \

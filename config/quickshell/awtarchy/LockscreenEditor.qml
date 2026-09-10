@@ -17,7 +17,10 @@ Singleton {
     readonly property string stateBackend: configHome + "/hypr/scripts/quickshell_application_state.sh"
     readonly property string contrastBackend: configHome + "/hypr/scripts/quickshell_lockscreen_contrast.sh"
     readonly property string wallpaperPickerBackend: configHome + "/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh"
-    readonly property bool open: editorWindow.visible
+    property bool editingActive: false
+    readonly property bool open: editingActive
+    property bool pickerSuspended: false
+    property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
 
     property var draftLayout: defaultLayout()
@@ -573,7 +576,7 @@ Singleton {
     }
 
     function scheduleContrastRefresh() {
-        if (!open)
+        if (!open || pickerSuspended)
             return;
         contrastRefreshPending = true;
         contrastRefreshDelay.restart();
@@ -854,6 +857,17 @@ Singleton {
         return screens.length > 0 ? screens[0] : null;
     }
 
+    function toggleDrawer(name) {
+        const allowed = ["element", "layout", "background", "weather"];
+        if (allowed.indexOf(String(name || "")) < 0)
+            return;
+        activeDrawer = activeDrawer === name ? "" : name;
+        if (activeDrawer !== "element")
+            elementPaletteOpen = false;
+        if (activeDrawer !== "background")
+            backgroundPaletteOpen = false;
+    }
+
     function openForScreen(target) {
         if (target)
             editorWindow.screen = target;
@@ -863,6 +877,9 @@ Singleton {
         historyTransactionActive = false;
         historyTransactionSnapshot = null;
         inertiaOwner = "";
+        activeDrawer = "";
+        pickerSuspended = false;
+        editingActive = true;
         editorWindow.visible = true;
         FlyoutManager.claimOverlay("lockscreen-editor");
         scheduleContrastRefresh();
@@ -871,6 +888,29 @@ Singleton {
 
     function openFocused() {
         openForScreen(focusedScreen());
+    }
+
+    function suspendForWallpaperPicker() {
+        if (!open || pickerSuspended || wallpaperPickerProcess.running)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        inertiaOwner = "";
+        pickerSuspended = true;
+        statusMessage = "Opening lockscreen wallpaper picker…";
+        FlyoutManager.releaseOverlay("lockscreen-editor");
+        editorWindow.visible = false;
+        wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]);
+    }
+
+    function resumeAfterWallpaperPicker() {
+        if (!open || !pickerSuspended)
+            return;
+        pickerSuspended = false;
+        editorWindow.visible = true;
+        FlyoutManager.claimOverlay("lockscreen-editor");
+        scheduleContrastRefresh();
+        Qt.callLater(() => editorFocus.forceActiveFocus());
     }
 
     function close() {
@@ -883,6 +923,11 @@ Singleton {
         historyTransactionActive = false;
         historyTransactionSnapshot = null;
         clearGuides();
+        activeDrawer = "";
+        elementPaletteOpen = false;
+        backgroundPaletteOpen = false;
+        pickerSuspended = false;
+        editingActive = false;
         FlyoutManager.releaseOverlay("lockscreen-editor");
         editorWindow.visible = false;
         loadPersistedDraft();
@@ -1007,15 +1052,19 @@ Singleton {
             onRead: line => root.acceptWallpaperSelection(line)
         }
         onExited: (exitCode, exitStatus) => {
-            if (root.open && exitCode !== 0 && root.statusMessage.length === 0)
-                root.statusMessage = "Lockscreen wallpaper picker closed";
+            if (root.open && exitCode !== 0)
+                root.statusMessage = "Lockscreen wallpaper picker closed without a selection";
+            else if (root.open
+                    && root.statusMessage === "Opening lockscreen wallpaper picker…")
+                root.statusMessage = "No wallpaper selected.";
+            root.resumeAfterWallpaperPicker();
         }
     }
 
     Shortcut {
         sequence: "Escape"
         context: Qt.ApplicationShortcut
-        enabled: root.open
+        enabled: root.open && !root.pickerSuspended
         autoRepeat: false
         onActivated: root.close()
     }
@@ -1023,7 +1072,7 @@ Singleton {
     Shortcut {
         sequence: "Ctrl+Z"
         context: Qt.ApplicationShortcut
-        enabled: root.open && root.undoStack.length > 0
+        enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0
         autoRepeat: false
         onActivated: root.undo()
     }
@@ -1031,7 +1080,7 @@ Singleton {
     Shortcut {
         sequence: "Ctrl+Shift+Z"
         context: Qt.ApplicationShortcut
-        enabled: root.open && root.redoStack.length > 0
+        enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
         autoRepeat: false
         onActivated: root.redo()
     }
@@ -1039,7 +1088,7 @@ Singleton {
     Shortcut {
         sequence: "Ctrl+Y"
         context: Qt.ApplicationShortcut
-        enabled: root.open && root.redoStack.length > 0
+        enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
         autoRepeat: false
         onActivated: root.redo()
     }
@@ -1355,7 +1404,7 @@ Singleton {
                         id: inertiaTimer
                         interval: 16
                         repeat: true
-                        running: root.open && parent.inertiaActive
+                        running: root.open && !root.pickerSuspended && parent.inertiaActive
                             && root.inertiaOwner === parent.elementName
                         onRunningChanged: {
                             if (!root.open && !running) {
@@ -1431,13 +1480,14 @@ Singleton {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: 282 + ((root.elementPaletteOpen || root.backgroundPaletteOpen) ? 150 : 0)
+                height: editorDockContent.implicitHeight + 18
                 color: Theme.popupBackground
                 border.width: 1
                 border.color: Theme.muted
                 z: 300
 
                 ColumnLayout {
+                    id: editorDockContent
                     anchors.fill: parent
                     anchors.margins: 9
                     spacing: 6
@@ -1467,13 +1517,7 @@ Singleton {
                                 !root.elementEnabled(root.selectedElement))
                         }
 
-                        Text {
-                            text: "Scale"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-
+                        Text { text: "Scale"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton {
                             label: "−"
                             available: root.elementScale(root.selectedElement) > 0.50
@@ -1481,7 +1525,6 @@ Singleton {
                             onClicked: root.setDraftScale(root.selectedElement,
                                 root.elementScale(root.selectedElement) - 0.10)
                         }
-
                         Text {
                             text: Math.round(root.elementScale(root.selectedElement) * 100) + "%"
                             color: Theme.foreground
@@ -1490,7 +1533,6 @@ Singleton {
                             Layout.preferredWidth: 42
                             horizontalAlignment: Text.AlignHCenter
                         }
-
                         SettingsButton {
                             label: "+"
                             available: root.elementScale(root.selectedElement) < 2.00
@@ -1499,36 +1541,20 @@ Singleton {
                                 root.elementScale(root.selectedElement) + 0.10)
                         }
 
-                        SettingsButton {
-                            label: "Reset Position"
-                            textSize: 9
-                            onClicked: root.resetElementPosition(root.selectedElement)
-                        }
-
-                        Text {
-                            text: "X"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
+                        Text { text: "X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
                             id: positionXField
-                            Layout.preferredWidth: 58
+                            Layout.preferredWidth: 54
                             text: Number(root.primaryPoint().x * 100).toFixed(1)
                             validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
                             selectByMouse: true
                             font.pixelSize: 9
                             onEditingFinished: root.setSelectedCoordinate("x", text)
                         }
-                        Text {
-                            text: "Y"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
+                        Text { text: "Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
                             id: positionYField
-                            Layout.preferredWidth: 58
+                            Layout.preferredWidth: 54
                             text: Number(root.primaryPoint().y * 100).toFixed(1)
                             validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
                             selectByMouse: true
@@ -1536,72 +1562,86 @@ Singleton {
                             onEditingFinished: root.setSelectedCoordinate("y", text)
                         }
 
-                        SettingsButton {
-                            label: "Undo"
-                            textSize: 9
-                            available: root.undoStack.length > 0
-                            onClicked: root.undo()
-                        }
-                        SettingsButton {
-                            label: "Redo"
-                            textSize: 9
-                            available: root.redoStack.length > 0
-                            onClicked: root.redo()
-                        }
+                        SettingsButton { label: "Undo"; textSize: 9; available: root.undoStack.length > 0; onClicked: root.undo() }
+                        SettingsButton { label: "Redo"; textSize: 9; available: root.redoStack.length > 0; onClicked: root.redo() }
+
+                        SettingsButton { label: "Element"; active: root.activeDrawer === "element"; textSize: 9; onClicked: root.toggleDrawer("element") }
+                        SettingsButton { label: "Layout"; active: root.activeDrawer === "layout"; textSize: 9; onClicked: root.toggleDrawer("layout") }
+                        SettingsButton { label: "Background"; active: root.activeDrawer === "background"; textSize: 9; onClicked: root.toggleDrawer("background") }
+                        SettingsButton { label: "Weather"; active: root.activeDrawer === "weather"; textSize: 9; onClicked: root.toggleDrawer("weather") }
 
                         Item { Layout.fillWidth: true }
 
                         Text {
-                            text: root.statusMessage.length > 0
-                                ? root.statusMessage
-                                : "Drag the actual lockscreen visuals. Hidden items stay faded so they can be restored."
+                            visible: root.statusMessage.length > 0
+                            text: root.statusMessage.length > 0 ? root.statusMessage : "Password cannot be hidden."
                             color: Theme.muted
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
                             elide: Text.ElideRight
-                            Layout.maximumWidth: 470
+                            Layout.maximumWidth: 260
+                        }
+
+                        SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }
+                        SettingsButton {
+                            label: "Save"
+                            active: true
+                            textSize: 9
+                            available: !saveProcess.running && !contrastPersistProcess.running
+                            onClicked: root.save()
                         }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 7
+                        visible: root.activeDrawer === "element"
 
+                        SettingsButton {
+                            label: "Reset Position"
+                            textSize: 9
+                            onClicked: root.resetElementPosition(root.selectedElement)
+                        }
+                        Text { text: "Element color"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Auto"; active: root.elementColor(root.selectedElement) === "auto"; textSize: 9; onClicked: root.setDraftColor(root.selectedElement, "auto") }
+                        SettingsButton { label: "White"; active: root.elementColor(root.selectedElement) === "#ffffff"; textSize: 9; onClicked: root.setDraftColor(root.selectedElement, "#ffffff") }
+                        SettingsButton { label: "Black"; active: root.elementColor(root.selectedElement) === "#000000"; textSize: 9; onClicked: root.setDraftColor(root.selectedElement, "#000000") }
+                        SettingsButton {
+                            label: "Custom"
+                            active: root.elementPaletteOpen
+                            textSize: 9
+                            onClicked: {
+                                root.elementPaletteOpen = !root.elementPaletteOpen;
+                                if (root.elementPaletteOpen)
+                                    root.backgroundPaletteOpen = false;
+                            }
+                        }
+                        Text { text: "All:"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Auto All"; textSize: 9; onClicked: root.setAllDraftColors("auto") }
+                        SettingsButton { label: "White All"; textSize: 9; onClicked: root.setAllDraftColors("#ffffff") }
+                        SettingsButton { label: "Black All"; textSize: 9; onClicked: root.setAllDraftColors("#000000") }
+                        Item { Layout.fillWidth: true }
                         Text {
-                            text: "Layout"
+                            text: "Password cannot be hidden. Auto samples each element independently."
                             color: Theme.muted
                             font.family: Theme.fontFamily
                             font.pixelSize: 9
+                            elide: Text.ElideRight
                         }
-                        SettingsButton {
-                            label: "Minimal"
-                            textSize: 9
-                            onClicked: root.applyLayoutPreset("minimal")
-                        }
-                        SettingsButton {
-                            label: "Centered"
-                            textSize: 9
-                            onClicked: root.applyLayoutPreset("centered")
-                        }
-                        SettingsButton {
-                            label: "Information"
-                            textSize: 9
-                            onClicked: root.applyLayoutPreset("information")
-                        }
-                        SettingsButton {
-                            label: "Lower Third"
-                            textSize: 9
-                            onClicked: root.applyLayoutPreset("lower-third")
-                        }
-                        SettingsButton {
-                            label: "Guides"
-                            active: root.showEditorGrid
-                            textSize: 9
-                            onClicked: root.showEditorGrid = !root.showEditorGrid
-                        }
+                    }
 
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+                        visible: root.activeDrawer === "layout"
+
+                        SettingsButton { label: "Minimal"; textSize: 9; onClicked: root.applyLayoutPreset("minimal") }
+                        SettingsButton { label: "Centered"; textSize: 9; onClicked: root.applyLayoutPreset("centered") }
+                        SettingsButton { label: "Information"; textSize: 9; onClicked: root.applyLayoutPreset("information") }
+                        SettingsButton { label: "Lower Third"; textSize: 9; onClicked: root.applyLayoutPreset("lower-third") }
+                        SettingsButton { label: "Guides"; active: root.showEditorGrid; textSize: 9; onClicked: root.showEditorGrid = !root.showEditorGrid }
+                        SettingsButton { label: "Restore Defaults"; textSize: 9; onClicked: root.resetDraft() }
                         Item { Layout.fillWidth: true }
-
                         Text {
                             text: "Presets change layout and visibility only."
                             color: Theme.muted
@@ -1614,80 +1654,9 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 7
+                        visible: root.activeDrawer === "background"
 
-                        Text {
-                            text: "Element color"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-
-                        SettingsButton {
-                            label: "Auto"
-                            active: root.elementColor(root.selectedElement) === "auto"
-                            textSize: 9
-                            onClicked: root.setDraftColor(root.selectedElement, "auto")
-                        }
-                        SettingsButton {
-                            label: "White"
-                            active: root.elementColor(root.selectedElement) === "#ffffff"
-                            textSize: 9
-                            onClicked: root.setDraftColor(root.selectedElement, "#ffffff")
-                        }
-                        SettingsButton {
-                            label: "Black"
-                            active: root.elementColor(root.selectedElement) === "#000000"
-                            textSize: 9
-                            onClicked: root.setDraftColor(root.selectedElement, "#000000")
-                        }
-                        SettingsButton {
-                            label: "Custom"
-                            active: root.elementPaletteOpen
-                            textSize: 9
-                            onClicked: {
-                                root.elementPaletteOpen = !root.elementPaletteOpen;
-                                if (root.elementPaletteOpen)
-                                    root.backgroundPaletteOpen = false;
-                            }
-                        }
-
-                        Text {
-                            text: "All:"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-                        SettingsButton { label: "Auto All"; textSize: 9; onClicked: root.setAllDraftColors("auto") }
-                        SettingsButton { label: "White All"; textSize: 9; onClicked: root.setAllDraftColors("#ffffff") }
-                        SettingsButton { label: "Black All"; textSize: 9; onClicked: root.setAllDraftColors("#000000") }
-
-                        Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: "Auto is calculated independently around each element."
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                        }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 7
-
-                        Text {
-                            text: "Background"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-                        SettingsButton {
-                            label: "Black"
-                            active: root.draftBackgroundMode === "black"
-                            textSize: 9
-                            onClicked: root.setDraftBackgroundMode("black")
-                        }
+                        SettingsButton { label: "Black"; active: root.draftBackgroundMode === "black"; textSize: 9; onClicked: root.setDraftBackgroundMode("black") }
                         SettingsButton {
                             label: "Wallpaper"
                             active: root.draftBackgroundMode === "wallpaper"
@@ -1695,20 +1664,15 @@ Singleton {
                             onClicked: {
                                 if (root.draftWallpaperPath.length > 0)
                                     root.setDraftBackgroundMode("wallpaper");
-                                else if (!wallpaperPickerProcess.running) {
-                                    root.statusMessage = "Opening lockscreen wallpaper picker…";
-                                    wallpaperPickerProcess.exec(["bash", root.wallpaperPickerBackend]);
-                                }
+                                else
+                                    root.suspendForWallpaperPicker();
                             }
                         }
                         SettingsButton {
                             label: "Choose Wallpaper"
                             textSize: 9
                             available: !wallpaperPickerProcess.running
-                            onClicked: {
-                                root.statusMessage = "Opening lockscreen wallpaper picker…";
-                                wallpaperPickerProcess.exec(["bash", root.wallpaperPickerBackend]);
-                            }
+                            onClicked: root.suspendForWallpaperPicker()
                         }
                         SettingsButton {
                             label: "Color"
@@ -1730,7 +1694,6 @@ Singleton {
                                     root.elementPaletteOpen = false;
                             }
                         }
-
                         Text {
                             Layout.fillWidth: true
                             text: root.draftWallpaperPath.length > 0
@@ -1746,153 +1709,61 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 7
+                        visible: root.activeDrawer === "background"
 
-                        Text {
-                            text: "Wallpaper fit"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-                        SettingsButton {
-                            label: "Cover"
-                            active: root.draftWallpaperFit === "cover"
-                            available: root.draftWallpaperPath.length > 0
-                            textSize: 9
-                            onClicked: root.setDraftWallpaperFit("cover")
-                        }
-                        SettingsButton {
-                            label: "Contain"
-                            active: root.draftWallpaperFit === "contain"
-                            available: root.draftWallpaperPath.length > 0
-                            textSize: 9
-                            onClicked: root.setDraftWallpaperFit("contain")
-                        }
-
-                        Text {
-                            text: "Overlay"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-                        SettingsButton {
-                            label: "None"
-                            active: root.draftOverlayMode === "none"
-                            textSize: 9
-                            onClicked: root.setDraftOverlay("none", root.draftOverlayStrength)
-                        }
-                        SettingsButton {
-                            label: "Darken"
-                            active: root.draftOverlayMode === "dark"
-                            textSize: 9
-                            onClicked: root.setDraftOverlay("dark",
-                                root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35)
-                        }
-                        SettingsButton {
-                            label: "Lighten"
-                            active: root.draftOverlayMode === "light"
-                            textSize: 9
-                            onClicked: root.setDraftOverlay("light",
-                                root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35)
-                        }
+                        Text { text: "Fit"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Cover"; active: root.draftWallpaperFit === "cover"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("cover") }
+                        SettingsButton { label: "Contain"; active: root.draftWallpaperFit === "contain"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("contain") }
+                        Text { text: "Overlay"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "None"; active: root.draftOverlayMode === "none"; textSize: 9; onClicked: root.setDraftOverlay("none", root.draftOverlayStrength) }
+                        SettingsButton { label: "Darken"; active: root.draftOverlayMode === "dark"; textSize: 9; onClicked: root.setDraftOverlay("dark", root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35) }
+                        SettingsButton { label: "Lighten"; active: root.draftOverlayMode === "light"; textSize: 9; onClicked: root.setDraftOverlay("light", root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35) }
                         Slider {
                             id: overlaySlider
                             Layout.preferredWidth: 120
-                            from: 0
-                            to: 100
-                            stepSize: 1
+                            from: 0; to: 100; stepSize: 1
                             value: root.draftOverlayStrength
-                            onPressedChanged: {
-                                if (pressed) root.beginHistoryTransaction();
-                                else root.commitHistoryTransaction();
-                            }
+                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
                             onMoved: root.setDraftOverlay(root.draftOverlayMode, value)
                         }
-                        Text {
-                            text: root.draftOverlayStrength + "%"
-                            color: Theme.foreground
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            Layout.preferredWidth: 34
-                        }
-
-                        Text {
-                            text: "Blur"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
+                        Text { text: root.draftOverlayStrength + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
+                        Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Slider {
                             id: blurSlider
                             Layout.preferredWidth: 110
-                            from: 0
-                            to: 100
-                            stepSize: 1
+                            from: 0; to: 100; stepSize: 1
                             value: root.draftWallpaperBlur
                             enabled: root.draftBackgroundMode === "wallpaper"
-                            onPressedChanged: {
-                                if (pressed) root.beginHistoryTransaction();
-                                else root.commitHistoryTransaction();
-                            }
+                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
                             onMoved: root.setDraftWallpaperBlur(value)
                         }
-                        Text {
-                            text: root.draftWallpaperBlur + "%"
-                            color: Theme.foreground
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            Layout.preferredWidth: 34
-                        }
+                        Text { text: root.draftWallpaperBlur + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
+                        Item { Layout.fillWidth: true }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 7
+                        visible: root.activeDrawer === "weather"
 
-                        Text {
-                            text: "Weather units"
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                        }
-                        SettingsButton {
-                            label: "Auto"
-                            active: root.draftWeatherUnits === "auto"
-                            textSize: 9
-                            onClicked: root.setDraftWeatherUnits("auto")
-                        }
-                        SettingsButton {
-                            label: "°F"
-                            active: root.draftWeatherUnits === "fahrenheit"
-                            textSize: 9
-                            onClicked: root.setDraftWeatherUnits("fahrenheit")
-                        }
-                        SettingsButton {
-                            label: "°C"
-                            active: root.draftWeatherUnits === "celsius"
-                            textSize: 9
-                            onClicked: root.setDraftWeatherUnits("celsius")
-                        }
-
+                        Text { text: "Weather units"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Auto"; active: root.draftWeatherUnits === "auto"; textSize: 9; onClicked: root.setDraftWeatherUnits("auto") }
+                        SettingsButton { label: "°F"; active: root.draftWeatherUnits === "fahrenheit"; textSize: 9; onClicked: root.setDraftWeatherUnits("fahrenheit") }
+                        SettingsButton { label: "°C"; active: root.draftWeatherUnits === "celsius"; textSize: 9; onClicked: root.setDraftWeatherUnits("celsius") }
                         Item { Layout.fillWidth: true }
-
-                        Text {
-                            text: "Auto follows the system measurement locale."
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                        }
+                        Text { text: "Auto follows the system measurement locale."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true
                         Layout.preferredHeight: visible ? 142 : 0
                         spacing: 12
-                        visible: root.elementPaletteOpen || root.backgroundPaletteOpen
+                        visible: (root.activeDrawer === "element" && root.elementPaletteOpen)
+                            || (root.activeDrawer === "background" && root.backgroundPaletteOpen)
 
                         InlineColorPicker {
                             id: elementColorPicker
-                            visible: root.elementPaletteOpen
+                            visible: root.activeDrawer === "element" && root.elementPaletteOpen
                             Layout.preferredWidth: 320
                             Layout.preferredHeight: visible ? 142 : 0
                             colorValue: root.elementColor(root.selectedElement) === "auto"
@@ -1903,7 +1774,7 @@ Singleton {
 
                         InlineColorPicker {
                             id: backgroundColorPicker
-                            visible: root.backgroundPaletteOpen
+                            visible: root.activeDrawer === "background" && root.backgroundPaletteOpen
                             Layout.preferredWidth: 320
                             Layout.preferredHeight: visible ? 142 : 0
                             colorValue: root.draftBackgroundColor
@@ -1911,34 +1782,6 @@ Singleton {
                         }
 
                         Item { Layout.fillWidth: true }
-                    }
-
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-
-                        Text {
-                            Layout.fillWidth: true
-                            text: "Changes are live preview only until Save. Password cannot be hidden."
-                            color: Theme.muted
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            elide: Text.ElideRight
-                        }
-
-                        SettingsButton {
-                            label: "Restore Defaults"
-                            textSize: 10
-                            onClicked: root.resetDraft()
-                        }
-                        SettingsButton { label: "Cancel"; textSize: 10; onClicked: root.close() }
-                        SettingsButton {
-                            label: "Save"
-                            active: true
-                            textSize: 10
-                            available: !saveProcess.running && !contrastPersistProcess.running
-                            onClicked: root.save()
-                        }
                     }
                 }
             }

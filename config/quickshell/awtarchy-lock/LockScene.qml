@@ -77,6 +77,7 @@ Item {
     readonly property real audioDisplacementCap: 6 * uiScale
     readonly property int pointerResponseDurationMs: 100
     readonly property int pointerReturnDurationMs: 180
+    readonly property real pointerNeighborCohesion: 0.30
     readonly property var logoCohesionGroups: buildLogoCohesionGroups()
     readonly property real pointerMovementThreshold: 3 * uiScale
     readonly property string usernameText: showUsername ? Quickshell.env("USER") : ""
@@ -305,17 +306,17 @@ Item {
         return true;
     }
 
-    function radialFieldOffset(group, fieldX, fieldY, strength, radius, cap) {
-        if (!group || strength <= 0 || radius <= 0 || cap <= 0)
+    function radialPointOffset(centerX, centerY, seed, fieldX, fieldY, strength, radius, cap) {
+        if (strength <= 0 || radius <= 0 || cap <= 0)
             return ({ x: 0, y: 0 });
 
-        let dx = group.centerX - fieldX;
-        let dy = group.centerY - fieldY;
+        let dx = centerX - fieldX;
+        let dy = centerY - fieldY;
         let distance = Math.sqrt(dx * dx + dy * dy);
         if (distance >= radius)
             return ({ x: 0, y: 0 });
         if (distance < 0.001) {
-            const angle = (group.id + 1) * 2.399963229728653;
+            const angle = (seed + 1) * 2.399963229728653;
             dx = Math.cos(angle);
             dy = Math.sin(angle);
             distance = 1;
@@ -330,22 +331,65 @@ Item {
         });
     }
 
-    function logoDeformationOffset(group) {
-        if (!group)
+    function directCellDeformationOffset(row, column) {
+        if (!isFilledWordmarkCell(row, column))
             return ({ x: 0, y: 0 });
+        const centerX = (column + 0.5) * wordmarkCellWidth;
+        const centerY = (row + 0.5) * wordmarkCellHeight;
+        const seed = row * wordmarkColumns + column;
         const pointer = pointerEffectsEnabled
-            ? radialFieldOffset(group, pointerFieldX, pointerFieldY,
-                pointerFieldStrength, pointerInfluenceRadius, pointerDisplacementCap)
+            ? radialPointOffset(centerX, centerY, seed,
+                pointerFieldX, pointerFieldY, pointerFieldStrength,
+                pointerInfluenceRadius, pointerDisplacementCap)
             : ({ x: 0, y: 0 });
         const click = mouseInteractive
-            ? radialFieldOffset(group, clickFieldX, clickFieldY,
-                clickFieldStrength, clickInfluenceRadius, clickDisplacementCap)
+            ? radialPointOffset(centerX, centerY, seed,
+                clickFieldX, clickFieldY, clickFieldStrength,
+                clickInfluenceRadius, clickDisplacementCap)
             : ({ x: 0, y: 0 });
         return ({
             x: Math.max(-clickDisplacementCap,
                 Math.min(clickDisplacementCap, pointer.x + click.x)),
             y: Math.max(-clickDisplacementCap,
                 Math.min(clickDisplacementCap, pointer.y + click.y))
+        });
+    }
+
+    function neighborCellDeformationOffset(row, column) {
+        const neighbors = [
+            ({ row: row, column: column - 1 }),
+            ({ row: row, column: column + 1 }),
+            ({ row: row - 1, column: column }),
+            ({ row: row + 1, column: column })
+        ];
+        let sumX = 0;
+        let sumY = 0;
+        let count = 0;
+        for (let i = 0; i < neighbors.length; ++i) {
+            const neighbor = neighbors[i];
+            if (!isFilledWordmarkCell(neighbor.row, neighbor.column))
+                continue;
+            const offset = directCellDeformationOffset(neighbor.row, neighbor.column);
+            sumX += offset.x;
+            sumY += offset.y;
+            ++count;
+        }
+        if (count === 0)
+            return ({ x: 0, y: 0 });
+        return ({
+            x: sumX / count * pointerNeighborCohesion,
+            y: sumY / count * pointerNeighborCohesion
+        });
+    }
+
+    function logoCellDeformationOffset(row, column) {
+        const direct = directCellDeformationOffset(row, column);
+        const neighbor = neighborCellDeformationOffset(row, column);
+        return ({
+            x: Math.max(-clickDisplacementCap,
+                Math.min(clickDisplacementCap, direct.x + neighbor.x)),
+            y: Math.max(-clickDisplacementCap,
+                Math.min(clickDisplacementCap, direct.y + neighbor.y))
         });
     }
 
@@ -578,7 +622,8 @@ Item {
                             readonly property bool cohesionReady: isFilledGlyph
                                 && root.logoGroupReady(cohesionGroup)
                             readonly property var pointerTarget: cohesionReady
-                                ? root.logoDeformationOffset(cohesionGroup) : ({ x: 0, y: 0 })
+                                ? root.logoCellDeformationOffset(wordmarkRow.rowIndex, columnIndex)
+                                : ({ x: 0, y: 0 })
                             readonly property bool pointerTargetActive:
                                 Math.abs(pointerTarget.x) + Math.abs(pointerTarget.y) > 0.01
                             property real pointerOffsetX: pointerTarget.x
