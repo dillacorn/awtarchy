@@ -203,8 +203,14 @@ require_text "$SURFACE_QML" 'required property bool unlocking' \
     'lock surface does not receive the shared unlock-fade state'
 require_text "$SURFACE_QML" 'property bool entered: false' \
     'lock surface has no fade-in entry state'
-require_text "$SURFACE_QML" 'opacity: root.unlocking ? 0 : root.entered ? 1 : 0' \
-    'secure password content does not fade for lock and unlock transitions'
+require_text "$SURFACE_QML" 'opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")' \
+    'secure password presentation does not combine transition fade with saved presentation opacity'
+require_text "$SURFACE_QML" 'color: "transparent"' \
+    'secure password TextInput content is visually exposed'
+require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
+    'secure password TextInput lost sensitive-data input hints'
+require_text "$SCENE_QML" 'const minimum = name === "password" ? 20 : 0;' \
+    'password presentation opacity is not bounded to the approved visible minimum'
 require_text "$SCENE_QML" 'opacity: root.unlocking ? 0 : root.entered ? 1 : 0' \
     'shared presentation content does not fade for lock and unlock transitions'
 require_text "$SURFACE_QML" 'Behavior on opacity' \
