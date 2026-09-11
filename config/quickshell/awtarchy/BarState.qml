@@ -137,6 +137,22 @@ Singleton {
         lockscreen_overlay_strength: 0,
         lockscreen_wallpaper_blur: 0
     })
+    readonly property var defaultLockscreenVisualizer: ({
+        enabled: false,
+        x: 0.50,
+        y: 0.80,
+        scale: 1.0,
+        stretch_x: 1.0,
+        stretch_y: 1.0,
+        opacity: 100,
+        color: "auto",
+        bands: 16,
+        gap: 4,
+        height: 100,
+        sensitivity: 100,
+        shape: "straight",
+        bend: 45
+    })
     readonly property var defaultLockscreenLayout: ({
         logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
         time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
@@ -371,6 +387,8 @@ Singleton {
             lockscreen_weather_location: "",
             lockscreen_layout: root.defaultLockscreenLayout,
             lockscreen_custom_images: [],
+            lockscreen_visualizer: root.defaultLockscreenVisualizer,
+            lockscreen_background_opacity: 100,
             monitors: {},
             launcher_sizes: {},
             clipboard_views: {},
@@ -642,6 +660,67 @@ Singleton {
     function lockscreenLogoPhysicsHz() {
         const value = Math.round(Number(data().lockscreen_logo_physics_hz));
         return [30, 60, 90].indexOf(value) >= 0 ? value : 30;
+    }
+
+    function lockscreenVisualizer() {
+        const defaults = root.defaultLockscreenVisualizer;
+        const value = data().lockscreen_visualizer;
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            return defaults;
+
+        const enabled = typeof value.enabled === "boolean" ? value.enabled : defaults.enabled;
+        const x = Number(value.x ?? defaults.x);
+        const y = Number(value.y ?? defaults.y);
+        const scale = Number(value.scale ?? defaults.scale);
+        const stretchX = Number(value.stretch_x ?? defaults.stretch_x);
+        const stretchY = Number(value.stretch_y ?? defaults.stretch_y);
+        const opacity = Number(value.opacity ?? defaults.opacity);
+        const color = String(value.color ?? defaults.color).toLowerCase();
+        const bands = Number(value.bands ?? defaults.bands);
+        const gap = Number(value.gap ?? defaults.gap);
+        const height = Number(value.height ?? defaults.height);
+        const sensitivity = Number(value.sensitivity ?? defaults.sensitivity);
+        const shape = String(value.shape ?? defaults.shape);
+        const bend = Number(value.bend ?? defaults.bend);
+
+        if (!Number.isFinite(x) || x < 0.05 || x > 0.95
+                || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                || !Number.isFinite(scale) || scale < 0.5 || scale > 2
+                || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4
+                || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4
+                || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color))
+                || !Number.isInteger(bands) || bands < 4 || bands > 64
+                || !Number.isInteger(gap) || gap < 0 || gap > 24
+                || !Number.isInteger(height) || height < 25 || height > 300
+                || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
+                || ["straight", "arc", "circle"].indexOf(shape) < 0
+                || !Number.isInteger(bend) || bend < -100 || bend > 100)
+            return defaults;
+
+        return ({
+            enabled: enabled,
+            x: x,
+            y: y,
+            scale: scale,
+            stretch_x: stretchX,
+            stretch_y: stretchY,
+            opacity: Math.round(opacity),
+            color: color,
+            bands: bands,
+            gap: gap,
+            height: height,
+            sensitivity: sensitivity,
+            shape: shape,
+            bend: bend
+        });
+    }
+
+    function lockscreenBackgroundOpacity() {
+        const value = Number(data().lockscreen_background_opacity);
+        if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 100)
+            return 100;
+        return value;
     }
 
     function lockscreenAudioReactiveEnabled() {
