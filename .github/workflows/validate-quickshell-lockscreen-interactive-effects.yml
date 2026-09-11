@@ -19,6 +19,8 @@ jobs:
         with:
           ref: feature/lockscreen-interactive-effects
           fetch-depth: 0
+      - name: Install updater test prerequisites
+        run: sudo apt-get update && sudo apt-get install -y lua5.4
       - name: Refresh exact current managed hashes
         run: |
           set -euo pipefail
