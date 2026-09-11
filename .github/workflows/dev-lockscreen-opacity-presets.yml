@@ -1,4 +1,5 @@
 name: Lockscreen Opacity Preset Completion
+# Retrigger after GitHub registered this one-use workflow on the feature branch.
 
 on:
   push:
