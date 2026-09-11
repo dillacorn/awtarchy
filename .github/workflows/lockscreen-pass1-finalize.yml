@@ -23,10 +23,12 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import hashlib
 
           secure = Path('config/quickshell/awtarchy-lock/LockScene.qml')
           preview = Path('config/quickshell/awtarchy/LockPreviewScene.qml')
           animation_test = Path('tests/test-quickshell-lockscreen-animation-preference.sh')
+          history = Path('local/share/awtarchy/quickshell-managed-history.sha256')
 
           text = secure.read_text(encoding='utf-8')
           scene_replacements = [
@@ -99,6 +101,23 @@ jobs:
           if count != 1:
               raise SystemExit(f'expected one stale audio contract block, found {count}')
           animation_test.write_text(test_text.replace(old_audio_contract, new_audio_contract, 1), encoding='utf-8')
+
+          history_text = history.read_text(encoding='utf-8')
+          managed = [
+              (preview, '.config/quickshell/awtarchy/LockPreviewScene.qml'),
+              (secure, '.config/quickshell/awtarchy-lock/LockScene.qml'),
+          ]
+          additions = []
+          for source, installed in managed:
+              digest = hashlib.sha256(source.read_bytes()).hexdigest()
+              entry = f'{digest}\t{installed}'
+              if entry not in history_text.splitlines():
+                  additions.append(entry)
+          if additions:
+              if history_text and not history_text.endswith('\n'):
+                  history_text += '\n'
+              history_text += '\n'.join(additions) + '\n'
+              history.write_text(history_text, encoding='utf-8')
           PY
 
       - name: Focused Pass 1 validation
@@ -144,6 +163,7 @@ jobs:
           git add \
             config/quickshell/awtarchy-lock/LockScene.qml \
             config/quickshell/awtarchy/LockPreviewScene.qml \
-            tests/test-quickshell-lockscreen-animation-preference.sh
+            tests/test-quickshell-lockscreen-animation-preference.sh \
+            local/share/awtarchy/quickshell-managed-history.sha256
           git commit -m 'Finalize lockscreen Pass 1 interactions'
           git push origin HEAD:feature/lockscreen-interactive-effects
