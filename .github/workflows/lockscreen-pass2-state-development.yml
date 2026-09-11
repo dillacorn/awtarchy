@@ -56,7 +56,21 @@ jobs:
           bash tests/test-quickshell-lockscreen-animation-preference.sh
           bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash tests/test-quickshell-production-readiness.sh
-          bash tests/test-quickshell-updater-migration.sh
+
+          migration_log="$(mktemp)"
+          set +e
+          AWTARCHY_TEST_KEEP_TMP=1 bash tests/test-quickshell-updater-migration.sh 2>&1 | tee "$migration_log"
+          migration_status=${PIPESTATUS[0]}
+          set -e
+          if (( migration_status != 0 )); then
+            fixture="$(sed -n 's/^DEBUG: retained updater fixture: //p' "$migration_log" | tail -n 1)"
+            if [[ -n $fixture && -d $fixture ]]; then
+              printf '%s\n' '--- updater migration fixture outputs ---'
+              find "$fixture" -maxdepth 1 -type f -name '*.out' -print -exec sh -c 'printf "%s\n" "--- $1 ---"; tail -n 120 "$1"' _ {} \;
+            fi
+            exit "$migration_status"
+          fi
+
           bash tests/test-quickshell-updater-bootstrap.sh
       - name: Commit generic editor slice
         run: |
