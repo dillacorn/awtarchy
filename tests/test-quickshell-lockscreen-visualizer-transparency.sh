@@ -277,6 +277,8 @@ require_text "$QUICK_SETTINGS" 'text: "Visualizer"' \
     'Quick Settings has no visualizer toggle'
 require_text "$QUICK_SETTINGS" 'text: "Background Opacity"' \
     'Quick Settings has no background-opacity controls'
+require_text "$QUICK_SETTINGS" 'Transparency can reveal content' \
+    'Quick Settings has no transparency privacy warning'
 for preset in 100 75 50 25 0; do
     require_text "$QUICK_SETTINGS" "label: \"${preset}%\"" \
         "Quick Settings is missing ${preset}% background-opacity preset"
