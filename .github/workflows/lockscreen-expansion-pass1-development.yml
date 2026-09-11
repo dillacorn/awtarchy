@@ -63,14 +63,14 @@ jobs:
               raise SystemExit(f'could not isolate obsolete picker patch block: start={start} end={end}')
           script = script[:start] + script[end + 2:]
 
-          # The temporary patcher was generated through an escaped transport and
-          # its raw regex pattern arguments contain doubled regex escapes. Fix
-          # only the pattern argument of replace_re_once calls. Replacement
-          # payloads and generated raw shell/QML strings are left untouched.
+          # Normalize only raw regex pattern arguments. Two scene property
+          # anchors are written without semicolons in the current QML, so make
+          # those terminators optional rather than depending on style trivia.
           call_pattern = re.compile(r"(replace_re_once\([^,]+,\s*r''')(.*?)(''',)", re.S)
 
           def normalize_regex(match):
               body = match.group(2).replace('\\\\', '\\')
+              body = body.replace(r': \"\";', r': \"\";?')
               return match.group(1) + body + match.group(3)
 
           script, regex_count = call_pattern.subn(normalize_regex, script)
