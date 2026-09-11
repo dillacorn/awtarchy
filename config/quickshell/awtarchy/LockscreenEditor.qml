@@ -22,8 +22,10 @@ Singleton {
     property bool pickerSuspended: false
     property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
+    readonly property int customImageMaximum: 12
 
     property var draftLayout: defaultLayout()
+    property var draftCustomImages: []
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
     property string draftBackgroundColor: "#000000"
@@ -72,12 +74,12 @@ Singleton {
 
     function defaultLayout() {
         return ({
-            logo: ({ x: 0.50, y: 0.34, scale: 1.0, color: "auto" }),
-            time: ({ x: 0.50, y: 0.51, scale: 1.0, color: "auto" }),
-            date: ({ x: 0.50, y: 0.555, scale: 1.0, color: "auto" }),
-            username: ({ x: 0.50, y: 0.595, scale: 1.0, color: "auto" }),
-            weather: ({ x: 0.50, y: 0.635, scale: 1.0, color: "auto" }),
-            password: ({ x: 0.50, y: 0.70, scale: 1.0, color: "auto" })
+            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
         });
     }
 
@@ -165,9 +167,11 @@ Singleton {
                 x: target.x,
                 y: target.y,
                 scale: target.scale,
+                stretch_x: current.stretch_x,
+                stretch_y: current.stretch_y,
+                opacity: current.opacity,
                 color: current.color
             });
-            next[element].color = current.color;
         }
         draftLayout = next;
         draftVisibility = cloneVisibility(visibility);
@@ -205,6 +209,7 @@ Singleton {
     function editorSnapshot() {
         return ({
             layout: cloneLayout(draftLayout),
+            customImages: cloneCustomImages(draftCustomImages),
             visibility: cloneVisibility(draftVisibility),
             backgroundMode: draftBackgroundMode,
             backgroundColor: draftBackgroundColor,
@@ -243,7 +248,12 @@ Singleton {
         if (!snapshot || typeof snapshot !== "object")
             return;
         draftLayout = cloneLayout(snapshot.layout);
+        draftCustomImages = cloneCustomImages(snapshot.customImages);
         draftVisibility = cloneVisibility(snapshot.visibility);
+        const validSelection = selectedElements.filter(name => elementExists(name));
+        if (!elementExists(selectedElement))
+            selectedElement = validSelection.length > 0 ? validSelection[0] : "logo";
+        selectedElements = validSelection.length > 0 ? validSelection : [selectedElement];
         draftBackgroundMode = ["black", "wallpaper", "color"].indexOf(String(snapshot.backgroundMode)) >= 0
             ? String(snapshot.backgroundMode) : "black";
         draftBackgroundColor = validHex(snapshot.backgroundColor)
@@ -333,14 +343,14 @@ Singleton {
     }
 
     function selectElement(name, additive) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
         if (!additive) {
             selectedElement = name;
             selectedElements = [name];
             return;
         }
-        const next = selectedElements.slice();
+        const next = selectedElements.filter(candidate => elementExists(candidate));
         const index = next.indexOf(name);
         if (index >= 0) {
             if (next.length > 1)
@@ -349,30 +359,39 @@ Singleton {
             next.push(name);
         }
         selectedElements = next;
-        selectedElement = selectedContains(name) ? name : next[0];
+        selectedElement = next.indexOf(name) >= 0 ? name : next[0];
     }
 
     function primaryPoint() {
-        return draftLayout[selectedElement] || defaultLayout()[selectedElement] || defaultLayout().logo;
+        return elementPoint(selectedElement) || defaultLayout().logo;
     }
 
     function setDraftScaleSilently(name, scaleValue) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
         const numeric = Number(scaleValue);
         if (!Number.isFinite(numeric))
             return;
-        const next = cloneLayout(draftLayout);
-        next[name].scale = Math.max(0.50, Math.min(2.00, numeric));
-        draftLayout = next;
+        const value = Math.max(0.50, Math.min(2.00, numeric));
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = customImageIndex(name);
+            if (index < 0) return;
+            next[index].scale = value;
+            draftCustomImages = next;
+        } else {
+            const next = cloneLayout(draftLayout);
+            next[name].scale = value;
+            draftLayout = next;
+        }
         scheduleContrastRefresh();
     }
 
     function beginResizeElement(name, sceneX, sceneY) {
-        if (elementNames.indexOf(name) < 0 || editorFocus.width <= 0 || editorFocus.height <= 0)
+        if (!elementExists(name) || editorFocus.width <= 0 || editorFocus.height <= 0)
             return;
         selectElement(name, false);
-        const point = draftLayout[name] || defaultLayout()[name];
+        const point = elementPoint(name);
         resizeElementName = name;
         resizeCenterX = Number(point.x) * editorFocus.width;
         resizeCenterY = Number(point.y) * editorFocus.height;
@@ -416,7 +435,9 @@ Singleton {
         let minDy = -2;
         let maxDy = 2;
         for (const name of selectedElements) {
-            const point = draftLayout[name] || defaultLayout()[name];
+            const point = elementPoint(name);
+            if (!point)
+                continue;
             const bounds = pointBounds(name);
             minDx = Math.max(minDx, bounds.minX - Number(point.x));
             maxDx = Math.min(maxDx, bounds.maxX - Number(point.x));
@@ -433,14 +454,21 @@ Singleton {
         const delta = clampedGroupDelta(dx, dy);
         if (Math.abs(delta.x) < 0.0000001 && Math.abs(delta.y) < 0.0000001)
             return delta;
-        const next = cloneLayout(draftLayout);
+        const nextLayout = cloneLayout(draftLayout);
+        const nextImages = cloneCustomImages(draftCustomImages);
         for (const name of selectedElements) {
-            const point = next[name] || defaultLayout()[name];
-            point.x = Number(point.x) + delta.x;
-            point.y = Number(point.y) + delta.y;
-            next[name] = point;
+            if (isCustomImage(name)) {
+                const index = nextImages.findIndex(image => image.id === name);
+                if (index < 0) continue;
+                nextImages[index].x = Number(nextImages[index].x) + delta.x;
+                nextImages[index].y = Number(nextImages[index].y) + delta.y;
+            } else if (elementNames.indexOf(name) >= 0) {
+                nextLayout[name].x = Number(nextLayout[name].x) + delta.x;
+                nextLayout[name].y = Number(nextLayout[name].y) + delta.y;
+            }
         }
-        draftLayout = next;
+        draftLayout = nextLayout;
+        draftCustomImages = nextImages;
         if (selectPrimary && selectedElements.length > 0 && !selectedContains(selectedElement))
             selectedElement = selectedElements[0];
         scheduleContrastRefresh();
@@ -460,9 +488,10 @@ Singleton {
         }
         const xTargets = [0.5];
         const yTargets = [0.5];
-        for (const peer of elementNames) {
+        for (const peer of editableElementNames()) {
             if (!root.selectedContains(peer)) {
-                const point = draftLayout[peer] || defaultLayout()[peer];
+                const point = elementPoint(peer);
+                if (!point) continue;
                 xTargets.push(Number(point.x));
                 yTargets.push(Number(point.y));
             }
@@ -523,15 +552,25 @@ Singleton {
     }
 
     function resetElementPosition(name) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
         recordUndoBeforeChange();
-        const defaults = defaultLayout();
-        const next = cloneLayout(draftLayout);
-        next[name].x = defaults[name].x;
-        next[name].y = defaults[name].y;
-        draftLayout = next;
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = next.findIndex(image => image.id === name);
+            if (index < 0) return;
+            next[index].x = 0.5;
+            next[index].y = 0.5;
+            draftCustomImages = next;
+        } else {
+            const defaults = defaultLayout();
+            const next = cloneLayout(draftLayout);
+            next[name].x = defaults[name].x;
+            next[name].y = defaults[name].y;
+            draftLayout = next;
+        }
         selectedElement = name;
+        selectedElements = [name];
         statusMessage = elementLabel(name) + " position reset";
         scheduleContrastRefresh();
     }
@@ -624,6 +663,17 @@ Singleton {
         scheduleContrastRefresh();
     }
 
+    function acceptCustomImageSelection(line) {
+        if (!open)
+            return;
+        const value = String(line || "").trim();
+        if (!value.startsWith("/") || value.indexOf("://") >= 0) {
+            statusMessage = "Awtwall returned an invalid local image";
+            return;
+        }
+        addCustomImage(value);
+    }
+
     function scheduleContrastRefresh() {
         if (!open || pickerSuspended)
             return;
@@ -674,6 +724,72 @@ Singleton {
         }
     }
 
+    function cloneCustomImages(value) {
+        if (!Array.isArray(value))
+            return [];
+        const result = [];
+        const ids = ({});
+        for (let i = 0; i < value.length && result.length < customImageMaximum; ++i) {
+            const raw = value[i];
+            if (!raw || typeof raw !== "object" || Array.isArray(raw))
+                continue;
+            const id = String(raw.id || "");
+            const imagePath = String(raw.path || "");
+            if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
+                    || !imagePath.startsWith("/") || imagePath.indexOf("://") >= 0)
+                continue;
+            const x = Number(raw.x);
+            const y = Number(raw.y);
+            const scale = Number(raw.scale);
+            const stretchX = Number(raw.stretch_x);
+            const stretchY = Number(raw.stretch_y);
+            const opacity = Number(raw.opacity);
+            ids[id] = true;
+            result.push(({
+                id: id,
+                path: imagePath,
+                x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : 0.5)),
+                y: Math.max(0.08, Math.min(0.92, Number.isFinite(y) ? y : 0.5)),
+                scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : 1)),
+                stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
+                stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
+                opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                visible: typeof raw.visible === "boolean" ? raw.visible : true
+            }));
+        }
+        return result;
+    }
+
+    function customImageIndex(name) {
+        const key = String(name || "");
+        for (let i = 0; i < draftCustomImages.length; ++i) {
+            if (String(draftCustomImages[i].id || "") === key)
+                return i;
+        }
+        return -1;
+    }
+
+    function isCustomImage(name) {
+        return customImageIndex(name) >= 0;
+    }
+
+    function editableElementNames() {
+        const names = elementNames.slice();
+        for (const image of draftCustomImages)
+            names.push(String(image.id));
+        return names;
+    }
+
+    function elementExists(name) {
+        return elementNames.indexOf(name) >= 0 || isCustomImage(name);
+    }
+
+    function elementPoint(name) {
+        if (isCustomImage(name))
+            return draftCustomImages[customImageIndex(name)];
+        return draftLayout[name] || defaultLayout()[name] || null;
+    }
+
     function cloneLayout(value) {
         const cloned = cloneObject(value, defaultLayout);
         const defaults = defaultLayout();
@@ -684,6 +800,9 @@ Singleton {
             const x = Number(raw.x);
             const y = Number(raw.y);
             const scale = Number(raw.scale === undefined ? 1 : raw.scale);
+            const stretchX = Number(raw.stretch_x === undefined ? 1 : raw.stretch_x);
+            const stretchY = Number(raw.stretch_y === undefined ? 1 : raw.stretch_y);
+            const opacity = Number(raw.opacity === undefined ? 100 : raw.opacity);
             const rawColor = String(raw.color === undefined ? "auto" : raw.color);
             const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)
                 ? rawColor.toLowerCase() : "auto";
@@ -694,8 +813,10 @@ Singleton {
                 y: Math.max(password ? 0.20 : 0.08,
                     Math.min(password ? 0.86 : 0.92,
                         Number.isFinite(y) ? y : defaults[name].y)),
-                scale: Math.max(0.50, Math.min(2.00,
-                    Number.isFinite(scale) ? scale : 1)),
+                scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : 1)),
+                stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
+                stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
+                opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 color: color
             });
         }
@@ -721,19 +842,24 @@ Singleton {
     }
 
     function writeDraftPoint(name, x, y, selectPrimary) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
         if (selectPrimary)
             recordUndoBeforeChange();
-        const next = cloneLayout(draftLayout);
         const point = clampPoint(name, Number(x), Number(y));
-        next[name] = ({
-            x: point.x,
-            y: point.y,
-            scale: next[name].scale,
-            color: next[name].color
-        });
-        draftLayout = next;
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = next.findIndex(image => image.id === name);
+            if (index < 0) return;
+            next[index].x = point.x;
+            next[index].y = point.y;
+            draftCustomImages = next;
+        } else {
+            const next = cloneLayout(draftLayout);
+            next[name].x = point.x;
+            next[name].y = point.y;
+            draftLayout = next;
+        }
         if (selectPrimary)
             selectElement(name, false);
         scheduleContrastRefresh();
@@ -766,7 +892,7 @@ Singleton {
     }
 
     function beginEditorHold(name) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
         heldReleaseClear.stop();
         heldSettle.stop();
@@ -784,14 +910,35 @@ Singleton {
     }
 
     function elementScale(name) {
-        const point = draftLayout[name] || defaultLayout()[name];
-        const value = Number(point.scale === undefined ? 1 : point.scale);
+        const point = elementPoint(name);
+        const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
         return Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
     }
 
+    function elementStretchX(name) {
+        const point = elementPoint(name);
+        const value = point ? Number(point.stretch_x === undefined ? 1 : point.stretch_x) : 1;
+        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;
+    }
+
+    function elementStretchY(name) {
+        const point = elementPoint(name);
+        const value = point ? Number(point.stretch_y === undefined ? 1 : point.stretch_y) : 1;
+        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;
+    }
+
+    function elementOpacity(name) {
+        const point = elementPoint(name);
+        const minimum = name === "password" ? 20 : 0;
+        const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100;
+        return Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100;
+    }
+
     function elementColor(name) {
-        const point = draftLayout[name] || defaultLayout()[name];
-        const value = String(point.color === undefined ? "auto" : point.color);
+        if (isCustomImage(name))
+            return "auto";
+        const point = elementPoint(name);
+        const value = point ? String(point.color === undefined ? "auto" : point.color) : "auto";
         return value === "auto" || /^#[0-9a-fA-F]{6}$/.test(value)
             ? value.toLowerCase() : "auto";
     }
@@ -813,39 +960,148 @@ Singleton {
     }
 
     function setDraftScale(name, scale) {
-        if (elementNames.indexOf(name) < 0)
+        if (!elementExists(name))
             return;
-        recordUndoBeforeChange();
-        const next = cloneLayout(draftLayout);
         const value = Number(scale);
         if (!Number.isFinite(value))
             return;
-        next[name].scale = Math.round(Math.max(0.50, Math.min(2.00, value)) * 100) / 100;
-        draftLayout = next;
+        recordUndoBeforeChange();
+        setDraftScaleSilently(name, Math.round(Math.max(0.50, Math.min(2.00, value)) * 100) / 100);
+        selectElement(name, false);
+    }
+
+    function setDraftOpacity(name, opacity) {
+        if (!elementExists(name))
+            return;
+        const numeric = Number(opacity);
+        if (!Number.isFinite(numeric))
+            return;
+        const minimum = name === "password" ? 20 : 0;
+        const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
+        recordUndoBeforeChange();
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = next.findIndex(image => image.id === name);
+            if (index < 0) return;
+            next[index].opacity = value;
+            draftCustomImages = next;
+        } else {
+            const next = cloneLayout(draftLayout);
+            next[name].opacity = value;
+            draftLayout = next;
+        }
+        selectElement(name, false);
+    }
+
+    function setDraftStretch(name, stretchX, stretchY) {
+        if (!elementExists(name))
+            return;
+        const rawX = Number(stretchX);
+        const rawY = Number(stretchY);
+        if (!Number.isFinite(rawX) || !Number.isFinite(rawY))
+            return;
+        const x = Math.round(Math.max(0.25, Math.min(4.00, rawX)) * 100) / 100;
+        const y = Math.round(Math.max(0.25, Math.min(4.00, rawY)) * 100) / 100;
+        recordUndoBeforeChange();
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = next.findIndex(image => image.id === name);
+            if (index < 0) return;
+            next[index].stretch_x = x;
+            next[index].stretch_y = y;
+            draftCustomImages = next;
+        } else {
+            const next = cloneLayout(draftLayout);
+            next[name].stretch_x = x;
+            next[name].stretch_y = y;
+            draftLayout = next;
+        }
         selectElement(name, false);
     }
 
     function elementCanHide(name) {
-        return name !== "password";
+        return name !== "password" && elementExists(name);
     }
 
     function setDraftVisible(name, visible) {
-        if (elementNames.indexOf(name) < 0 || !elementCanHide(name))
+        if (!elementCanHide(name))
             return;
         recordUndoBeforeChange();
-        const next = cloneVisibility(draftVisibility);
-        next[name] = !!visible;
-        draftVisibility = next;
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages);
+            const index = next.findIndex(image => image.id === name);
+            if (index < 0) return;
+            next[index].visible = !!visible;
+            draftCustomImages = next;
+        } else {
+            const next = cloneVisibility(draftVisibility);
+            next[name] = !!visible;
+            draftVisibility = next;
+        }
         selectElement(name, false);
     }
 
     function elementEnabled(name) {
+        if (isCustomImage(name)) {
+            const point = elementPoint(name);
+            return point ? point.visible !== false : false;
+        }
         return draftVisibility[name] !== false;
+    }
+
+    function nextCustomImageId() {
+        const prefix = "image-" + Date.now().toString(36);
+        let suffix = 0;
+        let candidate = prefix;
+        while (customImageIndex(candidate) >= 0) {
+            suffix += 1;
+            candidate = prefix + "_" + suffix;
+        }
+        return candidate;
+    }
+
+    function addCustomImage(imagePath) {
+        const value = String(imagePath || "").trim();
+        if (!value.startsWith("/") || value.indexOf("://") >= 0) {
+            statusMessage = "Custom image must be a local absolute path";
+            return;
+        }
+        if (draftCustomImages.length >= customImageMaximum) {
+            statusMessage = "Custom image limit reached (" + customImageMaximum + ")";
+            return;
+        }
+        recordUndoBeforeChange();
+        const next = cloneCustomImages(draftCustomImages);
+        const id = nextCustomImageId();
+        next.push(({
+            id: id, path: value, x: 0.5, y: 0.5, scale: 1.0,
+            stretch_x: 1.0, stretch_y: 1.0, opacity: 100, visible: true
+        }));
+        draftCustomImages = next;
+        selectedElement = id;
+        selectedElements = [id];
+        activeDrawer = "element";
+        statusMessage = "Image added. Save to apply.";
+    }
+
+    function removeCustomImage(name) {
+        const index = customImageIndex(name);
+        if (index < 0)
+            return;
+        recordUndoBeforeChange();
+        const next = cloneCustomImages(draftCustomImages);
+        next.splice(index, 1);
+        draftCustomImages = next;
+        selectedElement = "logo";
+        selectedElements = ["logo"];
+        clearGuides();
+        statusMessage = "Image removed. Save to apply.";
     }
 
     function resetDraft() {
         recordUndoBeforeChange();
         draftLayout = defaultLayout();
+        draftCustomImages = [];
         draftVisibility = defaultVisibility();
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
@@ -869,6 +1125,7 @@ Singleton {
 
     function loadPersistedDraft() {
         draftLayout = cloneLayout(BarState.lockscreenLayout());
+        draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages());
         draftVisibility = cloneVisibility(({
             logo: BarState.lockscreenShowLogo(),
             time: BarState.lockscreenShowTime(),
@@ -888,7 +1145,7 @@ Singleton {
         draftWallpaperBlur = BarState.lockscreenWallpaperBlur();
         draftWeatherUnits = BarState.lockscreenWeatherUnits();
         draftAutoAccents = defaultAutoAccents();
-        selectedElement = elementNames.indexOf(selectedElement) >= 0 ? selectedElement : "logo";
+        selectedElement = elementExists(selectedElement) ? selectedElement : "logo";
         selectedElements = [selectedElement];
         clearGuides();
         elementPaletteOpen = false;
@@ -940,7 +1197,7 @@ Singleton {
     }
 
     function suspendForWallpaperPicker() {
-        if (!open || pickerSuspended || wallpaperPickerProcess.running)
+        if (!open || pickerSuspended || wallpaperPickerProcess.running || customImagePickerProcess.running)
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
@@ -950,6 +1207,23 @@ Singleton {
         FlyoutManager.releaseOverlay("lockscreen-editor");
         editorWindow.visible = false;
         wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]);
+    }
+
+    function suspendForCustomImagePicker() {
+        if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running)
+            return;
+        if (draftCustomImages.length >= customImageMaximum) {
+            statusMessage = "Custom image limit reached (" + customImageMaximum + ")";
+            return;
+        }
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        inertiaOwner = "";
+        pickerSuspended = true;
+        statusMessage = "Opening custom image picker…";
+        FlyoutManager.releaseOverlay("lockscreen-editor");
+        editorWindow.visible = false;
+        customImagePickerProcess.exec(["bash", wallpaperPickerBackend]);
     }
 
     function resumeAfterWallpaperPicker() {
@@ -1001,7 +1275,8 @@ Singleton {
             draftOverlayMode,
             String(draftOverlayStrength),
             String(draftWallpaperBlur),
-            draftWeatherUnits
+            draftWeatherUnits,
+            JSON.stringify(draftCustomImages)
         ]);
     }
 
@@ -1012,6 +1287,7 @@ Singleton {
         if (name === "username") return "Username";
         if (name === "weather") return "Weather";
         if (name === "password") return "Password";
+        if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1);
         return name;
     }
 
@@ -1106,6 +1382,21 @@ Singleton {
             else if (root.open
                     && root.statusMessage === "Opening lockscreen wallpaper picker…")
                 root.statusMessage = "No wallpaper selected.";
+            root.resumeAfterWallpaperPicker();
+        }
+    }
+
+    Process {
+        id: customImagePickerProcess
+        stdout: SplitParser {
+            onRead: line => root.acceptCustomImageSelection(line)
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (root.open && exitCode !== 0)
+                root.statusMessage = "Custom image picker closed without a selection";
+            else if (root.open
+                    && root.statusMessage === "Opening custom image picker…")
+                root.statusMessage = "No image selected.";
             root.resumeAfterWallpaperPicker();
         }
     }
@@ -1209,6 +1500,7 @@ Singleton {
                 wallpaperBlur: root.draftWallpaperBlur
                 autoAccents: root.draftAutoAccents
                 layout: root.draftLayout
+                customImages: root.draftCustomImages
                 previewMode: true
                 editorMode: true
                 editorVisibility: root.draftVisibility
@@ -1327,14 +1619,13 @@ Singleton {
             }
 
             Repeater {
-                model: root.elementNames
+                model: root.editableElementNames()
 
                 Rectangle {
                     required property string modelData
                     readonly property string elementName: modelData
                     readonly property bool enabledElement: root.elementEnabled(elementName)
-                    readonly property var point: root.draftLayout[elementName]
-                        || root.defaultLayout()[elementName]
+                    readonly property var point: root.elementPoint(elementName)
                     width: Math.max(30, previewScene.elementVisualWidth(elementName) + 14)
                     height: Math.max(26, previewScene.elementVisualHeight(elementName) + 12)
                     x: Math.max(0, Math.min(parent.width - width,
@@ -1377,8 +1668,7 @@ Singleton {
                             root.beginHistoryTransaction();
                             pressOffsetX = mouse.x;
                             pressOffsetY = mouse.y;
-                            const point = root.draftLayout[parent.elementName]
-                                || root.defaultLayout()[parent.elementName];
+                            const point = root.elementPoint(parent.elementName);
                             parent.lastSampleX = Number(point.x);
                             parent.lastSampleY = Number(point.y);
                             parent.lastSampleTime = Date.now();
@@ -1397,13 +1687,11 @@ Singleton {
                                 scenePoint.x / editorFocus.width,
                                 scenePoint.y / editorFocus.height,
                                 bypassSnap);
-                            const current = root.draftLayout[parent.elementName]
-                                || root.defaultLayout()[parent.elementName];
+                            const current = root.elementPoint(parent.elementName);
                             root.translateSelectedElements(
                                 snapped.x - Number(current.x),
                                 snapped.y - Number(current.y), true);
-                            const moved = root.draftLayout[parent.elementName]
-                                || root.defaultLayout()[parent.elementName];
+                            const moved = root.elementPoint(parent.elementName);
                             const now = Date.now();
                             if (parent.lastSampleTime > 0 && now > parent.lastSampleTime) {
                                 const dt = Math.max(8, now - parent.lastSampleTime) / 1000;
@@ -1505,8 +1793,7 @@ Singleton {
                             }
                         }
                         onTriggered: {
-                            const point = root.draftLayout[parent.elementName]
-                                || root.defaultLayout()[parent.elementName];
+                            const point = root.elementPoint(parent.elementName);
                             const dt = interval / 1000;
                             if (root.selectedElements.length <= 1) {
                                 const proposedX = Number(point.x) + parent.flickVelocityX * dt;
@@ -1656,6 +1943,7 @@ Singleton {
 
                         SettingsButton {
                             id: selectedElementColorButton
+                            visible: !root.isCustomImage(root.selectedElement)
                             label: root.elementColor(root.selectedElement) === "auto"
                                 ? "Color: Auto" : "Color: " + root.elementColor(root.selectedElement)
                             textSize: 9
@@ -1700,6 +1988,70 @@ Singleton {
                         Layout.fillWidth: true
                         spacing: 7
                         visible: root.activeDrawer === "element"
+
+                        SettingsButton {
+                            label: "Add Image"
+                            textSize: 9
+                            available: root.draftCustomImages.length < root.customImageMaximum
+                                && !customImagePickerProcess.running
+                            onClicked: root.suspendForCustomImagePicker()
+                        }
+                        SettingsButton {
+                            label: "Remove Image"
+                            textSize: 9
+                            visible: root.isCustomImage(root.selectedElement)
+                            available: visible
+                            onClicked: root.removeCustomImage(root.selectedElement)
+                        }
+
+                        Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton {
+                            label: "−"
+                            textSize: 9
+                            available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0)
+                            onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5)
+                        }
+                        Text {
+                            text: Math.round(root.elementOpacity(root.selectedElement)) + "%"
+                            color: Theme.foreground
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            Layout.preferredWidth: 38
+                            horizontalAlignment: Text.AlignHCenter
+                        }
+                        SettingsButton {
+                            label: "+"
+                            textSize: 9
+                            available: root.elementOpacity(root.selectedElement) < 100
+                            onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) + 5)
+                        }
+
+                        Text { text: "Stretch X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.elementStretchX(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) - 0.10, root.elementStretchY(root.selectedElement)) }
+                        Text { text: Math.round(root.elementStretchX(root.selectedElement) * 100) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.elementStretchX(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) + 0.10, root.elementStretchY(root.selectedElement)) }
+
+                        Text { text: "Stretch Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.elementStretchY(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) - 0.10) }
+                        Text { text: Math.round(root.elementStretchY(root.selectedElement) * 100) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
+
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: root.isCustomImage(root.selectedElement)
+                                ? "Custom images are local presentation-only elements."
+                                : "Drag the corner handle for direct uniform scaling."
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+                        visible: root.activeDrawer === "element" && !root.isCustomImage(root.selectedElement)
 
                         SettingsButton {
                             label: "Reset Position"
@@ -1868,6 +2220,7 @@ Singleton {
                         InlineColorPicker {
                             id: elementColorPicker
                             visible: root.activeDrawer === "element" && root.elementPaletteOpen
+                                && !root.isCustomImage(root.selectedElement)
                             Layout.preferredWidth: 320
                             Layout.preferredHeight: visible ? 142 : 0
                             colorValue: root.elementColor(root.selectedElement) === "auto"
