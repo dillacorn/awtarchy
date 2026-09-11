@@ -203,7 +203,9 @@ require_text "$SURFACE" 'required property int backgroundOpacity' \
     'secure surface has no background-opacity input'
 require_text "$SURFACE" 'TextInput {' \
     'secure password TextInput is missing'
-require_text "$SURFACE" 'auth.submit(root.passwordText)' \
+require_text "$SURFACE" 'const response = password.text;' \
+    'secure password submission no longer copies the in-memory TextInput response'
+          require_text "$SURFACE" 'if (auth.submit(response))' \
     'secure password submission path changed'
 reject_text "$LOCK_AUTH" 'visualizer' \
     'visualizer state leaked into PAM/authentication owner'

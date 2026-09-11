@@ -61,8 +61,10 @@ require_text "$SHELL_QML" 'sessionLock.locked = false' \
 # unlocked editor through LockScene.
 require_text "$SURFACE_QML" 'WlSessionLockSurface {' \
     'lock surface is not a real WlSessionLockSurface'
-require_text "$SURFACE_QML" 'color: "#000000"' \
-    'lock surface does not use an opaque black compositor-surface base'
+require_text "$SURFACE_QML" 'required property int backgroundOpacity' \
+    'lock surface has no presentation-only background opacity input'
+require_text "$SCENE_QML" 'id: backgroundLayer' \
+    'shared scene does not isolate background alpha from secure presentation'
 require_text "$SURFACE_QML" 'LockScene {' \
     'secure lock surface does not embed the shared presentation scene'
 reject_text "$SCENE_QML" 'WlSessionLock' \

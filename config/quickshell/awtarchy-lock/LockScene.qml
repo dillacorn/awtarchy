@@ -29,6 +29,9 @@ Item {
     required property var autoAccents
     required property var layout
     required property var customImages
+    required property var visualizer
+    required property var audioBands
+    required property int backgroundOpacity
 
     property bool previewMode: false
     property bool editorMode: false
@@ -149,6 +152,9 @@ Item {
     }
 
     function presentationPoint(name) {
+        if (name === "visualizer" && root.visualizer
+                && typeof root.visualizer === "object" && !Array.isArray(root.visualizer))
+            return root.visualizer;
         return normalizedPoint(name) || customImageForName(name);
     }
 
@@ -195,13 +201,85 @@ Item {
     }
 
     function elementColor(name) {
-        const point = normalizedPoint(name);
+        const point = presentationPoint(name);
         const value = String(point && point.color !== undefined ? point.color : "auto");
         const automatic = String(root.autoAccents && root.autoAccents[name] !== undefined
             ? root.autoAccents[name] : "#ffffff");
         const safeAuto = /^#[0-9a-fA-F]{6}$/.test(automatic) ? automatic : "#ffffff";
         return value === "auto" ? safeAuto
             : /^#[0-9a-fA-F]{6}$/.test(value) ? value : safeAuto;
+    }
+
+    function visualizerNumber(name, fallback, minimum, maximum) {
+        const value = root.visualizer && typeof root.visualizer === "object"
+            ? Number(root.visualizer[name]) : Number.NaN;
+        return Number.isFinite(value)
+            ? Math.max(minimum, Math.min(maximum, value)) : fallback;
+    }
+
+    function visualizerBandCount() {
+        return Math.max(4, Math.min(64,
+            Math.round(visualizerNumber("bands", 16, 4, 64))));
+    }
+
+    function visualizerGapPx() {
+        return visualizerNumber("gap", 4, 0, 24) * 0.60 * root.uiScale;
+    }
+
+    function visualizerResponseHeight() {
+        return 180 * root.uiScale
+            * visualizerNumber("height", 100, 25, 300) / 100;
+    }
+
+    function visualizerShape() {
+        const value = String(root.visualizer && root.visualizer.shape !== undefined
+            ? root.visualizer.shape : "straight");
+        return ["straight", "arc", "circle"].indexOf(value) >= 0
+            ? value : "straight";
+    }
+
+    function visualizerBend() {
+        return Math.round(visualizerNumber("bend", 45, -100, 100));
+    }
+
+    function visualizerBands() {
+        const count = Math.min(64, root.visualizerBandCount());
+        const source = Array.isArray(root.audioBands) ? root.audioBands : [];
+        const result = [];
+        const sensitivity = visualizerNumber("sensitivity", 100, 25, 300) / 100;
+        for (let i = 0; i < count; ++i) {
+            if (source.length === 0) {
+                result.push(0);
+                continue;
+            }
+            const start = Math.floor(i * source.length / count);
+            const end = Math.max(start + 1,
+                Math.floor((i + 1) * source.length / count));
+            let total = 0;
+            let used = 0;
+            for (let j = start; j < Math.min(source.length, end); ++j) {
+                const value = Number(source[j]);
+                if (!Number.isFinite(value))
+                    continue;
+                total += Math.max(0, Math.min(1, value));
+                used++;
+            }
+            const average = used > 0 ? total / used : 0;
+            result.push(Math.max(0, Math.min(1, average * sensitivity)));
+        }
+        return result;
+    }
+
+    function visualizerBaseWidth() {
+        if (visualizerShape() === "circle")
+            return 380 * root.uiScale;
+        return 520 * root.uiScale;
+    }
+
+    function visualizerBaseHeight() {
+        if (visualizerShape() === "circle")
+            return 380 * root.uiScale;
+        return Math.max(120 * root.uiScale, visualizerResponseHeight() * 1.5);
     }
 
     function presentationVisible(name, configuredVisible) {
@@ -213,6 +291,8 @@ Item {
     }
 
     function elementVisualWidth(name) {
+        if (name === "visualizer")
+            return visualizerBaseWidth() * root.elementScale(name) * root.elementStretchX(name);
         if (customImageForName(name))
             return 180 * root.uiScale * root.elementScale(name) * root.elementStretchX(name);
         if (name === "logo") return root.wordmarkWidth * root.elementScale("logo") * root.elementStretchX("logo");
@@ -225,6 +305,8 @@ Item {
     }
 
     function elementVisualHeight(name) {
+        if (name === "visualizer")
+            return visualizerBaseHeight() * root.elementScale(name) * root.elementStretchY(name);
         if (customImageForName(name))
             return 180 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);
         if (name === "logo") return root.wordmarkHeight * root.elementScale("logo") * root.elementStretchY("logo");
@@ -515,44 +597,50 @@ Item {
         lastPointerY = y;
         lastPointerSampleTime = now;
     }
-    Rectangle {
+    Item {
+        id: backgroundLayer
         anchors.fill: parent
-        color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
-    }
+        opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100
 
-    Image {
-        id: wallpaperImage
-        readonly property var geometry: root.wallpaperGeometry()
-        x: geometry.x
-        y: geometry.y
-        width: geometry.width
-        height: geometry.height
-        visible: false
-        source: root.wallpaperSource
-        fillMode: Image.Stretch
-        asynchronous: true
-        cache: true
-    }
+        Rectangle {
+            anchors.fill: parent
+            color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
+        }
 
-    MultiEffect {
-        x: wallpaperImage.x
-        y: wallpaperImage.y
-        width: wallpaperImage.width
-        height: wallpaperImage.height
-        visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
-        source: wallpaperImage
-        autoPaddingEnabled: false
-        blurEnabled: root.wallpaperBlur > 0
-        blurMax: 32
-        blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
-    }
+        Image {
+            id: wallpaperImage
+            readonly property var geometry: root.wallpaperGeometry()
+            x: geometry.x
+            y: geometry.y
+            width: geometry.width
+            height: geometry.height
+            visible: false
+            source: root.wallpaperSource
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: true
+        }
 
-    Rectangle {
-        id: backgroundOverlay
-        anchors.fill: parent
-        visible: root.overlayMode !== "none" && root.overlayStrength > 0
-        color: root.overlayMode === "light" ? "#ffffff" : "#000000"
-        opacity: Math.max(0, Math.min(100, root.overlayStrength)) / 100
+        MultiEffect {
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+            source: wallpaperImage
+            autoPaddingEnabled: false
+            blurEnabled: root.wallpaperBlur > 0
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+        }
+
+        Rectangle {
+            id: backgroundOverlay
+            anchors.fill: parent
+            visible: root.overlayMode !== "none" && root.overlayStrength > 0
+            color: root.overlayMode === "light" ? "#ffffff" : "#000000"
+            opacity: Math.max(0, Math.min(100, root.overlayStrength)) / 100
+        }
     }
 
     Item {
@@ -596,6 +684,80 @@ Item {
                 opacity: root.elementOpacity(elementName)
                     * (modelData.visible !== false ? 1.0 : root.editorMode ? 0.30 : 0.0)
                 z: 4
+            }
+        }
+
+        Item {
+            id: visualizerItem
+            readonly property bool configuredEnabled: root.visualizer
+                && root.visualizer.enabled === true
+            readonly property int bandCount: Math.min(64, root.visualizerBandCount())
+            readonly property var displayBands: root.visualizerBands()
+            readonly property real gapPx: root.visualizerGapPx()
+            readonly property string shapeMode: root.visualizerShape()
+            readonly property real responseHeight: root.visualizerResponseHeight()
+            readonly property real bendAmount: root.visualizerBend()
+
+            visible: configuredEnabled || root.editorMode
+            opacity: root.elementOpacity("visualizer")
+                * (configuredEnabled ? 1.0 : root.editorMode ? 0.30 : 0.0)
+            width: root.visualizerBaseWidth()
+            height: root.visualizerBaseHeight()
+            x: root.normalizedX("visualizer", 0.50) * parent.width - width / 2
+            y: root.normalizedY("visualizer", 0.80) * parent.height - height / 2
+            scale: root.elementScale("visualizer")
+            transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: visualizerItem.width / 2
+                origin.y: visualizerItem.height / 2
+                xScale: root.elementStretchX("visualizer")
+                yScale: root.elementStretchY("visualizer")
+            }
+            z: 8
+
+            Repeater {
+                model: visualizerItem.bandCount
+
+                Rectangle {
+                    readonly property real amplitude: index < visualizerItem.displayBands.length
+                        ? Number(visualizerItem.displayBands[index]) : 0
+                    readonly property real safeAmplitude: Number.isFinite(amplitude)
+                        ? Math.max(0, Math.min(1, amplitude)) : 0
+                    readonly property real availableWidth: Math.max(1,
+                        visualizerItem.width - visualizerItem.gapPx
+                            * Math.max(0, visualizerItem.bandCount - 1))
+                    readonly property real thickness: Math.max(1,
+                        availableWidth / Math.max(1, visualizerItem.bandCount))
+                    readonly property real barLength: Math.max(2 * root.uiScale,
+                        safeAmplitude * visualizerItem.responseHeight)
+                    readonly property real unitPosition: visualizerItem.bandCount <= 1 ? 0
+                        : index / (visualizerItem.bandCount - 1)
+                    readonly property real signedPosition: unitPosition * 2 - 1
+                    readonly property real arcOffset: visualizerItem.shapeMode === "arc"
+                        ? (1 - signedPosition * signedPosition)
+                            * visualizerItem.bendAmount * 0.42 * root.uiScale : 0
+                    readonly property real angleRadians: -Math.PI / 2
+                        + index * Math.PI * 2 / Math.max(1, visualizerItem.bandCount)
+                    readonly property real circleRadius: Math.min(
+                        visualizerItem.width, visualizerItem.height) * 0.29
+
+                    width: thickness
+                    height: barLength
+                    radius: Math.min(width / 2, 2 * root.uiScale)
+                    color: root.elementColor("visualizer")
+                    antialiasing: true
+                    x: visualizerItem.shapeMode === "circle"
+                        ? visualizerItem.width / 2 + Math.cos(angleRadians) * circleRadius - width / 2
+                        : index * (thickness + visualizerItem.gapPx)
+                    y: visualizerItem.shapeMode === "circle"
+                        ? visualizerItem.height / 2 + Math.sin(angleRadians) * circleRadius - height / 2
+                        : visualizerItem.height - height - arcOffset
+                    rotation: visualizerItem.shapeMode === "circle"
+                        ? angleRadians * 180 / Math.PI + 90
+                        : visualizerItem.shapeMode === "arc"
+                            ? -signedPosition * visualizerItem.bendAmount * 0.22 : 0
+                    transformOrigin: Item.Center
+                }
             }
         }
 

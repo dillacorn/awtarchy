@@ -63,8 +63,10 @@ require_text "$SHELL_QML" 'property bool lockMouseInteractive: true' \
     'secure lock shell has no mouse-interaction preference'
 require_text "$SHELL_QML" 'lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);' \
     'secure lock shell does not load the persisted logo physics rate'
-reject_text "$SHELL_QML" 'LockAudioAnalyzer {' \
-    'secure lock still starts an analyzer solely to move the AWTARCHY logo'
+require_text "$SHELL_QML" 'LockAudioAnalyzer {' \
+    'secure lock has no shared analyzer for the standalone visualizer'
+require_text "$SHELL_QML" 'enabled: root.lockVisualizer.enabled' \
+    'standalone visualizer does not gate secure analyzer lifecycle'
 require_text "$SHELL_QML" 'LockWeatherCache {' \
     'secure lock shell lost its cache-only weather reader'
 require_text "$SHELL_QML" 'logoPhysicsHz: root.lockLogoPhysicsHz' \

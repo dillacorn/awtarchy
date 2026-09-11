@@ -29,8 +29,11 @@ WlSessionLockSurface {
     required property var autoAccents
     required property var layout
     required property var customImages
+    required property var visualizer
+    required property var audioBands
+    required property int backgroundOpacity
 
-    color: "#000000"
+    color: "transparent"
 
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
@@ -84,6 +87,9 @@ WlSessionLockSurface {
         autoAccents: root.autoAccents
         layout: root.layout
         customImages: root.customImages
+        visualizer: root.visualizer
+        audioBands: root.audioBands
+        backgroundOpacity: root.backgroundOpacity
         previewMode: false
     }
 

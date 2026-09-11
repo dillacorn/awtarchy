@@ -39,10 +39,89 @@ ShellRoot {
     readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)
     property var lockLayout: defaultLockLayout()
     property var lockCustomImages: []
+    property var lockVisualizer: defaultLockVisualizer()
+    property int lockBackgroundOpacity: 100
     property int randomFormationMode: Math.floor(Math.random() * 4)
     readonly property var allowedAnimationPreferences: [
         "random", "swarm", "edges", "center", "split", "off"
     ]
+
+    function defaultLockVisualizer() {
+        return ({
+            enabled: false,
+            x: 0.50,
+            y: 0.80,
+            scale: 1.0,
+            stretch_x: 1.0,
+            stretch_y: 1.0,
+            opacity: 100,
+            color: "auto",
+            bands: 16,
+            gap: 4,
+            height: 100,
+            sensitivity: 100,
+            shape: "straight",
+            bend: 45
+        });
+    }
+
+    function normalizedVisualizer(value) {
+        const defaults = defaultLockVisualizer();
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            return defaults;
+        const enabled = typeof value.enabled === "boolean" ? value.enabled : defaults.enabled;
+        const x = Number(value.x === undefined ? defaults.x : value.x);
+        const y = Number(value.y === undefined ? defaults.y : value.y);
+        const scale = Number(value.scale === undefined ? defaults.scale : value.scale);
+        const stretchX = Number(value.stretch_x === undefined ? defaults.stretch_x : value.stretch_x);
+        const stretchY = Number(value.stretch_y === undefined ? defaults.stretch_y : value.stretch_y);
+        const opacity = Number(value.opacity === undefined ? defaults.opacity : value.opacity);
+        const color = String(value.color === undefined ? defaults.color : value.color).toLowerCase();
+        const bands = Number(value.bands === undefined ? defaults.bands : value.bands);
+        const gap = Number(value.gap === undefined ? defaults.gap : value.gap);
+        const responseHeight = Number(value.height === undefined ? defaults.height : value.height);
+        const sensitivity = Number(value.sensitivity === undefined ? defaults.sensitivity : value.sensitivity);
+        const shape = String(value.shape === undefined ? defaults.shape : value.shape);
+        const bend = Number(value.bend === undefined ? defaults.bend : value.bend);
+        if (!Number.isFinite(x) || x < 0.05 || x > 0.95
+                || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
+                || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
+                || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
+                || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color))
+                || !Number.isInteger(bands) || bands < 4 || bands > 64
+                || !Number.isInteger(gap) || gap < 0 || gap > 24
+                || !Number.isInteger(responseHeight) || responseHeight < 25 || responseHeight > 300
+                || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
+                || ["straight", "arc", "circle"].indexOf(shape) < 0
+                || !Number.isInteger(bend) || bend < -100 || bend > 100)
+            return defaults;
+        return ({
+            enabled: enabled,
+            x: x,
+            y: y,
+            scale: scale,
+            stretch_x: stretchX,
+            stretch_y: stretchY,
+            opacity: opacity,
+            color: color,
+            bands: bands,
+            gap: gap,
+            height: responseHeight,
+            sensitivity: sensitivity,
+            shape: shape,
+            bend: bend
+        });
+    }
+
+    function normalizedBackgroundOpacity(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric) || !Number.isInteger(numeric)
+                || numeric < 0 || numeric > 100)
+            return 100;
+        return numeric;
+    }
 
     function defaultLockLayout() {
         return ({
@@ -217,6 +296,8 @@ ShellRoot {
         lockWeatherLocation = "";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
+        lockVisualizer = defaultLockVisualizer();
+        lockBackgroundOpacity = 100;
     }
 
     function loadPreferences() {
@@ -253,6 +334,8 @@ ShellRoot {
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
+            lockVisualizer = normalizedVisualizer(parsed.lockscreen_visualizer);
+            lockBackgroundOpacity = normalizedBackgroundOpacity(parsed.lockscreen_background_opacity);
         } catch (error) {
             resetPreferences();
         }
@@ -301,6 +384,11 @@ ShellRoot {
         id: lockContrastCache
     }
 
+    LockAudioAnalyzer {
+        id: lockAudioAnalyzer
+        enabled: root.lockVisualizer.enabled
+    }
+
     WlSessionLock {
         id: sessionLock
         locked: true
@@ -332,6 +420,9 @@ ShellRoot {
                 autoAccents: lockContrastCache.colors
                 layout: root.lockLayout
                 customImages: root.lockCustomImages
+                visualizer: root.lockVisualizer
+                audioBands: lockAudioAnalyzer.bands
+                backgroundOpacity: root.lockBackgroundOpacity
             }
         }
 
