@@ -1,0 +1,67 @@
+name: Lockscreen Pass 1 Test Maintenance
+
+on:
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  repair-test:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+
+      - name: Replace stale Audio Reactive editor assertion
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test-quickshell-lockscreen-live-editor.sh')
+          text = path.read_text(encoding='utf-8')
+          old = '''require_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \\
+              'global Audio Reactive control unexpectedly left Quick Settings'
+          '''
+          new = '''require_text "$QUICK_SETTINGS" 'text: "Logo Physics"' \\
+              'global Logo Physics control unexpectedly left Quick Settings'
+          reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \\
+              'retired Audio Reactive logo control returned to Quick Settings'
+          '''
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'expected exactly one stale Audio Reactive assertion, found {count}')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Validate maintained regression
+        shell: bash
+        run: |
+          bash -n tests/test-quickshell-lockscreen-live-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-animation-preference.sh
+          bash tests/test-quickshell-lockscreen-foundation.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git diff --check
+          git diff --exit-code origin/main -- config/quickshell/awtarchy-lock/LockAuth.qml
+
+      - name: Remove maintenance workflow and commit
+        shell: bash
+        run: |
+          git rm .github/workflows/lockscreen-pass1-test-maintenance.yml
+          git config user.name dillacorn
+          git config user.email 28743863+dillacorn@users.noreply.github.com
+          git add tests/test-quickshell-lockscreen-live-editor.sh
+          git diff --check
+          git commit -m 'Update lockscreen Pass 1 editor regression'
+          git push origin HEAD:feature/lockscreen-interactive-effects
