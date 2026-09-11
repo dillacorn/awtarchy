@@ -1,0 +1,82 @@
+name: Lockscreen Pass 2 Contract Fix
+
+on:
+  push:
+    branches: [feature/lockscreen-interactive-effects]
+    paths:
+      - '.github/workflows/lockscreen-pass2-contract-fix.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.repository == 'dillacorn/awtarchy'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Update Pass 2 contracts
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          runtime = Path('tests/test-quickshell-lockscreen-runtime-regressions.sh')
+          text = runtime.read_text()
+          old = '''require_text "$SURFACE_QML" 'opacity: root.unlocking ? 0 : root.entered ? 1 : 0' \\
+              'secure password content does not fade for lock and unlock transitions'
+          '''
+          new = '''require_text "$SURFACE_QML" 'opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")' \\
+              'secure password presentation does not combine transition fade with saved presentation opacity'
+          require_text "$SURFACE_QML" 'color: "transparent"' \\
+              'secure password TextInput content is visually exposed'
+          require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \\
+              'secure password TextInput lost sensitive-data input hints'
+          require_text "$SCENE_QML" 'const minimum = name === "password" ? 20 : 0;' \\
+              'password presentation opacity is not bounded to the approved visible minimum'
+          '''
+          if old not in text:
+              raise SystemExit('runtime regression contract anchor not found')
+          runtime.write_text(text.replace(old, new, 1))
+
+          presets = Path('tests/test-quickshell-lockscreen-editor-presets.sh')
+          text = presets.read_text()
+          old = '''require_text "$EDITOR" 'next[element].color = current.color;' 'preset application does not explicitly preserve colors'
+          '''
+          new = '''require_text "$EDITOR" 'color: current.color' 'preset application does not explicitly preserve colors'
+          require_text "$EDITOR" 'opacity: current.opacity' 'preset application does not explicitly preserve opacity'
+          require_text "$EDITOR" 'stretch_x: current.stretch_x' 'preset application does not explicitly preserve horizontal stretch'
+          require_text "$EDITOR" 'stretch_y: current.stretch_y' 'preset application does not explicitly preserve vertical stretch'
+          '''
+          if old not in text:
+              raise SystemExit('preset regression contract anchor not found')
+          presets.write_text(text.replace(old, new, 1))
+          PY
+      - name: Validate corrected contracts
+        run: |
+          set -euo pipefail
+          bash -n tests/test-quickshell-lockscreen-runtime-regressions.sh
+          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-regressions.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-runtime-regressions.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-foundation.sh
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+          git diff --check
+          git diff --exit-code origin/main -- config/quickshell/awtarchy-lock/LockAuth.qml
+      - name: Commit corrected contracts
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/test-quickshell-lockscreen-runtime-regressions.sh \
+            tests/test-quickshell-lockscreen-editor-presets.sh
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m 'Update lockscreen Pass 2 regression contracts'
+          git push origin HEAD:feature/lockscreen-interactive-effects
