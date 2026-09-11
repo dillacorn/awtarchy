@@ -31,6 +31,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-editor-presets.sh
           bash -n tests/test-quickshell-lockscreen-element-system.sh
           bash -n tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash -n tests/test-quickshell-lockscreen-entry-transitions.sh
           bash -n tests/test-quickshell-lockscreen-background-composition.sh
           bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash -n tests/test-quickshell-lockscreen-weather.sh
@@ -65,6 +66,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
           shellcheck tests/test-quickshell-lockscreen-element-system.sh
           shellcheck tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          shellcheck tests/test-quickshell-lockscreen-entry-transitions.sh
           shellcheck tests/test-quickshell-lockscreen-background-composition.sh
           shellcheck tests/test-quickshell-lockscreen-background-save-dispatch.sh
           shellcheck tests/test-quickshell-lockscreen-weather.sh
@@ -112,6 +114,8 @@ jobs:
           bash tests/test-quickshell-lockscreen-interactive-effects.sh
           bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
           bash tests/test-quickshell-lockscreen-interaction-polish.sh
+      - name: Entry transition contracts
+        run: bash tests/test-quickshell-lockscreen-entry-transitions.sh
       - name: Customization editor contracts
         run: |
           bash tests/test-quickshell-lockscreen-editor.sh
