@@ -11,6 +11,7 @@ PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="$ROOT/config/quickshell/awtarchy-lock/LockSurface.qml"
 SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
 AUTH="$ROOT/config/quickshell/awtarchy-lock/LockAuth.qml"
+PERMANENT_WORKFLOW="$ROOT/.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -153,4 +154,14 @@ done
 contains "$QUICK_SETTINGS" '"set-lockscreen-entry-transition"' \
     'Quick Settings transition controls do not persist through the state helper'
 
-printf '%s\n' 'PASS: lockscreen entry transitions are persisted, previewable, bounded, selectable in Quick Settings, and isolated from authentication.'
+# Temporary implementation helpers must never survive into a test candidate.
+[[ ! -e "$ROOT/.github/workflows/dev-lockscreen-entry-transitions.yml" ]] \
+    || fail 'temporary entry-transition development workflow is still present'
+[[ ! -e "$ROOT/.github/workflows/dev-lockscreen-transition-startup.yml" ]] \
+    || fail 'temporary transition-startup workflow is still present'
+[[ ! -e "$ROOT/.github/scripts/apply-lockscreen-entry-transitions.py" ]] \
+    || fail 'temporary entry-transition patcher is still present'
+rejects "$PERMANENT_WORKFLOW" 'contents: write' \
+    'permanent interactive-effects workflow regained branch write permission'
+
+printf '%s\n' 'PASS: lockscreen entry transitions are persisted, previewable, bounded, selectable in Quick Settings, isolated from authentication, and free of temporary write-back helpers.'
