@@ -205,7 +205,7 @@ require_text "$SURFACE" 'TextInput {' \
     'secure password TextInput is missing'
 require_text "$SURFACE" 'const response = password.text;' \
     'secure password submission no longer copies the in-memory TextInput response'
-          require_text "$SURFACE" 'if (auth.submit(response))' \
+require_text "$SURFACE" 'if (auth.submit(response))' \
     'secure password submission path changed'
 reject_text "$LOCK_AUTH" 'visualizer' \
     'visualizer state leaked into PAM/authentication owner'
@@ -277,10 +277,12 @@ require_text "$QUICK_SETTINGS" 'text: "Visualizer"' \
     'Quick Settings has no visualizer toggle'
 require_text "$QUICK_SETTINGS" 'text: "Background Opacity"' \
     'Quick Settings has no background-opacity controls'
-require_text "$QUICK_SETTINGS" '"100%"' \
-    'Quick Settings has no fully-opaque background preset'
-require_text "$QUICK_SETTINGS" '"0%"' \
-    'Quick Settings has no fully-transparent background preset'
+for preset in 100 75 50 25 0; do
+    require_text "$QUICK_SETTINGS" "label: \"${preset}%\"" \
+        "Quick Settings is missing ${preset}% background-opacity preset"
+    require_text "$QUICK_SETTINGS" "\"set-lockscreen-background-opacity\", \"${preset}\"" \
+        "Quick Settings ${preset}% preset does not persist through the state helper"
+done
 reject_text "$QUICK_SETTINGS" 'Audio Reactive' \
     'obsolete audio-reactive logo control returned to Quick Settings'
 
