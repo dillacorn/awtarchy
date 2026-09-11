@@ -24,7 +24,8 @@ LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
 LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
 LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
-LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"color":"auto"}}'
+LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
+LOCKSCREEN_CUSTOM_IMAGE_MAX=12
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
 QUICK_SETTINGS_SECTIONS_JSON='["brightness","output-volume","bar","display-effects","submap","wallpaper","awtarchy","smtty","scheduler","numlock","title-bars"]'
 WORKSPACE_STYLES_JSON='["awtarchy","numbers","icons","workflow","phases","custom-symbol"]'
@@ -350,26 +351,32 @@ normalize_lockscreen_layout_json() {
     jq -ce -n \
         --argjson candidate "$value" \
         --argjson keys "$LOCKSCREEN_LAYOUT_KEYS_JSON" '
+        def allowed_keys: ["color", "opacity", "scale", "stretch_x", "stretch_y", "x", "y"];
         if (
             ($candidate | type) == "object"
             and (($candidate | keys | sort) == ($keys | sort))
             and all($keys[];
                 . as $key
                 | ($candidate[$key] | type) == "object"
-                and ((($candidate[$key] | keys | sort) == ["x", "y"])
-                    or (($candidate[$key] | keys | sort) == ["scale", "x", "y"])
-                    or (($candidate[$key] | keys | sort) == ["color", "x", "y"])
-                    or (($candidate[$key] | keys | sort) == ["color", "scale", "x", "y"]))
+                and (($candidate[$key] | keys - allowed_keys | length) == 0)
                 and ($candidate[$key].x | type) == "number"
                 and ($candidate[$key].y | type) == "number"
-                and (($candidate[$key] | has("scale") | not)
-                    or ($candidate[$key].scale | type) == "number")
+                and (($candidate[$key].scale // 1) | type) == "number"
+                and (($candidate[$key].stretch_x // 1) | type) == "number"
+                and (($candidate[$key].stretch_y // 1) | type) == "number"
+                and (($candidate[$key].opacity // 100) | type) == "number"
                 and (($candidate[$key] | has("color") | not)
                     or (($candidate[$key].color | type) == "string"
                         and ($candidate[$key].color == "auto"
                             or ($candidate[$key].color | test("^#[0-9A-Fa-f]{6}$")))))
                 and (($candidate[$key].scale // 1) >= 0.50)
                 and (($candidate[$key].scale // 1) <= 2.00)
+                and (($candidate[$key].stretch_x // 1) >= 0.25)
+                and (($candidate[$key].stretch_x // 1) <= 4.00)
+                and (($candidate[$key].stretch_y // 1) >= 0.25)
+                and (($candidate[$key].stretch_y // 1) <= 4.00)
+                and (($candidate[$key].opacity // 100) >= (if $key == "password" then 20 else 0 end))
+                and (($candidate[$key].opacity // 100) <= 100)
                 and (if $key == "password" then
                     $candidate[$key].x >= 0.15 and $candidate[$key].x <= 0.85
                     and $candidate[$key].y >= 0.20 and $candidate[$key].y <= 0.86
@@ -384,12 +391,66 @@ normalize_lockscreen_layout_json() {
                     x: $candidate[$key].x,
                     y: $candidate[$key].y,
                     scale: ($candidate[$key].scale // 1),
+                    stretch_x: ($candidate[$key].stretch_x // 1),
+                    stretch_y: ($candidate[$key].stretch_y // 1),
+                    opacity: ($candidate[$key].opacity // 100),
                     color: ($candidate[$key].color // "auto")
                 })
         else
             error("invalid lockscreen layout")
         end
     '
+}
+
+normalize_lockscreen_custom_images_json() {
+    local value="$1" normalized count index path resolved
+    if ! normalized="$(jq -ce -n \
+        --argjson candidate "$value" \
+        --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" '
+        def keys_ok: ["id", "opacity", "path", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
+        if (($candidate | type) == "array"
+            and ($candidate | length) <= $maximum
+            and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
+            and all($candidate[];
+                (. | type) == "object"
+                and ((. | keys | sort) == keys_ok)
+                and (.id | type) == "string"
+                and (.id | test("^image-[A-Za-z0-9_-]{1,64}$"))
+                and (.path | type) == "string"
+                and (.path | startswith("/"))
+                and (.path | contains("://") | not)
+                and (.path | test("[\u0000-\u001f\u007f-\u009f]") | not)
+                and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
+                and (.y | type) == "number" and .y >= 0.08 and .y <= 0.92
+                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 2.00
+                and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
+                and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
+                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and (.visible | type) == "boolean"))
+        then $candidate else error("invalid custom images") end
+    ' 2>/dev/null)"; then
+        printf 'invalid lockscreen custom images
+' >&2
+        exit 2
+    fi
+
+    count="$(jq -r 'length' <<<"$normalized")"
+    for ((index = 0; index < count; ++index)); do
+        path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$normalized")"
+        [[ -f "$path" && -r "$path" ]] || {
+            printf 'lockscreen custom image must be a readable absolute local file
+' >&2
+            exit 2
+        }
+        resolved="$(readlink -f -- "$path" 2>/dev/null || true)"
+        [[ -n "$resolved" && "$resolved" == /* && -f "$resolved" && -r "$resolved" ]] || {
+            printf 'lockscreen custom image could not be resolved
+' >&2
+            exit 2
+        }
+        normalized="$(jq -c --argjson index "$index" --arg path "$resolved" '.[$index].path = $path' <<<"$normalized")"
+    done
+    printf '%s' "$normalized"
 }
 
 validate_lockscreen_layout() {
@@ -435,10 +496,14 @@ save_lockscreen_editor() {
     local overlay_strength="${10:-0}"
     local wallpaper_blur="${11:-0}"
     local weather_units="${12:-auto}"
+    local custom_images_input="${13:-[]}"
+    local custom_images
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
-        printf 'invalid lockscreen layout\n' >&2
+        printf 'invalid lockscreen layout
+' >&2
         exit 2
     fi
+    custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
     validate_lockscreen_editor_visibility "$visibility"
     validate_lockscreen_background "$background"
     validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
@@ -451,7 +516,8 @@ save_lockscreen_editor() {
     wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
     wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
     if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
-        printf 'wallpaper background requires a selected local image\n' >&2
+        printf 'wallpaper background requires a selected local image
+' >&2
         exit 2
     fi
     new_tmp
@@ -467,8 +533,10 @@ save_lockscreen_editor() {
         --arg overlay_mode "$overlay_mode" \
         --argjson overlay_strength "$overlay_strength" \
         --argjson wallpaper_blur "$wallpaper_blur" \
-        --arg weather_units "$weather_units" '
+        --arg weather_units "$weather_units" \
+        --argjson custom_images "$custom_images" '
         .lockscreen_layout = $layout
+        | .lockscreen_custom_images = $custom_images
         | .lockscreen_show_logo = $visibility.logo
         | .lockscreen_show_time = $visibility.time
         | .lockscreen_show_date = $visibility.date
@@ -511,6 +579,7 @@ reset_lockscreen_presentation() {
         | .lockscreen_weather_units = "auto"
         | .lockscreen_weather_location = ""
         | .lockscreen_layout = $layout
+        | .lockscreen_custom_images = []
     ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
@@ -1365,7 +1434,7 @@ case "$cmd" in
         ;;
     save-lockscreen-editor)
         case "$#" in
-            6|12|13) ;;
+            6|12|13|14) ;;
             *) exit 2 ;;
         esac
         save_lockscreen_editor "${@:2}"
