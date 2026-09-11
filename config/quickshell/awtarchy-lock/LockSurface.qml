@@ -9,11 +9,7 @@ WlSessionLockSurface {
     required property bool unlocking
     required property string animationPreference
     required property int randomFormationMode
-    required property bool audioReactive
-    required property real audioLow
-    required property real audioMid
-    required property real audioHigh
-    required property real audioOverall
+    required property int logoPhysicsHz
     required property bool mouseInteractive
     required property bool showLogo
     required property bool showTime
@@ -67,11 +63,7 @@ WlSessionLockSurface {
         unlocking: root.unlocking
         animationPreference: root.animationPreference
         randomFormationMode: root.randomFormationMode
-        audioReactive: root.audioReactive
-        audioLow: root.audioLow
-        audioMid: root.audioMid
-        audioHigh: root.audioHigh
-        audioOverall: root.audioOverall
+        logoPhysicsHz: root.logoPhysicsHz
         mouseInteractive: root.mouseInteractive
         showLogo: root.showLogo
         showTime: root.showTime

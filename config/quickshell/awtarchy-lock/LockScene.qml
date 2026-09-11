@@ -9,11 +9,7 @@ Item {
     required property var theme
     required property string animationPreference
     required property int randomFormationMode
-    required property bool audioReactive
-    required property real audioLow
-    required property real audioMid
-    required property real audioHigh
-    required property real audioOverall
+    required property int logoPhysicsHz
     required property bool mouseInteractive
     required property bool showLogo
     required property bool showTime
@@ -62,39 +58,32 @@ Item {
         : animationPreference === "center" ? 2
         : animationPreference === "split" ? 3
         : randomFormationMode
-    readonly property real audioLevel: audioOverall
-    readonly property real audioSilenceThreshold: 0.01
     readonly property bool pointerEffectsEnabled: mouseInteractive && pointerActive
-    readonly property bool audioEffectsEnabled: audioReactive && audioLevel > audioSilenceThreshold
     readonly property int ghostTrailLength: 6
-    readonly property int pointerUpdateIntervalMs: 16
     readonly property int cursorFadeDelayMs: 180
     readonly property int cursorFadeDurationMs: 320
-    readonly property real pointerInfluenceRadius: 72 * uiScale
-    readonly property real pointerDisplacementCap: 24 * uiScale
-    readonly property real clickInfluenceRadius: 110 * uiScale
-    readonly property real clickDisplacementCap: 38 * uiScale
-    readonly property real audioDisplacementCap: 6 * uiScale
-    readonly property int pointerResponseDurationMs: 100
-    readonly property int pointerReturnDurationMs: 180
-    readonly property real pointerNeighborCohesion: 0.30
-    readonly property var logoCohesionGroups: buildLogoCohesionGroups()
     readonly property real pointerMovementThreshold: 3 * uiScale
-    readonly property string usernameText: showUsername ? Quickshell.env("USER") : ""
-
-    readonly property real passwordCenterX: normalizedX("password", 0.50) * width
+    readonly property int logoPhysicsIntervalMs: logoPhysicsHz >= 90 ? 11
+        : logoPhysicsHz >= 60 ? 17 : 33
+    readonly property int logoExplosionScatterMs: 460
+    readonly property int logoExplosionMaxMs: 1450
+    readonly property real logoExplosionBaseSpeed: 1020 * uiScale
+    readonly property real logoExplosionMaxSpeed: 1900 * uiScale
+    readonly property real logoExplosionOffsetCap: 760 * uiScale
+    readonly property real logoExplosionCollisionDistance: Math.max(
+        wordmarkCellWidth, wordmarkCellHeight) * 0.76
+    readonly property real logoExplosionBucketSize: Math.max(
+        24 * uiScale, logoExplosionCollisionDistance * 1.35)
+    readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";    readonly property real passwordCenterX: normalizedX("password", 0.50) * width
     readonly property real passwordCenterY: normalizedY("password", 0.70) * height
     readonly property real passwordWidth: Math.round(420 * uiScale * elementScale("password"))
     readonly property real passwordHeight: Math.round(58 * uiScale * elementScale("password"))
 
     property bool pointerActive: false
-    property var wordmarkCells: ({})
-    property real pointerFieldX: -1000
-    property real pointerFieldY: -1000
-    property real pointerFieldStrength: 0
-    property real clickFieldX: -1000
-    property real clickFieldY: -1000
-    property real clickFieldStrength: 0
+    property bool logoExplosionActive: false
+    property var logoParticles: ({})
+    property var logoParticleBuckets: ({})
+    property real logoExplosionElapsedMs: 0
     property real ghostHeadX: -100
     property real ghostHeadY: -100
     property var ghostTrail: [
@@ -104,14 +93,10 @@ Item {
     ]
     property real ghostOpacity: 0
     property double lastPointerSampleTime: 0
-    property double lastPhysicsUpdateTime: 0
     property real lastPointerX: -1
     property real lastPointerY: -1
-    property real audioPhase: 0
     property string timeText: ""
-    property string dateText: ""
-
-    function wallpaperGeometry() {
+    property string dateText: "";    function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
         const sourceHeight = Number(wallpaperImage.sourceSize.height);
         if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)
@@ -221,204 +206,218 @@ Item {
         return String(row) + ":" + String(column);
     }
 
-    function buildLogoCohesionGroups() {
-        const groups = [];
-        const visited = ({});
-        const neighbors = [
-            ({ row: 0, column: 1 }),
-            ({ row: 1, column: 0 }),
-            ({ row: 0, column: -1 }),
-            ({ row: -1, column: 0 })
-        ];
-        let groupId = 0;
+    function logoParticleOffset(row, column) {
+        const particle = logoParticles[logoCellKey(row, column)];
+        if (!particle)
+            return ({ x: 0, y: 0 });
+        const x = Number(particle.x);
+        const y = Number(particle.y);
+        return ({
+            x: Number.isFinite(x) ? x : 0,
+            y: Number.isFinite(y) ? y : 0
+        });
+    }
 
+    function clampedParticleVelocity(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric))
+            return 0;
+        return Math.max(-logoExplosionMaxSpeed, Math.min(logoExplosionMaxSpeed, numeric));
+    }
+
+    function triggerLogoExplosion(x, y) {
+        if (!mouseInteractive || !showLogo)
+            return;
+        const local = wordmarkItem.mapFromItem(root, x, y);
+        const margin = 90 * uiScale;
+        if (local.x < -margin || local.y < -margin
+                || local.x > wordmarkWidth + margin
+                || local.y > wordmarkHeight + margin)
+            return;
+
+        const next = ({});
         for (let row = 0; row < wordmarkRows.length; ++row) {
             for (let column = 0; column < wordmarkColumns; ++column) {
-                const firstKey = logoCellKey(row, column);
-                if (!isFilledWordmarkCell(row, column) || visited[firstKey])
+                if (!isFilledWordmarkCell(row, column))
                     continue;
+                const key = logoCellKey(row, column);
+                const previous = logoParticles[key];
+                const particle = previous ? Object.assign({}, previous) : ({
+                    row: row,
+                    column: column,
+                    x: 0,
+                    y: 0,
+                    vx: 0,
+                    vy: 0
+                });
+                const homeX = (column + 0.5) * wordmarkCellWidth;
+                const homeY = (row + 0.5) * wordmarkCellHeight;
+                let dx = homeX + Number(particle.x || 0) - local.x;
+                let dy = homeY + Number(particle.y || 0) - local.y;
+                let distance = Math.sqrt(dx * dx + dy * dy);
+                const seed = row * wordmarkColumns + column + 1;
+                if (distance < 0.001) {
+                    const fallbackAngle = (seed * 2.399963229728653) % (Math.PI * 2);
+                    dx = Math.cos(fallbackAngle);
+                    dy = Math.sin(fallbackAngle);
+                    distance = 1;
+                }
+                const jitter = (((seed * 37) % 19) - 9) * 0.018;
+                const angle = Math.atan2(dy, dx) + jitter;
+                const speed = logoExplosionBaseSpeed
+                    * (0.84 + ((seed * 23) % 31) / 100);
+                particle.vx += Math.cos(angle) * speed;
+                particle.vy += Math.sin(angle) * speed;
+                particle.vx = clampedParticleVelocity(particle.vx);
+                particle.vy = clampedParticleVelocity(particle.vy);
+                next[key] = particle;
+            }
+        }
+        logoParticles = next;
+        logoExplosionElapsedMs = 0;
+        logoExplosionActive = Object.keys(next).length > 0;
+    }
 
-                const queue = [({ row: row, column: column })];
-                const cells = [];
-                const members = ({});
-                let cursor = 0;
-                let sumX = 0;
-                let sumY = 0;
-                visited[firstKey] = true;
+    function rebuildLogoBuckets() {
+        const buckets = ({});
+        for (const key in logoParticles) {
+            const particle = logoParticles[key];
+            if (!particle)
+                continue;
+            const centerX = (Number(particle.column) + 0.5) * wordmarkCellWidth
+                + Number(particle.x || 0);
+            const centerY = (Number(particle.row) + 0.5) * wordmarkCellHeight
+                + Number(particle.y || 0);
+            const bucketX = Math.floor(centerX / logoExplosionBucketSize);
+            const bucketY = Math.floor(centerY / logoExplosionBucketSize);
+            const bucketKey = String(bucketX) + ":" + String(bucketY);
+            const members = buckets[bucketKey] ? buckets[bucketKey].slice() : [];
+            members.push(key);
+            buckets[bucketKey] = members;
+        }
+        logoParticleBuckets = buckets;
+    }
 
-                while (cursor < queue.length) {
-                    const cell = queue[cursor++];
-                    const key = logoCellKey(cell.row, cell.column);
-                    cells.push(cell);
-                    members[key] = true;
-                    sumX += (cell.column + 0.5) * wordmarkCellWidth;
-                    sumY += (cell.row + 0.5) * wordmarkCellHeight;
+    function resolveLogoCollisions() {
+        const next = ({});
+        for (const key in logoParticles)
+            next[key] = Object.assign({}, logoParticles[key]);
+        const seen = ({});
+        const restitution = 0.58;
+        const minimumDistance = Math.max(4, logoExplosionCollisionDistance);
 
-                    for (let i = 0; i < neighbors.length; ++i) {
-                        const nextRow = cell.row + neighbors[i].row;
-                        const nextColumn = cell.column + neighbors[i].column;
-                        const nextKey = logoCellKey(nextRow, nextColumn);
-                        if (!visited[nextKey] && isFilledWordmarkCell(nextRow, nextColumn)) {
-                            visited[nextKey] = true;
-                            queue.push(({ row: nextRow, column: nextColumn }));
+        for (const bucketKey in logoParticleBuckets) {
+            const parts = String(bucketKey).split(":");
+            const baseX = Number(parts[0]);
+            const baseY = Number(parts[1]);
+            const current = logoParticleBuckets[bucketKey] || [];
+            for (let nx = -1; nx <= 1; ++nx) {
+                for (let ny = -1; ny <= 1; ++ny) {
+                    const neighborKey = String(baseX + nx) + ":" + String(baseY + ny);
+                    const neighbor = logoParticleBuckets[neighborKey] || [];
+                    for (let i = 0; i < current.length; ++i) {
+                        for (let j = 0; j < neighbor.length; ++j) {
+                            const aKey = current[i];
+                            const bKey = neighbor[j];
+                            if (aKey === bKey)
+                                continue;
+                            const pairKey = aKey < bKey
+                                ? aKey + "|" + bKey : bKey + "|" + aKey;
+                            if (seen[pairKey])
+                                continue;
+                            seen[pairKey] = true;
+                            const a = next[aKey];
+                            const b = next[bKey];
+                            if (!a || !b)
+                                continue;
+                            const ax = (Number(a.column) + 0.5) * wordmarkCellWidth + Number(a.x || 0);
+                            const ay = (Number(a.row) + 0.5) * wordmarkCellHeight + Number(a.y || 0);
+                            const bx = (Number(b.column) + 0.5) * wordmarkCellWidth + Number(b.x || 0);
+                            const by = (Number(b.row) + 0.5) * wordmarkCellHeight + Number(b.y || 0);
+                            let dx = bx - ax;
+                            let dy = by - ay;
+                            let distance = Math.sqrt(dx * dx + dy * dy);
+                            if (distance >= minimumDistance)
+                                continue;
+                            if (distance < 0.001) {
+                                const seed = Number(a.row) * wordmarkColumns + Number(a.column) + 1;
+                                const angle = (seed * 1.61803398875) % (Math.PI * 2);
+                                dx = Math.cos(angle);
+                                dy = Math.sin(angle);
+                                distance = 1;
+                            }
+                            const normalX = dx / distance;
+                            const normalY = dy / distance;
+                            const overlap = minimumDistance - distance;
+                            a.x -= normalX * overlap * 0.5;
+                            a.y -= normalY * overlap * 0.5;
+                            b.x += normalX * overlap * 0.5;
+                            b.y += normalY * overlap * 0.5;
+                            const relative = (Number(b.vx) - Number(a.vx)) * normalX
+                                + (Number(b.vy) - Number(a.vy)) * normalY;
+                            if (relative < 0) {
+                                const impulse = -(1 + restitution) * relative * 0.5;
+                                a.vx = clampedParticleVelocity(Number(a.vx) - impulse * normalX);
+                                a.vy = clampedParticleVelocity(Number(a.vy) - impulse * normalY);
+                                b.vx = clampedParticleVelocity(Number(b.vx) + impulse * normalX);
+                                b.vy = clampedParticleVelocity(Number(b.vy) + impulse * normalY);
+                            }
                         }
                     }
                 }
-
-                groups.push(({
-                    id: groupId,
-                    cells: cells,
-                    members: members,
-                    centerX: sumX / Math.max(1, cells.length),
-                    centerY: sumY / Math.max(1, cells.length)
-                }));
-                ++groupId;
             }
         }
-        return groups;
+        logoParticles = next;
     }
 
-    function logoGroupFor(row, column) {
-        const key = logoCellKey(row, column);
-        for (let i = 0; i < logoCohesionGroups.length; ++i) {
-            const group = logoCohesionGroups[i];
-            if (group.members && group.members[key])
-                return group;
+    function stepLogoExplosion() {
+        if (!logoExplosionActive)
+            return;
+        const dt = logoPhysicsIntervalMs / 1000;
+        logoExplosionElapsedMs += logoPhysicsIntervalMs;
+        const returning = logoExplosionElapsedMs >= logoExplosionScatterMs;
+        const next = ({});
+        let maxMotion = 0;
+        for (const key in logoParticles) {
+            const particle = Object.assign({}, logoParticles[key]);
+            if (returning) {
+                const spring = 28;
+                particle.vx += -Number(particle.x || 0) * spring * dt;
+                particle.vy += -Number(particle.y || 0) * spring * dt;
+                const damping = Math.exp(-8.4 * dt);
+                particle.vx *= damping;
+                particle.vy *= damping;
+            } else {
+                const drag = Math.exp(-1.6 * dt);
+                particle.vx *= drag;
+                particle.vy *= drag;
+            }
+            particle.vx = clampedParticleVelocity(particle.vx);
+            particle.vy = clampedParticleVelocity(particle.vy);
+            particle.x = Math.max(-logoExplosionOffsetCap,
+                Math.min(logoExplosionOffsetCap, Number(particle.x || 0) + particle.vx * dt));
+            particle.y = Math.max(-logoExplosionOffsetCap,
+                Math.min(logoExplosionOffsetCap, Number(particle.y || 0) + particle.vy * dt));
+            maxMotion = Math.max(maxMotion,
+                Math.abs(particle.x) + Math.abs(particle.y)
+                + (Math.abs(particle.vx) + Math.abs(particle.vy)) * 0.02);
+            next[key] = particle;
         }
-        return null;
-    }
-
-    function registerWordmarkCell(row, column, cell) {
-        const next = Object.assign({}, wordmarkCells);
-        next[logoCellKey(row, column)] = cell;
-        wordmarkCells = next;
-    }
-
-    function logoGroupReady(group) {
-        if (!group || !Array.isArray(group.cells) || group.cells.length === 0)
-            return false;
-        for (let i = 0; i < group.cells.length; ++i) {
-            const member = group.cells[i];
-            const cell = wordmarkCells[logoCellKey(member.row, member.column)];
-            if (!cell || cell.formationProgress < 0.96)
-                return false;
+        logoParticles = next;
+        if (!returning) {
+            rebuildLogoBuckets();
+            resolveLogoCollisions();
         }
-        return true;
-    }
-
-    function radialPointOffset(centerX, centerY, seed, fieldX, fieldY, strength, radius, cap) {
-        if (strength <= 0 || radius <= 0 || cap <= 0)
-            return ({ x: 0, y: 0 });
-
-        let dx = centerX - fieldX;
-        let dy = centerY - fieldY;
-        let distance = Math.sqrt(dx * dx + dy * dy);
-        if (distance >= radius)
-            return ({ x: 0, y: 0 });
-        if (distance < 0.001) {
-            const angle = (seed + 1) * 2.399963229728653;
-            dx = Math.cos(angle);
-            dy = Math.sin(angle);
-            distance = 1;
+        if (logoExplosionElapsedMs >= logoExplosionMaxMs
+                || (returning && maxMotion < 2.2)) {
+            logoExplosionActive = false;
+            logoExplosionElapsedMs = 0;
+            logoParticles = ({});
+            logoParticleBuckets = ({});
         }
-
-        const raw = Math.max(0, Math.min(1, 1 - distance / radius));
-        const proximity = raw * raw * (3 - 2 * raw);
-        const magnitude = cap * proximity * Math.max(0, Math.min(1, strength));
-        return ({
-            x: dx / distance * magnitude,
-            y: dy / distance * magnitude
-        });
     }
 
-    function directCellDeformationOffset(row, column) {
-        if (!isFilledWordmarkCell(row, column))
-            return ({ x: 0, y: 0 });
-        const centerX = (column + 0.5) * wordmarkCellWidth;
-        const centerY = (row + 0.5) * wordmarkCellHeight;
-        const seed = row * wordmarkColumns + column;
-        const pointer = pointerEffectsEnabled
-            ? radialPointOffset(centerX, centerY, seed,
-                pointerFieldX, pointerFieldY, pointerFieldStrength,
-                pointerInfluenceRadius, pointerDisplacementCap)
-            : ({ x: 0, y: 0 });
-        const click = mouseInteractive
-            ? radialPointOffset(centerX, centerY, seed,
-                clickFieldX, clickFieldY, clickFieldStrength,
-                clickInfluenceRadius, clickDisplacementCap)
-            : ({ x: 0, y: 0 });
-        return ({
-            x: Math.max(-clickDisplacementCap,
-                Math.min(clickDisplacementCap, pointer.x + click.x)),
-            y: Math.max(-clickDisplacementCap,
-                Math.min(clickDisplacementCap, pointer.y + click.y))
-        });
-    }
-
-    function neighborCellDeformationOffset(row, column) {
-        const neighbors = [
-            ({ row: row, column: column - 1 }),
-            ({ row: row, column: column + 1 }),
-            ({ row: row - 1, column: column }),
-            ({ row: row + 1, column: column })
-        ];
-        let sumX = 0;
-        let sumY = 0;
-        let count = 0;
-        for (let i = 0; i < neighbors.length; ++i) {
-            const neighbor = neighbors[i];
-            if (!isFilledWordmarkCell(neighbor.row, neighbor.column))
-                continue;
-            const offset = directCellDeformationOffset(neighbor.row, neighbor.column);
-            sumX += offset.x;
-            sumY += offset.y;
-            ++count;
-        }
-        if (count === 0)
-            return ({ x: 0, y: 0 });
-        return ({
-            x: sumX / count * pointerNeighborCohesion,
-            y: sumY / count * pointerNeighborCohesion
-        });
-    }
-
-    function logoCellDeformationOffset(row, column) {
-        const direct = directCellDeformationOffset(row, column);
-        const neighbor = neighborCellDeformationOffset(row, column);
-        return ({
-            x: Math.max(-clickDisplacementCap,
-                Math.min(clickDisplacementCap, direct.x + neighbor.x)),
-            y: Math.max(-clickDisplacementCap,
-                Math.min(clickDisplacementCap, direct.y + neighbor.y))
-        });
-    }
-
-    function logoGroupAudioOffset(group) {
-        if (!group || !audioEffectsEnabled)
-            return ({ x: 0, y: 0 });
-        const normalizedX = wordmarkWidth > 0 ? group.centerX / wordmarkWidth - 0.5 : 0;
-        const normalizedY = wordmarkHeight > 0 ? group.centerY / wordmarkHeight - 0.5 : 0;
-        const edgeWeight = Math.min(1,
-            Math.sqrt(normalizedX * normalizedX + normalizedY * normalizedY) * 2);
-        const band = group.id % 3;
-        const energy = band === 0 ? audioLow : band === 1 ? audioMid : audioHigh;
-        const envelope = Math.max(0, Math.min(1, energy)) * Math.pow(edgeWeight, 1.35);
-        if (envelope <= 0)
-            return ({ x: 0, y: 0 });
-        const angle = (group.id + 1) * 1.61803398875;
-        const rate = 0.82 + (group.id % 5) * 0.07;
-        return ({
-            x: Math.max(-audioDisplacementCap,
-                Math.min(audioDisplacementCap,
-                    Math.sin(audioPhase * rate + angle) * envelope * audioDisplacementCap)),
-            y: Math.max(-audioDisplacementCap,
-                Math.min(audioDisplacementCap,
-                    Math.cos(audioPhase * (rate + 0.09) + angle)
-                        * envelope * audioDisplacementCap * 0.82))
-        });
-    }
-
-    function minuteTimeFormat() {
+    function minuteTimeFormat() {    function minuteTimeFormat() {
         const localeFormat = String(Qt.locale().timeFormat(Locale.ShortFormat) || "");
         const withoutSeconds = localeFormat
             .replace(/([:.\-\s])s{1,2}(?:\.z{1,3})?/g, "")
@@ -447,31 +446,12 @@ Item {
         cursorFadeDelay.restart();
     }
 
-    function updatePointerField(x, y, speed) {
-        if (!pointerEffectsEnabled)
-            return;
-        const local = wordmarkItem.mapFromItem(root, x, y);
-        pointerFieldX = local.x;
-        pointerFieldY = local.y;
-        pointerFieldStrength = 0.35 + 0.65 * Math.min(1, Math.max(0, speed) / 1400);
-    }
-
-    function applyClickField(x, y) {
-        if (!mouseInteractive)
-            return;
-        const local = wordmarkItem.mapFromItem(root, x, y);
-        clickFieldX = local.x;
-        clickFieldY = local.y;
-        clickFieldStrength = 1;
-        clickFieldDecay.restart();
-    }
-
     function handlePointerClick(x, y) {
         if (!mouseInteractive)
             return;
         pointerActive = true;
         pushGhostSample(x, y);
-        applyClickField(x, y);
+        root.triggerLogoExplosion(x, y);
         lastPointerX = x;
         lastPointerY = y;
         lastPointerSampleTime = Date.now();
@@ -485,11 +465,6 @@ Item {
         const now = Date.now();
         const hasPrevious = lastPointerX >= 0 && lastPointerY >= 0
             && lastPointerSampleTime > 0;
-        const dx = hasPrevious ? x - lastPointerX : 0;
-        const dy = hasPrevious ? y - lastPointerY : 0;
-        const distance = Math.sqrt(dx * dx + dy * dy);
-        const elapsed = hasPrevious ? Math.max(1, now - lastPointerSampleTime) : 1;
-        const speed = hasPrevious ? distance * 1000 / elapsed : 0;
         const ghostDx = x - ghostHeadX;
         const ghostDy = y - ghostHeadY;
         const ghostDistance = Math.sqrt(ghostDx * ghostDx + ghostDy * ghostDy);
@@ -497,26 +472,10 @@ Item {
         if (!hasPrevious || ghostOpacity <= 0 || ghostDistance >= pointerMovementThreshold)
             pushGhostSample(x, y);
 
-        if (!hasPrevious || now - lastPhysicsUpdateTime >= pointerUpdateIntervalMs) {
-            updatePointerField(x, y, speed);
-            lastPhysicsUpdateTime = now;
-        }
-
         lastPointerX = x;
         lastPointerY = y;
         lastPointerSampleTime = now;
     }
-
-    NumberAnimation {
-        id: clickFieldDecay
-        target: root
-        property: "clickFieldStrength"
-        from: 1
-        to: 0
-        duration: 260
-        easing.type: Easing.OutCubic
-    }
-
     Rectangle {
         anchors.fill: parent
         color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
@@ -617,30 +576,8 @@ Item {
                             readonly property real finalCellX: columnIndex * root.wordmarkCellWidth
                             readonly property real finalCellY: wordmarkRow.rowIndex
                                 * root.wordmarkCellHeight
-                            readonly property var cohesionGroup: isFilledGlyph
-                                ? root.logoGroupFor(wordmarkRow.rowIndex, columnIndex) : null
-                            readonly property bool cohesionReady: isFilledGlyph
-                                && root.logoGroupReady(cohesionGroup)
-                            readonly property var pointerTarget: cohesionReady
-                                ? root.logoCellDeformationOffset(wordmarkRow.rowIndex, columnIndex)
-                                : ({ x: 0, y: 0 })
-                            readonly property bool pointerTargetActive:
-                                Math.abs(pointerTarget.x) + Math.abs(pointerTarget.y) > 0.01
-                            property real pointerOffsetX: pointerTarget.x
-                            property real pointerOffsetY: pointerTarget.y
-                            readonly property var groupAudioOffset: cohesionReady
-                                ? root.logoGroupAudioOffset(cohesionGroup) : ({ x: 0, y: 0 })
-                            readonly property real audioOffsetX: groupAudioOffset.x
-                            readonly property real audioOffsetY: groupAudioOffset.y
-                            readonly property real combinedOffsetX: Math.max(
-                                -root.clickDisplacementCap,
-                                Math.min(root.clickDisplacementCap,
-                                    pointerOffsetX + audioOffsetX))
-                            readonly property real combinedOffsetY: Math.max(
-                                -root.clickDisplacementCap,
-                                Math.min(root.clickDisplacementCap,
-                                    pointerOffsetY + audioOffsetY))
-
+                            readonly property var explosionOffset:
+                                root.logoParticleOffset(wordmarkRow.rowIndex, columnIndex)
                             readonly property real randomA: Math.random()
                             readonly property real randomB: Math.random()
                             readonly property real randomC: Math.random()
@@ -698,19 +635,14 @@ Item {
                             property real formationProgress:
                                 root.animationPreference === "off" ? 1 : 0
 
-                            Component.onCompleted: {
-                                if (wordmarkCell.isFilledGlyph)
-                                    root.registerWordmarkCell(wordmarkRow.rowIndex,
-                                        wordmarkCell.columnIndex, wordmarkCell);
-                            }
 
                             x: finalCellX
                                 + (1 - formationProgress) * startX
                                 + Math.sin(Math.PI * formationProgress) * curveX
-                                + combinedOffsetX
+                                + explosionOffset.x
                             y: (1 - formationProgress) * startY
                                 + Math.sin(Math.PI * formationProgress) * curveY
-                                + combinedOffsetY
+                                + explosionOffset.y
                             width: root.wordmarkCellWidth
                             height: root.wordmarkCellHeight
                             visible: isFilledGlyph
@@ -746,23 +678,7 @@ Item {
                                 }
                             }
 
-                            Behavior on pointerOffsetX {
-                                NumberAnimation {
-                                    duration: wordmarkCell.pointerTargetActive
-                                        ? root.pointerResponseDurationMs
-                                        : root.pointerReturnDurationMs
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
 
-                            Behavior on pointerOffsetY {
-                                NumberAnimation {
-                                    duration: wordmarkCell.pointerTargetActive
-                                        ? root.pointerResponseDurationMs
-                                        : root.pointerReturnDurationMs
-                                    easing.type: Easing.OutCubic
-                                }
-                            }
                         }
                     }
                 }
@@ -917,15 +833,12 @@ Item {
     }
 
     Timer {
-        interval: 33
+        id: logoPhysicsTimer
+        interval: root.logoPhysicsIntervalMs
         repeat: true
-        running: root.audioEffectsEnabled
-        onTriggered: {
-            root.audioPhase += 0.22;
-        }
-    }
-
-    Timer {
+        running: root.logoExplosionActive
+        onTriggered: root.stepLogoExplosion()
+    }    Timer {
         interval: 15000
         repeat: true
         triggeredOnStart: true

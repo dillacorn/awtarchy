@@ -64,6 +64,11 @@ Singleton {
     property real guideX: -1
     property real guideY: -1
     property string inertiaOwner: ""
+    property string resizeElementName: ""
+    property real resizeStartDistance: 1
+    property real resizeStartScale: 1
+    property real resizeCenterX: 0
+    property real resizeCenterY: 0
 
     function defaultLayout() {
         return ({
@@ -349,6 +354,50 @@ Singleton {
 
     function primaryPoint() {
         return draftLayout[selectedElement] || defaultLayout()[selectedElement] || defaultLayout().logo;
+    }
+
+    function setDraftScaleSilently(name, scaleValue) {
+        if (elementNames.indexOf(name) < 0)
+            return;
+        const numeric = Number(scaleValue);
+        if (!Number.isFinite(numeric))
+            return;
+        const next = cloneLayout(draftLayout);
+        next[name].scale = Math.max(0.50, Math.min(2.00, numeric));
+        draftLayout = next;
+        scheduleContrastRefresh();
+    }
+
+    function beginResizeElement(name, sceneX, sceneY) {
+        if (elementNames.indexOf(name) < 0 || editorFocus.width <= 0 || editorFocus.height <= 0)
+            return;
+        selectElement(name, false);
+        const point = draftLayout[name] || defaultLayout()[name];
+        resizeElementName = name;
+        resizeCenterX = Number(point.x) * editorFocus.width;
+        resizeCenterY = Number(point.y) * editorFocus.height;
+        resizeStartDistance = Math.max(12, Math.sqrt(
+            Math.pow(Number(sceneX) - resizeCenterX, 2)
+            + Math.pow(Number(sceneY) - resizeCenterY, 2)));
+        resizeStartScale = elementScale(name);
+        beginHistoryTransaction();
+    }
+
+    function updateResizeElement(sceneX, sceneY) {
+        if (resizeElementName.length === 0)
+            return;
+        const distance = Math.max(1, Math.sqrt(
+            Math.pow(Number(sceneX) - resizeCenterX, 2)
+            + Math.pow(Number(sceneY) - resizeCenterY, 2)));
+        setDraftScaleSilently(resizeElementName,
+            resizeStartScale * distance / resizeStartDistance);
+    }
+
+    function endResizeElement() {
+        if (resizeElementName.length === 0)
+            return;
+        resizeElementName = "";
+        commitHistoryTransaction();
     }
 
     function pointBounds(name) {
@@ -1069,29 +1118,6 @@ Singleton {
         onActivated: root.close()
     }
 
-    Shortcut {
-        sequence: "Ctrl+Z"
-        context: Qt.ApplicationShortcut
-        enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0
-        autoRepeat: false
-        onActivated: root.undo()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Shift+Z"
-        context: Qt.ApplicationShortcut
-        enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
-        autoRepeat: false
-        onActivated: root.redo()
-    }
-
-    Shortcut {
-        sequence: "Ctrl+Y"
-        context: Qt.ApplicationShortcut
-        enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
-        autoRepeat: false
-        onActivated: root.redo()
-    }
 
     PanelWindow {
         id: editorWindow
@@ -1105,6 +1131,33 @@ Singleton {
         anchors.left: true
         implicitWidth: Math.max(1, screen ? screen.width : 1920)
         implicitHeight: Math.max(1, screen ? screen.height : 1080)
+
+        Shortcut {
+            id: editorUndoShortcut
+            sequence: "Ctrl+Z"
+            context: Qt.WindowShortcut
+            enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0
+            autoRepeat: false
+            onActivated: root.undo()
+        }
+
+        Shortcut {
+            id: editorRedoShortcut
+            sequence: "Ctrl+Shift+Z"
+            context: Qt.WindowShortcut
+            enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
+            autoRepeat: false
+            onActivated: root.redo()
+        }
+
+        Shortcut {
+            id: editorRedoAlternateShortcut
+            sequence: "Ctrl+Y"
+            context: Qt.WindowShortcut
+            enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0
+            autoRepeat: false
+            onActivated: root.redo()
+        }
 
         Rectangle {
             id: editorFocus
@@ -1136,11 +1189,7 @@ Singleton {
                 theme: Theme
                 animationPreference: BarState.lockscreenAnimationPreference()
                 randomFormationMode: 3
-                audioReactive: false
-                audioLow: 0
-                audioMid: 0
-                audioHigh: 0
-                audioOverall: 0
+                logoPhysicsHz: BarState.lockscreenLogoPhysicsHz()
                 mouseInteractive: BarState.lockscreenMouseInteractiveEnabled()
                 showLogo: root.draftVisibility.logo
                 showTime: root.draftVisibility.time
@@ -1400,6 +1449,48 @@ Singleton {
                         }
                     }
 
+
+                    Rectangle {
+                        id: elementResizeHandle
+                        visible: root.selectedElement === parent.elementName
+                        width: 16
+                        height: 16
+                        radius: 3
+                        x: parent.width - width / 2
+                        y: parent.height - height / 2
+                        color: Theme.focus
+                        border.width: 1
+                        border.color: Theme.foreground
+                        z: 20
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 5
+                            height: 5
+                            radius: 1
+                            color: Theme.background
+                        }
+
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeFDiagCursor
+                            preventStealing: true
+                            onPressed: mouse => {
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.beginResizeElement(parent.parent.elementName, point.x, point.y);
+                                mouse.accepted = true;
+                            }
+                            onPositionChanged: mouse => {
+                                if (!pressed)
+                                    return;
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.updateResizeElement(point.x, point.y);
+                            }
+                            onReleased: root.endResizeElement()
+                            onCanceled: root.endResizeElement()
+                        }
+                    }
+
                     Timer {
                         id: inertiaTimer
                         interval: 16
@@ -1560,6 +1651,19 @@ Singleton {
                             selectByMouse: true
                             font.pixelSize: 9
                             onEditingFinished: root.setSelectedCoordinate("y", text)
+                        }
+
+
+                        SettingsButton {
+                            id: selectedElementColorButton
+                            label: root.elementColor(root.selectedElement) === "auto"
+                                ? "Color: Auto" : "Color: " + root.elementColor(root.selectedElement)
+                            textSize: 9
+                            onClicked: {
+                                if (root.activeDrawer !== "element")
+                                    root.toggleDrawer("element");
+                                root.elementPaletteOpen = true;
+                            }
                         }
 
                         SettingsButton { label: "Undo"; textSize: 9; available: root.undoStack.length > 0; onClicked: root.undo() }

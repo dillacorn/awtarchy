@@ -38,9 +38,17 @@ RESULT_FILE="$(mktemp "${RESULT_DIR}/lockscreen-wallpaper-selection.XXXXXX")"
 rm -f -- "$RESULT_FILE"
 
 set +e
-"$TERMINAL_CMD" --class awtarchy-lock-wallpaper -e \
-    "$awtwall_path" --select-only --type images --resume --select-result "$RESULT_FILE"
-terminal_rc=$?
+terminal_name="$(basename -- "$TERMINAL_CMD")"
+if [[ "$terminal_name" == "alacritty" ]]; then
+    "$TERMINAL_CMD" --option window.startup_mode=Fullscreen \
+        --class awtarchy-lock-wallpaper -e "$awtwall_path" \
+        --select-only --type images --resume --select-result "$RESULT_FILE"
+    terminal_rc=$?
+else
+    "$TERMINAL_CMD" --class awtarchy-lock-wallpaper -e "$awtwall_path" \
+        --select-only --type images --resume --select-result "$RESULT_FILE"
+    terminal_rc=$?
+fi
 set -e
 
 # Closing/cancelling the picker is a clean no-change result.

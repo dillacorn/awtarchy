@@ -160,6 +160,20 @@ set_lockscreen_animation() {
     commit_tmp
 }
 
+set_lockscreen_logo_physics_hz() {
+    local value="$1"
+    case "$value" in
+        30|60|90) ;;
+        *)
+            printf 'lockscreen logo physics Hz must be 30, 60, or 90\n' >&2
+            exit 2
+            ;;
+    esac
+    new_tmp
+    jq --argjson value "$value" '.lockscreen_logo_physics_hz = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
 set_lockscreen_option() {
     local field="$1" value="$2" label="$3" enabled
     case "$field" in
@@ -477,6 +491,7 @@ reset_lockscreen_presentation() {
     new_tmp
     jq --argjson layout "$LOCKSCREEN_LAYOUT_DEFAULT_JSON" '
         .lockscreen_animation = "split"
+        | .lockscreen_logo_physics_hz = 30
         | .lockscreen_audio_reactive = true
         | .lockscreen_mouse_interactive = true
         | .lockscreen_show_logo = true
@@ -1296,6 +1311,10 @@ case "$cmd" in
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_animation "$2"
         ;;
+    set-lockscreen-logo-physics-hz)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_logo_physics_hz "$2"
+        ;;
     set-lockscreen-audio-reactive)
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_option lockscreen_audio_reactive "$2" 'lockscreen audio reactive'
@@ -1495,7 +1514,7 @@ case "$cmd" in
         reset_defaults
         ;;
     *)
-        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-lockscreen-audio-reactive <true|false>|set-lockscreen-mouse-interactive <true|false>|set-lockscreen-show-logo <true|false>|set-lockscreen-show-time <true|false>|set-lockscreen-show-date <true|false>|set-lockscreen-show-username <true|false>|set-lockscreen-show-weather <true|false>|set-lockscreen-background <black|wallpaper|color>|set-lockscreen-background-color <#RRGGBB>|set-lockscreen-wallpaper <absolute_path>|set-lockscreen-weather-location <location>|save-lockscreen-layout <json>|save-lockscreen-editor <layout_json> <visibility_json> <background> <background_color> <wallpaper_path>|reset-lockscreen-presentation|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
+        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-lockscreen-logo-physics-hz <30|60|90>|set-lockscreen-audio-reactive <true|false>|set-lockscreen-mouse-interactive <true|false>|set-lockscreen-show-logo <true|false>|set-lockscreen-show-time <true|false>|set-lockscreen-show-date <true|false>|set-lockscreen-show-username <true|false>|set-lockscreen-show-weather <true|false>|set-lockscreen-background <black|wallpaper|color>|set-lockscreen-background-color <#RRGGBB>|set-lockscreen-wallpaper <absolute_path>|set-lockscreen-weather-location <location>|save-lockscreen-layout <json>|save-lockscreen-editor <layout_json> <visibility_json> <background> <background_color> <wallpaper_path>|reset-lockscreen-presentation|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
         exit 2
         ;;
 esac

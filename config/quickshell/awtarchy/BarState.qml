@@ -357,6 +357,7 @@ Singleton {
             enabled: true,
             update_notifications_enabled: true,
             lockscreen_animation: "split",
+            lockscreen_logo_physics_hz: 30,
             lockscreen_audio_reactive: true,
             lockscreen_mouse_interactive: true,
             lockscreen_show_logo: true,
@@ -635,6 +636,11 @@ Singleton {
     function lockscreenBooleanPreference(field, fallback) {
         const value = data()[field];
         return typeof value === "boolean" ? value : fallback;
+    }
+
+    function lockscreenLogoPhysicsHz() {
+        const value = Math.round(Number(data().lockscreen_logo_physics_hz));
+        return [30, 60, 90].indexOf(value) >= 0 ? value : 30;
     }
 
     function lockscreenAudioReactiveEnabled() {

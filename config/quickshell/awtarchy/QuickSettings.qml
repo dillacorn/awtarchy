@@ -2293,8 +2293,13 @@ Singleton {
 
                                         Text { Layout.fillWidth: true; text: "Mouse Interaction"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }
-                                        Text { Layout.fillWidth: true; text: "Audio Reactive"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
-                                        SettingsButton { label: BarState.lockscreenAudioReactiveEnabled() ? "On" : "Off"; active: BarState.lockscreenAudioReactiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-audio-reactive", BarState.lockscreenAudioReactiveEnabled() ? "false" : "true"]) }
+                                        Text { Layout.fillWidth: true; text: "Logo Physics"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        RowLayout {
+                                            spacing: 5
+                                            SettingsButton { label: "30 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 30; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "30"]) }
+                                            SettingsButton { label: "60 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 60; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "60"]) }
+                                            SettingsButton { label: "90 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 90; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "90"]) }
+                                        }
                                     }
 
                                     Text { Layout.fillWidth: true; text: "Location override (optional)"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9); font.bold: true }

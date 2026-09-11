@@ -14,7 +14,7 @@ ShellRoot {
     readonly property string statePath: (Quickshell.env("XDG_CACHE_HOME")
         || (Quickshell.env("HOME") + "/.cache")) + "/awtarchy/quickshell-state.json"
     property string lockAnimationPreference: "split"
-    property bool lockAudioReactive: true
+    property int lockLogoPhysicsHz: 30
     property bool lockMouseInteractive: true
     property bool lockShowLogo: true
     property bool lockShowTime: false
@@ -57,6 +57,11 @@ ShellRoot {
     function normalizedAnimationPreference(value) {
         const key = String(value || "");
         return allowedAnimationPreferences.indexOf(key) >= 0 ? key : "split";
+    }
+
+    function normalizedLogoPhysicsHz(value) {
+        const numeric = Math.round(Number(value));
+        return [30, 60, 90].indexOf(numeric) >= 0 ? numeric : 30;
     }
 
     function normalizedBoolean(value, fallback) {
@@ -146,7 +151,7 @@ ShellRoot {
 
     function resetPreferences() {
         lockAnimationPreference = "split";
-        lockAudioReactive = true;
+        lockLogoPhysicsHz = 30;
         lockMouseInteractive = true;
         lockShowLogo = true;
         lockShowTime = false;
@@ -181,7 +186,7 @@ ShellRoot {
             }
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
-            lockAudioReactive = normalizedBoolean(parsed.lockscreen_audio_reactive, true);
+            lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);
             lockMouseInteractive = normalizedBoolean(parsed.lockscreen_mouse_interactive, true);
             lockShowLogo = normalizedBoolean(parsed.lockscreen_show_logo, true);
             lockShowTime = normalizedBoolean(parsed.lockscreen_show_time, false);
@@ -233,11 +238,6 @@ ShellRoot {
         }
     }
 
-    LockAudioAnalyzer {
-        id: lockAudioAnalyzer
-        enabled: root.lockAudioReactive
-    }
-
     LockWeatherCache {
         id: lockWeatherCache
         enabled: root.lockShowWeather
@@ -263,11 +263,7 @@ ShellRoot {
                 unlocking: root.unlockRequested
                 animationPreference: root.lockAnimationPreference
                 randomFormationMode: root.randomFormationMode
-                audioReactive: root.lockAudioReactive
-                audioLow: lockAudioAnalyzer.low
-                audioMid: lockAudioAnalyzer.mid
-                audioHigh: lockAudioAnalyzer.high
-                audioOverall: lockAudioAnalyzer.overall
+                logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive
                 showLogo: root.lockShowLogo
                 showTime: root.lockShowTime
