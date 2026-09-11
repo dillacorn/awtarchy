@@ -95,19 +95,24 @@ reject_text "$FLYOUT_SETTINGS" 'CursorThemeSettings {' \
 reject_text "$FLYOUT_SETTINGS" 'cursorThemeSection.implicitHeight' \
     'generic settings panel still reserves height for duplicate cursor controls'
 
-# Pointer deformation must be local per filled block, with bounded neighbor
-# cohesion. Connected components may remain for readiness/audio but not as one
-# shared pointer target for every block in a letter.
-require_text "$LOCK_SCENE" 'function directCellDeformationOffset(row, column)' \
-    'logo has no per-cell direct pointer/click deformation'
-require_text "$LOCK_SCENE" 'function neighborCellDeformationOffset(row, column)' \
-    'logo has no local-neighbor cohesion blend'
-require_text "$LOCK_SCENE" 'function logoCellDeformationOffset(row, column)' \
-    'logo has no final gooey per-cell deformation target'
-require_text "$LOCK_SCENE" 'root.logoCellDeformationOffset(wordmarkRow.rowIndex, columnIndex)' \
-    'wordmark cells do not consume their own deformation target'
-reject_text "$LOCK_SCENE" 'root.logoDeformationOffset(cohesionGroup)' \
-    'wordmark cells still share one rigid connected-group pointer target'
+# Pointer movement keeps only the lightweight ghost trail. Logo movement is
+# click-only, active-only explosion physics and returns to exact home positions.
+require_text "$LOCK_SCENE" 'function triggerLogoExplosion(x, y)' \
+    'logo has no click-only explosion entrypoint'
+require_text "$LOCK_SCENE" 'id: logoPhysicsTimer' \
+    'logo has no bounded shared physics timer'
+require_text "$LOCK_SCENE" 'running: root.logoExplosionActive' \
+    'logo physics timer is not idle while no explosion is active'
+require_text "$LOCK_SCENE" 'readonly property var explosionOffset:' \
+    'wordmark blocks do not consume per-cell explosion offsets'
+reject_text "$LOCK_SCENE" 'function directCellDeformationOffset(row, column)' \
+    'retired continuous direct pointer deformation remains'
+reject_text "$LOCK_SCENE" 'function neighborCellDeformationOffset(row, column)' \
+    'retired continuous neighbor cohesion remains'
+reject_text "$LOCK_SCENE" 'function logoCellDeformationOffset(row, column)' \
+    'retired continuous per-cell deformation target remains'
+reject_text "$LOCK_SCENE" 'logoGroupAudioOffset' \
+    'AWTARCHY logo still carries audio-driven block displacement'
 cmp -s "$LOCK_SCENE" "$PREVIEW_SCENE" \
     || fail 'secure lock scene and unlocked preview scene diverge'
 
