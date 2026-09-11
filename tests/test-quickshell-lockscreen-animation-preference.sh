@@ -118,14 +118,18 @@ require_text "$SCENE_QML" 'root.animationPreference !== "off"' \
 
 require_text "$SCENE_QML" 'readonly property bool pointerEffectsEnabled: mouseInteractive && pointerActive' \
     'pointer effects are not controlled independently from formation animation'
-require_text "$SCENE_QML" 'readonly property bool audioEffectsEnabled: audioReactive && audioLevel > audioSilenceThreshold' \
-    'audio effects are not controlled independently from formation animation'
-require_text "$SHELL_QML" 'enabled: root.lockAudioReactive' \
-    'audio analyzer is not controlled solely by the Audio Reactive preference'
+reject_text "$SCENE_QML" 'readonly property bool audioEffectsEnabled:' \
+    'retired audio-driven logo movement remains in the presentation scene'
+reject_text "$SCENE_QML" 'required property bool audioReactive' \
+    'presentation scene still accepts retired logo audio-reactive state'
+reject_text "$SURFACE_QML" 'required property bool audioReactive' \
+    'secure lock surface still carries retired logo audio-reactive state'
+reject_text "$SHELL_QML" 'property bool lockAudioReactive' \
+    'secure lock shell still persists retired logo audio-reactive state'
+reject_text "$SHELL_QML" 'LockAudioAnalyzer {' \
+    'secure lock still instantiates audio analysis solely for logo movement'
 reject_text "$SCENE_QML" 'readonly property bool interactiveEffectsEnabled: root.animationPreference !== "off"' \
-    'formation Off still suppresses independent pointer/audio effects'
-reject_text "$SHELL_QML" 'enabled: root.lockAudioReactive && root.lockAnimationPreference !== "off"' \
-    'formation Off still suppresses the independent audio analyzer'
+    'formation Off still suppresses independent pointer effects'
 
 require_text "$SCENE_QML" 'readonly property int formationDelay: Math.floor(Math.random() * 301)' \
     'lockscreen formation delay is not capped at the faster 300ms range'

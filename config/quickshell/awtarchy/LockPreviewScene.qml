@@ -74,7 +74,8 @@ Item {
         wordmarkCellWidth, wordmarkCellHeight) * 0.76
     readonly property real logoExplosionBucketSize: Math.max(
         24 * uiScale, logoExplosionCollisionDistance * 1.35)
-    readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";    readonly property real passwordCenterX: normalizedX("password", 0.50) * width
+    readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";
+    readonly property real passwordCenterX: normalizedX("password", 0.50) * width
     readonly property real passwordCenterY: normalizedY("password", 0.70) * height
     readonly property real passwordWidth: Math.round(420 * uiScale * elementScale("password"))
     readonly property real passwordHeight: Math.round(58 * uiScale * elementScale("password"))
@@ -96,7 +97,9 @@ Item {
     property real lastPointerX: -1
     property real lastPointerY: -1
     property string timeText: ""
-    property string dateText: "";    function wallpaperGeometry() {
+    property string dateText: "";
+
+    function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
         const sourceHeight = Number(wallpaperImage.sourceSize.height);
         if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)
@@ -229,11 +232,6 @@ Item {
         if (!mouseInteractive || !showLogo)
             return;
         const local = wordmarkItem.mapFromItem(root, x, y);
-        const margin = 90 * uiScale;
-        if (local.x < -margin || local.y < -margin
-                || local.x > wordmarkWidth + margin
-                || local.y > wordmarkHeight + margin)
-            return;
 
         const next = ({});
         for (let row = 0; row < wordmarkRows.length; ++row) {
@@ -417,7 +415,7 @@ Item {
         }
     }
 
-    function minuteTimeFormat() {    function minuteTimeFormat() {
+    function minuteTimeFormat() {
         const localeFormat = String(Qt.locale().timeFormat(Locale.ShortFormat) || "");
         const withoutSeconds = localeFormat
             .replace(/([:.\-\s])s{1,2}(?:\.z{1,3})?/g, "")
@@ -838,7 +836,9 @@ Item {
         repeat: true
         running: root.logoExplosionActive
         onTriggered: root.stepLogoExplosion()
-    }    Timer {
+    }
+
+    Timer {
         interval: 15000
         repeat: true
         triggeredOnStart: true
