@@ -152,7 +152,7 @@ require_text "$EDITOR" 'root.toggleDrawer("element")' \
 # beside unrelated applications. Alternate terminal overrides remain supported.
 require_text "$PICKER" 'window.startup_mode=Fullscreen' \
     'Alacritty lockscreen wallpaper picker is not fullscreen'
-require_text "$PICKER" 'basename -- "$TERMINAL_CMD"' \
+require_text "$PICKER" "basename -- \"\$TERMINAL_CMD\"" \
     'wallpaper picker does not distinguish the standard Alacritty launch path'
 
 cmp -s "$SCENE" "$PREVIEW" \
