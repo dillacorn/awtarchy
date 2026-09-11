@@ -19,15 +19,15 @@ jobs:
         with:
           ref: feature/lockscreen-interactive-effects
           fetch-depth: 0
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils shellcheck lua5.4
       - name: Apply Pass 2 generic editor
         run: python3 .github/scripts/apply-lockscreen-pass2-state.py
       - name: Validate Pass 2 editor slice
         run: |
           set -euo pipefail
           bash -n config/hypr/scripts/quickshell_application_state.sh
-          if command -v shellcheck >/dev/null 2>&1; then
-            shellcheck config/hypr/scripts/quickshell_application_state.sh
-          fi
+          shellcheck config/hypr/scripts/quickshell_application_state.sh
           cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
           git diff --check
           git diff --exit-code origin/main -- config/quickshell/awtarchy-lock/LockAuth.qml
