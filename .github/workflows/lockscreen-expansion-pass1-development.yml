@@ -28,6 +28,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           picker = Path('config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh')
           text = picker.read_text(encoding='utf-8')
@@ -60,8 +61,24 @@ jobs:
           end = script.find(marker, start)
           if start < 0 or end < 0:
               raise SystemExit(f'could not isolate obsolete picker patch block: start={start} end={end}')
-          patcher.write_text(script[:start] + script[end + 2:], encoding='utf-8')
-          print('runner snapshot prepared')
+          script = script[:start] + script[end + 2:]
+
+          # The temporary patcher was generated through an escaped transport and
+          # its raw regex pattern arguments contain doubled regex escapes. Fix
+          # only the pattern argument of replace_re_once calls. Replacement
+          # payloads and generated raw shell/QML strings are left untouched.
+          call_pattern = re.compile(r"(replace_re_once\([^,]+,\s*r''')(.*?)(''',)", re.S)
+
+          def normalize_regex(match):
+              body = match.group(2).replace('\\\\', '\\')
+              return match.group(1) + body + match.group(3)
+
+          script, regex_count = call_pattern.subn(normalize_regex, script)
+          if regex_count < 1:
+              raise SystemExit('no replace_re_once raw regex arguments were normalized')
+          compile(script, str(patcher), 'exec')
+          patcher.write_text(script, encoding='utf-8')
+          print(f'runner snapshot prepared; normalized {regex_count} regex patterns')
           PY
 
       - name: Apply Pass 1 production changes
