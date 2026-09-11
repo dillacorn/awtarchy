@@ -110,12 +110,27 @@ require_text "$SCENE" 'const ghostDx = x - ghostHeadX;' \
     'high-polling-rate ghost movement accumulation regressed'
 reject_text "$SCENE" 'updatePointerField(x, y, speed);' \
     'ordinary pointer motion still drives logo physics'
+reject_text "$SCENE" 'const margin = 90 * uiScale;' \
+    'logo explosion is still restricted to clicks near the wordmark'
+reject_text "$SCENE" 'if (local.x < -margin || local.y < -margin' \
+    'full-surface click explosion is still gated by wordmark bounds'
 reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
     'retired audio-reactive logo control is still exposed'
 reject_text "$SURFACE" 'required property bool audioReactive' \
     'secure surface still carries audio-reactive logo state'
 reject_text "$SCENE" 'required property bool audioReactive' \
     'presentation scene still accepts audio-reactive logo state'
+
+# Guard the scene splice boundaries themselves. These catches are deliberately
+# textual because duplicate declarations can evade shell-only contract tests.
+reject_text "$SCENE" 'function minuteTimeFormat() {    function minuteTimeFormat() {' \
+    'scene contains a duplicated minuteTimeFormat declaration'
+reject_text "$SCENE" ';    readonly property real passwordCenterX:' \
+    'scene property splice joined password geometry onto usernameText'
+reject_text "$SCENE" ';    function wallpaperGeometry() {' \
+    'scene property splice joined wallpaperGeometry onto dateText'
+reject_text "$SCENE" '}    Timer {' \
+    'scene timer splice joined two QML objects on one line'
 
 # Secure surface still refocuses the real password input after presentation clicks.
 require_text "$SURFACE" 'scene.handlePointerClick(mouse.x, mouse.y)' \
