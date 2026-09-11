@@ -567,15 +567,30 @@ Item {
         cursorFadeDelay.restart();
     }
 
+    function logoContainsPoint(x, y) {
+        if (!showLogo)
+            return false;
+        const logoWidth = root.elementVisualWidth("logo");
+        const logoHeight = root.elementVisualHeight("logo");
+        const logoCenterX = root.normalizedX("logo", 0.50) * root.width;
+        const logoCenterY = root.normalizedY("logo", 0.34) * root.height;
+        return x >= logoCenterX - (logoWidth / 2)
+            && x <= logoCenterX + (logoWidth / 2)
+            && y >= logoCenterY - (logoHeight / 2)
+            && y <= logoCenterY + (logoHeight / 2);
+    }
+
     function handlePointerClick(x, y) {
         if (!mouseInteractive)
             return;
         pointerActive = true;
         pushGhostSample(x, y);
-        root.triggerLogoExplosion(x, y);
         lastPointerX = x;
         lastPointerY = y;
         lastPointerSampleTime = Date.now();
+        if (!root.logoContainsPoint(x, y))
+            return;
+        root.triggerLogoExplosion(x, y);
     }
 
     function handlePointerMotion(x, y) {
