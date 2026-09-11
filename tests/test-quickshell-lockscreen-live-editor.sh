@@ -202,8 +202,10 @@ for command in set-lockscreen-show-time set-lockscreen-show-date set-lockscreen-
 done
 require_text "$QUICK_SETTINGS" 'text: "Mouse Interaction"' \
     'global Mouse Interaction control unexpectedly left Quick Settings'
-require_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
-    'global Audio Reactive control unexpectedly left Quick Settings'
+require_text "$QUICK_SETTINGS" 'text: "Logo Physics"' \
+    'global Logo Physics control unexpectedly left Quick Settings'
+reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
+    'retired Audio Reactive logo control returned to Quick Settings'
 
 # Automatic contrast is computed only while unlocked. The secure lock reads a
 # local cache and never runs ImageMagick or wallpaper inspection itself.
