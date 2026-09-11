@@ -67,7 +67,8 @@ require_text "$QUICK_SETTINGS" '"set-lockscreen-logo-physics-hz"' \
     'Quick Settings does not persist logo physics rate'
 
 # Pointer motion keeps only the lightweight ghost. Logo blocks move only while
-# the bounded click explosion simulation is active.
+# the bounded click explosion simulation is active, and only logo clicks may
+# start or reinforce that simulation.
 for legacy in \
     'property real pointerFieldX:' \
     'property real pointerFieldY:' \
@@ -90,6 +91,18 @@ require_text "$SCENE" 'property var logoParticles: ({})' \
     'scene has no root-owned logo particle state'
 require_text "$SCENE" 'function triggerLogoExplosion(x, y)' \
     'scene has no click explosion entrypoint'
+require_text "$SCENE" 'function logoContainsPoint(x, y)' \
+    'scene has no logo-only pointer hit test'
+require_text "$SCENE" 'const logoWidth = root.elementVisualWidth("logo");' \
+    'logo click hit test does not follow the transformed logo width'
+require_text "$SCENE" 'const logoHeight = root.elementVisualHeight("logo");' \
+    'logo click hit test does not follow the transformed logo height'
+require_text "$SCENE" 'const logoCenterX = root.normalizedX("logo", 0.50) * root.width;' \
+    'logo click hit test does not follow the configured horizontal position'
+require_text "$SCENE" 'const logoCenterY = root.normalizedY("logo", 0.34) * root.height;' \
+    'logo click hit test does not follow the configured vertical position'
+require_text "$SCENE" 'if (!root.logoContainsPoint(x, y))' \
+    'pointer click is not gated to the actual logo bounds'
 require_text "$SCENE" 'function rebuildLogoBuckets()' \
     'logo explosion has no spatial bucket rebuild path'
 require_text "$SCENE" 'function resolveLogoCollisions()' \
@@ -105,15 +118,13 @@ require_text "$SCENE" 'interval: root.logoPhysicsIntervalMs' \
 require_text "$SCENE" 'particle.vx +=' \
     'clicking during an active explosion does not inject another impulse'
 require_text "$SCENE" 'root.triggerLogoExplosion(x, y);' \
-    'pointer click does not trigger the block explosion'
+    'logo pointer click does not trigger the block explosion'
 require_text "$SCENE" 'const ghostDx = x - ghostHeadX;' \
     'high-polling-rate ghost movement accumulation regressed'
 reject_text "$SCENE" 'updatePointerField(x, y, speed);' \
     'ordinary pointer motion still drives logo physics'
 reject_text "$SCENE" 'const margin = 90 * uiScale;' \
-    'logo explosion is still restricted to clicks near the wordmark'
-reject_text "$SCENE" 'if (local.x < -margin || local.y < -margin' \
-    'full-surface click explosion is still gated by wordmark bounds'
+    'logo hit testing regressed to the old oversized fixed margin'
 reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
     'retired audio-reactive logo control is still exposed'
 reject_text "$SURFACE" 'required property bool audioReactive' \
