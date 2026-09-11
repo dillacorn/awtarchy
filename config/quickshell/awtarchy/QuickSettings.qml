@@ -2300,6 +2300,23 @@ Singleton {
                                             SettingsButton { label: "60 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 60; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "60"]) }
                                             SettingsButton { label: "90 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 90; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "90"]) }
                                         }
+                                        Text { Layout.fillWidth: true; text: "Visualizer"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        SettingsButton {
+                                            label: BarState.lockscreenVisualizer().enabled ? "On" : "Off"
+                                            active: BarState.lockscreenVisualizer().enabled
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.queueStateCommand([
+                                                "set-lockscreen-visualizer-enabled",
+                                                BarState.lockscreenVisualizer().enabled ? "false" : "true"
+                                            ])
+                                        }
+                                        Text { Layout.fillWidth: true; text: "Background Opacity"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        RowLayout {
+                                            spacing: 5
+                                            SettingsButton { label: "100%"; active: BarState.lockscreenBackgroundOpacity() === 100; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "100"]) }
+                                            SettingsButton { label: "50%"; active: BarState.lockscreenBackgroundOpacity() === 50; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "50"]) }
+                                            SettingsButton { label: "0%"; active: BarState.lockscreenBackgroundOpacity() === 0; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "0"]) }
+                                        }
                                     }
 
                                     Text { Layout.fillWidth: true; text: "Location override (optional)"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9); font.bold: true }

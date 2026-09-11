@@ -26,6 +26,8 @@ Singleton {
 
     property var draftLayout: defaultLayout()
     property var draftCustomImages: []
+    property var draftVisualizer: defaultVisualizer()
+    property int draftBackgroundOpacity: 100
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
     property string draftBackgroundColor: "#000000"
@@ -71,6 +73,62 @@ Singleton {
     property real resizeStartScale: 1
     property real resizeCenterX: 0
     property real resizeCenterY: 0
+
+    function defaultVisualizer() {
+        return ({
+            enabled: false,
+            x: 0.50,
+            y: 0.80,
+            scale: 1.0,
+            stretch_x: 1.0,
+            stretch_y: 1.0,
+            opacity: 100,
+            color: "auto",
+            bands: 16,
+            gap: 4,
+            height: 100,
+            sensitivity: 100,
+            shape: "straight",
+            bend: 45
+        });
+    }
+
+    function cloneVisualizer(value) {
+        const defaults = defaultVisualizer();
+        const raw = value && typeof value === "object" && !Array.isArray(value)
+            ? value : defaults;
+        const enabled = typeof raw.enabled === "boolean" ? raw.enabled : defaults.enabled;
+        const x = Number(raw.x === undefined ? defaults.x : raw.x);
+        const y = Number(raw.y === undefined ? defaults.y : raw.y);
+        const scale = Number(raw.scale === undefined ? defaults.scale : raw.scale);
+        const stretchX = Number(raw.stretch_x === undefined ? defaults.stretch_x : raw.stretch_x);
+        const stretchY = Number(raw.stretch_y === undefined ? defaults.stretch_y : raw.stretch_y);
+        const opacity = Number(raw.opacity === undefined ? defaults.opacity : raw.opacity);
+        const rawColor = String(raw.color === undefined ? defaults.color : raw.color).toLowerCase();
+        const color = rawColor === "auto" || validHex(rawColor) ? rawColor : defaults.color;
+        const bands = Number(raw.bands === undefined ? defaults.bands : raw.bands);
+        const gap = Number(raw.gap === undefined ? defaults.gap : raw.gap);
+        const responseHeight = Number(raw.height === undefined ? defaults.height : raw.height);
+        const sensitivity = Number(raw.sensitivity === undefined ? defaults.sensitivity : raw.sensitivity);
+        const shape = String(raw.shape === undefined ? defaults.shape : raw.shape);
+        const bend = Number(raw.bend === undefined ? defaults.bend : raw.bend);
+        return ({
+            enabled: enabled,
+            x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : defaults.x)),
+            y: Math.max(0.08, Math.min(0.92, Number.isFinite(y) ? y : defaults.y)),
+            scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : defaults.scale)),
+            stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : defaults.stretch_x)),
+            stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : defaults.stretch_y)),
+            opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
+            color: color,
+            bands: Number.isInteger(bands) ? Math.max(4, Math.min(64, bands)) : defaults.bands,
+            gap: Number.isInteger(gap) ? Math.max(0, Math.min(24, gap)) : defaults.gap,
+            height: Number.isInteger(responseHeight) ? Math.max(25, Math.min(300, responseHeight)) : defaults.height,
+            sensitivity: Number.isInteger(sensitivity) ? Math.max(25, Math.min(300, sensitivity)) : defaults.sensitivity,
+            shape: ["straight", "arc", "circle"].indexOf(shape) >= 0 ? shape : defaults.shape,
+            bend: Number.isInteger(bend) ? Math.max(-100, Math.min(100, bend)) : defaults.bend
+        });
+    }
 
     function defaultLayout() {
         return ({
@@ -190,7 +248,8 @@ Singleton {
             date: "#ffffff",
             username: "#ffffff",
             weather: "#ffffff",
-            password: "#ffffff"
+            password: "#ffffff",
+            visualizer: "#ffffff"
         });
     }
 
@@ -210,9 +269,11 @@ Singleton {
         return ({
             layout: cloneLayout(draftLayout),
             customImages: cloneCustomImages(draftCustomImages),
+            visualizer: cloneSnapshot(draftVisualizer),
             visibility: cloneVisibility(draftVisibility),
             backgroundMode: draftBackgroundMode,
             backgroundColor: draftBackgroundColor,
+            backgroundOpacity: draftBackgroundOpacity,
             wallpaperPath: draftWallpaperPath,
             wallpaperFit: draftWallpaperFit,
             wallpaperFocalX: draftWallpaperFocalX,
@@ -249,6 +310,7 @@ Singleton {
             return;
         draftLayout = cloneLayout(snapshot.layout);
         draftCustomImages = cloneCustomImages(snapshot.customImages);
+        draftVisualizer = cloneVisualizer(snapshot.visualizer);
         draftVisibility = cloneVisibility(snapshot.visibility);
         const validSelection = selectedElements.filter(name => elementExists(name));
         if (!elementExists(selectedElement))
@@ -258,6 +320,9 @@ Singleton {
             ? String(snapshot.backgroundMode) : "black";
         draftBackgroundColor = validHex(snapshot.backgroundColor)
             ? String(snapshot.backgroundColor).toLowerCase() : "#000000";
+        const backgroundOpacity = Number(snapshot.backgroundOpacity);
+        draftBackgroundOpacity = Number.isFinite(backgroundOpacity)
+            ? Math.max(0, Math.min(100, Math.round(backgroundOpacity))) : 100;
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
             ? snapshot.wallpaperPath : "";
         draftWallpaperFit = ["cover", "contain"].indexOf(String(snapshot.wallpaperFit)) >= 0
@@ -373,7 +438,11 @@ Singleton {
         if (!Number.isFinite(numeric))
             return;
         const value = Math.max(0.50, Math.min(2.00, numeric));
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.scale = value;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = customImageIndex(name);
             if (index < 0) return;
@@ -456,8 +525,12 @@ Singleton {
             return delta;
         const nextLayout = cloneLayout(draftLayout);
         const nextImages = cloneCustomImages(draftCustomImages);
+        const nextVisualizer = cloneVisualizer(draftVisualizer);
         for (const name of selectedElements) {
-            if (isCustomImage(name)) {
+            if (name === "visualizer") {
+                nextVisualizer.x = Number(nextVisualizer.x) + delta.x;
+                nextVisualizer.y = Number(nextVisualizer.y) + delta.y;
+            } else if (isCustomImage(name)) {
                 const index = nextImages.findIndex(image => image.id === name);
                 if (index < 0) continue;
                 nextImages[index].x = Number(nextImages[index].x) + delta.x;
@@ -469,6 +542,7 @@ Singleton {
         }
         draftLayout = nextLayout;
         draftCustomImages = nextImages;
+        draftVisualizer = nextVisualizer;
         if (selectPrimary && selectedElements.length > 0 && !selectedContains(selectedElement))
             selectedElement = selectedElements[0];
         scheduleContrastRefresh();
@@ -547,6 +621,9 @@ Singleton {
         for (const name of elementNames)
             next[name].color = value;
         draftLayout = next;
+        const nextVisualizer = cloneVisualizer(draftVisualizer);
+        nextVisualizer.color = value;
+        draftVisualizer = nextVisualizer;
         statusMessage = value === "auto" ? "All elements use Auto contrast"
             : "All element colors updated";
     }
@@ -555,7 +632,13 @@ Singleton {
         if (!elementExists(name))
             return;
         recordUndoBeforeChange();
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const defaults = defaultVisualizer();
+            const next = cloneVisualizer(draftVisualizer);
+            next.x = defaults.x;
+            next.y = defaults.y;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = next.findIndex(image => image.id === name);
             if (index < 0) return;
@@ -587,6 +670,14 @@ Singleton {
         draftBackgroundMode = value;
         statusMessage = "";
         scheduleContrastRefresh();
+    }
+
+    function setDraftBackgroundOpacity(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric))
+            return;
+        recordUndoBeforeChange();
+        draftBackgroundOpacity = Math.max(0, Math.min(100, Math.round(numeric)));
     }
 
     function setDraftBackgroundColor(colorValue) {
@@ -638,6 +729,34 @@ Singleton {
             return;
         recordUndoBeforeChange();
         draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+    }
+
+    function setDraftVisualizerSetting(name, value) {
+        const next = cloneVisualizer(draftVisualizer);
+        if (name === "shape") {
+            const shape = String(value || "");
+            if (["straight", "arc", "circle"].indexOf(shape) < 0)
+                return;
+            recordUndoBeforeChange();
+            next.shape = shape;
+        } else {
+            const numeric = Math.round(Number(value));
+            if (!Number.isFinite(numeric))
+                return;
+            const bounds = ({
+                bands: ({ min: 4, max: 64 }),
+                gap: ({ min: 0, max: 24 }),
+                height: ({ min: 25, max: 300 }),
+                sensitivity: ({ min: 25, max: 300 }),
+                bend: ({ min: -100, max: 100 })
+            });
+            const range = bounds[name];
+            if (!range)
+                return;
+            recordUndoBeforeChange();
+            next[name] = Math.max(range.min, Math.min(range.max, numeric));
+        }
+        draftVisualizer = next;
     }
 
     function setDraftWeatherUnits(value) {
@@ -775,16 +894,19 @@ Singleton {
 
     function editableElementNames() {
         const names = elementNames.slice();
+        names.push("visualizer");
         for (const image of draftCustomImages)
             names.push(String(image.id));
         return names;
     }
 
     function elementExists(name) {
-        return elementNames.indexOf(name) >= 0 || isCustomImage(name);
+        return name === "visualizer" || elementNames.indexOf(name) >= 0 || isCustomImage(name);
     }
 
     function elementPoint(name) {
+        if (name === "visualizer")
+            return draftVisualizer;
         if (isCustomImage(name))
             return draftCustomImages[customImageIndex(name)];
         return draftLayout[name] || defaultLayout()[name] || null;
@@ -847,7 +969,12 @@ Singleton {
         if (selectPrimary)
             recordUndoBeforeChange();
         const point = clampPoint(name, Number(x), Number(y));
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.x = point.x;
+            next.y = point.y;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = next.findIndex(image => image.id === name);
             if (index < 0) return;
@@ -944,7 +1071,7 @@ Singleton {
     }
 
     function setDraftColor(name, colorValue) {
-        if (elementNames.indexOf(name) < 0)
+        if (name !== "visualizer" && elementNames.indexOf(name) < 0)
             return;
         const value = String(colorValue || "").trim().toLowerCase();
         if (value !== "auto" && !/^#[0-9a-f]{6}$/.test(value)) {
@@ -952,9 +1079,15 @@ Singleton {
             return;
         }
         recordUndoBeforeChange();
-        const next = cloneLayout(draftLayout);
-        next[name].color = value;
-        draftLayout = next;
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.color = value;
+            draftVisualizer = next;
+        } else {
+            const next = cloneLayout(draftLayout);
+            next[name].color = value;
+            draftLayout = next;
+        }
         selectElement(name, false);
         statusMessage = "";
     }
@@ -979,7 +1112,11 @@ Singleton {
         const minimum = name === "password" ? 20 : 0;
         const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
         recordUndoBeforeChange();
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.opacity = value;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = next.findIndex(image => image.id === name);
             if (index < 0) return;
@@ -1003,7 +1140,12 @@ Singleton {
         const x = Math.round(Math.max(0.25, Math.min(4.00, rawX)) * 100) / 100;
         const y = Math.round(Math.max(0.25, Math.min(4.00, rawY)) * 100) / 100;
         recordUndoBeforeChange();
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.stretch_x = x;
+            next.stretch_y = y;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = next.findIndex(image => image.id === name);
             if (index < 0) return;
@@ -1027,7 +1169,11 @@ Singleton {
         if (!elementCanHide(name))
             return;
         recordUndoBeforeChange();
-        if (isCustomImage(name)) {
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer);
+            next.enabled = !!visible;
+            draftVisualizer = next;
+        } else if (isCustomImage(name)) {
             const next = cloneCustomImages(draftCustomImages);
             const index = next.findIndex(image => image.id === name);
             if (index < 0) return;
@@ -1042,6 +1188,8 @@ Singleton {
     }
 
     function elementEnabled(name) {
+        if (name === "visualizer")
+            return draftVisualizer.enabled === true;
         if (isCustomImage(name)) {
             const point = elementPoint(name);
             return point ? point.visible !== false : false;
@@ -1102,6 +1250,8 @@ Singleton {
         recordUndoBeforeChange();
         draftLayout = defaultLayout();
         draftCustomImages = [];
+        draftVisualizer = defaultVisualizer();
+        draftBackgroundOpacity = 100;
         draftVisibility = defaultVisibility();
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
@@ -1126,6 +1276,8 @@ Singleton {
     function loadPersistedDraft() {
         draftLayout = cloneLayout(BarState.lockscreenLayout());
         draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages());
+        draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer());
+        draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity();
         draftVisibility = cloneVisibility(({
             logo: BarState.lockscreenShowLogo(),
             time: BarState.lockscreenShowTime(),
@@ -1276,7 +1428,9 @@ Singleton {
             String(draftOverlayStrength),
             String(draftWallpaperBlur),
             draftWeatherUnits,
-            JSON.stringify(draftCustomImages)
+            JSON.stringify(draftCustomImages),
+            JSON.stringify(draftVisualizer),
+            String(draftBackgroundOpacity)
         ]);
     }
 
@@ -1287,6 +1441,7 @@ Singleton {
         if (name === "username") return "Username";
         if (name === "weather") return "Weather";
         if (name === "password") return "Password";
+        if (name === "visualizer") return "Visualizer";
         if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1);
         return name;
     }
@@ -1410,6 +1565,12 @@ Singleton {
     }
 
 
+    LockPreviewAudioAnalyzer {
+        id: previewAudioAnalyzer
+        enabled: root.editingActive && !root.pickerSuspended
+            && root.draftVisualizer.enabled
+    }
+
     PanelWindow {
         id: editorWindow
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
@@ -1453,7 +1614,7 @@ Singleton {
         Rectangle {
             id: editorFocus
             anchors.fill: parent
-            color: "#000000"
+            color: "transparent"
             focus: true
 
             Keys.onPressed: event => {
@@ -1501,6 +1662,9 @@ Singleton {
                 autoAccents: root.draftAutoAccents
                 layout: root.draftLayout
                 customImages: root.draftCustomImages
+                visualizer: root.draftVisualizer
+                audioBands: previewAudioAnalyzer.bands
+                backgroundOpacity: root.draftBackgroundOpacity
                 previewMode: true
                 editorMode: true
                 editorVisibility: root.draftVisibility
@@ -2086,6 +2250,50 @@ Singleton {
                         }
                     }
 
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+                        visible: root.activeDrawer === "element"
+                            && root.selectedElement === "visualizer"
+
+                        Text { text: "Bands"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.bands > 4; onClicked: root.setDraftVisualizerSetting("bands", root.draftVisualizer.bands - 4) }
+                        Text { text: String(root.draftVisualizer.bands); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 26; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.bands < 64; onClicked: root.setDraftVisualizerSetting("bands", root.draftVisualizer.bands + 4) }
+
+                        Text { text: "Gap"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.gap > 0; onClicked: root.setDraftVisualizerSetting("gap", root.draftVisualizer.gap - 1) }
+                        Text { text: String(root.draftVisualizer.gap); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 24; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.gap < 24; onClicked: root.setDraftVisualizerSetting("gap", root.draftVisualizer.gap + 1) }
+
+                        Text { text: "Height"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.height > 25; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height - 10) }
+                        Text { text: root.draftVisualizer.height + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.height < 300; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height + 10) }
+
+                        Text { text: "Sensitivity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.sensitivity > 25; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity - 10) }
+                        Text { text: root.draftVisualizer.sensitivity + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignHCenter }
+                        SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.sensitivity < 300; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity + 10) }
+
+                        SettingsButton { label: "Straight"; active: root.draftVisualizer.shape === "straight"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "straight") }
+                        SettingsButton { label: "Arc"; active: root.draftVisualizer.shape === "arc"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "arc") }
+                        SettingsButton { label: "Circle"; active: root.draftVisualizer.shape === "circle"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "circle") }
+
+                        Text { text: "Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Slider {
+                            Layout.preferredWidth: 100
+                            visible: root.draftVisualizer.shape === "arc"
+                            from: -100; to: 100; stepSize: 1
+                            value: root.draftVisualizer.bend
+                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
+                            onMoved: root.setDraftVisualizerSetting("bend", value)
+                        }
+                        Text { text: String(root.draftVisualizer.bend); visible: root.draftVisualizer.shape === "arc"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 28 }
+                        Item { Layout.fillWidth: true }
+                    }
+
                     RowLayout {
                         Layout.fillWidth: true
                         spacing: 7
@@ -2195,6 +2403,33 @@ Singleton {
                         }
                         Text { text: root.draftWallpaperBlur + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
                         Item { Layout.fillWidth: true }
+                    }
+
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+                        visible: root.activeDrawer === "background"
+
+                        Text { text: "Background Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Slider {
+                            id: backgroundOpacitySlider
+                            Layout.preferredWidth: 150
+                            from: 0; to: 100; stepSize: 1
+                            value: root.draftBackgroundOpacity
+                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
+                            onMoved: root.setDraftBackgroundOpacity(value)
+                        }
+                        Text { text: root.draftBackgroundOpacity + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 36 }
+                        SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.setDraftBackgroundOpacity(100) }
+                        Item { Layout.fillWidth: true }
+                        Text {
+                            text: "Transparency can reveal content from the unlocked desktop behind the secure lock surface."
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 9
+                            wrapMode: Text.Wrap
+                        }
                     }
 
                     RowLayout {
