@@ -247,7 +247,6 @@ Singleton {
             String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
         ]);
     }
-
     function finishPreparedOpen() {
         if (!openPreparing)
             return;
@@ -2325,8 +2324,19 @@ Singleton {
                                         RowLayout {
                                             spacing: 5
                                             SettingsButton { label: "100%"; active: BarState.lockscreenBackgroundOpacity() === 100; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "100"]) }
+                                            SettingsButton { label: "75%"; active: BarState.lockscreenBackgroundOpacity() === 75; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "75"]) }
                                             SettingsButton { label: "50%"; active: BarState.lockscreenBackgroundOpacity() === 50; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "50"]) }
+                                            SettingsButton { label: "25%"; active: BarState.lockscreenBackgroundOpacity() === 25; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "25"]) }
                                             SettingsButton { label: "0%"; active: BarState.lockscreenBackgroundOpacity() === 0; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-background-opacity", "0"]) }
+                                        }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            visible: BarState.lockscreenBackgroundOpacity() < 100
+                                            text: "Transparency can reveal content from the unlocked desktop beneath the secure lockscreen."
+                                            color: Theme.muted
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.scaledText(8)
+                                            wrapMode: Text.Wrap
                                         }
                                     }
 
