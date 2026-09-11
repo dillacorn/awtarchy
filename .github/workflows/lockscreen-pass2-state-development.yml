@@ -37,7 +37,9 @@ jobs:
           bash tests/test-quickshell-lockscreen-interaction-polish.sh
           bash tests/test-quickshell-lockscreen-live-editor.sh
           bash tests/test-quickshell-lockscreen-animation-preference.sh
-          bash tests/test-quickshell-managed-history.sh
+          bash tests/test-quickshell-production-readiness.sh
+          bash tests/test-quickshell-updater-migration.sh
+          bash tests/test-quickshell-updater-bootstrap.sh
       - name: Commit generic editor slice
         run: |
           git config user.name 'github-actions[bot]'
