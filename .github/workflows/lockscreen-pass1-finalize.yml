@@ -11,9 +11,88 @@ permissions:
   contents: write
 
 jobs:
-  focused-red:
+  finalize:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-      - name: Run focused Pass 1 contract
-        run: bash tests/test-quickshell-lockscreen-interaction-polish.sh
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+
+      - name: Repair scene boundaries and full-surface click physics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          secure = Path('config/quickshell/awtarchy-lock/LockScene.qml')
+          preview = Path('config/quickshell/awtarchy/LockPreviewScene.qml')
+          text = secure.read_text(encoding='utf-8')
+
+          replacements = [
+              (
+                  'readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";    readonly property real passwordCenterX:',
+                  'readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";\n    readonly property real passwordCenterX:'
+              ),
+              (
+                  'property string dateText: "";    function wallpaperGeometry() {',
+                  'property string dateText: "";\n\n    function wallpaperGeometry() {'
+              ),
+              (
+                  'function minuteTimeFormat() {    function minuteTimeFormat() {',
+                  'function minuteTimeFormat() {'
+              ),
+              (
+                  '    }    Timer {\n        interval: 15000',
+                  '    }\n\n    Timer {\n        interval: 15000'
+              ),
+              (
+                  '''        const local = wordmarkItem.mapFromItem(root, x, y);
+                  const margin = 90 * uiScale;
+                  if (local.x < -margin || local.y < -margin
+                          || local.x > wordmarkWidth + margin
+                          || local.y > wordmarkHeight + margin)
+                      return;
+          ''',
+                  '''        const local = wordmarkItem.mapFromItem(root, x, y);
+          '''
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'expected exactly one scene repair match, found {count}: {old[:100]!r}')
+              text = text.replace(old, new, 1)
+
+          secure.write_text(text, encoding='utf-8')
+          preview.write_text(text, encoding='utf-8')
+          PY
+
+      - name: Focused Pass 1 validation
+        shell: bash
+        run: |
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          bash tests/test-quickshell-lockscreen-logo-cohesion.sh
+          bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-flick.sh
+          bash tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          bash tests/test-quickshell-lockscreen-runtime-services.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git diff --check
+          git diff --exit-code origin/main -- config/quickshell/awtarchy-lock/LockAuth.qml
+
+      - name: Commit final scene repair
+        shell: bash
+        run: |
+          git config user.name dillacorn
+          git config user.email 28743863+dillacorn@users.noreply.github.com
+          git add \
+            config/quickshell/awtarchy-lock/LockScene.qml \
+            config/quickshell/awtarchy/LockPreviewScene.qml
+          git commit -m 'Fix lockscreen click explosion boundaries'
+          git push origin HEAD:feature/lockscreen-interactive-effects
