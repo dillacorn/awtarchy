@@ -166,7 +166,7 @@ require_text "$CAVA_CONFIG" 'method = pipewire' \
     'CAVA visualizer source is not PipeWire'
 require_text "$CAVA_CONFIG" 'source = auto' \
     'CAVA visualizer source does not use the automatic output source'
-require_text "$AUDIO_HELPER" 'exec cava -p "$config_path"' \
+require_text "$AUDIO_HELPER" "exec cava -p \"\$config_path\"" \
     'audio helper no longer owns the bounded CAVA process'
 require_text "$ANALYZER" 'property var bands:' \
     'secure analyzer exposes no normalized band array'
