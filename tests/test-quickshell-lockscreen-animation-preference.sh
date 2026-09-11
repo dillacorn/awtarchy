@@ -28,6 +28,12 @@ reject_text() {
     fi
 }
 
+require_count() {
+    local file="$1" text="$2" expected="$3" message="$4" count
+    count="$(grep -Fc -- "$text" "$file" || true)"
+    [[ "$count" == "$expected" ]] || fail "$message (expected $expected, got $count)"
+}
+
 require_text "$APP_STATE" 'set-lockscreen-animation)' \
     'application state helper does not expose set-lockscreen-animation'
 require_text "$APP_STATE" 'LOCKSCREEN_ANIMATIONS_JSON=' \
@@ -126,8 +132,18 @@ reject_text "$SURFACE_QML" 'required property bool audioReactive' \
     'secure lock surface still carries retired logo audio-reactive state'
 reject_text "$SHELL_QML" 'property bool lockAudioReactive' \
     'secure lock shell still persists retired logo audio-reactive state'
-reject_text "$SHELL_QML" 'LockAudioAnalyzer {' \
-    'secure lock still instantiates audio analysis solely for logo movement'
+reject_text "$SCENE_QML" 'function logoGroupAudioOffset' \
+    'presentation scene still maps audio spectrum into logo movement'
+reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
+    'Quick Settings still exposes retired logo audio-reactive state'
+# Pass 3 legitimately owns one analyzer for the standalone visualizer. Its
+# lifecycle and output must be tied to visualizer state, never logo animation.
+require_count "$SHELL_QML" 'LockAudioAnalyzer {' 1 \
+    'secure lock shell does not own exactly one standalone visualizer analyzer'
+require_text "$SHELL_QML" 'enabled: root.lockVisualizer.enabled' \
+    'secure analyzer lifecycle is not tied to standalone visualizer state'
+require_text "$SHELL_QML" 'audioBands: lockAudioAnalyzer.bands' \
+    'secure analyzer output is not routed as visualizer presentation data'
 reject_text "$SCENE_QML" 'readonly property bool interactiveEffectsEnabled: root.animationPreference !== "off"' \
     'formation Off still suppresses independent pointer effects'
 
