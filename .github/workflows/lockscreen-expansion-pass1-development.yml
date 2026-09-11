@@ -125,7 +125,7 @@ jobs:
 
               if path == EDITOR and "Ctrl" in pattern and "Shortcut" in pattern:
                   between(
-                      "    Shortcut {\\n        sequence: \"Ctrl+Z\"",
+                      '    Shortcut {\\n        sequence: "Ctrl+Z"',
                       "    PanelWindow {")
                   return
 
