@@ -59,6 +59,9 @@ if run_state set-lockscreen-entry-transition glitch >/dev/null 2>&1; then
 fi
 [[ "$(jq -r '.lockscreen_entry_transition' "$TMP/cache/awtarchy/quickshell-state.json")" == pixel ]] \
     || fail 'invalid transition attempt changed persisted state'
+run_state reset-lockscreen-presentation
+[[ "$(jq -r '.lockscreen_entry_transition' "$TMP/cache/awtarchy/quickshell-state.json")" == fade ]] \
+    || fail 'reset-lockscreen-presentation did not restore Fade entry transition'
 
 contains "$BAR_STATE" 'lockscreenEntryTransitionPresets' \
     'BarState transition presets are missing'
