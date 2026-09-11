@@ -23,6 +23,18 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y desktop-file-utils shellcheck lua5.4
       - name: Apply Pass 2 generic editor
         run: python3 .github/scripts/apply-lockscreen-pass2-state.py
+      - name: Refresh Pass 2 managed history
+        run: |
+          set -euo pipefail
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+          while IFS='|' read -r source installed; do
+            digest="$(sha256sum "$source" | awk '{print $1}')"
+            entry="${digest}"$'\t'"${installed}"
+            grep -Fqx -- "$entry" "$history" || printf '%s\n' "$entry" >>"$history"
+          done <<'EOF'
+          config/hypr/scripts/quickshell_application_state.sh|.config/hypr/scripts/quickshell_application_state.sh
+          config/quickshell/awtarchy/LockscreenEditor.qml|.config/quickshell/awtarchy/LockscreenEditor.qml
+          EOF
       - name: Validate Pass 2 editor slice
         run: |
           set -euo pipefail
@@ -37,6 +49,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-interaction-polish.sh
           bash tests/test-quickshell-lockscreen-live-editor.sh
           bash tests/test-quickshell-lockscreen-animation-preference.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash tests/test-quickshell-production-readiness.sh
           bash tests/test-quickshell-updater-migration.sh
           bash tests/test-quickshell-updater-bootstrap.sh
@@ -44,7 +57,8 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add config/quickshell/awtarchy/LockscreenEditor.qml
+          git add config/quickshell/awtarchy/LockscreenEditor.qml \
+            local/share/awtarchy/quickshell-managed-history.sha256
           if git diff --cached --quiet; then
             exit 0
           fi
