@@ -6,7 +6,6 @@ on:
       - feature/lockscreen-interactive-effects
     paths:
       - .github/scripts/apply-lockscreen-expansion-pass1.py
-      - .github/scripts/normalize-lockscreen-pass1-patcher.py
       - .github/workflows/lockscreen-expansion-pass1-development.yml
 
 permissions:
@@ -24,10 +23,48 @@ jobs:
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install -y jq shellcheck
 
-      - name: Normalize Pass 1 patcher
-        run: python3 .github/scripts/normalize-lockscreen-pass1-patcher.py
+      - name: Prepare exact runner snapshot
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
 
-      - name: Apply Pass 1 production patch
+          picker = Path('config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh')
+          text = picker.read_text(encoding='utf-8')
+          old = '''set +e
+          "$TERMINAL_CMD" --class awtarchy-lock-wallpaper -e \\
+              "$awtwall_path" --select-only --type images --resume --select-result "$RESULT_FILE"
+          terminal_rc=$?
+          set -e'''
+          new = '''set +e
+          terminal_name="$(basename -- "$TERMINAL_CMD")"
+          if [[ "$terminal_name" == "alacritty" ]]; then
+              "$TERMINAL_CMD" --option window.startup_mode=Fullscreen \\
+                  --class awtarchy-lock-wallpaper -e "$awtwall_path" \\
+                  --select-only --type images --resume --select-result "$RESULT_FILE"
+              terminal_rc=$?
+          else
+              "$TERMINAL_CMD" --class awtarchy-lock-wallpaper -e "$awtwall_path" \\
+                  --select-only --type images --resume --select-result "$RESULT_FILE"
+              terminal_rc=$?
+          fi
+          set -e'''
+          if text.count(old) != 1:
+              raise SystemExit(f'picker launch block count: {text.count(old)}')
+          picker.write_text(text.replace(old, new, 1), encoding='utf-8')
+
+          patcher = Path('.github/scripts/apply-lockscreen-expansion-pass1.py')
+          script = patcher.read_text(encoding='utf-8')
+          start = script.find('replace_once(PICKER,')
+          marker = '''\n\n# ---------------------------------------------------------------------------\n# Secure shell/surface: logo physics rate replaces logo audio deformation.\n# ---------------------------------------------------------------------------'''
+          end = script.find(marker, start)
+          if start < 0 or end < 0:
+              raise SystemExit(f'could not isolate obsolete picker patch block: start={start} end={end}')
+          patcher.write_text(script[:start] + script[end + 2:], encoding='utf-8')
+          print('runner snapshot prepared')
+          PY
+
+      - name: Apply Pass 1 production changes
         run: python3 .github/scripts/apply-lockscreen-expansion-pass1.py
 
       - name: Bash syntax
