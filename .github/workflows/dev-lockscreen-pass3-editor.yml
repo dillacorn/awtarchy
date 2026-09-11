@@ -1,0 +1,51 @@
+name: Lockscreen Pass 3 Editor Development
+
+on:
+  push:
+    branches: [feature/lockscreen-interactive-effects]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-editor-slice:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Apply Pass 3 editor slice
+        run: python3 .github/scripts/apply-lockscreen-pass3-editor.py
+      - name: Validate Pass 3 and editor contracts
+        run: |
+          bash -n tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          shellcheck tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-flick.sh
+          bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-background-composition.sh
+          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash tests/test-quickshell-lockscreen-foundation.sh
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-runtime-services.sh
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git diff --exit-code origin/main -- config/quickshell/awtarchy-lock/LockAuth.qml
+          git diff --check
+      - name: Commit verified editor slice
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add \
+            config/quickshell/awtarchy/LockscreenEditor.qml \
+            config/quickshell/awtarchy/QuickSettings.qml
+          git diff --cached --quiet && exit 0
+          git commit -m 'Add lockscreen visualizer editor controls'
+          git push origin HEAD:feature/lockscreen-interactive-effects
