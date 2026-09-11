@@ -129,6 +129,13 @@ Singleton {
         { key: "split", label: "Split" },
         { key: "off", label: "Off" }
     ]
+    readonly property var lockscreenEntryTransitionPresets: [
+        { key: "fade", label: "Fade" },
+        { key: "pixel", label: "Pixel" },
+        { key: "iris", label: "Reverse Iris" },
+        { key: "edges", label: "Edges" },
+        { key: "wipe", label: "Wipe" }
+    ]
     readonly property var defaultLockscreenComposition: ({
         lockscreen_wallpaper_fit: "cover",
         lockscreen_wallpaper_focal_x: 0.5,
@@ -373,6 +380,7 @@ Singleton {
             enabled: true,
             update_notifications_enabled: true,
             lockscreen_animation: "split",
+            lockscreen_entry_transition: "fade",
             lockscreen_logo_physics_hz: 30,
             lockscreen_audio_reactive: true,
             lockscreen_mouse_interactive: true,
@@ -650,6 +658,15 @@ Singleton {
                 return value;
         }
         return "split";
+    }
+
+    function lockscreenEntryTransition() {
+        const value = String(data().lockscreen_entry_transition || "fade");
+        for (const preset of lockscreenEntryTransitionPresets) {
+            if (preset.key === value)
+                return value;
+        }
+        return "fade";
     }
 
     function lockscreenBooleanPreference(field, fallback) {

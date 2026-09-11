@@ -8,6 +8,7 @@ WlSessionLockSurface {
     required property var theme
     required property bool unlocking
     required property string animationPreference
+    required property string entryTransition
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -66,6 +67,7 @@ WlSessionLockSurface {
         theme: root.theme
         unlocking: root.unlocking
         animationPreference: root.animationPreference
+        entryTransition: root.entryTransition
         randomFormationMode: root.randomFormationMode
         logoPhysicsHz: root.logoPhysicsHz
         mouseInteractive: root.mouseInteractive
@@ -114,7 +116,7 @@ WlSessionLockSurface {
         width: scene.passwordWidth
         height: scene.passwordHeight
         z: 20
-        opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")
+        opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")
         transform: Scale {
             origin.x: passwordBlock.width / 2
             origin.y: passwordBlock.height / 2

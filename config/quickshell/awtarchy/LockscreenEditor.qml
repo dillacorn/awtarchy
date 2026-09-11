@@ -28,6 +28,8 @@ Singleton {
     property var draftCustomImages: []
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
+    property string draftEntryTransition: "fade"
+    property int entryTransitionReplayToken: 0
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
     property string draftBackgroundColor: "#000000"
@@ -274,6 +276,7 @@ Singleton {
             backgroundMode: draftBackgroundMode,
             backgroundColor: draftBackgroundColor,
             backgroundOpacity: draftBackgroundOpacity,
+            entryTransition: draftEntryTransition,
             wallpaperPath: draftWallpaperPath,
             wallpaperFit: draftWallpaperFit,
             wallpaperFocalX: draftWallpaperFocalX,
@@ -323,6 +326,9 @@ Singleton {
         const backgroundOpacity = Number(snapshot.backgroundOpacity);
         draftBackgroundOpacity = Number.isFinite(backgroundOpacity)
             ? Math.max(0, Math.min(100, Math.round(backgroundOpacity))) : 100;
+        const entryTransition = String(snapshot.entryTransition || "fade");
+        draftEntryTransition = ["fade", "pixel", "iris", "edges", "wipe"].indexOf(entryTransition) >= 0
+            ? entryTransition : "fade";
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
             ? snapshot.wallpaperPath : "";
         draftWallpaperFit = ["cover", "contain"].indexOf(String(snapshot.wallpaperFit)) >= 0
@@ -1246,12 +1252,32 @@ Singleton {
         statusMessage = "Image removed. Save to apply.";
     }
 
+    function setDraftEntryTransition(value) {
+        const key = String(value || "");
+        if (["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) < 0)
+            return;
+        if (draftEntryTransition === key) {
+            replayEntryTransition();
+            return;
+        }
+        recordUndoBeforeChange();
+        draftEntryTransition = key;
+        replayEntryTransition();
+    }
+
+    function replayEntryTransition() {
+        entryTransitionReplayToken = entryTransitionReplayToken >= 2147483646
+            ? 1 : entryTransitionReplayToken + 1;
+        statusMessage = "Replaying " + draftEntryTransition + " transition";
+    }
+
     function resetDraft() {
         recordUndoBeforeChange();
         draftLayout = defaultLayout();
         draftCustomImages = [];
         draftVisualizer = defaultVisualizer();
         draftBackgroundOpacity = 100;
+        draftEntryTransition = "fade";
         draftVisibility = defaultVisibility();
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
@@ -1278,6 +1304,7 @@ Singleton {
         draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages());
         draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer());
         draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity();
+        draftEntryTransition = BarState.lockscreenEntryTransition();
         draftVisibility = cloneVisibility(({
             logo: BarState.lockscreenShowLogo(),
             time: BarState.lockscreenShowTime(),
@@ -1430,7 +1457,8 @@ Singleton {
             draftWeatherUnits,
             JSON.stringify(draftCustomImages),
             JSON.stringify(draftVisualizer),
-            String(draftBackgroundOpacity)
+            String(draftBackgroundOpacity),
+            String(draftEntryTransition)
         ]);
     }
 
@@ -1640,6 +1668,8 @@ Singleton {
                 anchors.fill: parent
                 theme: Theme
                 animationPreference: BarState.lockscreenAnimationPreference()
+                entryTransition: root.draftEntryTransition
+                entryTransitionReplayToken: root.entryTransitionReplayToken
                 randomFormationMode: 3
                 logoPhysicsHz: BarState.lockscreenLogoPhysicsHz()
                 mouseInteractive: BarState.lockscreenMouseInteractiveEnabled()
@@ -2430,6 +2460,23 @@ Singleton {
                             font.pixelSize: 9
                             wrapMode: Text.Wrap
                         }
+                    }
+
+
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 7
+                        visible: root.activeDrawer === "background"
+
+                        Text { text: "Entry Transition"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Fade"; active: root.draftEntryTransition === "fade"; textSize: 9; onClicked: root.setDraftEntryTransition("fade") }
+                        SettingsButton { label: "Pixel"; active: root.draftEntryTransition === "pixel"; textSize: 9; onClicked: root.setDraftEntryTransition("pixel") }
+                        SettingsButton { label: "Reverse Iris"; active: root.draftEntryTransition === "iris"; textSize: 9; onClicked: root.setDraftEntryTransition("iris") }
+                        SettingsButton { label: "Edges"; active: root.draftEntryTransition === "edges"; textSize: 9; onClicked: root.setDraftEntryTransition("edges") }
+                        SettingsButton { label: "Wipe"; active: root.draftEntryTransition === "wipe"; textSize: 9; onClicked: root.setDraftEntryTransition("wipe") }
+                        SettingsButton { label: "Replay Transition"; textSize: 9; onClicked: root.replayEntryTransition() }
+                        Item { Layout.fillWidth: true }
                     }
 
                     RowLayout {

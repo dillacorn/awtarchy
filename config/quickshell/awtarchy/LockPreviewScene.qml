@@ -8,6 +8,7 @@ Item {
 
     required property var theme
     required property string animationPreference
+    required property string entryTransition
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -40,6 +41,16 @@ Item {
     property real editorHoldScale: 1.0
     property bool unlocking: false
     property bool entered: false
+    property int entryTransitionReplayToken: 0
+    property real entryTransitionProgress: 0
+    property bool entryTransitionRunning: false
+
+    readonly property int entryTileColumns: 24
+    readonly property int entryTileRows: 14
+    readonly property real securePasswordEntryOpacity: root.unlocking ? 0
+        : !root.entered ? 0
+        : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
+        : root.entryTransitionRunning ? 0 : 1
 
     readonly property real uiScale: Math.max(0.72, Math.min(1.35,
         Math.min(width / 1920, height / 1080)))
@@ -102,6 +113,34 @@ Item {
     property real lastPointerY: -1
     property string timeText: ""
     property string dateText: "";
+
+    function entryTransitionMode() {
+        const key = String(root.entryTransition || "fade");
+        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) >= 0
+            ? key : "fade";
+    }
+
+    function entryTransitionDuration() {
+        const mode = entryTransitionMode();
+        if (mode === "pixel" || mode === "iris") return 560;
+        if (mode === "edges") return 460;
+        if (mode === "wipe") return 380;
+        return 220;
+    }
+
+    function replayEntryTransition() {
+        entryTransitionAnimation.stop();
+        entryTransitionProgress = 0;
+        entryTransitionRunning = true;
+        if (!entered || unlocking)
+            return;
+        entryTransitionAnimation.restart();
+    }
+
+    onEntryTransitionReplayTokenChanged: {
+        if (entered && !unlocking)
+            replayEntryTransition();
+    }
 
     function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
@@ -661,11 +700,13 @@ Item {
     Item {
         id: visualLayer
         anchors.fill: parent
-        opacity: root.unlocking ? 0 : root.entered ? 1 : 0
+        opacity: root.unlocking ? 0
+            : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
+            : root.entered ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation {
-                duration: root.unlocking ? 160 : 220
+                duration: root.unlocking ? 160 : 80
                 easing.type: Easing.OutCubic
             }
         }
@@ -1098,6 +1139,113 @@ Item {
         }
     }
 
+
+
+    Item {
+        id: entryTransitionCover
+        anchors.fill: parent
+        z: 500
+        visible: !root.unlocking && root.entryTransitionRunning
+            && root.entryTransitionMode() !== "fade"
+
+        Repeater {
+            model: entryTransitionCover.visible
+                && (root.entryTransitionMode() === "pixel"
+                    || root.entryTransitionMode() === "iris")
+                ? root.entryTileColumns * root.entryTileRows : 0
+
+            Rectangle {
+                readonly property int tileColumn: index % root.entryTileColumns
+                readonly property int tileRow: Math.floor(index / root.entryTileColumns)
+                readonly property real centerX: (tileColumn + 0.5) / root.entryTileColumns
+                readonly property real centerY: (tileRow + 0.5) / root.entryTileRows
+                readonly property real distanceFromCenter: Math.min(1,
+                    Math.sqrt(Math.pow((centerX - 0.5) * 2, 2)
+                        + Math.pow((centerY - 0.5) * 2, 2)) / Math.sqrt(2))
+                readonly property real pixelThreshold: 0.08
+                    + (((index * 73 + 19) % 337) / 336) * 0.84
+                readonly property real irisThreshold: 0.10
+                    + (1 - distanceFromCenter) * 0.82
+
+                x: tileColumn * entryTransitionCover.width / root.entryTileColumns
+                y: tileRow * entryTransitionCover.height / root.entryTileRows
+                width: Math.ceil(entryTransitionCover.width / root.entryTileColumns) + 1
+                height: Math.ceil(entryTransitionCover.height / root.entryTileRows) + 1
+                color: "#000000"
+                visible: root.entryTransitionMode() === "pixel"
+                    ? root.entryTransitionProgress < pixelThreshold
+                    : root.entryTransitionProgress < irisThreshold
+            }
+        }
+
+        Rectangle {
+            visible: root.entryTransitionMode() === "edges"
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: parent.height * 0.5 * (1 - root.entryTransitionProgress)
+            color: "#000000"
+        }
+        Rectangle {
+            visible: root.entryTransitionMode() === "edges"
+            anchors.bottom: parent.bottom
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: parent.height * 0.5 * (1 - root.entryTransitionProgress)
+            color: "#000000"
+        }
+        Rectangle {
+            visible: root.entryTransitionMode() === "edges"
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width * 0.5 * (1 - root.entryTransitionProgress)
+            color: "#000000"
+        }
+        Rectangle {
+            visible: root.entryTransitionMode() === "edges"
+            anchors.right: parent.right
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width * 0.5 * (1 - root.entryTransitionProgress)
+            color: "#000000"
+        }
+
+        Rectangle {
+            visible: root.entryTransitionMode() === "wipe"
+            x: parent.width * root.entryTransitionProgress
+            y: 0
+            width: Math.max(0, parent.width * (1 - root.entryTransitionProgress))
+            height: parent.height
+            color: "#000000"
+        }
+        Rectangle {
+            visible: root.entryTransitionMode() === "wipe"
+                && root.entryTransitionProgress > 0
+                && root.entryTransitionProgress < 1
+            x: Math.max(0, parent.width * root.entryTransitionProgress - width)
+            y: 0
+            width: Math.max(2, Math.round(6 * root.uiScale))
+            height: parent.height
+            color: root.theme.lockAccent
+            opacity: 0.65
+        }
+    }
+
+    NumberAnimation {
+        id: entryTransitionAnimation
+        target: root
+        property: "entryTransitionProgress"
+        from: 0
+        to: 1
+        duration: root.entryTransitionDuration()
+        easing.type: Easing.OutCubic
+        onFinished: {
+            root.entryTransitionProgress = 1;
+            root.entryTransitionRunning = false;
+        }
+    }
+
     Timer {
         id: cursorFadeDelay
         interval: root.cursorFadeDelayMs
@@ -1134,5 +1282,6 @@ Item {
     Component.onCompleted: {
         root.updateClockText();
         root.entered = true;
+        Qt.callLater(() => root.replayEntryTransition());
     }
 }

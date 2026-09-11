@@ -14,6 +14,7 @@ ShellRoot {
     readonly property string statePath: (Quickshell.env("XDG_CACHE_HOME")
         || (Quickshell.env("HOME") + "/.cache")) + "/awtarchy/quickshell-state.json"
     property string lockAnimationPreference: "split"
+    property string lockEntryTransition: "fade"
     property int lockLogoPhysicsHz: 30
     property bool lockMouseInteractive: true
     property bool lockShowLogo: true
@@ -137,6 +138,12 @@ ShellRoot {
     function normalizedAnimationPreference(value) {
         const key = String(value || "");
         return allowedAnimationPreferences.indexOf(key) >= 0 ? key : "split";
+    }
+
+    function normalizedEntryTransition(value) {
+        const key = String(value || "");
+        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) >= 0
+            ? key : "fade";
     }
 
     function normalizedLogoPhysicsHz(value) {
@@ -277,6 +284,7 @@ ShellRoot {
 
     function resetPreferences() {
         lockAnimationPreference = "split";
+        lockEntryTransition = "fade";
         lockLogoPhysicsHz = 30;
         lockMouseInteractive = true;
         lockShowLogo = true;
@@ -315,6 +323,7 @@ ShellRoot {
             }
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
+            lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
             lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);
             lockMouseInteractive = normalizedBoolean(parsed.lockscreen_mouse_interactive, true);
             lockShowLogo = normalizedBoolean(parsed.lockscreen_show_logo, true);
@@ -399,6 +408,7 @@ ShellRoot {
                 theme: lockTheme
                 unlocking: root.unlockRequested
                 animationPreference: root.lockAnimationPreference
+                entryTransition: root.lockEntryTransition
                 randomFormationMode: root.randomFormationMode
                 logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive

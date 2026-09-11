@@ -19,6 +19,7 @@ MAX_ICON_SCALE=200
 SAVE_VERSION=2
 QUICK_SETTINGS_LAYOUT_SAVE_VERSION=1
 LOCKSCREEN_ANIMATIONS_JSON='["random","swarm","edges","center","split","off"]'
+LOCKSCREEN_ENTRY_TRANSITIONS_JSON='["fade","pixel","iris","edges","wipe"]'
 LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
 LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
 LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
@@ -98,6 +99,17 @@ validate_lockscreen_animation() {
     fi
 }
 
+validate_lockscreen_entry_transition() {
+    local value="$1"
+    if ! jq -e -n \
+        --arg value "$value" \
+        --argjson allowed "$LOCKSCREEN_ENTRY_TRANSITIONS_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen entry transition: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
 
 validate_cursor_variant() {
     local value="$1"
@@ -160,6 +172,14 @@ set_lockscreen_animation() {
     validate_lockscreen_animation "$value"
     new_tmp
     jq --arg value "$value" '.lockscreen_animation = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+set_lockscreen_entry_transition() {
+    local value="$1"
+    validate_lockscreen_entry_transition "$value"
+    new_tmp
+    jq --arg value "$value" '.lockscreen_entry_transition = $value' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
 
@@ -588,7 +608,8 @@ save_lockscreen_editor() {
     local custom_images_input="${13:-[]}"
     local visualizer_input="${14:-$LOCKSCREEN_VISUALIZER_DEFAULT_JSON}"
     local background_opacity_input="${15:-100}"
-    local custom_images visualizer background_opacity
+    local entry_transition_input="${16:-}"
+    local custom_images visualizer background_opacity entry_transition
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout
 ' >&2
@@ -597,6 +618,17 @@ save_lockscreen_editor() {
     custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
     visualizer="$(normalize_lockscreen_visualizer_json "$visualizer_input")"
     background_opacity="$(normalize_percent_integer "$background_opacity_input" 'lockscreen background opacity')"
+    if [[ -n "$entry_transition_input" ]]; then
+        entry_transition="$entry_transition_input"
+        validate_lockscreen_entry_transition "$entry_transition"
+    else
+        entry_transition="$(jq -r '.lockscreen_entry_transition // "fade"' "$STATE_FILE")"
+        if ! jq -e -n --arg value "$entry_transition" \
+            --argjson allowed "$LOCKSCREEN_ENTRY_TRANSITIONS_JSON" \
+            '$allowed | index($value) != null' >/dev/null 2>&1; then
+            entry_transition="fade"
+        fi
+    fi
     validate_lockscreen_editor_visibility "$visibility"
     validate_lockscreen_background "$background"
     validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
@@ -629,11 +661,13 @@ save_lockscreen_editor() {
         --arg weather_units "$weather_units" \
         --argjson custom_images "$custom_images" \
         --argjson visualizer "$visualizer" \
-        --argjson background_opacity "$background_opacity" '
+        --argjson background_opacity "$background_opacity" \
+        --arg entry_transition "$entry_transition" '
         .lockscreen_layout = $layout
         | .lockscreen_custom_images = $custom_images
         | .lockscreen_visualizer = $visualizer
         | .lockscreen_background_opacity = $background_opacity
+        | .lockscreen_entry_transition = $entry_transition
         | .lockscreen_show_logo = $visibility.logo
         | .lockscreen_show_time = $visibility.time
         | .lockscreen_show_date = $visibility.date
@@ -657,6 +691,7 @@ reset_lockscreen_presentation() {
     jq --argjson layout "$LOCKSCREEN_LAYOUT_DEFAULT_JSON" \
         --argjson visualizer "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" '
         .lockscreen_animation = "split"
+        | .lockscreen_entry_transition = "fade"
         | .lockscreen_logo_physics_hz = 30
         | .lockscreen_audio_reactive = true
         | .lockscreen_mouse_interactive = true
@@ -1480,6 +1515,10 @@ case "$cmd" in
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_animation "$2"
         ;;
+    set-lockscreen-entry-transition)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_entry_transition "$2"
+        ;;
     set-lockscreen-logo-physics-hz)
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_logo_physics_hz "$2"
@@ -1542,7 +1581,7 @@ case "$cmd" in
         ;;
     save-lockscreen-editor)
         case "$#" in
-            6|12|13|14|16) ;;
+            6|12|13|14|16|17) ;;
             *) exit 2 ;;
         esac
         save_lockscreen_editor "${@:2}"
