@@ -1,0 +1,86 @@
+name: Lockscreen Logo Hit Test Development
+
+on:
+  push:
+    branches: [feature/lockscreen-interactive-effects]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Apply logo-only click hit test
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          paths = [
+              Path('config/quickshell/awtarchy-lock/LockScene.qml'),
+              Path('config/quickshell/awtarchy/LockPreviewScene.qml'),
+          ]
+          marker = '''    function handlePointerClick(x, y) {
+              if (!mouseInteractive)
+                  return;
+              pointerActive = true;
+              pushGhostSample(x, y);
+              root.triggerLogoExplosion(x, y);
+              lastPointerX = x;
+              lastPointerY = y;
+              lastPointerSampleTime = Date.now();
+          }
+          '''
+          replacement = '''    function logoContainsPoint(x, y) {
+              if (!showLogo)
+                  return false;
+              const logoWidth = root.elementVisualWidth("logo");
+              const logoHeight = root.elementVisualHeight("logo");
+              const logoCenterX = root.normalizedX("logo", 0.50) * root.width;
+              const logoCenterY = root.normalizedY("logo", 0.34) * root.height;
+              return x >= logoCenterX - (logoWidth / 2)
+                  && x <= logoCenterX + (logoWidth / 2)
+                  && y >= logoCenterY - (logoHeight / 2)
+                  && y <= logoCenterY + (logoHeight / 2);
+          }
+
+          function handlePointerClick(x, y) {
+              if (!mouseInteractive)
+                  return;
+              pointerActive = true;
+              pushGhostSample(x, y);
+              lastPointerX = x;
+              lastPointerY = y;
+              lastPointerSampleTime = Date.now();
+              if (!root.logoContainsPoint(x, y))
+                  return;
+              root.triggerLogoExplosion(x, y);
+          }
+          '''
+          for path in paths:
+              text = path.read_text()
+              if text.count(marker) != 1:
+                  raise SystemExit(f'{path}: expected exactly one handlePointerClick marker, found {text.count(marker)}')
+              path.write_text(text.replace(marker, replacement, 1))
+          PY
+      - name: Validate logo-only click behavior
+        run: |
+          set -euo pipefail
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git diff --check
+      - name: Commit verified product change
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git diff --cached --quiet && exit 0
+          git commit -m 'Fix lockscreen logo click hit testing'
+          git push origin HEAD:feature/lockscreen-interactive-effects
