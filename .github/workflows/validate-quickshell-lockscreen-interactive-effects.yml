@@ -9,69 +9,6 @@ permissions:
   contents: read
 
 jobs:
-  refresh-final-history:
-    if: github.event_name == 'pull_request' && github.head_ref == 'feature/lockscreen-interactive-effects' && github.actor != 'github-actions[bot]'
-    permissions:
-      contents: write
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          ref: feature/lockscreen-interactive-effects
-          fetch-depth: 0
-      - name: Install updater test prerequisites
-        run: sudo apt-get update && sudo apt-get install -y lua5.4
-      - name: Refresh exact current managed hashes
-        run: |
-          set -euo pipefail
-          history='local/share/awtarchy/quickshell-managed-history.sha256'
-          while IFS= read -r path; do
-            rel=".${path}"
-            entry="$(sha256sum "$path" | awk '{print $1}')"$'\t'"$rel"
-            grep -Fqx -- "$entry" "$history" || printf '%s\n' "$entry" >>"$history"
-          done < <(
-            {
-              find config/quickshell/awtarchy -type f -print
-              find config/quickshell/awtarchy-lock -type f -print
-              find config/hypr/scripts -maxdepth 1 -type f \
-                \( -name 'quickshell*' -o -name 'ddc_brightness.sh' -o -name 'hypr-ddc-brightness.sh' \) -print
-              find local/share/applications -maxdepth 1 -type f \
-                -name 'quickshell_bar_*.desktop' -print
-            } | LC_ALL=C sort -u
-          )
-          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          git diff --check
-      - name: Validate updater migration against refreshed history
-        run: |
-          set -euo pipefail
-          aur_scan_fixture_installed=0
-          cleanup_aur_scan_fixture() {
-            if (( aur_scan_fixture_installed == 1 )); then
-              sudo rm -f -- /usr/bin/aur-scan
-            fi
-          }
-          trap cleanup_aur_scan_fixture EXIT
-          if [[ ! -x /usr/bin/aur-scan ]]; then
-            sudo install -m 0755 tests/fixtures/aur-scan-version-only.sh /usr/bin/aur-scan
-            aur_scan_fixture_installed=1
-          fi
-          bash tests/test-quickshell-updater-migration.sh
-          cleanup_aur_scan_fixture
-          aur_scan_fixture_installed=0
-          trap - EXIT
-          bash tests/test-quickshell-updater-bootstrap.sh
-      - name: Commit verified history only
-        run: |
-          set -euo pipefail
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add local/share/awtarchy/quickshell-managed-history.sha256
-          git diff --cached --quiet && exit 0
-          test "$(git diff --cached --name-only | wc -l)" -eq 1
-          test "$(git diff --cached --name-only)" = 'local/share/awtarchy/quickshell-managed-history.sha256'
-          git commit -m 'Refresh final lockscreen managed history'
-          git push origin HEAD:feature/lockscreen-interactive-effects
-
   validate:
     runs-on: ubuntu-latest
     steps:
