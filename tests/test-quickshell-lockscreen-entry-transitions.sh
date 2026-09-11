@@ -118,6 +118,10 @@ for key in pixel iris edges wipe; do
 done
 rejects "$SCENE" 'ShaderEffect' \
     'entry transitions must not add a shader path'
+rejects "$SCENE" 'Qt.callLater(() => root.replayEntryTransition());' \
+    'initial entry transition is deferred and can expose a pre-cover frame'
+contains "$SCENE" 'root.replayEntryTransition();' \
+    'initial entry transition does not start synchronously'
 
 contains "$EDITOR" 'property string draftEntryTransition: "fade"' \
     'editor transition draft is missing'
