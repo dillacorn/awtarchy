@@ -1,17 +1,16 @@
 name: Lockscreen Pass 1 Finalize
 
 on:
-  push:
+  pull_request:
     branches:
-      - feature/lockscreen-interactive-effects
-    paths:
-      - .github/workflows/lockscreen-pass1-finalize.yml
+      - main
 
 permissions:
   contents: write
 
 jobs:
   finalize:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
