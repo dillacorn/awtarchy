@@ -16,325 +16,129 @@ def regex_once(text, pattern, repl, label):
         raise SystemExit(f"{label}: expected exactly one regex match, found {count}")
     return new
 
-app_path = Path("config/hypr/scripts/quickshell_application_state.sh")
-app = app_path.read_text()
-app = replace_once(
-    app,
-    "LOCKSCREEN_LAYOUT_DEFAULT_JSON='{\"logo\":{\"x\":0.5,\"y\":0.34,\"scale\":1,\"color\":\"auto\"},\"time\":{\"x\":0.5,\"y\":0.51,\"scale\":1,\"color\":\"auto\"},\"date\":{\"x\":0.5,\"y\":0.555,\"scale\":1,\"color\":\"auto\"},\"username\":{\"x\":0.5,\"y\":0.595,\"scale\":1,\"color\":\"auto\"},\"weather\":{\"x\":0.5,\"y\":0.635,\"scale\":1,\"color\":\"auto\"},\"password\":{\"x\":0.5,\"y\":0.7,\"scale\":1,\"color\":\"auto\"}}'",
-    "LOCKSCREEN_LAYOUT_DEFAULT_JSON='{\"logo\":{\"x\":0.5,\"y\":0.34,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"},\"time\":{\"x\":0.5,\"y\":0.51,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"},\"date\":{\"x\":0.5,\"y\":0.555,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"},\"username\":{\"x\":0.5,\"y\":0.595,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"},\"weather\":{\"x\":0.5,\"y\":0.635,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"},\"password\":{\"x\":0.5,\"y\":0.7,\"scale\":1,\"stretch_x\":1,\"stretch_y\":1,\"opacity\":100,\"color\":\"auto\"}}'\nLOCKSCREEN_CUSTOM_IMAGE_MAX=12",
-    "layout defaults",
+
+scene_path = Path("config/quickshell/awtarchy-lock/LockScene.qml")
+scene = scene_path.read_text()
+scene = replace_once(
+    scene,
+    '    required property var autoAccents\n    required property var layout\n',
+    '    required property var autoAccents\n    required property var layout\n    required property var customImages\n',
+    "scene custom image input",
 )
-
-new_layout = r'''normalize_lockscreen_layout_json() {
-    local value="$1"
-    jq -ce -n \
-        --argjson candidate "$value" \
-        --argjson keys "$LOCKSCREEN_LAYOUT_KEYS_JSON" '
-        def allowed_keys: ["color", "opacity", "scale", "stretch_x", "stretch_y", "x", "y"];
-        if (
-            ($candidate | type) == "object"
-            and (($candidate | keys | sort) == ($keys | sort))
-            and all($keys[];
-                . as $key
-                | ($candidate[$key] | type) == "object"
-                and (($candidate[$key] | keys - allowed_keys | length) == 0)
-                and ($candidate[$key].x | type) == "number"
-                and ($candidate[$key].y | type) == "number"
-                and (($candidate[$key].scale // 1) | type) == "number"
-                and (($candidate[$key].stretch_x // 1) | type) == "number"
-                and (($candidate[$key].stretch_y // 1) | type) == "number"
-                and (($candidate[$key].opacity // 100) | type) == "number"
-                and (($candidate[$key] | has("color") | not)
-                    or (($candidate[$key].color | type) == "string"
-                        and ($candidate[$key].color == "auto"
-                            or ($candidate[$key].color | test("^#[0-9A-Fa-f]{6}$")))))
-                and (($candidate[$key].scale // 1) >= 0.50)
-                and (($candidate[$key].scale // 1) <= 2.00)
-                and (($candidate[$key].stretch_x // 1) >= 0.25)
-                and (($candidate[$key].stretch_x // 1) <= 4.00)
-                and (($candidate[$key].stretch_y // 1) >= 0.25)
-                and (($candidate[$key].stretch_y // 1) <= 4.00)
-                and (($candidate[$key].opacity // 100) >= (if $key == "password" then 20 else 0 end))
-                and (($candidate[$key].opacity // 100) <= 100)
-                and (if $key == "password" then
-                    $candidate[$key].x >= 0.15 and $candidate[$key].x <= 0.85
-                    and $candidate[$key].y >= 0.20 and $candidate[$key].y <= 0.86
-                else
-                    $candidate[$key].x >= 0.05 and $candidate[$key].x <= 0.95
-                    and $candidate[$key].y >= 0.08 and $candidate[$key].y <= 0.92
-                end)
-            )
-        ) then
-            reduce $keys[] as $key ({};
-                .[$key] = {
-                    x: $candidate[$key].x,
-                    y: $candidate[$key].y,
-                    scale: ($candidate[$key].scale // 1),
-                    stretch_x: ($candidate[$key].stretch_x // 1),
-                    stretch_y: ($candidate[$key].stretch_y // 1),
-                    opacity: ($candidate[$key].opacity // 100),
-                    color: ($candidate[$key].color // "auto")
-                })
-        else
-            error("invalid lockscreen layout")
-        end
-    '
-}
-
-normalize_lockscreen_custom_images_json() {
-    local value="$1" normalized count index path resolved
-    if ! normalized="$(jq -ce -n \
-        --argjson candidate "$value" \
-        --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" '
-        def keys_ok: ["id", "opacity", "path", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
-        if (($candidate | type) == "array"
-            and ($candidate | length) <= $maximum
-            and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
-            and all($candidate[];
-                (. | type) == "object"
-                and ((. | keys | sort) == keys_ok)
-                and (.id | type) == "string"
-                and (.id | test("^image-[A-Za-z0-9_-]{1,64}$"))
-                and (.path | type) == "string"
-                and (.path | startswith("/"))
-                and (.path | contains("://") | not)
-                and (.path | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not)
-                and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
-                and (.y | type) == "number" and .y >= 0.08 and .y <= 0.92
-                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 2.00
-                and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
-                and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
-                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
-                and (.visible | type) == "boolean"))
-        then $candidate else error("invalid custom images") end
-    ' 2>/dev/null)"; then
-        printf 'invalid lockscreen custom images\n' >&2
-        exit 2
-    fi
-
-    count="$(jq -r 'length' <<<"$normalized")"
-    for ((index = 0; index < count; ++index)); do
-        path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$normalized")"
-        [[ -f "$path" && -r "$path" ]] || {
-            printf 'lockscreen custom image must be a readable absolute local file\n' >&2
-            exit 2
-        }
-        resolved="$(readlink -f -- "$path" 2>/dev/null || true)"
-        [[ -n "$resolved" && "$resolved" == /* && -f "$resolved" && -r "$resolved" ]] || {
-            printf 'lockscreen custom image could not be resolved\n' >&2
-            exit 2
-        }
-        normalized="$(jq -c --argjson index "$index" --arg path "$resolved" '.[$index].path = $path' <<<"$normalized")"
-    done
-    printf '%s' "$normalized"
-}
-'''
-app = regex_once(
-    app,
-    r'normalize_lockscreen_layout_json\(\) \{.*?\n\}\n\n(?=validate_lockscreen_layout\(\))',
-    new_layout + "\n",
-    "layout normalizer",
+scene = replace_once(
+    scene,
+    '''    function normalizedPoint(name) {\n        const value = root.layout && typeof root.layout === "object"\n            ? root.layout[name] : null;\n        return value && typeof value === "object" ? value : null;\n    }\n\n''',
+    '''    function normalizedPoint(name) {\n        const value = root.layout && typeof root.layout === "object"\n            ? root.layout[name] : null;\n        return value && typeof value === "object" ? value : null;\n    }\n\n    function customImageForName(name) {\n        if (!Array.isArray(root.customImages))\n            return null;\n        const key = String(name || "");\n        for (let i = 0; i < root.customImages.length; ++i) {\n            const image = root.customImages[i];\n            if (image && typeof image === "object" && String(image.id || "") === key)\n                return image;\n        }\n        return null;\n    }\n\n    function presentationPoint(name) {\n        return normalizedPoint(name) || customImageForName(name);\n    }\n\n''',
+    "scene generic point helper",
 )
-
-new_save = r'''save_lockscreen_editor() {
-    local normalized visibility="$2" background="$3" background_color="${4,,}" wallpaper="$5"
-    local wallpaper_fit="${6:-cover}"
-    local focal_x="${7:-0.5}"
-    local focal_y="${8:-0.5}"
-    local overlay_mode="${9:-none}"
-    local overlay_strength="${10:-0}"
-    local wallpaper_blur="${11:-0}"
-    local weather_units="${12:-auto}"
-    local custom_images_input="${13:-[]}"
-    local custom_images
-    if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
-        printf 'invalid lockscreen layout\n' >&2
-        exit 2
-    fi
-    custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
-    validate_lockscreen_editor_visibility "$visibility"
-    validate_lockscreen_background "$background"
-    validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
-    validate_lockscreen_wallpaper_fit "$wallpaper_fit"
-    validate_lockscreen_overlay_mode "$overlay_mode"
-    validate_lockscreen_weather_units "$weather_units"
-    focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
-    focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
-    overlay_strength="$(normalize_percent_integer "$overlay_strength" 'lockscreen overlay strength')"
-    wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
-    wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
-    if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
-        printf 'wallpaper background requires a selected local image\n' >&2
-        exit 2
-    fi
-    new_tmp
-    jq \
-        --argjson layout "$normalized" \
-        --argjson visibility "$visibility" \
-        --arg background "$background" \
-        --arg background_color "$background_color" \
-        --arg wallpaper "$wallpaper" \
-        --arg wallpaper_fit "$wallpaper_fit" \
-        --argjson focal_x "$focal_x" \
-        --argjson focal_y "$focal_y" \
-        --arg overlay_mode "$overlay_mode" \
-        --argjson overlay_strength "$overlay_strength" \
-        --argjson wallpaper_blur "$wallpaper_blur" \
-        --arg weather_units "$weather_units" \
-        --argjson custom_images "$custom_images" '
-        .lockscreen_layout = $layout
-        | .lockscreen_custom_images = $custom_images
-        | .lockscreen_show_logo = $visibility.logo
-        | .lockscreen_show_time = $visibility.time
-        | .lockscreen_show_date = $visibility.date
-        | .lockscreen_show_username = $visibility.username
-        | .lockscreen_show_weather = $visibility.weather
-        | .lockscreen_background = $background
-        | .lockscreen_background_color = $background_color
-        | .lockscreen_wallpaper_path = $wallpaper
-        | .lockscreen_wallpaper_fit = $wallpaper_fit
-        | .lockscreen_wallpaper_focal_x = $focal_x
-        | .lockscreen_wallpaper_focal_y = $focal_y
-        | .lockscreen_overlay_mode = $overlay_mode
-        | .lockscreen_overlay_strength = $overlay_strength
-        | .lockscreen_wallpaper_blur = $wallpaper_blur
-        | .lockscreen_weather_units = $weather_units
-    ' "$STATE_FILE" >"$TMP_FILE"
-    commit_tmp
-}
-'''
-app = regex_once(
-    app,
-    r'save_lockscreen_editor\(\) \{.*?\n\}\n(?=reset_lockscreen_presentation\(\))',
-    new_save,
-    "editor save",
+scene = replace_once(
+    scene,
+    '''    function normalizedX(name, fallback) {\n        const point = normalizedPoint(name);\n        const value = point ? Number(point.x) : Number.NaN;\n        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;\n    }\n\n    function normalizedY(name, fallback) {\n        const point = normalizedPoint(name);\n        const value = point ? Number(point.y) : Number.NaN;\n        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;\n    }\n\n''',
+    '''    function normalizedX(name, fallback) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.x) : Number.NaN;\n        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;\n    }\n\n    function normalizedY(name, fallback) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.y) : Number.NaN;\n        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;\n    }\n\n''',
+    "scene generic coordinates",
 )
-app = replace_once(
-    app,
-    '        | .lockscreen_layout = $layout\n',
-    '        | .lockscreen_layout = $layout\n        | .lockscreen_custom_images = []\n',
-    "reset custom images",
+scene = regex_once(
+    scene,
+    r'''    function elementScale\(name\) \{.*?\n    \}\n\n(?=    function elementColor)''',
+    '''    function elementScale(name) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;\n        const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;\n        const holdScale = root.editorMode && name === editorHeldElement ? editorHoldScale : 1.0;\n        const safeHoldScale = Number.isFinite(Number(holdScale))\n            ? Math.max(1.0, Math.min(1.12, Number(holdScale))) : 1.0;\n        return baseScale * safeHoldScale;\n    }\n\n    function elementStretchX(name) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.stretch_x === undefined ? 1 : point.stretch_x) : 1;\n        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;\n    }\n\n    function elementStretchY(name) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.stretch_y === undefined ? 1 : point.stretch_y) : 1;\n        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;\n    }\n\n    function elementOpacity(name) {\n        const point = presentationPoint(name);\n        const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100;\n        const minimum = name === "password" ? 20 : 0;\n        const percent = Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100;\n        return percent / 100;\n    }\n\n''',
+    "scene generic transforms",
 )
-app = replace_once(app, '            6|12|13) ;;', '            6|12|13|14) ;;', "editor command arity")
-app_path.write_text(app)
-
-bar_path = Path("config/quickshell/awtarchy/BarState.qml")
-bar = bar_path.read_text()
-for name in ("logo", "time", "date", "username", "weather", "password"):
-    bar = bar.replace(
-        f'{name}: ({{ x:',
-        f'{name}: ({{ x:',
-        1,
-    )
-# Expand only the default lockscreen layout block.
-default_pattern = r'''    readonly property var defaultLockscreenLayout: \(\{.*?\n    \}\)'''
-default_repl = '''    readonly property var defaultLockscreenLayout: ({
-        logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
-    })'''
-bar = regex_once(bar, default_pattern, default_repl, "BarState defaults")
-bar = replace_once(
-    bar,
-    '            lockscreen_layout: root.defaultLockscreenLayout,\n',
-    '            lockscreen_layout: root.defaultLockscreenLayout,\n            lockscreen_custom_images: [],\n',
-    "BarState empty custom images",
+scene = regex_once(
+    scene,
+    r'''    function elementVisualWidth\(name\) \{.*?\n    \}\n\n    function elementVisualHeight\(name\) \{.*?\n    \}\n''',
+    '''    function elementVisualWidth(name) {\n        if (customImageForName(name))\n            return 180 * root.uiScale * root.elementScale(name) * root.elementStretchX(name);\n        if (name === "logo") return root.wordmarkWidth * root.elementScale("logo") * root.elementStretchX("logo");\n        if (name === "time") return timeItem.implicitWidth * root.elementScale("time") * root.elementStretchX("time");\n        if (name === "date") return dateItem.implicitWidth * root.elementScale("date") * root.elementStretchX("date");\n        if (name === "username") return usernameItem.implicitWidth * root.elementScale("username") * root.elementStretchX("username");\n        if (name === "weather") return weatherItem.implicitWidth * root.elementScale("weather") * root.elementStretchX("weather");\n        if (name === "password") return root.passwordWidth * root.elementStretchX("password");\n        return 48 * root.uiScale;\n    }\n\n    function elementVisualHeight(name) {\n        if (customImageForName(name))\n            return 180 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);\n        if (name === "logo") return root.wordmarkHeight * root.elementScale("logo") * root.elementStretchY("logo");\n        if (name === "time") return timeItem.implicitHeight * root.elementScale("time") * root.elementStretchY("time");\n        if (name === "date") return dateItem.implicitHeight * root.elementScale("date") * root.elementStretchY("date");\n        if (name === "username") return usernameItem.implicitHeight * root.elementScale("username") * root.elementStretchY("username");\n        if (name === "weather") return weatherItem.implicitHeight * root.elementScale("weather") * root.elementStretchY("weather");\n        if (name === "password") return root.passwordHeight * root.elementStretchY("password");\n        return 28 * root.uiScale;\n    }\n''',
+    "scene visual bounds",
 )
-
-layout_reader = r'''    function lockscreenLayoutPoint(value, fallback, password) {
-        const fallbackColor = String(fallback.color || "auto");
-        const fallbackPoint = ({
-            x: fallback.x, y: fallback.y, scale: fallback.scale,
-            stretch_x: fallback.stretch_x, stretch_y: fallback.stretch_y,
-            opacity: fallback.opacity, color: fallbackColor
-        });
-        if (!value || typeof value !== "object" || Array.isArray(value))
-            return fallbackPoint;
-        const x = Number(value.x);
-        const y = Number(value.y);
-        const scale = Number(value.scale === undefined ? 1 : value.scale);
-        const stretchX = Number(value.stretch_x === undefined ? 1 : value.stretch_x);
-        const stretchY = Number(value.stretch_y === undefined ? 1 : value.stretch_y);
-        const opacity = Number(value.opacity === undefined ? 100 : value.opacity);
-        const rawColor = String(value.color === undefined ? "auto" : value.color);
-        const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)
-            ? rawColor.toLowerCase() : fallbackColor;
-        const minX = password ? 0.15 : 0.05;
-        const maxX = password ? 0.85 : 0.95;
-        const minY = password ? 0.20 : 0.08;
-        const maxY = password ? 0.86 : 0.92;
-        const minOpacity = password ? 20 : 0;
-        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)
-                || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
-                || !Number.isFinite(opacity)
-                || x < minX || x > maxX || y < minY || y > maxY
-                || scale < 0.50 || scale > 2.00
-                || stretchX < 0.25 || stretchX > 4.00
-                || stretchY < 0.25 || stretchY > 4.00
-                || opacity < minOpacity || opacity > 100)
-            return fallbackPoint;
-        return ({ x: x, y: y, scale: scale, stretch_x: stretchX,
-            stretch_y: stretchY, opacity: opacity, color: color });
-    }
-    function lockscreenLayout() {
-        const defaults = root.defaultLockscreenLayout;
-        const value = data().lockscreen_layout;
-        if (!value || typeof value !== "object" || Array.isArray(value))
-            return defaults;
-        return ({
-            logo: lockscreenLayoutPoint(value.logo, defaults.logo, false),
-            time: lockscreenLayoutPoint(value.time, defaults.time, false),
-            date: lockscreenLayoutPoint(value.date, defaults.date, false),
-            username: lockscreenLayoutPoint(value.username, defaults.username, false),
-            weather: lockscreenLayoutPoint(value.weather, defaults.weather, false),
-            password: lockscreenLayoutPoint(value.password, defaults.password, true)
-        });
-    }
-
-    function lockscreenCustomImages() {
-        const value = data().lockscreen_custom_images;
-        if (!Array.isArray(value) || value.length > 12)
-            return [];
-        const result = [];
-        const ids = ({});
-        for (const raw of value) {
-            if (!raw || typeof raw !== "object" || Array.isArray(raw))
-                return [];
-            const id = String(raw.id || "");
-            const path = String(raw.path || "");
-            const x = Number(raw.x);
-            const y = Number(raw.y);
-            const scale = Number(raw.scale);
-            const stretchX = Number(raw.stretch_x);
-            const stretchY = Number(raw.stretch_y);
-            const opacity = Number(raw.opacity);
-            if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
-                    || !path.startsWith("/") || path.indexOf("://") >= 0
-                    || /[\\u0000-\\u001f\\u007f-\\u009f]/.test(path)
-                    || !Number.isFinite(x) || x < 0.05 || x > 0.95
-                    || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                    || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
-                    || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
-                    || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
-                    || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
-                    || typeof raw.visible !== "boolean")
-                return [];
-            ids[id] = true;
-            result.push(({ id: id, path: path, x: x, y: y, scale: scale,
-                stretch_x: stretchX, stretch_y: stretchY,
-                opacity: opacity, visible: raw.visible }));
-        }
-        return result;
-    }
-'''
-bar = regex_once(
-    bar,
-    r'    function lockscreenLayoutPoint\(value, fallback, password\) \{.*?\n    \}\n    function lockscreenLayout\(\) \{.*?\n    \}\n',
-    layout_reader,
-    "BarState layout reader",
+custom_repeater = '''        Repeater {\n            id: customImageRepeater\n            model: Array.isArray(root.customImages) ? root.customImages : []\n\n            Image {\n                required property var modelData\n                readonly property string elementName: String(modelData.id || "")\n\n                visible: modelData.visible !== false || root.editorMode\n                source: String(modelData.path || "").startsWith("/")\n                    ? "file://" + String(modelData.path) : ""\n                asynchronous: true\n                cache: true\n                fillMode: Image.PreserveAspectFit\n                width: Math.round(180 * root.uiScale)\n                height: Math.round(180 * root.uiScale)\n                x: root.normalizedX(elementName, 0.50) * parent.width - width / 2\n                y: root.normalizedY(elementName, 0.50) * parent.height - height / 2\n                scale: root.elementScale(elementName)\n                transformOrigin: Item.Center\n                transform: Scale {\n                    origin.x: width / 2\n                    origin.y: height / 2\n                    xScale: root.elementStretchX(elementName)\n                    yScale: root.elementStretchY(elementName)\n                }\n                opacity: root.elementOpacity(elementName)\n                    * (modelData.visible !== false ? 1.0 : root.editorMode ? 0.30 : 0.0)\n                z: 4\n            }\n        }\n\n'''
+scene = replace_once(
+    scene,
+    '        Item {\n            id: wordmarkItem\n',
+    custom_repeater + '        Item {\n            id: wordmarkItem\n',
+    "scene custom image repeater",
 )
-bar_path.write_text(bar)
-print("Pass 2 persistence and BarState patch applied")
+scene = replace_once(
+    scene,
+    '''            visible: root.presentationVisible("logo", root.showLogo)\n            opacity: root.presentationOpacity("logo")\n            x: root.normalizedX("logo", 0.50) * parent.width - width / 2\n            y: root.normalizedY("logo", 0.34) * parent.height - height / 2\n            width: root.wordmarkWidth\n            height: root.wordmarkHeight\n            scale: root.elementScale("logo")\n            transformOrigin: Item.Center\n''',
+    '''            visible: root.presentationVisible("logo", root.showLogo)\n            opacity: root.presentationOpacity("logo") * root.elementOpacity("logo")\n            x: root.normalizedX("logo", 0.50) * parent.width - width / 2\n            y: root.normalizedY("logo", 0.34) * parent.height - height / 2\n            width: root.wordmarkWidth\n            height: root.wordmarkHeight\n            scale: root.elementScale("logo")\n            transformOrigin: Item.Center\n            transform: Scale {\n                origin.x: wordmarkItem.width / 2\n                origin.y: wordmarkItem.height / 2\n                xScale: root.elementStretchX("logo")\n                yScale: root.elementStretchY("logo")\n            }\n            z: 10\n''',
+    "logo stretch opacity",
+)
+for name, base_opacity in (("time", ""), ("date", "0.78 * "), ("username", "0.72 * "), ("weather", "0.76 * ")):
+    item = name + "Item"
+    visible_line = f'            visible: root.presentationVisible("{name}", root.show{name.capitalize()})'
+    if name == "weather":
+        visible_line += ' && root.weatherText.length > 0'
+    old = f'''{visible_line}\n            opacity: {base_opacity}root.presentationOpacity("{name}")\n            scale: root.elementScale("{name}")\n            transformOrigin: Item.Center\n'''
+    new = f'''{visible_line}\n            opacity: {base_opacity}root.presentationOpacity("{name}") * root.elementOpacity("{name}")\n            scale: root.elementScale("{name}")\n            transformOrigin: Item.Center\n            transform: Scale {{\n                origin.x: {item}.width / 2\n                origin.y: {item}.height / 2\n                xScale: root.elementStretchX("{name}")\n                yScale: root.elementStretchY("{name}")\n            }}\n            z: 10\n'''
+    scene = replace_once(scene, old, new, f"{name} stretch opacity")
+scene_path.write_text(scene)
+Path("config/quickshell/awtarchy/LockPreviewScene.qml").write_text(scene)
+
+surface_path = Path("config/quickshell/awtarchy-lock/LockSurface.qml")
+surface = surface_path.read_text()
+surface = replace_once(
+    surface,
+    '    required property var autoAccents\n    required property var layout\n',
+    '    required property var autoAccents\n    required property var layout\n    required property var customImages\n',
+    "surface custom image input",
+)
+surface = replace_once(
+    surface,
+    '        autoAccents: root.autoAccents\n        layout: root.layout\n        previewMode: false\n',
+    '        autoAccents: root.autoAccents\n        layout: root.layout\n        customImages: root.customImages\n        previewMode: false\n',
+    "surface scene custom images",
+)
+surface = replace_once(
+    surface,
+    '''        z: 20\n        opacity: root.unlocking ? 0 : root.entered ? 1 : 0\n\n        Behavior on opacity {\n''',
+    '''        z: 20\n        opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")\n        transform: Scale {\n            origin.x: passwordBlock.width / 2\n            origin.y: passwordBlock.height / 2\n            xScale: scene.elementStretchX("password")\n            yScale: scene.elementStretchY("password")\n        }\n\n        Behavior on opacity {\n''',
+    "password transform opacity",
+)
+surface_path.write_text(surface)
+
+shell_path = Path("config/quickshell/awtarchy-lock/shell.qml")
+shell = shell_path.read_text()
+shell = replace_once(
+    shell,
+    '    property var lockLayout: defaultLockLayout()\n',
+    '    property var lockLayout: defaultLockLayout()\n    property var lockCustomImages: []\n',
+    "shell custom image property",
+)
+shell = regex_once(
+    shell,
+    r'''    function defaultLockLayout\(\) \{.*?\n    \}\n\n(?=    function normalizedAnimationPreference)''',
+    '''    function defaultLockLayout() {\n        return ({\n            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),\n            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),\n            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),\n            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),\n            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),\n            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })\n        });\n    }\n\n''',
+    "shell default layout",
+)
+shell = regex_once(
+    shell,
+    r'''    function layoutPoint\(value, fallback, password\) \{.*?\n    \}\n(?=    function normalizedLayout)''',
+    '''    function layoutPoint(value, fallback, password) {\n        const fallbackColor = String(fallback.color || "auto");\n        const fallbackOpacity = Number(fallback.opacity === undefined ? 100 : fallback.opacity);\n        if (!value || typeof value !== "object" || Array.isArray(value))\n            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, color: fallbackColor });\n        const x = Number(value.x);\n        const y = Number(value.y);\n        const scale = Number(value.scale === undefined ? 1 : value.scale);\n        const stretchX = Number(value.stretch_x === undefined ? 1 : value.stretch_x);\n        const stretchY = Number(value.stretch_y === undefined ? 1 : value.stretch_y);\n        const opacity = Number(value.opacity === undefined ? 100 : value.opacity);\n        const rawColor = String(value.color === undefined ? "auto" : value.color);\n        const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)\n            ? rawColor.toLowerCase() : fallbackColor;\n        const minX = password ? 0.15 : 0.05;\n        const maxX = password ? 0.85 : 0.95;\n        const minY = password ? 0.20 : 0.08;\n        const maxY = password ? 0.86 : 0.92;\n        const minOpacity = password ? 20 : 0;\n        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)\n                || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)\n                || !Number.isFinite(opacity)\n                || x < minX || x > maxX || y < minY || y > maxY\n                || scale < 0.50 || scale > 2.00\n                || stretchX < 0.25 || stretchX > 4.00\n                || stretchY < 0.25 || stretchY > 4.00\n                || opacity < minOpacity || opacity > 100)\n            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, color: fallbackColor });\n        return ({ x: x, y: y, scale: scale, stretch_x: stretchX, stretch_y: stretchY, opacity: opacity, color: color });\n    }\n''',
+    "shell layout normalization",
+)
+shell = replace_once(
+    shell,
+    '''    function normalizedWeatherLocation(value) {\n''',
+    '''    function normalizedCustomImages(value) {\n        if (!Array.isArray(value) || value.length > 12)\n            return [];\n        const result = [];\n        const ids = ({});\n        for (let i = 0; i < value.length; ++i) {\n            const image = value[i];\n            if (!image || typeof image !== "object" || Array.isArray(image))\n                return [];\n            const id = String(image.id || "");\n            const path = normalizedWallpaperPath(image.path);\n            const x = Number(image.x);\n            const y = Number(image.y);\n            const scale = Number(image.scale);\n            const stretchX = Number(image.stretch_x);\n            const stretchY = Number(image.stretch_y);\n            const opacity = Number(image.opacity);\n            if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0\n                    || !Number.isFinite(x) || x < 0.05 || x > 0.95\n                    || !Number.isFinite(y) || y < 0.08 || y > 0.92\n                    || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00\n                    || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00\n                    || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00\n                    || !Number.isFinite(opacity) || opacity < 0 || opacity > 100\n                    || typeof image.visible !== "boolean")\n                return [];\n            ids[id] = true;\n            result.push(({\n                id: id, path: path, x: x, y: y, scale: scale,\n                stretch_x: stretchX, stretch_y: stretchY, opacity: opacity,\n                visible: image.visible\n            }));\n        }\n        return result;\n    }\n\n    function normalizedWeatherLocation(value) {\n''',
+    "shell custom image normalization",
+)
+shell = replace_once(
+    shell,
+    '        lockLayout = defaultLockLayout();\n',
+    '        lockLayout = defaultLockLayout();\n        lockCustomImages = [];\n',
+    "shell custom image reset",
+)
+shell = replace_once(
+    shell,
+    '            lockLayout = normalizedLayout(parsed.lockscreen_layout);\n',
+    '            lockLayout = normalizedLayout(parsed.lockscreen_layout);\n            lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);\n',
+    "shell custom image load",
+)
+shell = replace_once(
+    shell,
+    '                autoAccents: lockContrastCache.colors\n                layout: root.lockLayout\n',
+    '                autoAccents: lockContrastCache.colors\n                layout: root.lockLayout\n                customImages: root.lockCustomImages\n',
+    "shell custom image surface pass",
+)
+shell_path.write_text(shell)
+
+print("Pass 2 secure rendering patch applied")
