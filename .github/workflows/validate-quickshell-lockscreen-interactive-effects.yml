@@ -24,6 +24,22 @@ jobs:
       - name: Apply deterministic transition patch
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/scripts/apply-lockscreen-entry-transitions.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''    SURFACE,
+              ''' + "'''        opacity: (root.unlocking ? 0 : root.entered ? 1 : 0)\\n            * scene.elementOpacity(\"password\")\\n'''," + '''
+              ''' + "'''        opacity: scene.securePasswordEntryOpacity\\n            * scene.elementOpacity(\"password\")\\n'''," + '''
+          )'''
+          new = '''    SURFACE,
+              ''' + "'''        opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity(\"password\")\\n'''," + '''
+              ''' + "'''        opacity: scene.securePasswordEntryOpacity * scene.elementOpacity(\"password\")\\n'''," + '''
+          )'''
+          if text.count(old) != 1:
+              raise SystemExit('expected one LockSurface password-opacity patch anchor')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
           python3 -m py_compile .github/scripts/apply-lockscreen-entry-transitions.py
           python3 .github/scripts/apply-lockscreen-entry-transitions.py
       - name: Validate transition slice
