@@ -1282,6 +1282,6 @@ Item {
     Component.onCompleted: {
         root.updateClockText();
         root.entered = true;
-        Qt.callLater(() => root.replayEntryTransition());
+        root.replayEntryTransition();
     }
 }
