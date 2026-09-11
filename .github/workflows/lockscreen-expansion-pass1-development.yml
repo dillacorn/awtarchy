@@ -70,21 +70,73 @@ jobs:
               write(path, next_text)
           '''
           new_helper = '''def replace_re_once(path, pattern, replacement):
-              slash = chr(92)
-              pattern = pattern.replace(slash + slash, slash)
-              pattern = pattern.replace(': ' + slash + '"' + slash + '";', ': ' + slash + '"' + slash + '";?')
               text = read(path)
-              next_text, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one regex match, found {count}: {pattern[:120]!r}")
-              write(path, next_text)
+
+              def between(start_anchor, end_anchor):
+                  start = text.find(start_anchor)
+                  end = text.find(end_anchor, start + len(start_anchor)) if start >= 0 else -1
+                  if start < 0 or end < 0:
+                      raise SystemExit(
+                          f"{path}: literal section anchors missing: {start_anchor[:80]!r} -> {end_anchor[:80]!r}")
+                  write(path, text[:start] + replacement + text[end:])
+                  return
+
+              if path == SCENE:
+                  if "audioLevel: audioOverall" in pattern:
+                      between(
+                          "    readonly property real audioLevel: audioOverall\\n",
+                          "    readonly property real passwordCenterX:")
+                      return
+                  if "property bool pointerActive: false" in pattern:
+                      between(
+                          "    property bool pointerActive: false\\n",
+                          "    function wallpaperGeometry() {")
+                      return
+                  if "function logoCellKey" in pattern:
+                      between(
+                          "    function logoCellKey(row, column) {",
+                          "    function minuteTimeFormat() {")
+                      return
+                  if "function updatePointerField" in pattern:
+                      between(
+                          "    function updatePointerField(x, y, speed) {",
+                          "    Rectangle {\\n        anchors.fill: parent\\n        color:")
+                      return
+                  if "cohesionGroup: isFilledGlyph" in pattern:
+                      between(
+                          "                            readonly property var cohesionGroup: isFilledGlyph",
+                          "                            readonly property real randomA:")
+                      return
+                  if "Component" in pattern and "wordmarkCell" in pattern:
+                      between(
+                          "                            Component.onCompleted: {",
+                          "                            x: finalCellX")
+                      return
+                  if "Behavior on pointerOffsetX" in pattern:
+                      between(
+                          "                            Behavior on pointerOffsetX {",
+                          "                        }\\n                    }\\n                }\\n            }\\n        }\\n\\n        Text {\\n            id: timeItem")
+                      return
+                  if "interval: 33" in pattern and "audioEffectsEnabled" in pattern:
+                      between(
+                          "    Timer {\\n        interval: 33\\n",
+                          "    Timer {\\n        interval: 15000\\n")
+                      return
+
+              if path == EDITOR and "Ctrl" in pattern and "Shortcut" in pattern:
+                  between(
+                      "    Shortcut {\\n        sequence: \"Ctrl+Z\"",
+                      "    PanelWindow {")
+                  return
+
+              raise SystemExit(f"{path}: no deterministic literal-section mapping for regex: {pattern[:120]!r}")
           '''
           if script.count(old_helper) != 1:
               raise SystemExit(f'regex helper count: {script.count(old_helper)}')
           script = script.replace(old_helper, new_helper, 1)
           compile(script, str(patcher), 'exec')
           patcher.write_text(script, encoding='utf-8')
-          print('runner snapshot prepared; regex normalization moved to runtime helper')
+          print('runner snapshot prepared; regex substitutions mapped to literal section anchors')
           PY
 
       - name: Apply Pass 1 production changes
