@@ -28,6 +28,7 @@ WlSessionLockSurface {
     required property real wallpaperBlur
     required property var autoAccents
     required property var layout
+    required property var customImages
 
     color: "#000000"
 
@@ -82,6 +83,7 @@ WlSessionLockSurface {
         wallpaperBlur: root.wallpaperBlur
         autoAccents: root.autoAccents
         layout: root.layout
+        customImages: root.customImages
         previewMode: false
     }
 
@@ -106,7 +108,13 @@ WlSessionLockSurface {
         width: scene.passwordWidth
         height: scene.passwordHeight
         z: 20
-        opacity: root.unlocking ? 0 : root.entered ? 1 : 0
+        opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")
+        transform: Scale {
+            origin.x: passwordBlock.width / 2
+            origin.y: passwordBlock.height / 2
+            xScale: scene.elementStretchX("password")
+            yScale: scene.elementStretchY("password")
+        }
 
         Behavior on opacity {
             NumberAnimation {

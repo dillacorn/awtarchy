@@ -28,6 +28,7 @@ Item {
     required property real wallpaperBlur
     required property var autoAccents
     required property var layout
+    required property var customImages
 
     property bool previewMode: false
     property bool editorMode: false
@@ -135,26 +136,62 @@ Item {
         return value && typeof value === "object" ? value : null;
     }
 
+    function customImageForName(name) {
+        if (!Array.isArray(root.customImages))
+            return null;
+        const key = String(name || "");
+        for (let i = 0; i < root.customImages.length; ++i) {
+            const image = root.customImages[i];
+            if (image && typeof image === "object" && String(image.id || "") === key)
+                return image;
+        }
+        return null;
+    }
+
+    function presentationPoint(name) {
+        return normalizedPoint(name) || customImageForName(name);
+    }
+
     function normalizedX(name, fallback) {
-        const point = normalizedPoint(name);
+        const point = presentationPoint(name);
         const value = point ? Number(point.x) : Number.NaN;
         return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;
     }
 
     function normalizedY(name, fallback) {
-        const point = normalizedPoint(name);
+        const point = presentationPoint(name);
         const value = point ? Number(point.y) : Number.NaN;
         return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : fallback;
     }
 
     function elementScale(name) {
-        const point = normalizedPoint(name);
+        const point = presentationPoint(name);
         const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
         const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
         const holdScale = root.editorMode && name === editorHeldElement ? editorHoldScale : 1.0;
         const safeHoldScale = Number.isFinite(Number(holdScale))
             ? Math.max(1.0, Math.min(1.12, Number(holdScale))) : 1.0;
         return baseScale * safeHoldScale;
+    }
+
+    function elementStretchX(name) {
+        const point = presentationPoint(name);
+        const value = point ? Number(point.stretch_x === undefined ? 1 : point.stretch_x) : 1;
+        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;
+    }
+
+    function elementStretchY(name) {
+        const point = presentationPoint(name);
+        const value = point ? Number(point.stretch_y === undefined ? 1 : point.stretch_y) : 1;
+        return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1;
+    }
+
+    function elementOpacity(name) {
+        const point = presentationPoint(name);
+        const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100;
+        const minimum = name === "password" ? 20 : 0;
+        const percent = Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100;
+        return percent / 100;
     }
 
     function elementColor(name) {
@@ -176,22 +213,26 @@ Item {
     }
 
     function elementVisualWidth(name) {
-        if (name === "logo") return root.wordmarkWidth * root.elementScale("logo");
-        if (name === "time") return timeItem.implicitWidth * root.elementScale("time");
-        if (name === "date") return dateItem.implicitWidth * root.elementScale("date");
-        if (name === "username") return usernameItem.implicitWidth * root.elementScale("username");
-        if (name === "weather") return weatherItem.implicitWidth * root.elementScale("weather");
-        if (name === "password") return root.passwordWidth;
+        if (customImageForName(name))
+            return 180 * root.uiScale * root.elementScale(name) * root.elementStretchX(name);
+        if (name === "logo") return root.wordmarkWidth * root.elementScale("logo") * root.elementStretchX("logo");
+        if (name === "time") return timeItem.implicitWidth * root.elementScale("time") * root.elementStretchX("time");
+        if (name === "date") return dateItem.implicitWidth * root.elementScale("date") * root.elementStretchX("date");
+        if (name === "username") return usernameItem.implicitWidth * root.elementScale("username") * root.elementStretchX("username");
+        if (name === "weather") return weatherItem.implicitWidth * root.elementScale("weather") * root.elementStretchX("weather");
+        if (name === "password") return root.passwordWidth * root.elementStretchX("password");
         return 48 * root.uiScale;
     }
 
     function elementVisualHeight(name) {
-        if (name === "logo") return root.wordmarkHeight * root.elementScale("logo");
-        if (name === "time") return timeItem.implicitHeight * root.elementScale("time");
-        if (name === "date") return dateItem.implicitHeight * root.elementScale("date");
-        if (name === "username") return usernameItem.implicitHeight * root.elementScale("username");
-        if (name === "weather") return weatherItem.implicitHeight * root.elementScale("weather");
-        if (name === "password") return root.passwordHeight;
+        if (customImageForName(name))
+            return 180 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);
+        if (name === "logo") return root.wordmarkHeight * root.elementScale("logo") * root.elementStretchY("logo");
+        if (name === "time") return timeItem.implicitHeight * root.elementScale("time") * root.elementStretchY("time");
+        if (name === "date") return dateItem.implicitHeight * root.elementScale("date") * root.elementStretchY("date");
+        if (name === "username") return usernameItem.implicitHeight * root.elementScale("username") * root.elementStretchY("username");
+        if (name === "weather") return weatherItem.implicitHeight * root.elementScale("weather") * root.elementStretchY("weather");
+        if (name === "password") return root.passwordHeight * root.elementStretchY("password");
         return 28 * root.uiScale;
     }
 
@@ -526,16 +567,55 @@ Item {
             }
         }
 
+        Repeater {
+            id: customImageRepeater
+            model: Array.isArray(root.customImages) ? root.customImages : []
+
+            Image {
+                required property var modelData
+                readonly property string elementName: String(modelData.id || "")
+
+                visible: modelData.visible !== false || root.editorMode
+                source: String(modelData.path || "").startsWith("/")
+                    ? "file://" + String(modelData.path) : ""
+                asynchronous: true
+                cache: true
+                fillMode: Image.PreserveAspectFit
+                width: Math.round(180 * root.uiScale)
+                height: Math.round(180 * root.uiScale)
+                x: root.normalizedX(elementName, 0.50) * parent.width - width / 2
+                y: root.normalizedY(elementName, 0.50) * parent.height - height / 2
+                scale: root.elementScale(elementName)
+                transformOrigin: Item.Center
+                transform: Scale {
+                    origin.x: width / 2
+                    origin.y: height / 2
+                    xScale: root.elementStretchX(elementName)
+                    yScale: root.elementStretchY(elementName)
+                }
+                opacity: root.elementOpacity(elementName)
+                    * (modelData.visible !== false ? 1.0 : root.editorMode ? 0.30 : 0.0)
+                z: 4
+            }
+        }
+
         Item {
             id: wordmarkItem
             visible: root.presentationVisible("logo", root.showLogo)
-            opacity: root.presentationOpacity("logo")
+            opacity: root.presentationOpacity("logo") * root.elementOpacity("logo")
             x: root.normalizedX("logo", 0.50) * parent.width - width / 2
             y: root.normalizedY("logo", 0.34) * parent.height - height / 2
             width: root.wordmarkWidth
             height: root.wordmarkHeight
             scale: root.elementScale("logo")
             transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: wordmarkItem.width / 2
+                origin.y: wordmarkItem.height / 2
+                xScale: root.elementStretchX("logo")
+                yScale: root.elementStretchY("logo")
+            }
+            z: 10
 
             Repeater {
                 model: root.wordmarkRows.length
@@ -686,9 +766,16 @@ Item {
         Text {
             id: timeItem
             visible: root.presentationVisible("time", root.showTime)
-            opacity: root.presentationOpacity("time")
+            opacity: root.presentationOpacity("time") * root.elementOpacity("time")
             scale: root.elementScale("time")
             transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: timeItem.width / 2
+                origin.y: timeItem.height / 2
+                xScale: root.elementStretchX("time")
+                yScale: root.elementStretchY("time")
+            }
+            z: 10
             x: root.normalizedX("time", 0.50) * parent.width - width / 2
             y: root.normalizedY("time", 0.51) * parent.height - height / 2
             text: root.timeText
@@ -701,9 +788,16 @@ Item {
         Text {
             id: dateItem
             visible: root.presentationVisible("date", root.showDate)
-            opacity: 0.78 * root.presentationOpacity("date")
+            opacity: 0.78 * root.presentationOpacity("date") * root.elementOpacity("date")
             scale: root.elementScale("date")
             transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: dateItem.width / 2
+                origin.y: dateItem.height / 2
+                xScale: root.elementStretchX("date")
+                yScale: root.elementStretchY("date")
+            }
+            z: 10
             x: root.normalizedX("date", 0.50) * parent.width - width / 2
             y: root.normalizedY("date", 0.555) * parent.height - height / 2
             text: root.dateText
@@ -715,9 +809,16 @@ Item {
         Text {
             id: usernameItem
             visible: root.presentationVisible("username", root.showUsername)
-            opacity: 0.72 * root.presentationOpacity("username")
+            opacity: 0.72 * root.presentationOpacity("username") * root.elementOpacity("username")
             scale: root.elementScale("username")
             transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: usernameItem.width / 2
+                origin.y: usernameItem.height / 2
+                xScale: root.elementStretchX("username")
+                yScale: root.elementStretchY("username")
+            }
+            z: 10
             x: root.normalizedX("username", 0.50) * parent.width - width / 2
             y: root.normalizedY("username", 0.595) * parent.height - height / 2
             text: root.usernameText.length > 0 ? root.usernameText : Quickshell.env("USER")
@@ -729,9 +830,16 @@ Item {
         Text {
             id: weatherItem
             visible: root.presentationVisible("weather", root.showWeather) && root.weatherText.length > 0
-            opacity: 0.76 * root.presentationOpacity("weather")
+            opacity: 0.76 * root.presentationOpacity("weather") * root.elementOpacity("weather")
             scale: root.elementScale("weather")
             transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: weatherItem.width / 2
+                origin.y: weatherItem.height / 2
+                xScale: root.elementStretchX("weather")
+                yScale: root.elementStretchY("weather")
+            }
+            z: 10
             x: root.normalizedX("weather", 0.50) * parent.width - width / 2
             y: root.normalizedY("weather", 0.635) * parent.height - height / 2
             text: root.weatherText
