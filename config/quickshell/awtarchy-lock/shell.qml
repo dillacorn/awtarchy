@@ -40,6 +40,7 @@ ShellRoot {
     property string lockOverlayMode: "none"
     property int lockOverlayStrength: 0
     property int lockWallpaperBlur: 0
+    property string lockBlurStyle: "smooth"
     property string lockWeatherLocation: ""
     readonly property string wallpaperFit: normalizedWallpaperFit(lockWallpaperFit)
     readonly property real wallpaperFocalX: normalizedUnitInterval(lockWallpaperFocalX, 0.5)
@@ -47,6 +48,7 @@ ShellRoot {
     readonly property string overlayMode: normalizedOverlayMode(lockOverlayMode)
     readonly property int overlayStrength: normalizedPercent(lockOverlayStrength)
     readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)
+    readonly property string blurStyle: normalizedBlurStyle(lockBlurStyle)
     property var lockLayout: defaultLockLayout()
     property var lockCustomImages: []
     property var lockVisualizer: defaultLockVisualizer()
@@ -212,6 +214,11 @@ ShellRoot {
         return ["none", "dark", "light"].indexOf(key) >= 0 ? key : "none";
     }
 
+    function normalizedBlurStyle(value) {
+        const key = String(value || "");
+        return ["smooth", "pixelated"].indexOf(key) >= 0 ? key : "smooth";
+    }
+
     function normalizedUnitInterval(value, fallback) {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? Math.max(0, Math.min(1, numeric)) : fallback;
@@ -341,6 +348,7 @@ ShellRoot {
         lockOverlayMode = "none";
         lockOverlayStrength = 0;
         lockWallpaperBlur = 0;
+        lockBlurStyle = "smooth";
         lockWeatherLocation = "";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
@@ -382,6 +390,7 @@ ShellRoot {
             lockOverlayMode = normalizedOverlayMode(parsed.lockscreen_overlay_mode);
             lockOverlayStrength = normalizedPercent(parsed.lockscreen_overlay_strength);
             lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);
+            lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
@@ -471,6 +480,7 @@ ShellRoot {
                 overlayMode: root.overlayMode
                 overlayStrength: root.overlayStrength
                 wallpaperBlur: root.wallpaperBlur
+                blurStyle: root.blurStyle
                 autoAccents: lockContrastCache.colors
                 layout: root.lockLayout
                 customImages: root.lockCustomImages

@@ -132,7 +132,7 @@ Singleton {
     readonly property var lockscreenEntryTransitionPresets: [
         { key: "fade", label: "Fade" },
         { key: "pixel", label: "Pixel" },
-        { key: "iris", label: "Reverse Iris" },
+        { key: "iris", label: "Iris Reveal" },
         { key: "edges", label: "Edges" },
         { key: "wipe", label: "Wipe" }
     ]
@@ -143,6 +143,7 @@ Singleton {
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
         lockscreen_wallpaper_blur: 0,
+        lockscreen_blur_style: "smooth",
         lockscreen_background_opacity_previous: 100
     })
     readonly property var defaultLockscreenVisualizer: ({
@@ -833,6 +834,11 @@ Singleton {
     function lockscreenWallpaperBlur() {
         const value = Number(data().lockscreen_wallpaper_blur);
         return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+    function lockscreenBlurStyle() {
+        const value = String(data().lockscreen_blur_style || "smooth");
+        return ["smooth", "pixelated"].indexOf(value) >= 0 ? value : "smooth";
     }
 
     function lockscreenWeatherUnits() {

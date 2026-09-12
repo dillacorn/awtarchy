@@ -28,6 +28,7 @@ Item {
     required property string overlayMode
     required property real overlayStrength
     required property real wallpaperBlur
+    required property string blurStyle
     required property var autoAccents
     required property var layout
     required property var customImages
@@ -735,27 +736,65 @@ Item {
             width: geometry.width
             height: geometry.height
             visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
-                && root.wallpaperBlur <= 0
             source: root.wallpaperSource
             fillMode: Image.Stretch
             asynchronous: true
             cache: true
         }
 
-        MultiEffect {
-            id: wallpaperBlurEffect
+        ShaderEffectSource {
+            id: wallpaperTexture
             x: wallpaperImage.x
             y: wallpaperImage.y
             width: wallpaperImage.width
             height: wallpaperImage.height
-            source: wallpaperImage
+            sourceItem: wallpaperImage
+            hideSource: true
+            live: true
+            recursive: false
+            smooth: true
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && wallpaperImage.status === Image.Ready
+        }
+
+        MultiEffect {
+            id: wallpaperSmoothBlur
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            source: wallpaperTexture
             autoPaddingEnabled: false
-            blurEnabled: root.wallpaperBlur > 0
+            blurEnabled: true
             blurMax: 32
             blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
             visible: root.backgroundMode === "wallpaper"
                 && root.wallpaperSource.length > 0
                 && root.wallpaperBlur > 0
+                && root.blurStyle === "smooth"
+                && wallpaperImage.status === Image.Ready
+        }
+
+        ShaderEffectSource {
+            id: wallpaperPixelatedBlur
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            sourceItem: wallpaperImage
+            live: true
+            recursive: false
+            smooth: false
+            readonly property real pixelFactor: 1
+                + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+            textureSize: Qt.size(
+                Math.max(1, Math.round(width / pixelFactor)),
+                Math.max(1, Math.round(height / pixelFactor)))
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && root.wallpaperBlur > 0
+                && root.blurStyle === "pixelated"
                 && wallpaperImage.status === Image.Ready
         }
 

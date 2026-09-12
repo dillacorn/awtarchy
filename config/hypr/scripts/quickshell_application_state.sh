@@ -23,6 +23,7 @@ LOCKSCREEN_ENTRY_TRANSITIONS_JSON='["fade","pixel","iris","edges","wipe"]'
 LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
 LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
 LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
+LOCKSCREEN_BLUR_STYLES_JSON='["smooth","pixelated"]'
 LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
@@ -221,6 +222,7 @@ lockscreen_composition_defaults() {
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
         lockscreen_wallpaper_blur: 0,
+        lockscreen_blur_style: "smooth",
         lockscreen_background_opacity_previous: 100
     }'
 }
@@ -237,6 +239,15 @@ validate_lockscreen_overlay_mode() {
     local value="$1"
     if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_OVERLAY_MODES_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
         printf 'invalid lockscreen overlay mode: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+validate_lockscreen_blur_style() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_BLUR_STYLES_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen blur style: %s\n' "$value" >&2
         exit 2
     fi
 }
@@ -620,6 +631,7 @@ save_lockscreen_editor() {
     local entry_transition_input="${16:-}"
     local entry_transition_duration_input="${17:-1800}"
     local background_opacity_previous_input="${18:-100}"
+    local blur_style="${19:-smooth}"
     local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout
@@ -648,6 +660,7 @@ save_lockscreen_editor() {
     validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
     validate_lockscreen_wallpaper_fit "$wallpaper_fit"
     validate_lockscreen_overlay_mode "$overlay_mode"
+    validate_lockscreen_blur_style "$blur_style"
     validate_lockscreen_weather_units "$weather_units"
     focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
     focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
@@ -672,6 +685,7 @@ save_lockscreen_editor() {
         --arg overlay_mode "$overlay_mode" \
         --argjson overlay_strength "$overlay_strength" \
         --argjson wallpaper_blur "$wallpaper_blur" \
+        --arg blur_style "$blur_style" \
         --arg weather_units "$weather_units" \
         --argjson custom_images "$custom_images" \
         --argjson visualizer "$visualizer" \
@@ -700,6 +714,7 @@ save_lockscreen_editor() {
         | .lockscreen_overlay_mode = $overlay_mode
         | .lockscreen_overlay_strength = $overlay_strength
         | .lockscreen_wallpaper_blur = $wallpaper_blur
+        | .lockscreen_blur_style = $blur_style
         | .lockscreen_weather_units = $weather_units
     ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
@@ -728,6 +743,7 @@ reset_lockscreen_presentation() {
         | .lockscreen_overlay_mode = "none"
         | .lockscreen_overlay_strength = 0
         | .lockscreen_wallpaper_blur = 0
+        | .lockscreen_blur_style = "smooth"
         | .lockscreen_weather_units = "auto"
         | .lockscreen_weather_location = ""
         | .lockscreen_layout = $layout
@@ -1601,7 +1617,7 @@ case "$cmd" in
         ;;
     save-lockscreen-editor)
         case "$#" in
-            6|12|13|14|16|17|18|19) ;;
+            6|12|13|14|16|17|18|19|20) ;;
             *) exit 2 ;;
         esac
         save_lockscreen_editor "${@:2}"

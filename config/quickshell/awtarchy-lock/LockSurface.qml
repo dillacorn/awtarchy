@@ -29,6 +29,7 @@ WlSessionLockSurface {
     required property string overlayMode
     required property real overlayStrength
     required property real wallpaperBlur
+    required property string blurStyle
     required property var autoAccents
     required property var layout
     required property var customImages
@@ -104,19 +105,50 @@ WlSessionLockSurface {
                 cache: false
                 fillMode: Image.Stretch
                 visible: status === Image.Ready
-                    && (!root.transitionComplete || root.wallpaperBlur <= 0)
             }
-        }
 
-        MultiEffect {
-            id: desktopCaptureBlur
-            anchors.fill: parent
-            visible: root.wallpaperBlur > 0 && desktopCapture.status === Image.Ready
-            source: desktopCapture
-            autoPaddingEnabled: false
-            blurEnabled: root.wallpaperBlur > 0
-            blurMax: 32
-            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            ShaderEffectSource {
+                id: desktopCaptureTexture
+                anchors.fill: parent
+                sourceItem: desktopCapture
+                hideSource: true
+                live: true
+                recursive: false
+                smooth: true
+                visible: desktopCapture.status === Image.Ready
+            }
+
+            MultiEffect {
+                id: desktopCaptureSmoothBlur
+                anchors.fill: parent
+                source: desktopCaptureTexture
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 32
+                blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+                visible: root.transitionComplete
+                    && root.wallpaperBlur > 0
+                    && root.blurStyle === "smooth"
+                    && desktopCapture.status === Image.Ready
+            }
+
+            ShaderEffectSource {
+                id: desktopCapturePixelatedBlur
+                anchors.fill: parent
+                sourceItem: desktopCapture
+                live: true
+                recursive: false
+                smooth: false
+                readonly property real pixelFactor: 1
+                    + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+                textureSize: Qt.size(
+                    Math.max(1, Math.round(width / pixelFactor)),
+                    Math.max(1, Math.round(height / pixelFactor)))
+                visible: root.transitionComplete
+                    && root.wallpaperBlur > 0
+                    && root.blurStyle === "pixelated"
+                    && desktopCapture.status === Image.Ready
+            }
         }
 
         LockScene {
@@ -145,6 +177,7 @@ WlSessionLockSurface {
             overlayMode: root.overlayMode
             overlayStrength: root.overlayStrength
             wallpaperBlur: root.wallpaperBlur
+            blurStyle: root.blurStyle
             autoAccents: root.autoAccents
             layout: root.layout
             customImages: root.customImages

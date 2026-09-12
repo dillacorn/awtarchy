@@ -43,6 +43,7 @@ Singleton {
     property string draftOverlayMode: "none"
     property int draftOverlayStrength: 0
     property int draftWallpaperBlur: 0
+    property string draftBlurStyle: "smooth"
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
@@ -54,6 +55,7 @@ Singleton {
     property string heldElement: ""
     property real heldScaleBoost: 1.0
     property bool showEditorGrid: false
+    property real settingsBarOffsetY: 0
 
     readonly property real flickThreshold: 0.80
     readonly property real flickVelocityCap: 2.50
@@ -308,6 +310,7 @@ Singleton {
             overlayMode: draftOverlayMode,
             overlayStrength: draftOverlayStrength,
             wallpaperBlur: draftWallpaperBlur,
+            blurStyle: draftBlurStyle,
             wallpaperBlurExplicit: draftWallpaperBlurExplicit,
             weatherUnits: draftWeatherUnits
         });
@@ -378,6 +381,8 @@ Singleton {
         draftWallpaperBlur = Number.isFinite(wallpaperBlur)
             ? Math.max(0, Math.min(100, Math.round(wallpaperBlur))) : 0;
         draftWallpaperBlurExplicit = snapshot.wallpaperBlurExplicit === true;
+        draftBlurStyle = ["smooth", "pixelated"].indexOf(String(snapshot.blurStyle)) >= 0
+            ? String(snapshot.blurStyle) : "smooth";
         draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0
             ? String(snapshot.weatherUnits) : "auto";
         scheduleContrastRefresh();
@@ -1016,6 +1021,30 @@ Singleton {
         draftWallpaperBlurExplicit = true;
     }
 
+    function setDraftBlurStyle(value) {
+        const style = String(value || "");
+        if (["smooth", "pixelated"].indexOf(style) < 0 || draftBlurStyle === style)
+            return;
+        recordUndoBeforeChange();
+        draftBlurStyle = style;
+    }
+
+    function resetDraftBrightness() {
+        setDraftBrightness(0);
+    }
+
+    function resetDraftWallpaperBlur() {
+        setDraftWallpaperBlur(0);
+    }
+
+    function resetDraftBackgroundOpacity() {
+        setDraftBackgroundOpacity(100);
+    }
+
+    function resetDraftWallpaperFocal() {
+        setDraftWallpaperFocal(0.5, 0.5);
+    }
+
     function setDraftVisualizerSetting(name, value) {
         const next = cloneVisualizer(draftVisualizer);
         if (name === "shape") {
@@ -1579,6 +1608,10 @@ Singleton {
         draftEntryTransitionDuration = Math.max(800, Math.min(6000, numeric));
     }
 
+    function resetDraftEntryTransitionDuration() {
+        setDraftEntryTransitionDuration(1800);
+    }
+
     function setEntryTransitionDurationFromPointer(pointerX, trackWidth) {
         const width = Number(trackWidth);
         if (!Number.isFinite(width) || width <= 0)
@@ -1613,6 +1646,7 @@ Singleton {
         draftOverlayMode = "none";
         draftOverlayStrength = 0;
         draftWallpaperBlur = 0;
+        draftBlurStyle = "smooth";
         draftWallpaperBlurExplicit = false;
         draftWeatherUnits = "auto";
         draftAutoAccents = defaultAutoAccents();
@@ -1650,6 +1684,7 @@ Singleton {
         draftOverlayMode = BarState.lockscreenOverlayMode();
         draftOverlayStrength = BarState.lockscreenOverlayStrength();
         draftWallpaperBlur = BarState.lockscreenWallpaperBlur();
+        draftBlurStyle = BarState.lockscreenBlurStyle();
         draftWallpaperBlurExplicit = false;
         draftWeatherUnits = BarState.lockscreenWeatherUnits();
         draftAutoAccents = defaultAutoAccents();
@@ -1686,6 +1721,7 @@ Singleton {
         if (target)
             editorWindow.screen = target;
         loadPersistedDraft();
+        settingsBarOffsetY = 0;
         undoStack = [];
         redoStack = [];
         historyTransactionActive = false;
@@ -1789,7 +1825,8 @@ Singleton {
             String(draftBackgroundOpacity),
             String(draftEntryTransition),
             String(draftEntryTransitionDuration),
-            String(draftLastBackgroundOpacity)
+            String(draftLastBackgroundOpacity),
+            String(draftBlurStyle)
         ]);
     }
 
@@ -2074,6 +2111,7 @@ Singleton {
                 overlayMode: root.draftOverlayMode
                 overlayStrength: root.draftOverlayStrength
                 wallpaperBlur: root.draftWallpaperBlur
+                blurStyle: root.draftBlurStyle
                 autoAccents: root.draftAutoAccents
                 layout: root.draftLayout
                 customImages: root.draftCustomImages
@@ -2552,9 +2590,11 @@ Singleton {
             }
 
             Rectangle {
+                id: settingsBar
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
+                anchors.bottomMargin: root.settingsBarOffsetY
                 height: editorDockContent.implicitHeight + 18
                 color: Theme.popupBackground
                 border.width: 1
@@ -2963,6 +3003,7 @@ Singleton {
                         Text { text: "Focal Y"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField { id: wallpaperFocalYField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalY * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
                         selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }
+                        SettingsButton { label: "Reset"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; textSize: 9; onClicked: root.resetDraftWallpaperFocal() }
                         Text { text: "Brightness"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle {
                             id: brightnessTrack
@@ -2974,6 +3015,7 @@ Singleton {
                         }
                         TextField { id: brightnessField; Layout.preferredWidth: 50; text: String(root.draftBrightness()); validator: IntValidator { bottom: -100; top: 100 }
                         selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }
+                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBrightness() }
                         Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle {
                             id: blurTrack
@@ -2985,6 +3027,10 @@ Singleton {
                         }
                         TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 100 }
                         selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }
+                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftWallpaperBlur() }
+                        Text { text: "Blur Type"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Smooth"; active: root.draftBlurStyle === "smooth"; textSize: 9; onClicked: root.setDraftBlurStyle("smooth") }
+                        SettingsButton { label: "Pixelated"; active: root.draftBlurStyle === "pixelated"; textSize: 9; onClicked: root.setDraftBlurStyle("pixelated") }
                         Item { Layout.fillWidth: true }
                     }
 
@@ -3005,6 +3051,7 @@ Singleton {
                         }
                         TextField { id: backgroundOpacityField; Layout.preferredWidth: 46; text: String(root.draftBackgroundOpacity); validator: IntValidator { bottom: 0; top: 100 }
                         selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }
+                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBackgroundOpacity() }
                         SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.toggleBackgroundOpaque() }
                         Item { Layout.fillWidth: true }
                         Text {
@@ -3026,7 +3073,7 @@ Singleton {
                         Text { text: "Entry Transition"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "Fade"; active: root.draftEntryTransition === "fade"; textSize: 9; onClicked: root.setDraftEntryTransition("fade") }
                         SettingsButton { label: "Pixel"; active: root.draftEntryTransition === "pixel"; textSize: 9; onClicked: root.setDraftEntryTransition("pixel") }
-                        SettingsButton { label: "Reverse Iris"; active: root.draftEntryTransition === "iris"; textSize: 9; onClicked: root.setDraftEntryTransition("iris") }
+                        SettingsButton { label: "Iris Reveal"; active: root.draftEntryTransition === "iris"; textSize: 9; onClicked: root.setDraftEntryTransition("iris") }
                         SettingsButton { label: "Edges"; active: root.draftEntryTransition === "edges"; textSize: 9; onClicked: root.setDraftEntryTransition("edges") }
                         SettingsButton { label: "Wipe"; active: root.draftEntryTransition === "wipe"; textSize: 9; onClicked: root.setDraftEntryTransition("wipe") }
                         SettingsButton { label: "Replay Transition"; textSize: 9; onClicked: root.replayEntryTransition() }
@@ -3071,6 +3118,7 @@ Singleton {
                             }
                         }
                         Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(2) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftEntryTransitionDuration() }
                         Item { Layout.fillWidth: true }
                     }
 
@@ -3118,6 +3166,34 @@ Singleton {
                         Item { Layout.fillWidth: true }
                     }
                 }
+
+                MouseArea {
+                    id: settingsBarAltDrag
+                    anchors.fill: parent
+                    z: 1000
+                    acceptedButtons: Qt.LeftButton
+                    property real dragStartSceneY: 0
+                    property real dragStartOffsetY: 0
+
+                    onPressed: mouse => {
+                        if (!(mouse.modifiers & Qt.AltModifier)) {
+                            mouse.accepted = false;
+                            return;
+                        }
+                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                        dragStartSceneY = point.y;
+                        dragStartOffsetY = root.settingsBarOffsetY;
+                        mouse.accepted = true;
+                    }
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return;
+                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                        const limit = Math.max(0, editorFocus.height - settingsBar.height);
+                        root.settingsBarOffsetY = Math.max(0, Math.min(
+                            limit, dragStartOffsetY + dragStartSceneY - point.y));
+                    }
+                }
             }
         }
     }
@@ -3151,6 +3227,7 @@ Singleton {
                 backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
                 wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
                 overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
+                blurStyle: root.draftBlurStyle
                 autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages
                 visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
                 previewMode: true; editorMode: false
