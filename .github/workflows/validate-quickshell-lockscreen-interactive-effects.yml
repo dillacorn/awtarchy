@@ -27,6 +27,7 @@ jobs:
 
           path = Path('.github/scripts/apply-lockscreen-third-runtime-pass.py')
           text = path.read_text()
+
           start_marker = "anchor='''        Image {\n            id: wallpaperImage\n"
           end_marker = "effect=anchor+'''\n"
           start = text.find(start_marker)
@@ -52,8 +53,21 @@ jobs:
               "        }",
               "'''",
           ]
-          replacement = "\n".join(anchor_lines) + "\n"
-          path.write_text(text[:start] + replacement + text[end:])
+          text = text[:start] + "\n".join(anchor_lines) + "\n" + text[end:]
+
+          old_pattern_tail = r'\n\n                        SettingsButton \{\n                            label: "Reset Position"'
+          new_pattern_tail = r'\n\n                        Text \{ text: "Scale"'
+          if text.count(old_pattern_tail) != 1:
+              raise RuntimeError(f'visibility pattern tail: expected 1, got {text.count(old_pattern_tail)}')
+          text = text.replace(old_pattern_tail, new_pattern_tail, 1)
+
+          old_replacement_tail = '                        SettingsButton {\n                            label: "Reset Position"' + "''','visibility UI')"
+          new_replacement_tail = '                        Text { text: "Scale"' + "''','visibility UI')"
+          if text.count(old_replacement_tail) != 1:
+              raise RuntimeError(f'visibility replacement tail: expected 1, got {text.count(old_replacement_tail)}')
+          text = text.replace(old_replacement_tail, new_replacement_tail, 1)
+
+          path.write_text(text)
           PY
             python3 .github/scripts/apply-lockscreen-third-runtime-pass.py
           fi
