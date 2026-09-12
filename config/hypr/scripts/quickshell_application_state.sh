@@ -1601,7 +1601,7 @@ case "$cmd" in
         ;;
     save-lockscreen-editor)
         case "$#" in
-            6|12|13|14|16|17|18) ;;
+            6|12|13|14|16|17|18|19) ;;
             *) exit 2 ;;
         esac
         save_lockscreen_editor "${@:2}"
