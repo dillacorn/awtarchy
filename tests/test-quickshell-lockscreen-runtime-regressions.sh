@@ -182,8 +182,10 @@ require_text "$SCENE_QML" 'visible: root.presentationVisible("username", root.sh
     'username metadata is not optional outside editor mode'
 reject_text "$SURFACE_QML" 'text: "PASSWORD"' \
     'lockscreen still displays a PASSWORD label'
-require_text "$SURFACE_QML" 'readonly property int maskedCount: Math.min(password.text.length, 10)' \
-    'lockscreen does not cap visible password length'
+require_text "$SURFACE_QML" 'Math.min(password.text.length, 10)' \
+    'typed lockscreen password mask does not cap visible length'
+require_text "$SURFACE_QML" 'root.submittedMaskCount = Math.min(response.length, 10);' \
+    'failed-attempt lockscreen password mask does not retain the same visible-length cap'
 require_text "$SURFACE_QML" 'readonly property real passwordScale: scene.elementScale("password")' \
     'secure password visuals do not consume the shared bounded password scale'
 require_text "$SURFACE_QML" 'width: Math.round(7 * root.uiScale * root.passwordScale)' \
