@@ -102,8 +102,8 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh
           fi
-          if [[ -f config/hypr/scripts/quickshell-lockscreen_weather.sh ]]; then
-            shellcheck config/hypr/scripts/quickshell-lockscreen_weather.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_weather.sh
           fi
           if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_contrast.sh
