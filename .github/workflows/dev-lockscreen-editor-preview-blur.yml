@@ -27,22 +27,10 @@ jobs:
           editor = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
           text = editor.read_text()
 
-          primary_old = '''                audioBands: previewAudioAnalyzer.bands
-                backgroundOpacity: root.draftBackgroundOpacity
-                previewMode: true
-'''
-          primary_new = '''                audioBands: previewAudioAnalyzer.bands
-                backgroundOpacity: root.draftBackgroundOpacity
-                desktopBackingSource: editorTransitionStart
-                previewMode: true
-'''
-          secondary_old = '''                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                previewMode: true; editorMode: false
-'''
-          secondary_new = '''                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                desktopBackingSource: secondaryTransitionStart
-                previewMode: true; editorMode: false
-'''
+          primary_old = "                audioBands: previewAudioAnalyzer.bands\n                backgroundOpacity: root.draftBackgroundOpacity\n                previewMode: true\n"
+          primary_new = "                audioBands: previewAudioAnalyzer.bands\n                backgroundOpacity: root.draftBackgroundOpacity\n                desktopBackingSource: editorTransitionStart\n                previewMode: true\n"
+          secondary_old = "                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity\n                previewMode: true; editorMode: false\n"
+          secondary_new = "                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity\n                desktopBackingSource: secondaryTransitionStart\n                previewMode: true; editorMode: false\n"
 
           for label, old, new in (
               ('primary preview', primary_old, primary_new),
