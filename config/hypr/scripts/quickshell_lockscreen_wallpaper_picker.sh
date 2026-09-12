@@ -6,6 +6,11 @@ TERMINAL_CMD="${LOCKSCREEN_WALLPAPER_TERMINAL:-alacritty}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 RESULT_DIR="${CACHE_HOME}/awtarchy"
 RESULT_FILE=""
+PICKER_CLASS="awtarchy-lock-wallpaper"
+PICKER_TITLE="Awtarchy-Lockscreen-Wallpaper"
+MAP_ATTEMPTS=100
+FULLSCREEN_ATTEMPTS=40
+POLL_INTERVAL=0.05
 
 cleanup() {
     [[ -z "$RESULT_FILE" ]] || rm -f -- "$RESULT_FILE"
@@ -14,6 +19,58 @@ trap cleanup EXIT
 
 have() {
     command -v "$1" >/dev/null 2>&1
+}
+
+mapped_picker_address() {
+    hyprctl clients -j 2>/dev/null | jq -r \
+        --arg class "$PICKER_CLASS" --arg title "$PICKER_TITLE" '
+            first(.[] | select(.class == $class and .title == $title) | .address) // empty
+        ' 2>/dev/null || true
+}
+
+picker_fullscreen_state() {
+    local address="$1"
+    hyprctl clients -j 2>/dev/null | jq -r --arg address "$address" '
+        first(.[] | select(.address == $address) | .fullscreen) // empty
+    ' 2>/dev/null || true
+}
+
+request_picker_fullscreen() {
+    local address="$1"
+    local selector="address:${address}"
+
+    # Hyprland 0.55+ dispatchers accept an exact window selector directly.
+    # Use an explicit set action so retries cannot toggle the picker back out.
+    hyprctl dispatch "hl.dsp.focus({ window = \"${selector}\" })" >/dev/null 2>&1 || true
+    hyprctl dispatch "hl.dsp.window.fullscreen({ window = \"${selector}\", mode = \"fullscreen\", action = \"set\" })" \
+        >/dev/null 2>&1 || true
+}
+
+ensure_picker_fullscreen() {
+    local window_address=""
+    local fullscreen_state=""
+
+    for ((_attempt = 0; _attempt < MAP_ATTEMPTS; _attempt++)); do
+        window_address="$(mapped_picker_address)"
+        if [[ "$window_address" =~ ^0x[[:xdigit:]]+$ ]]; then
+            break
+        fi
+        window_address=""
+        sleep "$POLL_INTERVAL"
+    done
+
+    [[ -n "$window_address" ]] || return 0
+
+    for ((_attempt = 0; _attempt < FULLSCREEN_ATTEMPTS; _attempt++)); do
+        fullscreen_state="$(picker_fullscreen_state "$window_address")"
+        [[ "$fullscreen_state" == "2" ]] && return 0
+        request_picker_fullscreen "$window_address"
+        sleep "$POLL_INTERVAL"
+    done
+
+    # One final read verifies the last bounded request without turning a picker
+    # failure into a wallpaper-selection failure.
+    picker_fullscreen_state "$window_address" >/dev/null
 }
 
 awtwall_path="$(command -v "$AWTWALL_CMD" 2>/dev/null || true)"
@@ -53,17 +110,7 @@ else
 fi
 
 if have hyprctl && have jq; then
-    for _attempt in {1..20}; do
-        if hyprctl clients -j 2>/dev/null | jq -e '
-            any(.[]; .class == "awtarchy-lock-wallpaper"
-                and .title == "Awtarchy-Lockscreen-Wallpaper")
-        ' >/dev/null 2>&1; then
-            hyprctl dispatch focuswindow 'class:^(awtarchy-lock-wallpaper)$' >/dev/null 2>&1 || true
-            hyprctl dispatch fullscreen 1 >/dev/null 2>&1 || true
-            break
-        fi
-        sleep 0.05
-    done
+    ensure_picker_fullscreen
 fi
 wait "$terminal_pid"
 terminal_rc=$?
