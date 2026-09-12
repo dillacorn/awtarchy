@@ -63,7 +63,7 @@ fi
 [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$state_before" ]] \
     || fail 'invalid visualizer bend partially mutated persistent state'
 
-require_text "$APP_STATE" '$bend >= -360 and $bend <= 360' \
+require_text "$APP_STATE" "\$bend >= -360 and \$bend <= 360" \
     'state backend still uses the narrow arc bend range'
 require_text "$BAR_STATE" 'bend < -360 || bend > 360' \
     'BarState still uses the narrow arc bend range'
