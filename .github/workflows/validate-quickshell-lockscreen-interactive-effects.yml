@@ -37,6 +37,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-capture.sh
           bash -n tests/test-quickshell-lockscreen-transition-layer.sh
           bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash -n tests/test-quickshell-lockscreen-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -83,6 +84,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-capture.sh
           shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
           shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
           shellcheck tests/test-quickshell-lockscreen-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -143,6 +145,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-background-composition.sh
           bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
       - name: Weather refresh contracts
         run: |
           bash tests/test-quickshell-lockscreen-weather.sh
