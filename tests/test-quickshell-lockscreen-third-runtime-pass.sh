@@ -56,15 +56,19 @@ contains "$SURFACE" 'showLogo: root.showLogo && root.transitionComplete' \
 rejects "$AUTH" 'entryTransition' \
     'LockAuth must remain independent of transition presentation'
 
-# Reverse Iris must directly reveal the destination rather than only erasing a
-# start texture, and Edges must contract horizontally only. Pixel markers are
-# pinned to prevent accidental retuning of the runtime-approved effect.
+# Iris Reveal must directly reveal the destination through a live mask texture,
+# and Edges must contract horizontally only. Pixel markers are pinned to prevent
+# accidental retuning of the runtime-approved effect.
 contains "$LAYER" 'id: irisStartSource' \
-    'Reverse Iris has no explicit frozen-desktop base layer'
+    'Iris Reveal has no explicit frozen-desktop base layer'
 contains "$LAYER" 'source: root.endSource' \
-    'Reverse Iris does not directly reveal the lockscreen destination'
+    'Iris Reveal does not directly reveal the lockscreen destination'
+contains "$LAYER" 'id: irisMaskTexture' \
+    'Iris Reveal has no live texture-provider mask'
+contains "$LAYER" 'maskSource: irisMaskTexture' \
+    'Iris Reveal does not consume its live mask texture'
 contains "$LAYER" 'maskInverted: false' \
-    'Reverse Iris still relies on the ineffective inverted start-source mask'
+    'Iris Reveal still relies on the ineffective inverted start-source mask'
 contains "$LAYER" 'height: root.height' \
     'Edges no longer keeps full output height'
 rejects "$LAYER" 'height: Math.max(0, root.height * (1 - root.progress))' \
@@ -76,19 +80,34 @@ contains "$LAYER" 'Math.min(1, (root.progress - 0.45) / 0.10)' \
 cmp -s "$LAYER" "$PREVIEW_LAYER" \
     || fail 'secure/editor transition renderers diverged'
 
-# Pass B: both wallpaper and captured-desktop blur need a real rendered effect
-# source. The visible source must not simply remain stacked under its own blur
-# output after the entry transition.
-contains "$SCENE" 'id: wallpaperBlurEffect' \
-    'wallpaper has no actual MultiEffect blur render path'
-contains "$SCENE" 'source: wallpaperImage' \
-    'wallpaper blur effect is not sourced from the wallpaper image'
-contains "$SCENE" 'visible: root.backgroundMode === "wallpaper"' \
-    'wallpaper blur effect is not tied to wallpaper presentation'
-contains "$SURFACE" '!root.transitionComplete || root.wallpaperBlur <= 0' \
-    'captured desktop source is not hidden after handoff when blur is active'
-contains "$SURFACE" 'source: desktopCapture' \
-    'captured desktop blur is not sourced from the secure capture image'
+# Pass B: wallpaper and captured desktop each have real rendered composition
+# paths. Smooth uses MultiEffect; pixelated uses nearest-neighbor downsampling.
+# The underlying captured desktop remains independently blur-capable beneath a
+# wallpaper instead of the wallpaper consuming the blur control.
+contains "$SCENE" 'id: wallpaperTexture' \
+    'wallpaper has no texture-provider render path'
+contains "$SCENE" 'sourceItem: wallpaperImage' \
+    'wallpaper texture is not sourced from the wallpaper image'
+contains "$SCENE" 'id: wallpaperSmoothBlur' \
+    'wallpaper has no actual MultiEffect smooth blur render path'
+contains "$SCENE" 'source: wallpaperTexture' \
+    'wallpaper smooth blur is not sourced from its texture provider'
+contains "$SCENE" 'id: wallpaperPixelatedBlur' \
+    'wallpaper has no pixelated composition blur render path'
+contains "$SCENE" 'root.blurStyle === "pixelated"' \
+    'wallpaper pixelated blur is not style-gated'
+contains "$SURFACE" 'id: desktopCaptureTexture' \
+    'captured desktop has no texture-provider render path'
+contains "$SURFACE" 'sourceItem: desktopCapture' \
+    'captured desktop texture is not sourced from the secure capture image'
+contains "$SURFACE" 'id: desktopCaptureSmoothBlur' \
+    'captured desktop has no actual MultiEffect smooth blur render path'
+contains "$SURFACE" 'source: desktopCaptureTexture' \
+    'captured desktop smooth blur is not sourced from its texture provider'
+contains "$SURFACE" 'id: desktopCapturePixelatedBlur' \
+    'captured desktop has no pixelated composition blur render path'
+contains "$SURFACE" 'root.blurStyle === "pixelated"' \
+    'captured desktop pixelated blur is not style-gated'
 cmp -s "$SCENE" "$PREVIEW_SCENE" \
     || fail 'secure/editor scene copies diverged'
 
@@ -102,8 +121,8 @@ contains "$STATE" '.lockscreen_background_opacity_previous' \
     'last non-opaque background opacity is not retained in the existing state backend'
 contains "$EDITOR" 'String(draftLastBackgroundOpacity)' \
     'editor does not persist the reversible Opaque metadata with the existing save path'
-contains "$STATE" '6|12|13|14|16|17|18|19) ;;' \
-    'save-lockscreen-editor dispatcher rejects the current 18-value editor payload'
+contains "$STATE" '6|12|13|14|16|17|18|19|20) ;;' \
+    'save-lockscreen-editor dispatcher rejects the current 19-value editor payload'
 
 # Every percentage-based lockscreen editor control discovered in the current UI
 # must expose direct numeric entry bound to the authoritative setter/state.
