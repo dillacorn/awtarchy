@@ -70,7 +70,6 @@ jobs:
             tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh \
             tests/test-quickshell-lockscreen-third-runtime-pass.sh \
             tests/test-quickshell-lockscreen-runtime-acceptance-187.sh \
-            .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml \
             local/share/awtarchy/quickshell-managed-history.sha256
           git commit -m "fix: render lockscreen composition blur directly"
           git push origin HEAD:feature/lockscreen-interactive-effects
