@@ -2203,11 +2203,22 @@ Singleton {
                                         font.family: Theme.fontFamily
                                         font.pixelSize: root.scaledText(8)
                                     }
-                                    SettingsButton {
-                                        label: root.lockscreenSectionExpanded ? "Collapse" : "Expand"
-                                        active: root.lockscreenSectionExpanded
-                                        textSize: root.scaledText(9)
-                                        onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
+                                    ColumnLayout {
+                                        id: lockscreenHeaderActions
+                                        spacing: 5
+                                        Layout.alignment: Qt.AlignTop
+                                        SettingsButton {
+                                            label: root.lockscreenSectionExpanded ? "Collapse" : "Expand"
+                                            active: root.lockscreenSectionExpanded
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
+                                        }
+                                        SettingsButton {
+                                            label: "Edit Layout"
+                                            active: true
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.openLockscreenEditor()
+                                        }
                                     }
                                 }
 
@@ -2243,25 +2254,6 @@ Singleton {
                                                     "set-lockscreen-animation", String(modelData.key)
                                                 ])
                                             }
-                                        }
-                                    }
-
-                                    RowLayout {
-                                        Layout.fillWidth: true
-                                        spacing: 6
-                                        SettingsButton {
-                                            label: "Edit Layout"
-                                            active: true
-                                            textSize: root.scaledText(9)
-                                            onClicked: root.openLockscreenEditor()
-                                        }
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: "Drag, resize, show/hide, recolor, and compose the lockscreen on the focused display"
-                                            color: Theme.muted
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: root.scaledText(8)
-                                            wrapMode: Text.Wrap
                                         }
                                     }
 
