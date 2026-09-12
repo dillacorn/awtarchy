@@ -104,8 +104,8 @@ require_text "$EDITOR" 'overlayStrength: root.draftOverlayStrength' 'preview doe
 require_text "$EDITOR" 'wallpaperBlur: root.draftWallpaperBlur' 'preview does not receive blur'
 require_text "$EDITOR" 'blurStyle: root.draftBlurStyle' 'preview does not receive blur style'
 
-# LockScene independently blurs the wallpaper through a texture provider so
-# smooth and pixelated effects can coexist without exposing a sharp source.
+# LockScene renders exactly one wallpaper source: smooth blur is an Image
+# layer effect, while pixelated mode conditionally hides the sharp image.
 require_text "$PREVIEW" 'required property string wallpaperFit' 'scene has no wallpaper-fit input'
 require_text "$PREVIEW" 'required property real wallpaperFocalX' 'scene has no focal-x input'
 require_text "$PREVIEW" 'required property real wallpaperFocalY' 'scene has no focal-y input'
@@ -115,11 +115,11 @@ require_text "$PREVIEW" 'required property real wallpaperBlur' 'scene has no blu
 require_text "$PREVIEW" 'required property string blurStyle' 'scene has no blur-style input'
 require_text "$PREVIEW" 'function wallpaperGeometry()' 'scene has no cover/contain focal geometry helper'
 require_text "$PREVIEW" 'root.wallpaperFit === "contain"' 'scene does not distinguish contain from cover'
-require_text "$PREVIEW" 'id: wallpaperTexture' 'wallpaper has no texture-provider path'
-require_text "$PREVIEW" 'sourceItem: wallpaperImage' 'wallpaper texture does not source the wallpaper image'
-require_text "$PREVIEW" 'hideSource: true' 'wallpaper source is not hidden through its texture provider'
-require_text "$PREVIEW" 'id: wallpaperSmoothBlur' 'wallpaper smooth blur has no rendered effect path'
-require_text "$PREVIEW" 'source: wallpaperTexture' 'wallpaper smooth blur does not source the texture provider'
+require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'wallpaper smooth blur layer is not enabled'
+require_text "$PREVIEW" 'layer.effect: MultiEffect' 'wallpaper smooth blur has no direct layer effect'
+require_text "$PREVIEW" 'root.blurStyle === "smooth"' 'wallpaper smooth blur is not style-gated'
+forbid_text "$PREVIEW" 'id: wallpaperTexture' 'wallpaper still has a competing texture-provider copy'
+require_text "$PREVIEW" 'hideSource: root.wallpaperBlur > 0' 'pixelated wallpaper does not hide the sharp source'
 require_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper pixelated blur has no rendered effect path'
 require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'wallpaper pixelated blur is not style-gated'
 require_text "$PREVIEW" 'id: backgroundOverlay' 'scene has no readability overlay'
@@ -127,17 +127,16 @@ require_text "$PREVIEW" 'root.overlayMode === "light" ? "#ffffff" : "#000000"' '
 require_text "$PREVIEW" 'Math.max(0, Math.min(100, root.overlayStrength)) / 100' 'overlay strength is not bounded'
 require_text "$PREVIEW" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' 'scene background opacity is not bounded'
 
-# Secure LockSurface owns the frozen-desktop blur. The capture is always fed
-# through a texture provider, then smooth or pixelated composition blur covers
-# it underneath every lockscreen background mode.
+# Secure LockSurface owns the frozen-desktop blur. Smooth mode transforms
+# the capture directly; pixelated mode conditionally hides that same source.
 require_text "$SURFACE" 'import QtQuick.Effects' 'secure surface cannot blur the frozen desktop backing'
 require_text "$SURFACE" 'color: "#000000"' 'secure surface does not fail closed to opaque black'
 require_text "$SURFACE" 'id: desktopCapture' 'secure surface has no per-output frozen desktop image'
-require_text "$SURFACE" 'id: desktopCaptureTexture' 'secure surface has no desktop texture provider'
-require_text "$SURFACE" 'sourceItem: desktopCapture' 'desktop texture does not source the frozen capture'
-require_text "$SURFACE" 'hideSource: true' 'desktop source is not hidden through its texture provider'
-require_text "$SURFACE" 'id: desktopCaptureSmoothBlur' 'secure surface has no smooth desktop blur effect'
-require_text "$SURFACE" 'source: desktopCaptureTexture' 'smooth desktop blur does not source the texture provider'
+require_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'secure capture has no direct smooth-blur layer gate'
+require_text "$SURFACE" 'layer.effect: MultiEffect' 'secure capture has no direct smooth-blur effect'
+require_text "$SURFACE" 'root.blurStyle === "smooth"' 'smooth desktop blur is not style-gated'
+forbid_text "$SURFACE" 'id: desktopCaptureTexture' 'secure surface still renders a competing desktop texture copy'
+require_text "$SURFACE" 'hideSource: root.transitionComplete' 'pixelated desktop path does not hide the sharp source'
 require_text "$SURFACE" 'desktopCapture.status === Image.Ready' 'desktop blur is not gated on a valid loaded capture'
 require_text "$SURFACE" 'blurEnabled: true' 'smooth desktop blur is not enabled'
 require_text "$SURFACE" 'blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))' 'desktop blur is not bounded'

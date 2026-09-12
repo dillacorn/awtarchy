@@ -89,16 +89,16 @@ require_text "$EDITOR" 'root.settingsBarOffsetY' 'settings bar drag does not upd
 require_text "$EDITOR" 'Math.max(0, Math.min(' 'settings bar movement is not clamped on-screen'
 forbid_text "$EDITOR" 'settingsBarOffsetY: root.settingsBarOffsetY' 'settings bar position leaked into presentation snapshot/save data'
 
-# Secure runtime always renders the captured desktop through a texture source,
-# so blur still exists with black/color backgrounds and underneath wallpaper.
+# Secure runtime renders one captured desktop source: direct smooth layer or
+# conditionally source-hiding pixelated provider under every background mode.
 require_text "$LOCK_SHELL" 'property string lockBlurStyle: "smooth"' 'secure shell has no blur-style state'
 require_text "$LOCK_SHELL" 'readonly property string blurStyle:' 'secure shell does not normalize blur style'
 require_text "$LOCK_SHELL" 'blurStyle: root.blurStyle' 'secure surface does not receive blur style'
 require_text "$SURFACE" 'required property string blurStyle' 'secure surface has no blur-style input'
-require_text "$SURFACE" 'id: desktopCaptureTexture' 'desktop capture has no texture-provider path'
-require_text "$SURFACE" 'sourceItem: desktopCapture' 'desktop texture does not source the captured Hyprland frame'
-require_text "$SURFACE" 'hideSource: true' 'captured desktop source is not hidden through the texture provider'
-require_text "$SURFACE" 'id: desktopCaptureSmoothBlur' 'smooth desktop blur path is missing'
+require_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'desktop capture has no direct smooth-blur layer'
+require_text "$SURFACE" 'layer.effect: MultiEffect' 'desktop capture has no direct MultiEffect layer'
+require_text "$SURFACE" 'hideSource: root.transitionComplete' 'pixelated desktop path does not hide the sharp capture'
+forbid_text "$SURFACE" 'id: desktopCaptureTexture' 'competing desktop texture-provider path remains'
 require_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'pixelated desktop blur path is missing'
 require_text "$SURFACE" 'root.blurStyle === "pixelated"' 'desktop blur style does not switch to pixelated rendering'
 require_text "$SURFACE" 'textureSize:' 'pixelated desktop blur does not downsample the captured session'
@@ -106,9 +106,9 @@ require_text "$SURFACE" 'textureSize:' 'pixelated desktop blur does not downsamp
 # Wallpaper uses the same blur strength/style, independently layered above the
 # already blurred captured desktop.
 require_text "$PREVIEW" 'required property string blurStyle' 'presentation scene has no blur-style input'
-require_text "$PREVIEW" 'id: wallpaperTexture' 'wallpaper has no texture-provider path'
-require_text "$PREVIEW" 'sourceItem: wallpaperImage' 'wallpaper texture does not source wallpaper image'
-require_text "$PREVIEW" 'id: wallpaperSmoothBlur' 'smooth wallpaper blur path is missing'
+require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'wallpaper has no direct smooth-blur layer'
+require_text "$PREVIEW" 'layer.effect: MultiEffect' 'wallpaper has no direct MultiEffect layer'
+forbid_text "$PREVIEW" 'id: wallpaperTexture' 'competing wallpaper texture-provider path remains'
 require_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'pixelated wallpaper blur path is missing'
 require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'wallpaper blur style does not switch to pixelated rendering'
 

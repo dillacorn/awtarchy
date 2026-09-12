@@ -84,26 +84,26 @@ cmp -s "$LAYER" "$PREVIEW_LAYER" \
 # paths. Smooth uses MultiEffect; pixelated uses nearest-neighbor downsampling.
 # The underlying captured desktop remains independently blur-capable beneath a
 # wallpaper instead of the wallpaper consuming the blur control.
-contains "$SCENE" 'id: wallpaperTexture' \
-    'wallpaper has no texture-provider render path'
-contains "$SCENE" 'sourceItem: wallpaperImage' \
-    'wallpaper texture is not sourced from the wallpaper image'
-contains "$SCENE" 'id: wallpaperSmoothBlur' \
-    'wallpaper has no actual MultiEffect smooth blur render path'
-contains "$SCENE" 'source: wallpaperTexture' \
-    'wallpaper smooth blur is not sourced from its texture provider'
+contains "$SCENE" 'layer.enabled: root.wallpaperBlur > 0' \
+    'wallpaper has no direct smooth-blur layer gate'
+contains "$SCENE" 'layer.effect: MultiEffect' \
+    'wallpaper has no direct MultiEffect smooth blur path'
+rejects "$SCENE" 'id: wallpaperTexture' \
+    'wallpaper still has a competing texture-provider copy'
+contains "$SCENE" 'hideSource: root.wallpaperBlur > 0' \
+    'pixelated wallpaper path does not hide the sharp image'
 contains "$SCENE" 'id: wallpaperPixelatedBlur' \
     'wallpaper has no pixelated composition blur render path'
 contains "$SCENE" 'root.blurStyle === "pixelated"' \
     'wallpaper pixelated blur is not style-gated'
-contains "$SURFACE" 'id: desktopCaptureTexture' \
-    'captured desktop has no texture-provider render path'
-contains "$SURFACE" 'sourceItem: desktopCapture' \
-    'captured desktop texture is not sourced from the secure capture image'
-contains "$SURFACE" 'id: desktopCaptureSmoothBlur' \
-    'captured desktop has no actual MultiEffect smooth blur render path'
-contains "$SURFACE" 'source: desktopCaptureTexture' \
-    'captured desktop smooth blur is not sourced from its texture provider'
+contains "$SURFACE" 'layer.enabled: root.transitionComplete' \
+    'captured desktop has no direct smooth-blur layer gate'
+contains "$SURFACE" 'layer.effect: MultiEffect' \
+    'captured desktop has no direct MultiEffect smooth blur path'
+rejects "$SURFACE" 'id: desktopCaptureTexture' \
+    'captured desktop still has a competing texture-provider copy'
+contains "$SURFACE" 'hideSource: root.transitionComplete' \
+    'pixelated desktop path does not hide the sharp capture'
 contains "$SURFACE" 'id: desktopCapturePixelatedBlur' \
     'captured desktop has no pixelated composition blur render path'
 contains "$SURFACE" 'root.blurStyle === "pixelated"' \

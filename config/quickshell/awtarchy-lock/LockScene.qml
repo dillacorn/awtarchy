@@ -740,41 +740,17 @@ Item {
             fillMode: Image.Stretch
             asynchronous: true
             cache: true
-        }
 
-        ShaderEffectSource {
-            id: wallpaperTexture
-            x: wallpaperImage.x
-            y: wallpaperImage.y
-            width: wallpaperImage.width
-            height: wallpaperImage.height
-            sourceItem: wallpaperImage
-            hideSource: true
-            live: true
-            recursive: false
-            smooth: true
-            visible: root.backgroundMode === "wallpaper"
-                && root.wallpaperSource.length > 0
-                && wallpaperImage.status === Image.Ready
-        }
-
-        MultiEffect {
-            id: wallpaperSmoothBlur
-            x: wallpaperImage.x
-            y: wallpaperImage.y
-            width: wallpaperImage.width
-            height: wallpaperImage.height
-            source: wallpaperTexture
-            autoPaddingEnabled: false
-            blurEnabled: true
-            blurMax: 32
-            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
-            visible: root.backgroundMode === "wallpaper"
-                && root.wallpaperSource.length > 0
-                && root.wallpaperBlur > 0
+            layer.enabled: root.wallpaperBlur > 0
                 && root.blurStyle === "smooth"
-                && wallpaperImage.status === Image.Ready
+            layer.effect: MultiEffect {
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 32
+                blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            }
         }
+
 
         ShaderEffectSource {
             id: wallpaperPixelatedBlur
@@ -783,6 +759,9 @@ Item {
             width: wallpaperImage.width
             height: wallpaperImage.height
             sourceItem: wallpaperImage
+            hideSource: root.wallpaperBlur > 0
+                && root.blurStyle === "pixelated"
+                && wallpaperImage.status === Image.Ready
             live: true
             recursive: false
             smooth: false

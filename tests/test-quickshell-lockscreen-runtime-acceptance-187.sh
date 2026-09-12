@@ -76,9 +76,9 @@ has "$EDITOR" 'if (draftBackgroundOpacity === 100 && next < 100 && draftWallpape
 has "$EDITOR" '&& !draftWallpaperBlurExplicit)' 'explicit blur choice is not respected by opacity seeding'
 lacks "$EDITOR" 'enabled: root.draftBackgroundMode === "wallpaper"' 'blur remains wallpaper-gated'
 lacks "$QUICK_SETTINGS" 'text: "Background Opacity"' 'detailed opacity still duplicated in Quick Settings'
-has "$SURFACE" 'id: desktopCaptureTexture' 'secure frozen desktop has no texture-provider blur backing'
-has "$SURFACE" 'id: desktopCaptureSmoothBlur' 'smooth blur is not applied to the secure frozen desktop backing'
-has "$SURFACE" 'source: desktopCaptureTexture' 'smooth secure blur does not consume the frozen desktop texture'
+has "$SURFACE" 'layer.enabled: root.transitionComplete' 'secure frozen desktop has no direct smooth-blur layer gate'
+has "$SURFACE" 'layer.effect: MultiEffect' 'smooth blur is not applied directly to the secure frozen desktop'
+lacks "$SURFACE" 'id: desktopCaptureTexture' 'secure frozen desktop still has a competing texture-provider copy'
 has "$SURFACE" 'id: desktopCapturePixelatedBlur' 'pixelated blur is not applied to the secure frozen desktop backing'
 has "$SURFACE" 'root.blurStyle === "pixelated"' 'secure pixelated blur is not style-gated'
 

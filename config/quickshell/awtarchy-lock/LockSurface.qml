@@ -105,37 +105,27 @@ WlSessionLockSurface {
                 cache: false
                 fillMode: Image.Stretch
                 visible: status === Image.Ready
-            }
 
-            ShaderEffectSource {
-                id: desktopCaptureTexture
-                anchors.fill: parent
-                sourceItem: desktopCapture
-                hideSource: true
-                live: true
-                recursive: false
-                smooth: true
-                visible: desktopCapture.status === Image.Ready
-            }
-
-            MultiEffect {
-                id: desktopCaptureSmoothBlur
-                anchors.fill: parent
-                source: desktopCaptureTexture
-                autoPaddingEnabled: false
-                blurEnabled: true
-                blurMax: 32
-                blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
-                visible: root.transitionComplete
+                layer.enabled: root.transitionComplete
                     && root.wallpaperBlur > 0
                     && root.blurStyle === "smooth"
-                    && desktopCapture.status === Image.Ready
+                layer.effect: MultiEffect {
+                    autoPaddingEnabled: false
+                    blurEnabled: true
+                    blurMax: 32
+                    blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+                }
             }
+
 
             ShaderEffectSource {
                 id: desktopCapturePixelatedBlur
                 anchors.fill: parent
                 sourceItem: desktopCapture
+                hideSource: root.transitionComplete
+                    && root.wallpaperBlur > 0
+                    && root.blurStyle === "pixelated"
+                    && desktopCapture.status === Image.Ready
                 live: true
                 recursive: false
                 smooth: false
