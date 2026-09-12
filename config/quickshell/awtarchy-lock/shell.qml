@@ -126,7 +126,7 @@ ShellRoot {
                 || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
                 || ["straight", "arc", "circle"].indexOf(shape) < 0
                 || ["balanced", "responsive"].indexOf(performance) < 0
-                || !Number.isInteger(bend) || bend < -100 || bend > 100)
+                || !Number.isInteger(bend) || bend < -360 || bend > 360)
             return defaults;
         return ({
             enabled: enabled,

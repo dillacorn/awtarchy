@@ -308,7 +308,7 @@ normalize_lockscreen_visualizer_json() {
                 and ($height | type) == "number" and ($height | floor) == $height and $height >= 25 and $height <= 300
                 and ($sensitivity | type) == "number" and ($sensitivity | floor) == $sensitivity and $sensitivity >= 25 and $sensitivity <= 300
                 and ($shape | type) == "string" and ($shapes | index($shape) != null)
-                and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -100 and $bend <= 100
+                and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -360 and $bend <= 360
                 and ($performance == "balanced" or $performance == "responsive")
               then {
                 enabled: $enabled,

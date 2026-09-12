@@ -302,7 +302,7 @@ Item {
     }
 
     function visualizerBend() {
-        return Math.round(visualizerNumber("bend", 45, -100, 100));
+        return Math.round(visualizerNumber("bend", 45, -360, 360));
     }
 
     function visualizerBands() {

@@ -77,6 +77,10 @@ Singleton {
     property real resizeStartScale: 1
     property real resizeCenterX: 0
     property real resizeCenterY: 0
+    property bool visualizerWidthResizeActive: false
+    property real visualizerWidthStartStretch: 1
+    property real visualizerWidthStartDistance: 1
+    property real visualizerWidthCenterX: 0
     property string rotationElementName: ""
     property real rotationStartAngle: 0
     property real rotationStartValue: 0
@@ -137,7 +141,7 @@ Singleton {
             height: Number.isInteger(responseHeight) ? Math.max(25, Math.min(300, responseHeight)) : defaults.height,
             sensitivity: Number.isInteger(sensitivity) ? Math.max(25, Math.min(300, sensitivity)) : defaults.sensitivity,
             shape: ["straight", "arc", "circle"].indexOf(shape) >= 0 ? shape : defaults.shape,
-            bend: Number.isInteger(bend) ? Math.max(-100, Math.min(100, bend)) : defaults.bend,
+            bend: Number.isInteger(bend) ? Math.max(-360, Math.min(360, bend)) : defaults.bend,
             performance: ["balanced", "responsive"].indexOf(performance) >= 0
                 ? performance : defaults.performance
         });
@@ -586,6 +590,50 @@ Singleton {
         commitHistoryTransaction();
     }
 
+    function setDraftVisualizerWidth(percentValue) {
+        const numeric = Number(percentValue);
+        if (!Number.isFinite(numeric) || numeric < 25 || numeric > 400) {
+            statusMessage = "Visualizer width must be 25% to 400%";
+            return;
+        }
+        recordUndoBeforeChange();
+        const next = cloneVisualizer(draftVisualizer);
+        next.stretch_x = Math.max(0.25, Math.min(4.00, numeric / 100));
+        draftVisualizer = next;
+        selectElement("visualizer", false);
+        statusMessage = "Visualizer width updated";
+    }
+
+    function beginVisualizerWidthResize(sceneX) {
+        if (editorFocus.width <= 0)
+            return;
+        selectElement("visualizer", false);
+        const point = elementPoint("visualizer");
+        visualizerWidthCenterX = Number(point.x) * editorFocus.width;
+        visualizerWidthStartDistance = Math.max(8, Math.abs(Number(sceneX) - visualizerWidthCenterX));
+        visualizerWidthStartStretch = elementStretchX("visualizer");
+        visualizerWidthResizeActive = true;
+        beginHistoryTransaction();
+    }
+
+    function updateVisualizerWidthResize(sceneX) {
+        if (!visualizerWidthResizeActive)
+            return;
+        const distance = Math.max(1, Math.abs(Number(sceneX) - visualizerWidthCenterX));
+        const next = cloneVisualizer(draftVisualizer);
+        next.stretch_x = Math.max(0.25, Math.min(4.00,
+            visualizerWidthStartStretch * distance / visualizerWidthStartDistance));
+        draftVisualizer = next;
+    }
+
+    function endVisualizerWidthResize() {
+        if (!visualizerWidthResizeActive)
+            return;
+        visualizerWidthResizeActive = false;
+        commitHistoryTransaction();
+        scheduleContrastRefresh();
+    }
+
     function pointBounds(name) {
         const password = name === "password";
         return ({
@@ -915,7 +963,7 @@ Singleton {
                 gap: ({ min: 0, max: 24 }),
                 height: ({ min: 25, max: 300 }),
                 sensitivity: ({ min: 25, max: 300 }),
-                bend: ({ min: -100, max: 100 })
+                bend: ({ min: -360, max: 360 })
             });
             const range = bounds[name];
             if (!range)
@@ -2152,6 +2200,70 @@ Singleton {
                         }
                     }
 
+                    Rectangle {
+                        id: visualizerWidthLeftHandle
+                        visible: root.selectedElement === parent.elementName
+                            && parent.elementName === "visualizer"
+                        width: 14
+                        height: 24
+                        radius: 3
+                        x: -width / 2
+                        y: parent.height / 2 - height / 2
+                        color: Theme.focus
+                        border.width: 1
+                        border.color: Theme.foreground
+                        z: 30
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeHorCursor
+                            preventStealing: true
+                            onPressed: mouse => {
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.beginVisualizerWidthResize(point.x);
+                                mouse.accepted = true;
+                            }
+                            onPositionChanged: mouse => {
+                                if (!pressed) return;
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.updateVisualizerWidthResize(point.x);
+                            }
+                            onReleased: root.endVisualizerWidthResize()
+                            onCanceled: root.endVisualizerWidthResize()
+                        }
+                    }
+
+                    Rectangle {
+                        id: visualizerWidthRightHandle
+                        visible: root.selectedElement === parent.elementName
+                            && parent.elementName === "visualizer"
+                        width: 14
+                        height: 24
+                        radius: 3
+                        x: parent.width - width / 2
+                        y: parent.height / 2 - height / 2
+                        color: Theme.focus
+                        border.width: 1
+                        border.color: Theme.foreground
+                        z: 30
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.SizeHorCursor
+                            preventStealing: true
+                            onPressed: mouse => {
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.beginVisualizerWidthResize(point.x);
+                                mouse.accepted = true;
+                            }
+                            onPositionChanged: mouse => {
+                                if (!pressed) return;
+                                const point = parent.mapToItem(editorFocus, mouse.x, mouse.y);
+                                root.updateVisualizerWidthResize(point.x);
+                            }
+                            onReleased: root.endVisualizerWidthResize()
+                            onCanceled: root.endVisualizerWidthResize()
+                        }
+                    }
+
                     Timer {
                         id: inertiaTimer
                         interval: 16
@@ -2540,6 +2652,16 @@ Singleton {
                         Text { text: String(root.draftVisualizer.gap); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 24; horizontalAlignment: Text.AlignHCenter }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.gap < 24; onClicked: root.setDraftVisualizerSetting("gap", root.draftVisualizer.gap + 1) }
 
+                        Text { text: "Width"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField {
+                            Layout.preferredWidth: 58
+                            text: (Number(root.draftVisualizer.stretch_x || 1) * 100).toFixed(1)
+                            validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }
+                            selectByMouse: true
+                            font.pixelSize: 9
+                            onEditingFinished: root.setDraftVisualizerWidth(text)
+                        }
+
                         Text { text: "Height"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.height > 25; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height - 10) }
                         Text { text: root.draftVisualizer.height + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignHCenter }
@@ -2557,16 +2679,16 @@ Singleton {
                         SettingsButton { label: "Balanced"; active: root.draftVisualizer.performance === "balanced"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "balanced") }
                         SettingsButton { label: "Responsive"; active: root.draftVisualizer.performance === "responsive"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "responsive") }
 
-                        Text { text: "Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        Slider {
-                            Layout.preferredWidth: 100
+                        Text { text: "Arc Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField {
+                            Layout.preferredWidth: 58
                             visible: root.draftVisualizer.shape === "arc"
-                            from: -100; to: 100; stepSize: 1
-                            value: root.draftVisualizer.bend
-                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
-                            onMoved: root.setDraftVisualizerSetting("bend", value)
+                            text: String(Math.round(Number(root.draftVisualizer.bend || 0)))
+                            validator: DoubleValidator { bottom: -360; top: 360; decimals: 0 }
+                            selectByMouse: true
+                            font.pixelSize: 9
+                            onEditingFinished: root.setDraftVisualizerSetting("bend", text)
                         }
-                        Text { text: String(root.draftVisualizer.bend); visible: root.draftVisualizer.shape === "arc"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 28 }
                         Item { Layout.fillWidth: true }
                     }
 

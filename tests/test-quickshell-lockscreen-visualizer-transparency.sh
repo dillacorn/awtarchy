@@ -128,11 +128,11 @@ if run_state save-lockscreen-editor \
     fail 'unsupported visualizer shape was accepted'
 fi
 
-bad_bend="${visualizer/\"bend\":-55/\"bend\":101}"
+bad_bend="${visualizer/\"bend\":-55/\"bend\":361}"
 if run_state save-lockscreen-editor \
     "$layout" "$visibility" black '#000000' '' \
     cover 0.5 0.5 none 0 0 auto '[]' "$bad_bend" 60 >/dev/null 2>&1; then
-    fail 'visualizer bend outside -100..100 was accepted'
+    fail 'visualizer bend outside -360..360 was accepted'
 fi
 
 if run_state set-lockscreen-background-opacity 101 >/dev/null 2>&1; then
