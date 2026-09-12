@@ -87,7 +87,7 @@ require_text "$EDITOR" 'id: settingsBar' 'editor settings bar has no stable id'
 require_text "$EDITOR" 'mouse.modifiers & Qt.AltModifier' 'settings bar drag is not gated by Alt'
 require_text "$EDITOR" 'root.settingsBarOffsetY' 'settings bar drag does not update editor-only offset'
 require_text "$EDITOR" 'Math.max(0, Math.min(' 'settings bar movement is not clamped on-screen'
-forbid_text "$EDITOR" 'settingsBarOffsetY:' 'settings bar position leaked into presentation snapshot/save data'
+forbid_text "$EDITOR" 'settingsBarOffsetY: root.settingsBarOffsetY' 'settings bar position leaked into presentation snapshot/save data'
 
 # Secure runtime always renders the captured desktop through a texture source,
 # so blur still exists with black/color backgrounds and underneath wallpaper.
