@@ -179,8 +179,8 @@ WlSessionLockSurface {
         width: scene.passwordWidth
         height: scene.passwordHeight
         z: 20
-        opacity: root.transitionComplete
-            ? scene.securePasswordEntryOpacity * scene.elementOpacity("password") : 0
+        opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")
+            * (root.transitionComplete ? 1 : 0)
         transform: Scale {
             origin.x: passwordBlock.width / 2
             origin.y: passwordBlock.height / 2
