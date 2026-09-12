@@ -154,7 +154,7 @@ contains "$EDITOR" 'root.commitHistoryTransaction()' \
 for degrees in 0 90 180 270; do
     contains "$EDITOR" "label: \"${degrees}°\"" "missing image rotation preset: ${degrees}°"
 done
-contains "$EDITOR" 'onEditingFinished: root.setDraftImageRotation(text)' \
+contains "$EDITOR" 'onEditingFinished: root.setDraftRotation(root.selectedElement, text)' \
     'numeric rotation input is not bound to the shared rotation setter'
 rejects "$EDITOR" 'Math.max(-180, Math.min(180, Number(text)))' \
     'numeric rotation input still rejects arbitrary exact angles outside +/-180 degrees'
