@@ -255,6 +255,14 @@ Item {
         return percent / 100;
     }
 
+    function elementRotation(name) {
+        const image = customImageForName(name);
+        if (!image)
+            return 0;
+        const value = Number(image.rotation === undefined ? 0 : image.rotation);
+        return Number.isFinite(value) ? Math.max(-180, Math.min(180, value)) : 0;
+    }
+
     function elementColor(name) {
         const point = presentationPoint(name);
         const value = String(point && point.color !== undefined ? point.color : "auto");
@@ -794,6 +802,7 @@ Item {
                 x: root.normalizedX(elementName, 0.50) * parent.width - width / 2
                 y: root.normalizedY(elementName, 0.50) * parent.height - height / 2
                 scale: root.elementScale(elementName)
+                rotation: root.elementRotation(elementName)
                 transformOrigin: Item.Center
                 transform: Scale {
                     origin.x: width / 2

@@ -519,13 +519,13 @@ normalize_lockscreen_custom_images_json() {
     if ! normalized="$(jq -ce -n \
         --argjson candidate "$value" \
         --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" '
-        def keys_ok: ["id", "opacity", "path", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
+        def keys_ok: ["id", "opacity", "path", "rotation", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
         if (($candidate | type) == "array"
             and ($candidate | length) <= $maximum
             and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
             and all($candidate[];
                 (. | type) == "object"
-                and ((. | keys | sort) == keys_ok)
+                and ((. | keys - keys_ok | length) == 0)
                 and (.id | type) == "string"
                 and (.id | test("^image-[A-Za-z0-9_-]{1,64}$"))
                 and (.path | type) == "string"
@@ -538,8 +538,11 @@ normalize_lockscreen_custom_images_json() {
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
                 and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and ((.rotation // 0) | type) == "number"
+                and (.rotation // 0) >= -180 and (.rotation // 0) <= 180
                 and (.visible | type) == "boolean"))
-        then $candidate else error("invalid custom images") end
+        then [$candidate[] | . + {rotation: (.rotation // 0)}]
+        else error("invalid custom images") end
     ' 2>/dev/null)"; then
         printf 'invalid lockscreen custom images
 ' >&2

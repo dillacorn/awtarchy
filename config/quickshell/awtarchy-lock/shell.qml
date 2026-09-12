@@ -285,6 +285,7 @@ ShellRoot {
             const stretchX = Number(image.stretch_x);
             const stretchY = Number(image.stretch_y);
             const opacity = Number(image.opacity);
+            const rotation = Number(image.rotation === undefined ? 0 : image.rotation);
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
@@ -292,13 +293,14 @@ ShellRoot {
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                    || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
                     || typeof image.visible !== "boolean")
                 return [];
             ids[id] = true;
             result.push(({
                 id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY, opacity: opacity,
-                visible: image.visible
+                rotation: rotation, visible: image.visible
             }));
         }
         return result;

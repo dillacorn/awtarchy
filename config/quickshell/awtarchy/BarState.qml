@@ -913,6 +913,7 @@ Singleton {
             const stretchX = Number(raw.stretch_x);
             const stretchY = Number(raw.stretch_y);
             const opacity = Number(raw.opacity);
+            const rotation = Number(raw.rotation === undefined ? 0 : raw.rotation);
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
                     || !path.startsWith("/") || path.indexOf("://") >= 0
                     || /[\u0000-\u001f\u007f-\u009f]/.test(path)
@@ -922,12 +923,13 @@ Singleton {
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                    || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
                     || typeof raw.visible !== "boolean")
                 return [];
             ids[id] = true;
             result.push(({ id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY,
-                opacity: opacity, visible: raw.visible }));
+                opacity: opacity, rotation: rotation, visible: raw.visible }));
         }
         return result;
     }
