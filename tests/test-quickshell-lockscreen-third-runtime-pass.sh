@@ -102,6 +102,8 @@ contains "$STATE" '.lockscreen_background_opacity_previous' \
     'last non-opaque background opacity is not retained in the existing state backend'
 contains "$EDITOR" 'String(draftLastBackgroundOpacity)' \
     'editor does not persist the reversible Opaque metadata with the existing save path'
+contains "$STATE" '6|12|13|14|16|17|18|19) ;;' \
+    'save-lockscreen-editor dispatcher rejects the current 18-value editor payload'
 
 # Every percentage-based lockscreen editor control discovered in the current UI
 # must expose direct numeric entry bound to the authoritative setter/state.
