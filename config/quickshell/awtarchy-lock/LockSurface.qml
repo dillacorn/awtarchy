@@ -34,9 +34,17 @@ WlSessionLockSurface {
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
+    required property string captureDirectory
 
-    color: "transparent"
+    color: "#000000"
 
+    readonly property string captureOutputName: root.screen && root.screen.name
+        ? String(root.screen.name) : ""
+    readonly property string captureSource: root.captureDirectory.length > 0
+        && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
+        ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".png"
+        : ""
+    readonly property bool transitionComplete: !transitionLayer.running
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
     readonly property int maskedCount: Math.min(password.text.length, 10)
@@ -54,6 +62,11 @@ WlSessionLockSurface {
             password.text = "";
     }
 
+    function focusPasswordWhenReady() {
+        if (root.transitionComplete)
+            Qt.callLater(() => password.forceActiveFocus());
+    }
+
     PinchHandler {
         target: null
     }
@@ -62,44 +75,92 @@ WlSessionLockSurface {
         target: null
     }
 
-    LockScene {
-        id: scene
+    Item {
+        id: securePresentation
         anchors.fill: parent
-        theme: root.theme
-        unlocking: root.unlocking
-        animationPreference: root.animationPreference
-        entryTransition: root.entryTransition
-        entryTransitionDuration: root.entryTransitionDuration
-        randomFormationMode: root.randomFormationMode
-        logoPhysicsHz: root.logoPhysicsHz
-        mouseInteractive: root.mouseInteractive
-        showLogo: root.showLogo
-        showTime: root.showTime
-        showDate: root.showDate
-        showUsername: root.showUsername
-        showWeather: root.showWeather
-        weatherText: root.weatherText
-        backgroundMode: root.backgroundMode
-        wallpaperSource: root.wallpaperSource
-        backgroundColor: root.backgroundColor
-        wallpaperFit: root.wallpaperFit
-        wallpaperFocalX: root.wallpaperFocalX
-        wallpaperFocalY: root.wallpaperFocalY
-        overlayMode: root.overlayMode
-        overlayStrength: root.overlayStrength
-        wallpaperBlur: root.wallpaperBlur
-        autoAccents: root.autoAccents
-        layout: root.layout
-        customImages: root.customImages
-        visualizer: root.visualizer
-        audioBands: root.audioBands
-        backgroundOpacity: root.backgroundOpacity
-        previewMode: false
+
+        // This backing is deliberately opaque even when capture loading fails.
+        // Background transparency later reveals this secure frozen frame rather
+        // than compositor pixels outside the WlSessionLock surface.
+        Item {
+            id: desktopBacking
+            anchors.fill: parent
+
+            Rectangle {
+                anchors.fill: parent
+                color: "#000000"
+            }
+
+            Image {
+                id: desktopCapture
+                anchors.fill: parent
+                source: root.captureSource
+                asynchronous: false
+                cache: false
+                fillMode: Image.Stretch
+                visible: status === Image.Ready
+            }
+        }
+
+        LockScene {
+            id: scene
+            anchors.fill: parent
+            theme: root.theme
+            unlocking: root.unlocking
+            animationPreference: root.animationPreference
+            entryTransition: root.entryTransition
+            entryTransitionDuration: root.entryTransitionDuration
+            randomFormationMode: root.randomFormationMode
+            logoPhysicsHz: root.logoPhysicsHz
+            mouseInteractive: root.mouseInteractive && root.transitionComplete
+            showLogo: root.showLogo && root.transitionComplete
+            showTime: root.showTime
+            showDate: root.showDate
+            showUsername: root.showUsername
+            showWeather: root.showWeather
+            weatherText: root.weatherText
+            backgroundMode: root.backgroundMode
+            wallpaperSource: root.wallpaperSource
+            backgroundColor: root.backgroundColor
+            wallpaperFit: root.wallpaperFit
+            wallpaperFocalX: root.wallpaperFocalX
+            wallpaperFocalY: root.wallpaperFocalY
+            overlayMode: root.overlayMode
+            overlayStrength: root.overlayStrength
+            wallpaperBlur: root.wallpaperBlur
+            autoAccents: root.autoAccents
+            layout: root.layout
+            customImages: root.customImages
+            visualizer: root.visualizer
+            audioBands: root.audioBands
+            backgroundOpacity: root.backgroundOpacity
+            previewMode: false
+            externallyManagedEntryTransition: true
+            externalEntryTransitionRunning: transitionLayer.running
+        }
+    }
+
+    LockTransitionLayer {
+        id: transitionLayer
+        anchors.fill: parent
+        z: 1000
+        startSource: desktopBacking
+        endSource: securePresentation
+        mode: root.entryTransition
+        duration: root.entryTransitionDuration
+        replayToken: 0
+
+        onFinished: {
+            root.entered = true;
+            root.focusPasswordWhenReady();
+        }
     }
 
     MouseArea {
         id: pointerArea
         anchors.fill: parent
+        z: 10
+        enabled: root.transitionComplete
         acceptedButtons: Qt.AllButtons
         hoverEnabled: true
         cursorShape: Qt.BlankCursor
@@ -118,7 +179,8 @@ WlSessionLockSurface {
         width: scene.passwordWidth
         height: scene.passwordHeight
         z: 20
-        opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")
+        opacity: root.transitionComplete
+            ? scene.securePasswordEntryOpacity * scene.elementOpacity("password") : 0
         transform: Scale {
             origin.x: passwordBlock.width / 2
             origin.y: passwordBlock.height / 2
@@ -171,7 +233,7 @@ WlSessionLockSurface {
             verticalAlignment: TextInput.AlignVCenter
             echoMode: TextInput.Password
             inputMethodHints: Qt.ImhSensitiveData
-            enabled: !auth.busy || auth.responseRequired
+            enabled: root.transitionComplete && (!auth.busy || auth.responseRequired)
             activeFocusOnTab: true
 
             onTextChanged: {
@@ -202,22 +264,19 @@ WlSessionLockSurface {
 
         function onAuthenticationFailed() {
             password.text = "";
-            Qt.callLater(() => password.forceActiveFocus());
+            root.focusPasswordWhenReady();
         }
 
         function onBusyChanged() {
             if (!root.auth.busy)
-                Qt.callLater(() => password.forceActiveFocus());
+                root.focusPasswordWhenReady();
         }
 
         function onResponseRequiredChanged() {
             if (root.auth.responseRequired)
-                Qt.callLater(() => password.forceActiveFocus());
+                root.focusPasswordWhenReady();
         }
     }
 
-    Component.onCompleted: {
-        root.entered = true;
-        Qt.callLater(() => password.forceActiveFocus());
-    }
+    Component.onCompleted: root.entered = true
 }
