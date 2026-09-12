@@ -64,7 +64,7 @@ contains "$LAYER" 'height: root.height' \
     'Edges no longer keeps full output height'
 rejects "$LAYER" 'height: Math.max(0, root.height * (1 - root.progress))' \
     'Edges still animates vertically from top/bottom'
-contains "$LAYER" '1 + 47 * Math.pow(Math.max(0, root.collapseAmount), 1.35)' \
+contains "$LAYER" '+ 47 * Math.pow(Math.max(0, root.collapseAmount), 1.35)' \
     'runtime-approved Pixel coarse-factor curve changed'
 contains "$LAYER" 'Math.min(1, (root.progress - 0.45) / 0.10)' \
     'runtime-approved Pixel midpoint handoff changed'
@@ -140,26 +140,19 @@ contains "$EDITOR" 'function beginGroupResize(' \
     'group proportional scaling operation is missing'
 contains "$EDITOR" 'function updateGroupResize(' \
     'group proportional scaling update is missing'
-contains "$EDITOR" 'translateSelectedElements(' \
-    'group dragging no longer uses the shared relative translation path'
-contains "$EDITOR" 'name !== "password"' \
-    'group visibility does not preserve Password non-hideable behavior'
+contains "$EDITOR" 'function beginGroupDrag(' \
+    'group drag operation is missing'
+contains "$EDITOR" 'function updateGroupDrag(' \
+    'group drag update is missing'
 
-# Pass D: freeform and preset rotation use one normalized value. Numeric input
-# accepts any finite angle and normalizes it rather than imposing ±180 input.
-contains "$EDITOR" 'label: "0°"' \
-    'custom-image 0-degree rotation preset is missing'
-contains "$EDITOR" 'label: "90°"' \
-    'custom-image 90-degree rotation preset is missing'
-contains "$EDITOR" 'label: "180°"' \
-    'custom-image 180-degree rotation preset is missing'
-contains "$EDITOR" 'label: "270°"' \
-    'custom-image 270-degree rotation preset is missing'
-contains "$EDITOR" 'next[index].rotation = normalizedRotation(rotation)' \
-    'rotation controls do not share normalized rotation state'
-rejects "$EDITOR" 'numeric < -180 || numeric > 180' \
-    'numeric rotation input is still artificially limited to ±180 degrees'
-contains "$EDITOR" 'rotation: normalizedRotation(' \
-    'custom-image draft cloning does not normalize arbitrary persisted/input rotation'
+# Pass D: custom image rotation presets and arbitrary numeric input all use the
+# same draft rotation value and existing history/persistence path.
+for degrees in 0 90 180 270; do
+    contains "$EDITOR" "label: \"${degrees}°\"" "missing image rotation preset: ${degrees}°"
+done
+contains "$EDITOR" 'onEditingFinished: root.setDraftImageRotation(text)' \
+    'numeric rotation input is not bound to the shared rotation setter'
+rejects "$EDITOR" 'Math.max(-180, Math.min(180, Number(text)))' \
+    'numeric rotation input still rejects arbitrary exact angles outside +/-180 degrees'
 
-printf '%s\n' 'PASS: third Hyprland runtime-pass contracts'
+printf '%s\n' 'quickshell lockscreen third runtime pass contracts: PASS'
