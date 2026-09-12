@@ -23,6 +23,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
           bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash -n tests/test-quickshell-lockscreen-capture.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash -n tests/test-quickshell-lockscreen-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -51,6 +52,9 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
             bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
           fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
       - name: ShellCheck
         run: |
           shellcheck tests/test-quickshell-lockscreen-interactive-effects.sh
@@ -59,6 +63,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          shellcheck tests/test-quickshell-lockscreen-capture.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
           shellcheck tests/test-quickshell-lockscreen-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -87,6 +92,9 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
           fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
       - name: Runtime helper mode
         run: |
           test -x config/hypr/scripts/quickshell_lockscreen_audio.sh
@@ -102,6 +110,8 @@ jobs:
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
           bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+      - name: Secure transition capture contract
+        run: bash tests/test-quickshell-lockscreen-capture.sh
       - name: Background composition contracts
         run: |
           bash tests/test-quickshell-lockscreen-background-composition.sh
