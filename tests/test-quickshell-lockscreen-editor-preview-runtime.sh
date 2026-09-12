@@ -107,7 +107,8 @@ check_text "$EDITOR" 'id: settingsBarAltDrag' 'settings bar Alt-drag handler is 
 check_text "$EDITOR" 'DragHandler {' 'settings bar Alt-drag does not use DragHandler'
 check_text "$EDITOR" 'acceptedModifiers: Qt.AltModifier' 'settings bar drag is not explicitly Alt-filtered'
 check_text "$EDITOR" 'yAxis.onActiveValueChanged:' 'settings bar drag does not apply live vertical deltas'
-reject_text "$EDITOR" 'mouse.modifiers & Qt.AltModifier' 'legacy MouseArea modifier gate still owns settings-bar dragging'
+reject_text "$EDITOR" 'property real dragStartSceneY: 0' 'legacy MouseArea settings-bar drag state still exists'
+reject_text "$EDITOR" 'property real dragStartOffsetY: 0' 'legacy MouseArea settings-bar drag offset still exists'
 
 # Secure capture remains separate and untouched by the editor-preview capture.
 check_text "$SECURE_CAPTURE" 'awtarchy-lock-transition' 'secure lock capture root changed unexpectedly'
