@@ -27,40 +27,31 @@ jobs:
 
           path = Path('.github/scripts/apply-lockscreen-third-runtime-pass.py')
           text = path.read_text()
-          old = '''anchor='''\'''''        Image {
-              id: wallpaperImage
-              visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
-                  && root.wallpaperBlur <= 0
-              source: root.wallpaperSource
-              asynchronous: false
-              cache: false
-              fillMode: Image.Stretch
-              x: root.wallpaperGeometry().x
-              y: root.wallpaperGeometry().y
-              width: root.wallpaperGeometry().width
-              height: root.wallpaperGeometry().height
-              smooth: true
-          }
-          '''\'''''\n'''
-          new = '''anchor='''\'''''        Image {
+          start_marker = "anchor='''        Image {\n            id: wallpaperImage\n"
+          end_marker = "effect=anchor+'''\n"
+          start = text.find(start_marker)
+          end = text.find(end_marker, start)
+          if start < 0 or end < 0:
+              raise RuntimeError('wallpaper helper anchor markers not found exactly once')
+          if text.find(start_marker, start + 1) >= 0:
+              raise RuntimeError('wallpaper helper anchor start marker is ambiguous')
+          replacement = """anchor='''        Image {
               id: wallpaperImage
               readonly property var geometry: root.wallpaperGeometry()
               x: geometry.x
               y: geometry.y
               width: geometry.width
               height: geometry.height
-              visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+              visible: root.backgroundMode === \"wallpaper\" && root.wallpaperSource.length > 0
                   && root.wallpaperBlur <= 0
               source: root.wallpaperSource
               fillMode: Image.Stretch
               asynchronous: true
               cache: true
           }
-          '''\'''''\n'''
-          count = text.count(old)
-          if count != 1:
-              raise RuntimeError(f'wallpaper helper anchor: expected 1, got {count}')
-          path.write_text(text.replace(old, new, 1))
+          '''
+          """
+          path.write_text(text[:start] + replacement + text[end:])
           PY
             python3 .github/scripts/apply-lockscreen-third-runtime-pass.py
           fi
