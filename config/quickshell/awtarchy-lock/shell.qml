@@ -11,6 +11,14 @@ ShellRoot {
     id: root
 
     property bool unlockRequested: false
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")
+    readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
+    readonly property string captureHelper: configHome
+        + "/hypr/scripts/quickshell_lockscreen_capture.sh"
+    readonly property string captureDirectory: normalizedCaptureDirectory(
+        Quickshell.env("AWTARCHY_LOCK_CAPTURE_DIR") || "")
+    property bool captureCleanupRequested: false
     readonly property string statePath: (Quickshell.env("XDG_CACHE_HOME")
         || (Quickshell.env("HOME") + "/.cache")) + "/awtarchy/quickshell-state.json"
     property string lockAnimationPreference: "split"
@@ -47,6 +55,24 @@ ShellRoot {
     readonly property var allowedAnimationPreferences: [
         "random", "swarm", "edges", "center", "split", "off"
     ]
+
+    function normalizedCaptureDirectory(value) {
+        const path = String(value || "");
+        if (root.runtimeDir.length === 0)
+            return "";
+        const prefix = root.runtimeDir + "/awtarchy-lock-transition/capture.";
+        if (!path.startsWith(prefix))
+            return "";
+        const suffix = path.slice(prefix.length);
+        return /^[A-Za-z0-9]+$/.test(suffix) ? path : "";
+    }
+
+    function cleanupTransitionCapture() {
+        if (root.captureCleanupRequested || root.captureDirectory.length === 0)
+            return;
+        root.captureCleanupRequested = true;
+        Quickshell.execDetached([root.captureHelper, "cleanup", root.captureDirectory]);
+    }
 
     function defaultLockVisualizer() {
         return ({
@@ -445,12 +471,17 @@ ShellRoot {
                 visualizer: root.lockVisualizer
                 audioBands: lockAudioAnalyzer.bands
                 backgroundOpacity: root.lockBackgroundOpacity
+                captureDirectory: root.captureDirectory
             }
         }
 
         onSecureChanged: {
-            if (root.unlockRequested && !secure)
+            if (secure && root.captureDirectory.length > 0)
+                captureCleanupTimer.restart();
+            if (root.unlockRequested && !secure) {
+                root.cleanupTransitionCapture();
                 quitAfterUnlock.restart();
+            }
         }
     }
 
@@ -485,9 +516,19 @@ ShellRoot {
     }
 
     Timer {
+        id: captureCleanupTimer
+        interval: Math.max(3000, Math.min(8000, root.lockEntryTransitionDuration + 2000))
+        repeat: false
+        onTriggered: root.cleanupTransitionCapture()
+    }
+
+    Timer {
         id: quitAfterUnlock
         interval: 150
         repeat: false
-        onTriggered: Qt.quit()
+        onTriggered: {
+            root.cleanupTransitionCapture();
+            Qt.quit();
+        }
     }
 }
