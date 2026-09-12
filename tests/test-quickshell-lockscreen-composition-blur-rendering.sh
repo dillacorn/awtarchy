@@ -21,38 +21,113 @@ rejects() {
     ! grep -Fq -- "$needle" "$file" || fail "$message"
 }
 
-# Smooth composition blur must transform the captured Hyprland frame itself.
-# A separately visible ShaderEffectSource leaves a sharp copy in the scene and
-# defeats the intended no-wallpaper blur composition.
-contains "$SURFACE" 'layer.enabled: root.transitionComplete' \
-    'captured Hyprland frame does not enable its own post-transition blur layer'
-contains "$SURFACE" 'layer.effect: MultiEffect' \
-    'captured Hyprland frame has no direct MultiEffect layer'
-contains "$SURFACE" 'root.blurStyle === "smooth"' \
-    'captured Hyprland smooth blur is not style-gated'
-rejects "$SURFACE" 'id: desktopCaptureTexture' \
-    'sharp desktop texture provider is still rendered alongside smooth blur'
-contains "$SURFACE" 'id: desktopCapturePixelatedBlur' \
-    'captured Hyprland pixelated blur path is missing'
-contains "$SURFACE" 'hideSource: root.transitionComplete' \
-    'pixelated desktop path does not hide the sharp captured frame'
+# The secure frozen desktop must enter the same background composition as the
+# configured lockscreen background before Blur is applied.  This is the key
+# ordering invariant for Background Opacity < 100%: there must be no separate
+# sharp desktop sibling left underneath a wallpaper/color-only blur effect.
+contains "$SURFACE" 'desktopBackingSource: desktopBacking' \
+    'secure scene does not receive the frozen desktop as a composition input'
+rejects "$SURFACE" 'desktopCapture.layer.enabled' \
+    'captured desktop is still blurred independently instead of in final composition'
 
-# Wallpaper follows the same single-visible-source rule so the one Blur slider
-# has identical semantics for wallpaper and captured-session composition.
-contains "$SCENE" 'layer.enabled: root.wallpaperBlur > 0' \
-    'wallpaper does not enable its own smooth blur layer'
+contains "$SCENE" 'property Item desktopBackingSource: null' \
+    'presentation scene has no optional secure desktop composition input'
+contains "$SCENE" 'id: backgroundCompositionContent' \
+    'presentation scene has no unified background composition item'
+contains "$SCENE" 'id: desktopBackingTexture' \
+    'unified composition does not render the secure frozen desktop input'
+contains "$SCENE" 'sourceItem: root.desktopBackingSource' \
+    'desktop composition texture does not source the secure frozen desktop'
+contains "$SCENE" 'hideSource: root.desktopBackingSource !== null' \
+    'secure frozen desktop source is not hidden after being copied into composition'
+contains "$SCENE" 'id: backgroundLayer' \
+    'configured wallpaper/color background layer is missing'
+contains "$SCENE" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' \
+    'configured background opacity is not applied inside final composition'
 contains "$SCENE" 'layer.effect: MultiEffect' \
-    'wallpaper has no direct MultiEffect layer'
-contains "$SCENE" 'root.blurStyle === "smooth"' \
-    'wallpaper smooth blur is not style-gated'
-rejects "$SCENE" 'id: wallpaperTexture' \
-    'sharp wallpaper texture provider is still rendered alongside smooth blur'
-contains "$SCENE" 'id: wallpaperPixelatedBlur' \
-    'wallpaper pixelated blur path is missing'
-contains "$SCENE" 'hideSource: root.wallpaperBlur > 0' \
-    'pixelated wallpaper path does not hide the sharp wallpaper image'
+    'unified background composition has no smooth blur effect'
+contains "$SCENE" 'id: backgroundCompositionPixelatedBlur' \
+    'unified background composition has no pixelated blur output'
+contains "$SCENE" 'sourceItem: backgroundCompositionContent' \
+    'pixelated blur does not consume the complete background composition'
+rejects "$SCENE" 'id: wallpaperPixelatedBlur' \
+    'wallpaper is still pixelated independently of the visible desktop composition'
+
+# Check nesting/order rather than only the presence of identifiers.  The frozen
+# desktop copy and translucent configured background must both occur inside the
+# item that owns the final blur, while foreground lockscreen UI stays outside.
+python3 - "$SCENE" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+composition = text.index("id: backgroundCompositionContent")
+desktop = text.index("id: desktopBackingTexture", composition)
+background = text.index("id: backgroundLayer", desktop)
+visual = text.index("id: visualLayer", background)
+segment = text[composition:visual]
+
+required = [
+    "sourceItem: root.desktopBackingSource",
+    "opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100",
+    "layer.enabled: root.wallpaperBlur > 0",
+    'root.blurStyle === "smooth"',
+    "layer.effect: MultiEffect",
+]
+for needle in required:
+    if needle not in segment:
+        raise SystemExit(f"FAIL: final background composition segment lacks {needle!r}")
+
+if not (composition < desktop < background < visual):
+    raise SystemExit("FAIL: desktop/background/foreground composition order is wrong")
+PY
+
+# Numeric compositing oracle for the runtime failure.  Model obvious sharp
+# desktop detail under a 40%-opaque background.  The required order is:
+#     blur(alpha(background, desktop))
+# not:
+#     alpha(blur(background), sharp_desktop)
+# The latter leaves the desktop's high-frequency detail visible and is exactly
+# the failure observed on Hyprland.
+python3 <<'PY'
+def alpha_over(top, bottom, alpha):
+    return [alpha * t + (1.0 - alpha) * b for t, b in zip(top, bottom)]
+
+
+def box_blur(values, radius=2):
+    out = []
+    for i in range(len(values)):
+        lo = max(0, i - radius)
+        hi = min(len(values), i + radius + 1)
+        out.append(sum(values[lo:hi]) / (hi - lo))
+    return out
+
+
+def adjacent_contrast(values):
+    return sum(abs(values[i] - values[i - 1]) for i in range(1, len(values))) / (len(values) - 1)
+
+# Alternating black/white pixels make any surviving sharp desktop unmistakable.
+desktop = [float(i % 2) for i in range(64)]
+alpha = 0.40
+
+for label, configured_background in (
+    ("no-wallpaper black background", [0.0] * len(desktop)),
+    ("wallpaper background", [0.30 + 0.20 * (i / (len(desktop) - 1)) for i in range(len(desktop))]),
+):
+    composited = alpha_over(configured_background, desktop, alpha)
+    expected = box_blur(composited)
+    wrong = alpha_over(box_blur(configured_background), desktop, alpha)
+
+    expected_contrast = adjacent_contrast(expected)
+    wrong_contrast = adjacent_contrast(wrong)
+    if expected_contrast >= wrong_contrast * 0.45:
+        raise SystemExit(
+            f"FAIL: {label}: final-composition blur did not sufficiently suppress desktop detail "
+            f"(expected={expected_contrast:.4f}, wrong={wrong_contrast:.4f})"
+        )
+PY
 
 cmp -s "$SCENE" "$PREVIEW" \
     || fail 'secure/editor presentation scenes diverged'
 
-printf '%s\n' 'PASS: composition blur renders exactly one blurred source for session and wallpaper'
+printf '%s\n' 'PASS: blur consumes the complete translucent background composition, including secure desktop backing'
