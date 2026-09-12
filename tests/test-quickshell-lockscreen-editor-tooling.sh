@@ -32,15 +32,17 @@ require_text 'sequence: "Ctrl+Shift+Z"' 'Ctrl+Shift+Z redo shortcut is missing'
 require_text 'sequence: "Ctrl+Y"' 'Ctrl+Y redo shortcut is missing'
 
 # Multi-selection and group translation remain within each element's existing
-# bounds. A normal click replaces selection; Shift toggles membership.
+# bounds. Normal press on an already-selected member preserves the group for
+# dragging; Shift-click and Ctrl-click both toggle membership.
 require_text 'property var selectedElements: ["logo"]' 'editor has no multi-selection state'
 require_text 'function selectElement(name, additive)' 'editor has no additive selection helper'
 require_text 'function selectedContains(name)' 'editor cannot test group membership'
 require_text 'function translateSelectedElements(dx, dy, selectPrimary)' 'editor cannot move a selected group'
 require_text 'function clampedGroupDelta(dx, dy)' 'group movement does not clamp against all member bounds'
 require_text 'function writeDraftPoint(name, x, y, selectPrimary)' 'point writer shadows the selectElement() helper'
-require_text 'mouse.modifiers & Qt.ShiftModifier' 'Shift-click multi-selection is missing'
-require_text 'root.selectElement(parent.elementName, additive);' 'pointer selection does not use group selection helper'
+require_text 'Qt.ShiftModifier | Qt.ControlModifier' 'Shift/Ctrl additive multi-selection is missing'
+require_text 'if (additive) root.selectElement(parent.elementName, true);' 'additive pointer selection does not toggle group membership'
+require_text 'else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false);' 'normal press collapses an existing selected group before drag'
 
 # Smart alignment uses screen center and peer centers, while Alt explicitly
 # disables snapping for free placement. Guide coordinates are editor-only.
