@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Effects
 import Quickshell.Wayland
 
 WlSessionLockSurface {
@@ -100,6 +101,17 @@ WlSessionLockSurface {
                 fillMode: Image.Stretch
                 visible: status === Image.Ready
             }
+        }
+
+        MultiEffect {
+            id: desktopCaptureBlur
+            anchors.fill: parent
+            visible: root.wallpaperBlur > 0 && desktopCapture.status === Image.Ready
+            source: desktopCapture
+            autoPaddingEnabled: false
+            blurEnabled: root.wallpaperBlur > 0
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
         }
 
         LockScene {

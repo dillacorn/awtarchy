@@ -739,24 +739,11 @@ Item {
             y: geometry.y
             width: geometry.width
             height: geometry.height
-            visible: false
+            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
             source: root.wallpaperSource
             fillMode: Image.Stretch
             asynchronous: true
             cache: true
-        }
-
-        MultiEffect {
-            x: wallpaperImage.x
-            y: wallpaperImage.y
-            width: wallpaperImage.width
-            height: wallpaperImage.height
-            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
-            source: wallpaperImage
-            autoPaddingEnabled: false
-            blurEnabled: root.wallpaperBlur > 0
-            blurMax: 32
-            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
         }
 
         Rectangle {

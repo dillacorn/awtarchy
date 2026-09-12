@@ -42,6 +42,7 @@ Singleton {
     property string draftOverlayMode: "none"
     property int draftOverlayStrength: 0
     property int draftWallpaperBlur: 0
+    property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
     property string selectedElement: "logo"
@@ -300,6 +301,7 @@ Singleton {
             overlayMode: draftOverlayMode,
             overlayStrength: draftOverlayStrength,
             wallpaperBlur: draftWallpaperBlur,
+            wallpaperBlurExplicit: draftWallpaperBlurExplicit,
             weatherUnits: draftWeatherUnits
         });
     }
@@ -364,6 +366,7 @@ Singleton {
             ? Math.max(0, Math.min(100, Math.round(overlayStrength))) : 0;
         draftWallpaperBlur = Number.isFinite(wallpaperBlur)
             ? Math.max(0, Math.min(100, Math.round(wallpaperBlur))) : 0;
+        draftWallpaperBlurExplicit = snapshot.wallpaperBlurExplicit === true;
         draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0
             ? String(snapshot.weatherUnits) : "auto";
         scheduleContrastRefresh();
@@ -856,7 +859,8 @@ Singleton {
             return;
         const next = Math.max(0, Math.min(100, Math.round(numeric)));
         recordUndoBeforeChange();
-        if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0)
+        if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0
+                && !draftWallpaperBlurExplicit)
             draftWallpaperBlur = 20;
         draftBackgroundOpacity = next;
     }
@@ -938,6 +942,7 @@ Singleton {
             return;
         recordUndoBeforeChange();
         draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+        draftWallpaperBlurExplicit = true;
     }
 
     function setDraftVisualizerSetting(name, value) {
@@ -1508,6 +1513,7 @@ Singleton {
         draftOverlayMode = "none";
         draftOverlayStrength = 0;
         draftWallpaperBlur = 0;
+        draftWallpaperBlurExplicit = false;
         draftWeatherUnits = "auto";
         draftAutoAccents = defaultAutoAccents();
         selectedElement = "logo";
@@ -1543,6 +1549,7 @@ Singleton {
         draftOverlayMode = BarState.lockscreenOverlayMode();
         draftOverlayStrength = BarState.lockscreenOverlayStrength();
         draftWallpaperBlur = BarState.lockscreenWallpaperBlur();
+        draftWallpaperBlurExplicit = false;
         draftWeatherUnits = BarState.lockscreenWeatherUnits();
         draftAutoAccents = defaultAutoAccents();
         selectedElement = elementExists(selectedElement) ? selectedElement : "logo";
