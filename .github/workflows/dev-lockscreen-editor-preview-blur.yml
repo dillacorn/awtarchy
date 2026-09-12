@@ -1,0 +1,81 @@
+name: Dev Lockscreen Editor Preview Blur
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.head_commit.message == 'ci: apply editor preview blur patch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Patch editor preview backing
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          editor = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
+          text = editor.read_text()
+
+          primary_old = '''                audioBands: previewAudioAnalyzer.bands
+                backgroundOpacity: root.draftBackgroundOpacity
+                previewMode: true
+'''
+          primary_new = '''                audioBands: previewAudioAnalyzer.bands
+                backgroundOpacity: root.draftBackgroundOpacity
+                desktopBackingSource: editorTransitionStart
+                previewMode: true
+'''
+          secondary_old = '''                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
+                previewMode: true; editorMode: false
+'''
+          secondary_new = '''                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
+                desktopBackingSource: secondaryTransitionStart
+                previewMode: true; editorMode: false
+'''
+
+          for label, old, new in (
+              ('primary preview', primary_old, primary_new),
+              ('secondary preview', secondary_old, secondary_new),
+          ):
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected one patch target, found {count}')
+              text = text.replace(old, new, 1)
+
+          editor.write_text(text)
+          PY
+
+          digest="$(sha256sum config/quickshell/awtarchy/LockscreenEditor.qml | awk '{print $1}')"
+          printf '%s\t%s\n' "$digest" '.config/quickshell/awtarchy/LockscreenEditor.qml' \
+            >> local/share/awtarchy/quickshell-managed-history.sha256
+      - name: Validate focused contracts
+        run: |
+          bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-background-composition.sh
+          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          git diff --check
+      - name: Commit production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            config/quickshell/awtarchy/LockscreenEditor.qml \
+            local/share/awtarchy/quickshell-managed-history.sha256
+          git commit -m "fix: update blur live in lockscreen editor previews"
+          git push origin HEAD:feature/lockscreen-interactive-effects
