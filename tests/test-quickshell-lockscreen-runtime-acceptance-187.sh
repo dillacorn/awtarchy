@@ -67,7 +67,8 @@ cmp -s "$ANALYZER" "$PREVIEW_ANALYZER" || fail 'secure/editor analyzer paths div
 
 # Detailed background controls live in the editor, stay usable for every mode,
 # and use direct pointer-driven slider tracks. The first transparency adjustment
-# seeds blur only until the user has explicitly chosen a blur value.
+# seeds blur only until the user has explicitly chosen a blur value. Secure blur
+# is applied to the frozen desktop backing through smooth or pixelated paths.
 has "$EDITOR" 'text: "Brightness"' 'editor brightness slider is missing'
 has "$EDITOR" 'function setDraftBrightness(value)' 'direct brightness adjustment is missing'
 has "$EDITOR" 'function setBackgroundOpacityFromPointer(pointerX, trackWidth)' 'opacity pointer slider is missing'
@@ -75,7 +76,11 @@ has "$EDITOR" 'if (draftBackgroundOpacity === 100 && next < 100 && draftWallpape
 has "$EDITOR" '&& !draftWallpaperBlurExplicit)' 'explicit blur choice is not respected by opacity seeding'
 lacks "$EDITOR" 'enabled: root.draftBackgroundMode === "wallpaper"' 'blur remains wallpaper-gated'
 lacks "$QUICK_SETTINGS" 'text: "Background Opacity"' 'detailed opacity still duplicated in Quick Settings'
-has "$SURFACE" 'id: desktopCaptureBlur' 'blur is not applied to the secure frozen desktop backing'
+has "$SURFACE" 'id: desktopCaptureTexture' 'secure frozen desktop has no texture-provider blur backing'
+has "$SURFACE" 'id: desktopCaptureSmoothBlur' 'smooth blur is not applied to the secure frozen desktop backing'
+has "$SURFACE" 'source: desktopCaptureTexture' 'smooth secure blur does not consume the frozen desktop texture'
+has "$SURFACE" 'id: desktopCapturePixelatedBlur' 'pixelated blur is not applied to the secure frozen desktop backing'
+has "$SURFACE" 'root.blurStyle === "pixelated"' 'secure pixelated blur is not style-gated'
 
 # Delete removes only a selected custom image through the existing undo path;
 # all elements share one high defensive scale ceiling instead of a 200% UX cap.
