@@ -33,7 +33,7 @@ has "$EDITOR" 'entryTransitionDuration: root.draftEntryTransitionDuration' 'prev
 has "$SURFACE" 'required property int entryTransitionDuration' 'secure surface duration input is missing'
 has "$SHELL" 'entryTransitionDuration: root.lockEntryTransitionDuration' 'secure shell does not pass duration'
 has "$SCENE" 'required property int entryTransitionDuration' 'scene duration input is missing'
-has "$SCENE" '&& !root.entryTransitionRunning' 'logo formation is not sequenced after scene reveal'
+has "$SCENE" '&& !root.effectiveEntryTransitionRunning' 'logo formation is not sequenced after the active scene reveal'
 has "$SCENE" 'readonly property int entryTileColumns: 24' 'transition tile bound changed'
 lacks "$AUTH" 'entryTransitionDuration' 'transition duration leaked into authentication owner'
 
