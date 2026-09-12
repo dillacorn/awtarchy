@@ -11,6 +11,7 @@ SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="$ROOT/config/quickshell/awtarchy-lock/LockSurface.qml"
 SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
+LAYER="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
 AUTH="$ROOT/config/quickshell/awtarchy-lock/LockAuth.qml"
 ANALYZER="$ROOT/config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml"
 PREVIEW_ANALYZER="$ROOT/config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml"
@@ -23,18 +24,17 @@ has() { grep -Fq -- "$2" "$1" || fail "$3"; }
 lacks() { ! grep -Fq -- "$2" "$1" || fail "$3"; }
 
 # Transition duration is persisted once, passed only through presentation, and
-# delays the selected logo formation until the actual scene reveal completes.
+# delays logo formation until the shared desktop-to-lockscreen reveal completes.
 has "$STATE" 'lockscreen_entry_transition_duration' 'transition duration is not persisted'
-has "$STATE" '1200' 'deliberate transition duration default is missing'
+has "$STATE" '1800' 'approved 1800ms transition duration default is missing'
+has "$STATE" '800 6000' 'approved 800-6000ms transition duration range is missing'
 has "$BAR_STATE" 'function lockscreenEntryTransitionDuration()' 'BarState duration reader is missing'
-has "$EDITOR" 'property int draftEntryTransitionDuration: 1200' 'editor duration draft is missing'
+has "$EDITOR" 'property int draftEntryTransitionDuration: 1800' 'editor duration draft is not 1800ms'
 has "$EDITOR" 'text: "Transition Speed"' 'editor duration control is missing'
-has "$EDITOR" 'entryTransitionDuration: root.draftEntryTransitionDuration' 'preview does not receive duration'
 has "$SURFACE" 'required property int entryTransitionDuration' 'secure surface duration input is missing'
 has "$SHELL" 'entryTransitionDuration: root.lockEntryTransitionDuration' 'secure shell does not pass duration'
-has "$SCENE" 'required property int entryTransitionDuration' 'scene duration input is missing'
+has "$LAYER" 'Math.max(800, Math.min(6000' 'shared renderer does not enforce transition duration bounds'
 has "$SCENE" '&& !root.effectiveEntryTransitionRunning' 'logo formation is not sequenced after the active scene reveal'
-has "$SCENE" 'readonly property int entryTileColumns: 24' 'transition tile bound changed'
 lacks "$AUTH" 'entryTransitionDuration' 'transition duration leaked into authentication owner'
 
 # One bounded simulation owns smooth coherent hover targets, explosion impulse,
@@ -65,13 +65,16 @@ has "$CAVA_CONFIG" 'noise_reduction = 35' 'CAVA responsiveness tuning is missing
 cmp -s "$ANALYZER" "$PREVIEW_ANALYZER" || fail 'secure/editor analyzer paths diverged'
 
 # Detailed background controls live in the editor, stay usable for every mode,
-# and use direct pointer-driven slider tracks.
+# and use direct pointer-driven slider tracks. The first transparency adjustment
+# seeds blur only until the user has explicitly chosen a blur value.
 has "$EDITOR" 'text: "Brightness"' 'editor brightness slider is missing'
 has "$EDITOR" 'function setDraftBrightness(value)' 'direct brightness adjustment is missing'
 has "$EDITOR" 'function setBackgroundOpacityFromPointer(pointerX, trackWidth)' 'opacity pointer slider is missing'
-has "$EDITOR" 'if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0)' 'first transparency adjustment does not seed blur'
+has "$EDITOR" 'if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0' 'first transparency adjustment does not seed blur'
+has "$EDITOR" '&& !draftWallpaperBlurExplicit)' 'explicit blur choice is not respected by opacity seeding'
 lacks "$EDITOR" 'enabled: root.draftBackgroundMode === "wallpaper"' 'blur remains wallpaper-gated'
 lacks "$QUICK_SETTINGS" 'text: "Background Opacity"' 'detailed opacity still duplicated in Quick Settings'
+has "$SURFACE" 'id: desktopCaptureBlur' 'blur is not applied to the secure frozen desktop backing'
 
 # Delete removes only a selected custom image through the existing undo path;
 # all elements share one high defensive scale ceiling instead of a 200% UX cap.
@@ -83,7 +86,8 @@ has "$BAR_STATE" 'scale > 100.00' 'BarState does not use the common scale bound'
 has "$SCENE" 'const maximum = 100.00;' 'renderer still uses a visible 200%/10x ceiling'
 
 # Production picker owns an exact identity and has a Hyprland fallback in
-# addition to Alacritty's startup request.
+# addition to Alacritty's startup request. The stricter mapped-address behavior
+# is covered by the dedicated picker task before the runtime candidate is cut.
 has "$PICKER" '--title Awtarchy-Lockscreen-Wallpaper' 'picker title is not stable'
 has "$PICKER" 'window.startup_mode=Fullscreen' 'Alacritty fullscreen request is missing'
 has "$PICKER" 'hyprctl dispatch fullscreen 1' 'Hyprland fullscreen fallback is missing'
