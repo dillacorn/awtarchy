@@ -1,0 +1,70 @@
+name: Dev Lockscreen Preview Runtime Fix
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: "${{ github.actor != 'github-actions[bot]' }}"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Apply preview/runtime patch
+        run: |
+          python3 .github/scripts/dev-fix-lockscreen-preview-runtime.py
+          chmod +x config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          history=local/share/awtarchy/quickshell-managed-history.sha256
+          for entry in \
+            'config/hypr/scripts/quickshell_lockscreen_preview_capture.sh:.config/hypr/scripts/quickshell_lockscreen_preview_capture.sh' \
+            'config/quickshell/awtarchy/LockscreenEditor.qml:.config/quickshell/awtarchy/LockscreenEditor.qml' \
+            'config/quickshell/awtarchy/LockPreviewTransitionLayer.qml:.config/quickshell/awtarchy/LockPreviewTransitionLayer.qml' \
+            'config/quickshell/awtarchy-lock/LockTransitionLayer.qml:.config/quickshell/awtarchy-lock/LockTransitionLayer.qml'; do
+            source_path="${entry%%:*}"
+            installed_path="${entry#*:}"
+            digest="$(sha256sum "$source_path" | awk '{print $1}')"
+            printf '%s\t%s\n' "$digest" "$installed_path" >> "$history"
+          done
+      - name: Validate focused contracts
+        run: |
+          bash -n config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          shellcheck config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          bash -n tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          bash tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          bash tests/test-quickshell-lockscreen-entry-transitions.sh
+          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-capture.sh
+          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          cmp -s config/quickshell/awtarchy-lock/LockTransitionLayer.qml config/quickshell/awtarchy/LockPreviewTransitionLayer.qml
+          git diff --check
+      - name: Commit validated production patch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add \
+            config/hypr/scripts/quickshell_lockscreen_preview_capture.sh \
+            config/quickshell/awtarchy/LockscreenEditor.qml \
+            config/quickshell/awtarchy/LockPreviewTransitionLayer.qml \
+            config/quickshell/awtarchy-lock/LockTransitionLayer.qml \
+            tests/test-quickshell-lockscreen-entry-transitions.sh \
+            tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh \
+            tests/test-quickshell-lockscreen-composition-blur-rendering.sh \
+            tests/test-quickshell-lockscreen-interactive-managed-history.sh \
+            .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml \
+            local/share/awtarchy/quickshell-managed-history.sha256
+          git commit -m "fix: align lockscreen editor preview with runtime"
+          git push origin HEAD:feature/lockscreen-interactive-effects
