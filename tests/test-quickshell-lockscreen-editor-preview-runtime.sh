@@ -33,9 +33,30 @@ cmp -s "$LAYER" "$PREVIEW_LAYER" || {
 # Iris Reveal's mask must be texture-only staging. It must never remain as a
 # visible scene item beneath Pixel/Fade/Edges/Wipe during partial alpha blends.
 check_text "$LAYER" 'id: irisMaskShape' 'Iris Reveal mask shape is missing'
-check_text "$LAYER" 'x: root.width + 64' 'Iris Reveal mask shape is not staged off-screen'
-check_text "$LAYER" 'visible: root.running && root.normalizedMode === "iris"' 'Iris Reveal mask staging is not mode-gated'
 check_text "$LAYER" 'maskSource: irisMaskTexture' 'Iris Reveal effect is not driven by the mask texture'
+python3 - "$LAYER" <<'PY' || failures=$((failures + 1))
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+try:
+    shape_start = text.index("id: irisMaskShape")
+    texture_start = text.index("id: irisMaskTexture", shape_start)
+except ValueError as exc:
+    raise SystemExit(f"FAIL: Iris Reveal mask staging block is incomplete: {exc}")
+shape = text[shape_start:texture_start]
+for needle, message in (
+    ("x: root.width + 64", "Iris Reveal mask shape is not staged off-screen"),
+    ("y: 0", "Iris Reveal mask shape lacks an explicit staging origin"),
+    ("width: root.width", "Iris Reveal mask shape does not preserve transition width"),
+    ("height: root.height", "Iris Reveal mask shape does not preserve transition height"),
+    ('visible: root.running && root.normalizedMode === "iris"', "Iris Reveal mask shape is not mode-gated"),
+):
+    if needle not in shape:
+        raise SystemExit(f"FAIL: {message}")
+if "anchors.fill: parent" in shape:
+    raise SystemExit("FAIL: Iris Reveal mask shape is still a visible in-scene full-frame item")
+PY
 
 # Editor preview must use a real per-output desktop snapshot captured after
 # Quick Settings closes and while every editor preview window is hidden.
