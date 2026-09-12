@@ -86,59 +86,21 @@ has "$STATE" '.scale <= 100.00' 'persisted custom images do not use the common s
 has "$BAR_STATE" 'scale > 100.00' 'BarState does not use the common scale bound'
 has "$SCENE" 'const maximum = 100.00;' 'renderer still uses a visible 200%/10x ceiling'
 
-# Production picker owns an exact identity and has a Hyprland fallback in
-# addition to Alacritty's startup request. The stricter mapped-address behavior
-# is covered by the dedicated picker task before the runtime candidate is cut.
+# Production picker owns a stable terminal identity, waits for the actual mapped
+# client, targets its exact address, requests true fullscreen with set semantics,
+# and verifies the resulting fullscreen state. The dedicated contract exercises
+# the bounded retry path with fake Awtwall/Alacritty/Hyprland fixtures.
 has "$PICKER" '--title Awtarchy-Lockscreen-Wallpaper' 'picker title is not stable'
 has "$PICKER" 'window.startup_mode=Fullscreen' 'Alacritty fullscreen request is missing'
-has "$PICKER" 'hyprctl dispatch fullscreen 1' 'Hyprland fullscreen fallback is missing'
+has "$PICKER" '.address' 'picker does not resolve the mapped Hyprland client address'
+has "$PICKER" 'address:' 'picker does not target the exact mapped client address'
+has "$PICKER" '.fullscreen' 'picker does not verify exact-client fullscreen state'
+has "$PICKER" 'mode = "fullscreen"' 'picker does not request true fullscreen mode'
+has "$PICKER" 'action = "set"' 'picker fullscreen request can toggle instead of set'
+lacks "$PICKER" 'class:^(awtarchy-lock-wallpaper)$' 'picker still dispatches by class instead of exact address'
 has "$PICKER" '--select-only --type images' 'picker no longer uses selection-only mode'
-
-picker_tmp="$(mktemp -d)"
-trap 'rm -rf -- "$picker_tmp"' EXIT
-mkdir -p "$picker_tmp/bin" "$picker_tmp/cache" "$picker_tmp/home"
-selected_image="$picker_tmp/selected image.png"
-printf 'fixture\n' >"$selected_image"
-cat >"$picker_tmp/bin/awtwall" <<'EOF'
-#!/usr/bin/env bash
-if [[ "${1:-}" == --help ]]; then printf '%s\n' '--select-only'; fi
-EOF
-cat >"$picker_tmp/bin/alacritty" <<'EOF'
-#!/usr/bin/env bash
-printf '%s\n' "$*" >"$PICKER_TERMINAL_LOG"
-while (( $# )); do
-    if [[ "$1" == --select-result ]]; then
-        printf '%s\n' "$PICKER_SELECTED_IMAGE" >"$2"
-        break
-    fi
-    shift
-done
-EOF
-cat >"$picker_tmp/bin/hyprctl" <<'EOF'
-#!/usr/bin/env bash
-if [[ "${1:-}" == clients && "${2:-}" == -j ]]; then
-    printf '%s\n' '[{"class":"awtarchy-lock-wallpaper","title":"Awtarchy-Lockscreen-Wallpaper"}]'
-else
-    printf '%s\n' "$*" >>"$PICKER_HYPR_LOG"
-fi
-EOF
-chmod +x "$picker_tmp/bin/awtwall" "$picker_tmp/bin/alacritty" "$picker_tmp/bin/hyprctl"
-picker_output="$(
-    PATH="$picker_tmp/bin:$PATH" \
-    HOME="$picker_tmp/home" \
-    XDG_CACHE_HOME="$picker_tmp/cache" \
-    AWTWALL_CMD="$picker_tmp/bin/awtwall" \
-    LOCKSCREEN_WALLPAPER_TERMINAL="$picker_tmp/bin/alacritty" \
-    PICKER_TERMINAL_LOG="$picker_tmp/terminal.log" \
-    PICKER_HYPR_LOG="$picker_tmp/hypr.log" \
-    PICKER_SELECTED_IMAGE="$selected_image" \
-    bash "$PICKER"
-)"
-[[ "$picker_output" == "$selected_image" ]] || fail 'picker did not return the selected absolute path'
-has "$picker_tmp/terminal.log" '--option window.startup_mode=Fullscreen' 'picker omitted Alacritty fullscreen startup mode'
-has "$picker_tmp/terminal.log" '--class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper' 'picker terminal identity drifted'
-has "$picker_tmp/hypr.log" 'dispatch focuswindow class:^(awtarchy-lock-wallpaper)$' 'picker did not focus its exact Hyprland class'
-has "$picker_tmp/hypr.log" 'dispatch fullscreen 1' 'picker did not request Hyprland fullscreen'
+bash "$ROOT/tests/test-quickshell-lockscreen-picker-targeting.sh" >/dev/null \
+    || fail 'exact mapped Awtwall fullscreen targeting contract failed'
 
 cmp -s "$SCENE" "$PREVIEW_SCENE" || fail 'secure/editor scene parity is broken'
 lacks "$AUTH" 'audioBands' 'audio presentation leaked into authentication owner'
