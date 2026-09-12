@@ -86,8 +86,10 @@ require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
     'password field is not marked as sensitive input'
 require_text "$SURFACE_QML" 'color: "transparent"' \
     'native password glyphs are still directly visible instead of using the custom mask'
-require_text "$SURFACE_QML" 'readonly property int maskedCount: Math.min(password.text.length, 10)' \
-    'custom password mask does not cap displayed password length'
+require_text "$SURFACE_QML" 'Math.min(password.text.length, 10)' \
+    'typed custom password mask does not cap displayed password length'
+require_text "$SURFACE_QML" 'root.submittedMaskCount = Math.min(response.length, 10);' \
+    'failed-attempt password mask does not retain the same 10-block cap'
 require_text "$SURFACE_QML" 'model: root.maskedCount' \
     'custom block mask is not driven by the capped password length'
 require_text "$SURFACE_QML" 'readonly property real maskSpread:' \
