@@ -18,6 +18,29 @@ jobs:
           fetch-depth: 0
       - name: Apply composition blur patch
         run: python3 .github/scripts/dev-fix-lockscreen-composition-blur.py
+      - name: Normalize managed history entries
+        run: |
+          python3 - <<'PY'
+          from hashlib import sha256
+          from pathlib import Path
+
+          root = Path.cwd()
+          history_path = root / "local/share/awtarchy/quickshell-managed-history.sha256"
+          mapping = {
+              "config/quickshell/awtarchy-lock/LockSurface.qml": ".config/quickshell/awtarchy-lock/LockSurface.qml",
+              "config/quickshell/awtarchy-lock/LockScene.qml": ".config/quickshell/awtarchy-lock/LockScene.qml",
+              "config/quickshell/awtarchy/LockPreviewScene.qml": ".config/quickshell/awtarchy/LockPreviewScene.qml",
+          }
+          lines = history_path.read_text().splitlines()
+          for source, installed in mapping.items():
+              digest = sha256((root / source).read_bytes()).hexdigest()
+              wrong = f"{digest}  {source}"
+              lines = [line for line in lines if line != wrong]
+              correct = f"{digest}\t{installed}"
+              if correct not in lines:
+                  lines.append(correct)
+          history_path.write_text("\n".join(lines) + "\n")
+          PY
       - name: Validate new composition blur regression
         run: |
           bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
