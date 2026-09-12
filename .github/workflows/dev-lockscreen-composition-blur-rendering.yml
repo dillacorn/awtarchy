@@ -1,0 +1,17 @@
+name: Dev Lockscreen Composition Blur Rendering
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Reproduce composition blur rendering bug
+        run: bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
