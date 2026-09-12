@@ -1,0 +1,243 @@
+name: Apply Lockscreen Transition Task 2
+
+on:
+  push:
+    branches: [feature/lockscreen-interactive-effects]
+    paths:
+      - .github/workflows/apply-lockscreen-transition-task2.yml
+
+permissions:
+  contents: write
+
+jobs:
+  apply:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+
+      - name: Patch secure transition coordination
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          def replace_once(path: Path, old: str, new: str) -> None:
+              text = path.read_text()
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected exactly one replacement anchor, found {count}: {old[:80]!r}")
+              path.write_text(text.replace(old, new, 1))
+
+          scene = Path("config/quickshell/awtarchy-lock/LockScene.qml")
+
+          replace_once(
+              scene,
+              "    property bool entryTransitionRunning: true\n\n    readonly property int entryTileColumns: 24\n",
+              "    property bool entryTransitionRunning: true\n"
+              "    property bool externallyManagedEntryTransition: false\n"
+              "    property bool externalEntryTransitionRunning: false\n"
+              "    readonly property bool effectiveEntryTransitionRunning:\n"
+              "        externallyManagedEntryTransition ? externalEntryTransitionRunning : entryTransitionRunning\n\n"
+              "    readonly property int entryTileColumns: 24\n",
+          )
+
+          replace_once(
+              scene,
+              "    readonly property real securePasswordEntryOpacity: root.unlocking ? 0\n"
+              "        : !root.entered ? 0\n"
+              "        : root.entryTransitionMode() === \"fade\" ? root.entryTransitionProgress\n"
+              "        : root.entryTransitionRunning ? 0 : 1\n",
+              "    readonly property real securePasswordEntryOpacity: root.unlocking ? 0\n"
+              "        : !root.entered ? 0\n"
+              "        : root.externallyManagedEntryTransition\n"
+              "            ? (root.externalEntryTransitionRunning ? 0 : 1)\n"
+              "        : root.entryTransitionMode() === \"fade\" ? root.entryTransitionProgress\n"
+              "        : root.entryTransitionRunning ? 0 : 1\n",
+          )
+
+          replace_once(
+              scene,
+              "    function replayEntryTransition() {\n"
+              "        entryTransitionAnimation.stop();\n"
+              "        entryTransitionProgress = 0;\n"
+              "        entryTransitionRunning = true;\n"
+              "        if (!entered || unlocking)\n"
+              "            return;\n"
+              "        entryTransitionAnimation.restart();\n"
+              "    }\n",
+              "    function replayEntryTransition() {\n"
+              "        entryTransitionAnimation.stop();\n"
+              "        if (externallyManagedEntryTransition) {\n"
+              "            entryTransitionProgress = 1;\n"
+              "            entryTransitionRunning = false;\n"
+              "            return;\n"
+              "        }\n"
+              "        entryTransitionProgress = 0;\n"
+              "        entryTransitionRunning = true;\n"
+              "        if (!entered || unlocking)\n"
+              "            return;\n"
+              "        entryTransitionAnimation.restart();\n"
+              "    }\n",
+          )
+
+          replace_once(
+              scene,
+              "        opacity: root.unlocking ? 0\n"
+              "            : root.entryTransitionMode() === \"fade\" ? root.entryTransitionProgress\n"
+              "            : root.entered ? 1 : 0\n",
+              "        opacity: root.unlocking ? 0\n"
+              "            : root.externallyManagedEntryTransition ? (root.entered ? 1 : 0)\n"
+              "            : root.entryTransitionMode() === \"fade\" ? root.entryTransitionProgress\n"
+              "            : root.entered ? 1 : 0\n",
+          )
+
+          replace_once(
+              scene,
+              "                                    && !root.entryTransitionRunning\n",
+              "                                    && !root.effectiveEntryTransitionRunning\n",
+          )
+
+          replace_once(
+              scene,
+              "        visible: !root.unlocking && root.entryTransitionRunning\n"
+              "            && root.entryTransitionMode() === \"fade\"\n",
+              "        visible: !root.externallyManagedEntryTransition\n"
+              "            && !root.unlocking && root.entryTransitionRunning\n"
+              "            && root.entryTransitionMode() === \"fade\"\n",
+          )
+
+          replace_once(
+              scene,
+              "        visible: !root.unlocking && root.entryTransitionRunning\n"
+              "            && root.entryTransitionMode() !== \"fade\"\n",
+              "        visible: !root.externallyManagedEntryTransition\n"
+              "            && !root.unlocking && root.entryTransitionRunning\n"
+              "            && root.entryTransitionMode() !== \"fade\"\n",
+          )
+
+          shell = Path("config/quickshell/awtarchy-lock/shell.qml")
+          replace_once(
+              shell,
+              "    property bool unlockRequested: false\n"
+              "    readonly property string statePath: (Quickshell.env(\"XDG_CACHE_HOME\")\n"
+              "        || (Quickshell.env(\"HOME\") + \"/.cache\")) + \"/awtarchy/quickshell-state.json\"\n",
+              "    property bool unlockRequested: false\n"
+              "    readonly property string configHome: Quickshell.env(\"XDG_CONFIG_HOME\")\n"
+              "        || (Quickshell.env(\"HOME\") + \"/.config\")\n"
+              "    readonly property string runtimeDir: Quickshell.env(\"XDG_RUNTIME_DIR\") || \"\"\n"
+              "    readonly property string captureHelper: configHome\n"
+              "        + \"/hypr/scripts/quickshell_lockscreen_capture.sh\"\n"
+              "    readonly property string captureDirectory: normalizedCaptureDirectory(\n"
+              "        Quickshell.env(\"AWTARCHY_LOCK_CAPTURE_DIR\") || \"\")\n"
+              "    property bool captureCleanupRequested: false\n"
+              "    readonly property string statePath: (Quickshell.env(\"XDG_CACHE_HOME\")\n"
+              "        || (Quickshell.env(\"HOME\") + \"/.cache\")) + \"/awtarchy/quickshell-state.json\"\n",
+          )
+
+          replace_once(
+              shell,
+              "    readonly property var allowedAnimationPreferences: [\n"
+              "        \"random\", \"swarm\", \"edges\", \"center\", \"split\", \"off\"\n"
+              "    ]\n\n"
+              "    function defaultLockVisualizer() {\n",
+              "    readonly property var allowedAnimationPreferences: [\n"
+              "        \"random\", \"swarm\", \"edges\", \"center\", \"split\", \"off\"\n"
+              "    ]\n\n"
+              "    function normalizedCaptureDirectory(value) {\n"
+              "        const path = String(value || \"\");\n"
+              "        if (root.runtimeDir.length === 0)\n"
+              "            return \"\";\n"
+              "        const prefix = root.runtimeDir + \"/awtarchy-lock-transition/capture.\";\n"
+              "        if (!path.startsWith(prefix))\n"
+              "            return \"\";\n"
+              "        const suffix = path.slice(prefix.length);\n"
+              "        return /^[A-Za-z0-9]+$/.test(suffix) ? path : \"\";\n"
+              "    }\n\n"
+              "    function cleanupTransitionCapture() {\n"
+              "        if (root.captureCleanupRequested || root.captureDirectory.length === 0)\n"
+              "            return;\n"
+              "        root.captureCleanupRequested = true;\n"
+              "        Quickshell.execDetached([root.captureHelper, \"cleanup\", root.captureDirectory]);\n"
+              "    }\n\n"
+              "    function defaultLockVisualizer() {\n",
+          )
+
+          replace_once(
+              shell,
+              "                visualizer: root.lockVisualizer\n"
+              "                audioBands: lockAudioAnalyzer.bands\n"
+              "                backgroundOpacity: root.lockBackgroundOpacity\n",
+              "                visualizer: root.lockVisualizer\n"
+              "                audioBands: lockAudioAnalyzer.bands\n"
+              "                backgroundOpacity: root.lockBackgroundOpacity\n"
+              "                captureDirectory: root.captureDirectory\n",
+          )
+
+          replace_once(
+              shell,
+              "        onSecureChanged: {\n"
+              "            if (root.unlockRequested && !secure)\n"
+              "                quitAfterUnlock.restart();\n"
+              "        }\n",
+              "        onSecureChanged: {\n"
+              "            if (secure && root.captureDirectory.length > 0)\n"
+              "                captureCleanupTimer.restart();\n"
+              "            if (root.unlockRequested && !secure) {\n"
+              "                root.cleanupTransitionCapture();\n"
+              "                quitAfterUnlock.restart();\n"
+              "            }\n"
+              "        }\n",
+          )
+
+          replace_once(
+              shell,
+              "    Timer {\n"
+              "        id: quitAfterUnlock\n"
+              "        interval: 150\n"
+              "        repeat: false\n"
+              "        onTriggered: Qt.quit()\n"
+              "    }\n",
+              "    Timer {\n"
+              "        id: captureCleanupTimer\n"
+              "        interval: Math.max(3000, Math.min(8000, root.lockEntryTransitionDuration + 2000))\n"
+              "        repeat: false\n"
+              "        onTriggered: root.cleanupTransitionCapture()\n"
+              "    }\n\n"
+              "    Timer {\n"
+              "        id: quitAfterUnlock\n"
+              "        interval: 150\n"
+              "        repeat: false\n"
+              "        onTriggered: {\n"
+              "            root.cleanupTransitionCapture();\n"
+              "            Qt.quit();\n"
+              "        }\n"
+              "    }\n",
+          )
+          PY
+
+      - name: Validate task 2 before commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test-quickshell-lockscreen-transition-layer.sh
+          bash tests/test-quickshell-lockscreen-foundation.sh
+          bash tests/test-quickshell-lockscreen-security.sh
+          bash tests/test-quickshell-lockscreen-entry-transitions.sh
+          git diff --check
+
+      - name: Commit task 2 and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git rm -- .github/workflows/apply-lockscreen-transition-task2.yml
+          git add -- config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy-lock/shell.qml
+          git commit -m "Coordinate secure desktop lock transition"
+          git push origin HEAD:feature/lockscreen-interactive-effects
