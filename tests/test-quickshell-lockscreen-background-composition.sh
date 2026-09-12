@@ -8,12 +8,20 @@ BAR="${ROOT}/config/quickshell/awtarchy/BarState.qml"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
 PREVIEW="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 SECURE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
+SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 LOCK_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
+QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 require_text() {
     local file="$1" text="$2" message="$3"
     grep -Fq -- "$text" "$file" || fail "$message"
+}
+forbid_text() {
+    local file="$1" text="$2" message="$3"
+    if grep -Fq -- "$text" "$file"; then
+        fail "$message"
+    fi
 }
 
 cmp -s "$PREVIEW" "$SECURE" || fail 'secure and preview presentation scenes diverged'
@@ -57,6 +65,7 @@ require_text "$EDITOR" 'property real draftWallpaperFocalY: 0.5' 'editor has no 
 require_text "$EDITOR" 'property string draftOverlayMode: "none"' 'editor has no overlay-mode draft'
 require_text "$EDITOR" 'property int draftOverlayStrength: 0' 'editor has no overlay-strength draft'
 require_text "$EDITOR" 'property int draftWallpaperBlur: 0' 'editor has no blur draft'
+require_text "$EDITOR" 'property bool draftWallpaperBlurExplicit: false' 'editor does not track explicit blur edits'
 require_text "$EDITOR" 'wallpaperFit: draftWallpaperFit' 'undo snapshot does not include wallpaper fit'
 require_text "$EDITOR" 'wallpaperFocalX: draftWallpaperFocalX' 'undo snapshot does not include focal x'
 require_text "$EDITOR" 'wallpaperFocalY: draftWallpaperFocalY' 'undo snapshot does not include focal y'
@@ -67,12 +76,14 @@ require_text "$EDITOR" 'function setDraftWallpaperFit(value)' 'editor cannot swi
 require_text "$EDITOR" 'function setDraftWallpaperFocal(x, y)' 'editor cannot change focal point'
 require_text "$EDITOR" 'function setDraftOverlay(mode, strength)' 'editor cannot configure overlay'
 require_text "$EDITOR" 'function setDraftWallpaperBlur(value)' 'editor cannot configure blur'
+require_text "$EDITOR" '&& !draftWallpaperBlurExplicit' 'opacity reduction seeds blur even after an explicit blur choice'
+require_text "$EDITOR" 'draftWallpaperBlurExplicit = true;' 'explicit blur edits are not remembered during the editor session'
 require_text "$EDITOR" 'label: "Cover"' 'Cover control is missing'
 require_text "$EDITOR" 'label: "Contain"' 'Contain control is missing'
 require_text "$EDITOR" 'function setDraftBrightness(value)' 'direct signed brightness control is missing'
 require_text "$EDITOR" 'text: "Brightness"' 'brightness slider UI is missing'
 require_text "$EDITOR" 'setBrightnessFromPointer' 'brightness slider is not directly pointer-driven'
-require_text "$EDITOR" 'text: "Blur"' 'wallpaper blur UI is missing'
+require_text "$EDITOR" 'text: "Blur"' 'desktop-backing blur UI is missing'
 require_text "$EDITOR" 'id: wallpaperFocalHandle' 'editor has no draggable wallpaper focal marker'
 require_text "$EDITOR" 'root.setDraftWallpaperFocal(' 'focal marker does not update draft focal point'
 require_text "$EDITOR" 'wallpaperFit: root.draftWallpaperFit' 'preview does not receive wallpaper fit'
@@ -82,21 +93,34 @@ require_text "$EDITOR" 'overlayMode: root.draftOverlayMode' 'preview does not re
 require_text "$EDITOR" 'overlayStrength: root.draftOverlayStrength' 'preview does not receive overlay strength'
 require_text "$EDITOR" 'wallpaperBlur: root.draftWallpaperBlur' 'preview does not receive blur'
 
-# Presentation scene performs composition only. No auth/network ownership moves.
-require_text "$PREVIEW" 'import QtQuick.Effects' 'scene does not use QtQuick.Effects for optional blur'
+# LockScene composes the configured background. Desktop-backing blur belongs outside it.
 require_text "$PREVIEW" 'required property string wallpaperFit' 'scene has no wallpaper-fit input'
 require_text "$PREVIEW" 'required property real wallpaperFocalX' 'scene has no focal-x input'
 require_text "$PREVIEW" 'required property real wallpaperFocalY' 'scene has no focal-y input'
 require_text "$PREVIEW" 'required property string overlayMode' 'scene has no overlay-mode input'
 require_text "$PREVIEW" 'required property real overlayStrength' 'scene has no overlay-strength input'
-require_text "$PREVIEW" 'required property real wallpaperBlur' 'scene has no blur input'
+require_text "$PREVIEW" 'required property real wallpaperBlur' 'scene has no blur input for shared editor/runtime state'
 require_text "$PREVIEW" 'function wallpaperGeometry()' 'scene has no cover/contain focal geometry helper'
 require_text "$PREVIEW" 'root.wallpaperFit === "contain"' 'scene does not distinguish contain from cover'
-require_text "$PREVIEW" 'source: wallpaperImage' 'blur effect does not source the wallpaper image'
-require_text "$PREVIEW" 'blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))' 'wallpaper blur is not bounded'
+forbid_text "$PREVIEW" 'source: wallpaperImage' 'blur is still applied only to the configured wallpaper instead of the secure desktop backing'
 require_text "$PREVIEW" 'id: backgroundOverlay' 'scene has no readability overlay'
 require_text "$PREVIEW" 'root.overlayMode === "light" ? "#ffffff" : "#000000"' 'overlay cannot switch dark/light'
 require_text "$PREVIEW" 'Math.max(0, Math.min(100, root.overlayStrength)) / 100' 'overlay strength is not bounded'
+require_text "$PREVIEW" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' 'scene background opacity is not bounded'
+
+# Secure LockSurface owns the frozen-desktop blur and fails closed behind it.
+require_text "$SURFACE" 'import QtQuick.Effects' 'secure surface cannot blur the frozen desktop backing'
+require_text "$SURFACE" 'color: "#000000"' 'secure surface does not fail closed to opaque black'
+require_text "$SURFACE" 'id: desktopCapture' 'secure surface has no per-output frozen desktop image'
+require_text "$SURFACE" 'id: desktopCaptureBlur' 'secure surface has no desktop-backing blur effect'
+require_text "$SURFACE" 'source: desktopCapture' 'desktop-backing blur does not source the frozen capture'
+require_text "$SURFACE" 'desktopCapture.status === Image.Ready' 'desktop-backing blur is not gated on a valid loaded capture'
+require_text "$SURFACE" 'blurEnabled: root.wallpaperBlur > 0' 'desktop-backing blur is not enabled by the persisted blur value'
+require_text "$SURFACE" 'blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))' 'desktop-backing blur is not bounded'
+
+# Detailed composition stays editor-owned rather than duplicated in Quick Settings.
+forbid_text "$QUICK_SETTINGS" 'Background Opacity' 'Quick Settings duplicates editor-owned background opacity control'
+forbid_text "$QUICK_SETTINGS" 'wallpaper blur' 'Quick Settings duplicates editor-owned blur precision control'
 
 # Secure shell independently validates persisted presentation fields.
 require_text "$LOCK_SHELL" 'readonly property string wallpaperFit:' 'secure shell does not normalize wallpaper fit'
@@ -113,4 +137,4 @@ if grep -Fq 'LockAuth' "$EDITOR"; then
     fail 'unlocked editor must not own authentication'
 fi
 
-printf '%s\n' 'PASS: lockscreen wallpaper fit/focal, overlay, blur, persistence, and secure presentation contracts'
+printf '%s\n' 'PASS: lockscreen composition uses secure captured-desktop blur with editor-owned controls'
