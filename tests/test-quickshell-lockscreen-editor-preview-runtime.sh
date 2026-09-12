@@ -101,6 +101,68 @@ if "editorWindow.visible = true" in block:
     raise SystemExit("FAIL: editor becomes visible in openForScreen before preview capture finishes")
 PY
 
+# Exercise the preview capture helper with fake Hyprland/grim commands. This
+# verifies that each output gets its own frozen frame in the isolated preview
+# runtime root and that validated cleanup removes only that capture directory.
+if [[ -f "$PREVIEW_CAPTURE" ]]; then
+    tmp_root="$(mktemp -d)"
+    fake_bin="$tmp_root/bin"
+    fake_runtime="$tmp_root/runtime"
+    mkdir -p -- "$fake_bin" "$fake_runtime"
+
+    cat > "$fake_bin/hyprctl" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "monitors" && "${2:-}" == "-j" ]]; then
+    printf '%s\n' '[{"name":"DP-1"},{"name":"HDMI-A-1"}]'
+    return 0 2>/dev/null || true
+fi
+printf '%s\n' 'unexpected hyprctl invocation' >&2
+return 64 2>/dev/null || true
+EOF
+    cat > "$fake_bin/grim" <<'EOF'
+#!/usr/bin/env bash
+output_file="${@: -1}"
+printf 'fake-png:%s\n' "$*" > "$output_file"
+EOF
+    chmod +x -- "$fake_bin/hyprctl" "$fake_bin/grim"
+
+    capture_dir="$(
+        XDG_RUNTIME_DIR="$fake_runtime" PATH="$fake_bin:$PATH" \
+            bash "$PREVIEW_CAPTURE" prepare
+    )" || {
+        printf 'FAIL: editor preview helper could not prepare fake per-output captures\n' >&2
+        failures=$((failures + 1))
+        capture_dir=""
+    }
+
+    if [[ -n "$capture_dir" ]]; then
+        [[ "$capture_dir" == "$fake_runtime"/awtarchy-lock-preview/capture.* ]] || {
+            printf 'FAIL: editor preview helper returned a capture outside its isolated root\n' >&2
+            failures=$((failures + 1))
+        }
+        for output in DP-1 HDMI-A-1; do
+            [[ -s "$capture_dir/$output.png" ]] || {
+                printf 'FAIL: editor preview helper did not create %s capture\n' "$output" >&2
+                failures=$((failures + 1))
+            }
+        done
+        [[ ! -e "$fake_runtime/awtarchy-lock-transition" ]] || {
+            printf 'FAIL: editor preview helper touched the secure lock capture root\n' >&2
+            failures=$((failures + 1))
+        }
+        XDG_RUNTIME_DIR="$fake_runtime" PATH="$fake_bin:$PATH" \
+            bash "$PREVIEW_CAPTURE" cleanup "$capture_dir" || {
+                printf 'FAIL: editor preview helper could not clean its validated capture directory\n' >&2
+                failures=$((failures + 1))
+            }
+        [[ ! -e "$capture_dir" ]] || {
+            printf 'FAIL: editor preview helper left its capture directory after cleanup\n' >&2
+            failures=$((failures + 1))
+        }
+    fi
+    rm -rf -- "$tmp_root"
+fi
+
 # Alt+Mouse1 bar dragging should use a modifier-filtered Pointer Handler so it
 # can reliably coexist with the bar's child buttons and text fields.
 check_text "$EDITOR" 'id: settingsBarAltDrag' 'settings bar Alt-drag handler is missing'
