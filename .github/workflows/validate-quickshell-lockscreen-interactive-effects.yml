@@ -32,25 +32,27 @@ jobs:
           start = text.find(start_marker)
           end = text.find(end_marker, start)
           if start < 0 or end < 0:
-              raise RuntimeError('wallpaper helper anchor markers not found exactly once')
+              raise RuntimeError('wallpaper helper anchor markers not found')
           if text.find(start_marker, start + 1) >= 0:
               raise RuntimeError('wallpaper helper anchor start marker is ambiguous')
-          replacement = """anchor='''        Image {
-              id: wallpaperImage
-              readonly property var geometry: root.wallpaperGeometry()
-              x: geometry.x
-              y: geometry.y
-              width: geometry.width
-              height: geometry.height
-              visible: root.backgroundMode === \"wallpaper\" && root.wallpaperSource.length > 0
-                  && root.wallpaperBlur <= 0
-              source: root.wallpaperSource
-              fillMode: Image.Stretch
-              asynchronous: true
-              cache: true
-          }
-          '''
-          """
+          anchor_lines = [
+              "anchor='''        Image {",
+              "            id: wallpaperImage",
+              "            readonly property var geometry: root.wallpaperGeometry()",
+              "            x: geometry.x",
+              "            y: geometry.y",
+              "            width: geometry.width",
+              "            height: geometry.height",
+              "            visible: root.backgroundMode === \"wallpaper\" && root.wallpaperSource.length > 0",
+              "                && root.wallpaperBlur <= 0",
+              "            source: root.wallpaperSource",
+              "            fillMode: Image.Stretch",
+              "            asynchronous: true",
+              "            cache: true",
+              "        }",
+              "'''",
+          ]
+          replacement = "\n".join(anchor_lines) + "\n"
           path.write_text(text[:start] + replacement + text[end:])
           PY
             python3 .github/scripts/apply-lockscreen-third-runtime-pass.py
