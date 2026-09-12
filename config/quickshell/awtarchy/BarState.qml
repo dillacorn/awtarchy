@@ -672,7 +672,8 @@ Singleton {
 
     function lockscreenEntryTransitionDuration() {
         const value = Math.round(Number(data().lockscreen_entry_transition_duration));
-        return Number.isFinite(value) && value >= 400 && value <= 4000 ? value : 1200;
+        return Number.isFinite(value)
+            ? Math.max(800, Math.min(6000, value)) : 1800;
     }
 
     function lockscreenBooleanPreference(field, fallback) {

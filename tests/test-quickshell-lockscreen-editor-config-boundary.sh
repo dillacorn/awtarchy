@@ -6,6 +6,8 @@ EDITOR_QML="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
 PREVIEW_SCENE="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 PREVIEW_WALLPAPER="${ROOT}/config/quickshell/awtarchy/LockPreviewWallpaperState.qml"
 LOCK_SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
+PREVIEW_TRANSITION="${ROOT}/config/quickshell/awtarchy/LockPreviewTransitionLayer.qml"
+LOCK_TRANSITION="${ROOT}/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
 LOCK_WALLPAPER="${ROOT}/config/quickshell/awtarchy-lock/LockWallpaperState.qml"
 
 fail() {
@@ -42,10 +44,13 @@ require_text "$EDITOR_QML" 'LockPreviewWallpaperState {' \
 
 require_file "$PREVIEW_SCENE" 'desktop editor preview scene is missing'
 require_file "$PREVIEW_WALLPAPER" 'desktop editor wallpaper preview state is missing'
+require_file "$PREVIEW_TRANSITION" 'desktop editor preview transition renderer is missing'
 cmp -s "$LOCK_SCENE" "$PREVIEW_SCENE" \
     || fail 'desktop preview scene drifted from the secure lock presentation scene'
 cmp -s "$LOCK_WALLPAPER" "$PREVIEW_WALLPAPER" \
     || fail 'desktop wallpaper preview state drifted from the secure lock wallpaper state'
+cmp -s "$LOCK_TRANSITION" "$PREVIEW_TRANSITION" \
+    || fail 'desktop transition renderer drifted from the secure lock transition renderer'
 
 for forbidden in WlSessionLock LockAuth auth.submit; do
     reject_text "$PREVIEW_SCENE" "$forbidden" \

@@ -10,6 +10,7 @@ PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="$ROOT/config/quickshell/awtarchy-lock/LockSurface.qml"
 SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
 LAYER="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
+PREVIEW_LAYER="$ROOT/config/quickshell/awtarchy/LockPreviewTransitionLayer.qml"
 AUTH="$ROOT/config/quickshell/awtarchy-lock/LockAuth.qml"
 PERMANENT_WORKFLOW="$ROOT/.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml"
 
@@ -88,8 +89,8 @@ run_state reset-lockscreen-presentation
 
 contains "$BAR_STATE" 'lockscreen_entry_transition: "fade"' \
     'BarState empty state does not default to Fade'
-contains "$BAR_STATE" 'lockscreen_entry_transition_duration: 1800' \
-    'BarState empty state does not default to 1800ms'
+contains "$BAR_STATE" '? Math.max(800, Math.min(6000, value)) : 1800;' \
+    'BarState does not clamp persisted duration to 800-6000ms with an 1800ms fallback'
 contains "$BAR_STATE" 'function lockscreenEntryTransition()' \
     'BarState transition reader is missing'
 contains "$BAR_STATE" 'function lockscreenEntryTransitionDuration()' \
@@ -130,12 +131,15 @@ contains "$EDITOR" 'property int draftEntryTransitionDuration: 1800' \
     'editor does not use the approved 1800ms draft default'
 contains "$EDITOR" 'Math.max(800, Math.min(6000' \
     'editor does not clamp transition duration to 800-6000ms'
-contains "$EDITOR" 'import "../awtarchy-lock" as LockRuntime' \
-    'editor does not import the shared secure transition renderer'
+[[ -f "$PREVIEW_LAYER" ]] || fail 'config-local preview transition renderer is missing'
+cmp -s "$LAYER" "$PREVIEW_LAYER" \
+    || fail 'secure/editor transition renderers diverged'
+rejects "$EDITOR" 'import "../awtarchy-lock"' \
+    'editor crosses the secure Quickshell configuration boundary'
 contains "$EDITOR" 'id: editorTransitionStart' \
     'editor has no synthetic transition start source'
-contains "$EDITOR" 'LockRuntime.LockTransitionLayer {' \
-    'editor Replay does not use the shared transition renderer'
+contains "$EDITOR" 'LockPreviewTransitionLayer {' \
+    'editor Replay does not use the config-local parity transition renderer'
 contains "$EDITOR" 'startSource: editorTransitionStart' \
     'editor Replay does not begin from its synthetic desktop source'
 contains "$EDITOR" 'endSource: previewScene' \

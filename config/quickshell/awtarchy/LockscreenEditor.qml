@@ -30,7 +30,7 @@ Singleton {
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
     property string draftEntryTransition: "fade"
-    property int draftEntryTransitionDuration: 1200
+    property int draftEntryTransitionDuration: 1800
     property int entryTransitionReplayToken: 0
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
@@ -1486,7 +1486,16 @@ Singleton {
         const numeric = Math.round(Number(value));
         if (!Number.isFinite(numeric)) return;
         recordUndoBeforeChange();
-        draftEntryTransitionDuration = Math.max(400, Math.min(4000, numeric));
+        draftEntryTransitionDuration = Math.max(800, Math.min(6000, numeric));
+    }
+
+    function setEntryTransitionDurationFromPointer(pointerX, trackWidth) {
+        const width = Number(trackWidth);
+        if (!Number.isFinite(width) || width <= 0)
+            return;
+        const ratio = Math.max(0, Math.min(1, Number(pointerX) / width));
+        const duration = 800 + ratio * 5200;
+        setDraftEntryTransitionDuration(Math.round(duration / 50) * 50);
     }
 
     function replayEntryTransition() {
@@ -1502,7 +1511,7 @@ Singleton {
         draftVisualizer = defaultVisualizer();
         draftBackgroundOpacity = 100;
         draftEntryTransition = "fade";
-        draftEntryTransitionDuration = 1200;
+        draftEntryTransitionDuration = 1800;
         draftVisibility = defaultVisibility();
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
@@ -1896,6 +1905,47 @@ Singleton {
                 }
             }
 
+            Item {
+                id: editorTransitionStart
+                x: editorFocus.width + 64
+                y: 0
+                width: editorFocus.width
+                height: editorFocus.height
+
+                Rectangle { anchors.fill: parent; color: "#101318" }
+                Rectangle {
+                    x: 0
+                    y: 0
+                    width: parent.width
+                    height: Math.max(28, parent.height * 0.035)
+                    color: "#1c222b"
+                }
+                Rectangle {
+                    anchors.centerIn: parent
+                    width: parent.width * 0.62
+                    height: parent.height * 0.56
+                    radius: 8
+                    color: "#202731"
+                    border.width: 1
+                    border.color: "#3a4657"
+                    Rectangle {
+                        x: 0
+                        y: 0
+                        width: parent.width
+                        height: Math.max(26, parent.height * 0.07)
+                        radius: parent.radius
+                        color: "#2a3340"
+                    }
+                    Text {
+                        anchors.centerIn: parent
+                        text: "Synthetic desktop preview"
+                        color: "#8d99aa"
+                        font.family: Theme.fontFamily
+                        font.pixelSize: Math.max(12, parent.height * 0.035)
+                    }
+                }
+            }
+
             LockPreviewScene {
                 id: previewScene
                 anchors.fill: parent
@@ -1903,7 +1953,8 @@ Singleton {
                 animationPreference: BarState.lockscreenAnimationPreference()
                 entryTransition: root.draftEntryTransition
                 entryTransitionDuration: root.draftEntryTransitionDuration
-                entryTransitionReplayToken: root.entryTransitionReplayToken
+                externallyManagedEntryTransition: true
+                externalEntryTransitionRunning: editorTransitionLayer.running
                 randomFormationMode: 3
                 logoPhysicsHz: BarState.lockscreenLogoPhysicsHz()
                 mouseInteractive: BarState.lockscreenMouseInteractiveEnabled()
@@ -1934,6 +1985,17 @@ Singleton {
                 editorVisibility: root.draftVisibility
                 editorHeldElement: root.heldElement
                 editorHoldScale: root.heldScaleBoost
+            }
+
+            LockPreviewTransitionLayer {
+                id: editorTransitionLayer
+                anchors.fill: parent
+                z: 160
+                startSource: editorTransitionStart
+                endSource: previewScene
+                mode: root.draftEntryTransition
+                duration: root.draftEntryTransitionDuration
+                replayToken: root.entryTransitionReplayToken
             }
 
             Item {
@@ -2848,8 +2910,46 @@ Singleton {
                         SettingsButton { label: "Wipe"; active: root.draftEntryTransition === "wipe"; textSize: 9; onClicked: root.setDraftEntryTransition("wipe") }
                         SettingsButton { label: "Replay Transition"; textSize: 9; onClicked: root.replayEntryTransition() }
                         Text { text: "Transition Speed"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        Slider { Layout.preferredWidth: 120; from: 400; to: 4000; stepSize: 100; value: root.draftEntryTransitionDuration; onMoved: root.setDraftEntryTransitionDuration(value) }
-                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(1) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Rectangle {
+                            id: entryTransitionDurationTrack
+                            Layout.preferredWidth: 140
+                            Layout.preferredHeight: 14
+                            radius: height / 2
+                            color: Theme.popupBackground
+                            border.width: 1
+                            border.color: Theme.active
+                            Rectangle {
+                                width: Math.max(0, Math.min(1,
+                                    (root.draftEntryTransitionDuration - 800) / 5200)) * parent.width
+                                height: parent.height
+                                radius: height / 2
+                                color: Theme.focus
+                            }
+                            Rectangle {
+                                width: 12
+                                height: 12
+                                radius: 6
+                                anchors.verticalCenter: parent.verticalCenter
+                                x: Math.max(0, Math.min(parent.width - width,
+                                    (root.draftEntryTransitionDuration - 800)
+                                        * (parent.width - width) / 5200))
+                                color: Theme.foreground
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                onPressed: mouse => {
+                                    root.beginHistoryTransaction();
+                                    root.setEntryTransitionDurationFromPointer(mouse.x, width);
+                                }
+                                onPositionChanged: mouse => {
+                                    if (pressed)
+                                        root.setEntryTransitionDurationFromPointer(mouse.x, width);
+                                }
+                                onReleased: root.commitHistoryTransaction()
+                                onCanceled: root.commitHistoryTransaction()
+                            }
+                        }
+                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(2) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Item { Layout.fillWidth: true }
                     }
 

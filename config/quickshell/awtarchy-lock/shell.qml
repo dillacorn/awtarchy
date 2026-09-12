@@ -23,7 +23,7 @@ ShellRoot {
         || (Quickshell.env("HOME") + "/.cache")) + "/awtarchy/quickshell-state.json"
     property string lockAnimationPreference: "split"
     property string lockEntryTransition: "fade"
-    property int lockEntryTransitionDuration: 1200
+    property int lockEntryTransitionDuration: 1800
     property int lockLogoPhysicsHz: 30
     property bool lockMouseInteractive: true
     property bool lockShowLogo: true
@@ -177,6 +177,12 @@ ShellRoot {
             ? key : "fade";
     }
 
+    function normalizedEntryTransitionDuration(value) {
+        const numeric = Math.round(Number(value));
+        return Number.isFinite(numeric)
+            ? Math.max(800, Math.min(6000, numeric)) : 1800;
+    }
+
     function normalizedLogoPhysicsHz(value) {
         const numeric = Math.round(Number(value));
         return [30, 60, 90].indexOf(numeric) >= 0 ? numeric : 30;
@@ -318,7 +324,7 @@ ShellRoot {
     function resetPreferences() {
         lockAnimationPreference = "split";
         lockEntryTransition = "fade";
-        lockEntryTransitionDuration = 1200;
+        lockEntryTransitionDuration = 1800;
         lockLogoPhysicsHz = 30;
         lockMouseInteractive = true;
         lockShowLogo = true;
@@ -358,10 +364,8 @@ ShellRoot {
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
             lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
-            const transitionDuration = Math.round(Number(parsed.lockscreen_entry_transition_duration));
-            lockEntryTransitionDuration = Number.isFinite(transitionDuration)
-                && transitionDuration >= 400 && transitionDuration <= 4000
-                ? transitionDuration : 1200;
+            lockEntryTransitionDuration = normalizedEntryTransitionDuration(
+                parsed.lockscreen_entry_transition_duration);
             lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);
             lockMouseInteractive = normalizedBoolean(parsed.lockscreen_mouse_interactive, true);
             lockShowLogo = normalizedBoolean(parsed.lockscreen_show_logo, true);

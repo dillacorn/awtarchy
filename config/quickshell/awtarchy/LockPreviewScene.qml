@@ -135,7 +135,7 @@ Item {
 
     function effectiveEntryTransitionDuration() {
         const value = Math.round(Number(root.entryTransitionDuration));
-        return Number.isFinite(value) ? Math.max(400, Math.min(4000, value)) : 1200;
+        return Number.isFinite(value) ? Math.max(800, Math.min(6000, value)) : 1800;
     }
 
     function replayEntryTransition() {
@@ -880,6 +880,7 @@ Item {
         Item {
             id: wordmarkItem
             visible: root.presentationVisible("logo", root.showLogo)
+                && !root.effectiveEntryTransitionRunning
             opacity: root.presentationOpacity("logo") * root.elementOpacity("logo")
             x: root.normalizedX("logo", 0.50) * parent.width - width / 2
             y: root.normalizedY("logo", 0.34) * parent.height - height / 2

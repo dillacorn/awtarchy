@@ -615,7 +615,7 @@ save_lockscreen_editor() {
     local visualizer_input="${14:-$LOCKSCREEN_VISUALIZER_DEFAULT_JSON}"
     local background_opacity_input="${15:-100}"
     local entry_transition_input="${16:-}"
-    local entry_transition_duration_input="${17:-1200}"
+    local entry_transition_duration_input="${17:-1800}"
     local custom_images visualizer background_opacity entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout
@@ -625,7 +625,7 @@ save_lockscreen_editor() {
     custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
     visualizer="$(normalize_lockscreen_visualizer_json "$visualizer_input")"
     background_opacity="$(normalize_percent_integer "$background_opacity_input" 'lockscreen background opacity')"
-    validate_int_range "$entry_transition_duration_input" 400 4000 'lockscreen entry transition duration'
+    validate_int_range "$entry_transition_duration_input" 800 6000 'lockscreen entry transition duration'
     entry_transition_duration=$((10#$entry_transition_duration_input))
     if [[ -n "$entry_transition_input" ]]; then
         entry_transition="$entry_transition_input"
@@ -703,7 +703,7 @@ reset_lockscreen_presentation() {
         --argjson visualizer "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" '
         .lockscreen_animation = "split"
         | .lockscreen_entry_transition = "fade"
-        | .lockscreen_entry_transition_duration = 1200
+        | .lockscreen_entry_transition_duration = 1800
         | .lockscreen_logo_physics_hz = 30
         | .lockscreen_audio_reactive = true
         | .lockscreen_mouse_interactive = true
