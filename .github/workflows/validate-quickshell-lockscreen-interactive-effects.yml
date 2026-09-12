@@ -32,6 +32,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
           bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
           bash -n tests/test-quickshell-lockscreen-capture.sh
           bash -n tests/test-quickshell-lockscreen-transition-layer.sh
@@ -76,6 +77,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
           shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
           shellcheck tests/test-quickshell-lockscreen-capture.sh
           shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
@@ -100,8 +102,8 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh
           fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
-            shellcheck config/hypr/scripts/quickshell_lockscreen_weather.sh
+          if [[ -f config/hypr/scripts/quickshell-lockscreen_weather.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell-lockscreen_weather.sh
           fi
           if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_contrast.sh
@@ -128,6 +130,8 @@ jobs:
           bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
           bash tests/test-quickshell-lockscreen-picker-targeting.sh
+      - name: Third Hyprland runtime pass contracts
+        run: bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
       - name: Secure transition capture contract
         run: bash tests/test-quickshell-lockscreen-capture.sh
       - name: Desktop transition layer contract
