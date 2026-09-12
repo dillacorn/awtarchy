@@ -1123,3 +1123,9 @@ e7a030d48f9a817b03dd16055fde45028c8c806261a89f69eb6ec842906c8bd9	.config/quicksh
 # 2026-09-12 issue 187 live visualizer performance-mode restart follow-up.
 3ff8a2db973ff988a8f5c7ce6ae520d2717b08db003e09411eabf7e03b60e17b	.config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml
 3ff8a2db973ff988a8f5c7ce6ae520d2717b08db003e09411eabf7e03b60e17b	.config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml
+
+# 2026-09-12 secure desktop-to-lockscreen transition coordination.
+3fee68765e527501a54cac460dca9a7836dc4d4d44068634aa88e688e57f2e56	.config/quickshell/awtarchy/LockPreviewScene.qml
+f90c8540b24c6771aa7c65b8f9b3efe100be7564a65b33254b8ad7418471b335	.config/quickshell/awtarchy-lock/shell.qml
+a6e1461069f1632b5ed2f4b33993bc7ce7314fb55f81b2946c094765452c453e	.config/quickshell/awtarchy-lock/LockSurface.qml
+3fee68765e527501a54cac460dca9a7836dc4d4d44068634aa88e688e57f2e56	.config/quickshell/awtarchy-lock/LockScene.qml
