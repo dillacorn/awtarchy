@@ -93,7 +93,7 @@ require_text "$EDITOR" 'overlayMode: root.draftOverlayMode' 'preview does not re
 require_text "$EDITOR" 'overlayStrength: root.draftOverlayStrength' 'preview does not receive overlay strength'
 require_text "$EDITOR" 'wallpaperBlur: root.draftWallpaperBlur' 'preview does not receive blur'
 
-# LockScene composes the configured background. Desktop-backing blur belongs outside it.
+# LockScene composes configured wallpaper blur; LockSurface separately blurs the secure captured desktop backing.
 require_text "$PREVIEW" 'required property string wallpaperFit' 'scene has no wallpaper-fit input'
 require_text "$PREVIEW" 'required property real wallpaperFocalX' 'scene has no focal-x input'
 require_text "$PREVIEW" 'required property real wallpaperFocalY' 'scene has no focal-y input'
@@ -102,7 +102,8 @@ require_text "$PREVIEW" 'required property real overlayStrength' 'scene has no o
 require_text "$PREVIEW" 'required property real wallpaperBlur' 'scene has no blur input for shared editor/runtime state'
 require_text "$PREVIEW" 'function wallpaperGeometry()' 'scene has no cover/contain focal geometry helper'
 require_text "$PREVIEW" 'root.wallpaperFit === "contain"' 'scene does not distinguish contain from cover'
-forbid_text "$PREVIEW" 'source: wallpaperImage' 'blur is still applied only to the configured wallpaper instead of the secure desktop backing'
+require_text "$PREVIEW" 'id: wallpaperBlurEffect' 'wallpaper blur has no rendered effect path'
+require_text "$PREVIEW" 'source: wallpaperImage' 'wallpaper blur does not source the wallpaper image'
 require_text "$PREVIEW" 'id: backgroundOverlay' 'scene has no readability overlay'
 require_text "$PREVIEW" 'root.overlayMode === "light" ? "#ffffff" : "#000000"' 'overlay cannot switch dark/light'
 require_text "$PREVIEW" 'Math.max(0, Math.min(100, root.overlayStrength)) / 100' 'overlay strength is not bounded'

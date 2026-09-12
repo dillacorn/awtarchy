@@ -29,6 +29,7 @@ Singleton {
     property var draftCustomImages: []
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
+    property int draftLastBackgroundOpacity: 100
     property string draftEntryTransition: "fade"
     property int draftEntryTransitionDuration: 1800
     property int entryTransitionReplayToken: 0
@@ -78,6 +79,11 @@ Singleton {
     property real resizeStartScale: 1
     property real resizeCenterX: 0
     property real resizeCenterY: 0
+    property var resizeGroupSnapshot: []
+    property real resizeGroupCenterX: 0
+    property real resizeGroupCenterY: 0
+    property real resizeGroupCenterNormalizedX: 0
+    property real resizeGroupCenterNormalizedY: 0
     property bool visualizerWidthResizeActive: false
     property real visualizerWidthStartStretch: 1
     property real visualizerWidthStartDistance: 1
@@ -292,6 +298,7 @@ Singleton {
             backgroundMode: draftBackgroundMode,
             backgroundColor: draftBackgroundColor,
             backgroundOpacity: draftBackgroundOpacity,
+            lastBackgroundOpacity: draftLastBackgroundOpacity,
             entryTransition: draftEntryTransition,
             entryTransitionDuration: draftEntryTransitionDuration,
             wallpaperPath: draftWallpaperPath,
@@ -344,12 +351,16 @@ Singleton {
         const backgroundOpacity = Number(snapshot.backgroundOpacity);
         draftBackgroundOpacity = Number.isFinite(backgroundOpacity)
             ? Math.max(0, Math.min(100, Math.round(backgroundOpacity))) : 100;
+        const lastBackgroundOpacity = Number(snapshot.lastBackgroundOpacity);
+        draftLastBackgroundOpacity = Number.isFinite(lastBackgroundOpacity)
+            ? Math.max(0, Math.min(100, Math.round(lastBackgroundOpacity)))
+            : (draftBackgroundOpacity < 100 ? draftBackgroundOpacity : 100);
         const entryTransition = String(snapshot.entryTransition || "fade");
         draftEntryTransition = ["fade", "pixel", "iris", "edges", "wipe"].indexOf(entryTransition) >= 0
             ? entryTransition : "fade";
         const transitionDuration = Math.round(Number(snapshot.entryTransitionDuration));
         draftEntryTransitionDuration = Number.isFinite(transitionDuration)
-            ? Math.max(400, Math.min(4000, transitionDuration)) : 1200;
+            ? Math.max(800, Math.min(6000, transitionDuration)) : 1800;
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
             ? snapshot.wallpaperPath : "";
         draftWallpaperFit = ["cover", "contain"].indexOf(String(snapshot.wallpaperFit)) >= 0
@@ -455,6 +466,14 @@ Singleton {
         selectedElement = next.indexOf(name) >= 0 ? name : next[0];
     }
 
+    function selectAllElements() {
+        const names = editableElementNames().filter(name => elementExists(name));
+        if (names.length === 0) return;
+        selectedElements = names;
+        if (names.indexOf(selectedElement) < 0) selectedElement = names[0];
+        statusMessage = "Selected all editable elements";
+    }
+
     function primaryPoint() {
         return elementPoint(selectedElement) || defaultLayout().logo;
     }
@@ -516,8 +535,8 @@ Singleton {
         if (!isCustomImage(name))
             return;
         const numeric = Number(rotation);
-        if (!Number.isFinite(numeric) || numeric < -180 || numeric > 180) {
-            statusMessage = "Rotation must be -180 to 180 degrees";
+        if (!Number.isFinite(numeric)) {
+            statusMessage = "Rotation must be a number";
             return;
         }
         recordUndoBeforeChange();
@@ -561,36 +580,78 @@ Singleton {
         scheduleContrastRefresh();
     }
 
+    function beginGroupResize(sceneX, sceneY) {
+        const names = selectedElements.filter(name => elementExists(name));
+        if (names.length <= 1 || editorFocus.width <= 0 || editorFocus.height <= 0) return false;
+        let minX=1, maxX=0, minY=1, maxY=0;
+        const snapshot=[];
+        for (const name of names) {
+            const point=elementPoint(name); if (!point) continue;
+            const hw=Math.max(0,Number(previewScene.elementVisualWidth(name)))/Math.max(1,editorFocus.width)/2;
+            const hh=Math.max(0,Number(previewScene.elementVisualHeight(name)))/Math.max(1,editorFocus.height)/2;
+            minX=Math.min(minX,Number(point.x)-hw); maxX=Math.max(maxX,Number(point.x)+hw);
+            minY=Math.min(minY,Number(point.y)-hh); maxY=Math.max(maxY,Number(point.y)+hh);
+            snapshot.push(({name:name,x:Number(point.x),y:Number(point.y),scale:elementScale(name)}));
+        }
+        if (snapshot.length <= 1) return false;
+        resizeGroupCenterNormalizedX=(minX+maxX)/2; resizeGroupCenterNormalizedY=(minY+maxY)/2;
+        resizeGroupCenterX=resizeGroupCenterNormalizedX*editorFocus.width;
+        resizeGroupCenterY=resizeGroupCenterNormalizedY*editorFocus.height;
+        resizeStartDistance=Math.max(12,Math.sqrt(Math.pow(Number(sceneX)-resizeGroupCenterX,2)+Math.pow(Number(sceneY)-resizeGroupCenterY,2)));
+        resizeGroupSnapshot=snapshot; resizeElementName=selectedElement; beginHistoryTransaction(); return true;
+    }
+
+    function clampedGroupScaleFactor(requestedFactor) {
+        let maximum=Number.POSITIVE_INFINITY, minimum=0;
+        for (const item of resizeGroupSnapshot) {
+            const scale=Math.max(0.0001,Number(item.scale));
+            minimum=Math.max(minimum,0.50/scale); maximum=Math.min(maximum,elementScaleMaximum/scale);
+            const b=pointBounds(item.name), dx=Number(item.x)-resizeGroupCenterNormalizedX, dy=Number(item.y)-resizeGroupCenterNormalizedY;
+            if (dx>0) maximum=Math.min(maximum,(b.maxX-resizeGroupCenterNormalizedX)/dx);
+            else if (dx<0) maximum=Math.min(maximum,(b.minX-resizeGroupCenterNormalizedX)/dx);
+            if (dy>0) maximum=Math.min(maximum,(b.maxY-resizeGroupCenterNormalizedY)/dy);
+            else if (dy<0) maximum=Math.min(maximum,(b.minY-resizeGroupCenterNormalizedY)/dy);
+        }
+        const hi=Number.isFinite(maximum)?Math.max(minimum,maximum):elementScaleMaximum;
+        return Math.max(minimum,Math.min(hi,Number(requestedFactor)||1));
+    }
+
+    function updateGroupResize(sceneX, sceneY) {
+        if (resizeGroupSnapshot.length <= 1) return;
+        const distance=Math.max(1,Math.sqrt(Math.pow(Number(sceneX)-resizeGroupCenterX,2)+Math.pow(Number(sceneY)-resizeGroupCenterY,2)));
+        const factor=clampedGroupScaleFactor(distance/resizeStartDistance);
+        const nl=cloneLayout(draftLayout), ni=cloneCustomImages(draftCustomImages), nv=cloneVisualizer(draftVisualizer);
+        for (const item of resizeGroupSnapshot) {
+            const x=resizeGroupCenterNormalizedX+(Number(item.x)-resizeGroupCenterNormalizedX)*factor;
+            const y=resizeGroupCenterNormalizedY+(Number(item.y)-resizeGroupCenterNormalizedY)*factor;
+            const scale=Math.max(0.50,Math.min(elementScaleMaximum,Number(item.scale)*factor));
+            if (item.name === "visualizer") { nv.x=x; nv.y=y; nv.scale=scale; }
+            else if (isCustomImage(item.name)) { const i=ni.findIndex(image=>image.id===item.name); if(i>=0){ni[i].x=x;ni[i].y=y;ni[i].scale=scale;} }
+            else if (elementNames.indexOf(item.name)>=0) { nl[item.name].x=x; nl[item.name].y=y; nl[item.name].scale=scale; }
+        }
+        draftLayout=nl; draftCustomImages=ni; draftVisualizer=nv; scheduleContrastRefresh();
+    }
+
     function beginResizeElement(name, sceneX, sceneY) {
-        if (!elementExists(name) || editorFocus.width <= 0 || editorFocus.height <= 0)
-            return;
-        selectElement(name, false);
-        const point = elementPoint(name);
-        resizeElementName = name;
-        resizeCenterX = Number(point.x) * editorFocus.width;
-        resizeCenterY = Number(point.y) * editorFocus.height;
-        resizeStartDistance = Math.max(12, Math.sqrt(
-            Math.pow(Number(sceneX) - resizeCenterX, 2)
-            + Math.pow(Number(sceneY) - resizeCenterY, 2)));
-        resizeStartScale = elementScale(name);
-        beginHistoryTransaction();
+        if (!elementExists(name) || editorFocus.width<=0 || editorFocus.height<=0) return;
+        if (selectedContains(name) && selectedElements.length>1 && beginGroupResize(sceneX,sceneY)) return;
+        selectElement(name,false); resizeGroupSnapshot=[];
+        const point=elementPoint(name); resizeElementName=name;
+        resizeCenterX=Number(point.x)*editorFocus.width; resizeCenterY=Number(point.y)*editorFocus.height;
+        resizeStartDistance=Math.max(12,Math.sqrt(Math.pow(Number(sceneX)-resizeCenterX,2)+Math.pow(Number(sceneY)-resizeCenterY,2)));
+        resizeStartScale=elementScale(name); beginHistoryTransaction();
     }
 
     function updateResizeElement(sceneX, sceneY) {
-        if (resizeElementName.length === 0)
-            return;
-        const distance = Math.max(1, Math.sqrt(
-            Math.pow(Number(sceneX) - resizeCenterX, 2)
-            + Math.pow(Number(sceneY) - resizeCenterY, 2)));
-        setDraftScaleSilently(resizeElementName,
-            resizeStartScale * distance / resizeStartDistance);
+        if (resizeElementName.length===0) return;
+        if (resizeGroupSnapshot.length>1) { updateGroupResize(sceneX,sceneY); return; }
+        const distance=Math.max(1,Math.sqrt(Math.pow(Number(sceneX)-resizeCenterX,2)+Math.pow(Number(sceneY)-resizeCenterY,2)));
+        setDraftScaleSilently(resizeElementName,resizeStartScale*distance/resizeStartDistance);
     }
 
     function endResizeElement() {
-        if (resizeElementName.length === 0)
-            return;
-        resizeElementName = "";
-        commitHistoryTransaction();
+        if (resizeElementName.length===0) return;
+        resizeElementName=""; resizeGroupSnapshot=[]; commitHistoryTransaction();
     }
 
     function setDraftVisualizerWidth(percentValue) {
@@ -862,7 +923,17 @@ Singleton {
         if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0
                 && !draftWallpaperBlurExplicit)
             draftWallpaperBlur = 20;
+        if (next < 100) draftLastBackgroundOpacity = next;
         draftBackgroundOpacity = next;
+    }
+
+    function toggleBackgroundOpaque() {
+        if (draftBackgroundOpacity < 100) {
+            draftLastBackgroundOpacity = draftBackgroundOpacity;
+            setDraftBackgroundOpacity(100);
+        } else if (draftLastBackgroundOpacity < 100) {
+            setDraftBackgroundOpacity(draftLastBackgroundOpacity);
+        }
     }
 
     function setBackgroundOpacityFromPointer(pointerX, trackWidth) {
@@ -1094,7 +1165,7 @@ Singleton {
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
                 opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
-                rotation: Math.max(-180, Math.min(180, Number.isFinite(rotation) ? rotation : 0)),
+                rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0),
                 visible: typeof raw.visible === "boolean" ? raw.visible : true
             }));
         }
@@ -1410,6 +1481,25 @@ Singleton {
         selectElement(name, false);
     }
 
+    function selectionAllVisible() {
+        const names=selectedElements.filter(name => name !== "password" && elementCanHide(name));
+        return names.length===0 || names.every(name => elementEnabled(name));
+    }
+
+    function setSelectedVisibility(visible) {
+        const names=selectedElements.filter(name => name !== "password" && elementCanHide(name));
+        if (names.length===0) return;
+        recordUndoBeforeChange();
+        const nv=cloneVisibility(draftVisibility), ni=cloneCustomImages(draftCustomImages), vz=cloneVisualizer(draftVisualizer);
+        for (const name of names) {
+            if (name === "visualizer") vz.enabled=!!visible;
+            else if (isCustomImage(name)) { const i=ni.findIndex(image=>image.id===name); if(i>=0) ni[i].visible=!!visible; }
+            else if (elementNames.indexOf(name)>=0) nv[name]=!!visible;
+        }
+        nv.password=true; draftVisibility=nv; draftCustomImages=ni; draftVisualizer=vz;
+        statusMessage=visible?"Selected elements visible":"Selected elements hidden"; scheduleContrastRefresh();
+    }
+
     function elementEnabled(name) {
         if (name === "visualizer")
             return draftVisualizer.enabled === true;
@@ -1510,6 +1600,7 @@ Singleton {
         draftCustomImages = [];
         draftVisualizer = defaultVisualizer();
         draftBackgroundOpacity = 100;
+        draftLastBackgroundOpacity = 100;
         draftEntryTransition = "fade";
         draftEntryTransitionDuration = 1800;
         draftVisibility = defaultVisibility();
@@ -1539,6 +1630,7 @@ Singleton {
         draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages());
         draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer());
         draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity();
+        draftLastBackgroundOpacity = BarState.lockscreenPreviousBackgroundOpacity();
         draftEntryTransition = BarState.lockscreenEntryTransition();
         draftEntryTransitionDuration = BarState.lockscreenEntryTransitionDuration();
         draftVisibility = cloneVisibility(({
@@ -1696,7 +1788,8 @@ Singleton {
             JSON.stringify(draftVisualizer),
             String(draftBackgroundOpacity),
             String(draftEntryTransition),
-            String(draftEntryTransitionDuration)
+            String(draftEntryTransitionDuration),
+            String(draftLastBackgroundOpacity)
         ]);
     }
 
@@ -1840,6 +1933,13 @@ Singleton {
 
     PanelWindow {
         id: editorWindow
+
+        Shortcut {
+            sequence: "Ctrl+A"
+            context: Qt.WindowShortcut
+            enabled: root.open && !root.pickerSuspended
+            onActivated: root.selectAllElements()
+        }
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
         visible: false
         color: "transparent"
@@ -2151,8 +2251,9 @@ Singleton {
                             parent.inertiaActive = false;
                             parent.flickVelocityX = 0;
                             parent.flickVelocityY = 0;
-                            const additive = !!(mouse.modifiers & Qt.ShiftModifier);
-                            root.selectElement(parent.elementName, additive);
+                            const additive = !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                            if (additive) root.selectElement(parent.elementName, true);
+                            else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false);
                             if (!root.selectedContains(parent.elementName))
                                 return;
                             root.beginHistoryTransaction();
@@ -2479,16 +2580,21 @@ Singleton {
                         }
 
                         SettingsButton {
-                            label: root.selectedElement === "logo"
-                                ? (root.elementEnabled("logo") ? "Logo visible" : "Logo hidden")
+                            label: root.selectedElements.length > 1
+                                ? (root.selectionAllVisible() ? "Hide Selected" : "Show Selected")
+                                : root.selectedElement === "logo"
+                                    ? (root.elementEnabled("logo") ? "Logo visible" : "Logo hidden")
+                                    : root.elementCanHide(root.selectedElement)
+                                        ? (root.elementEnabled(root.selectedElement) ? "Visible" : "Hidden") : "Always visible"
+                            active: root.selectedElements.length > 1 ? root.selectionAllVisible() : root.elementEnabled(root.selectedElement)
+                            available: root.selectedElements.length > 1
+                                ? root.selectedElements.some(name => name !== "password" && root.elementCanHide(name))
                                 : root.elementCanHide(root.selectedElement)
-                                    ? (root.elementEnabled(root.selectedElement) ? "Visible" : "Hidden")
-                                    : "Always visible"
-                            active: root.elementEnabled(root.selectedElement)
-                            available: root.elementCanHide(root.selectedElement)
                             textSize: 9
-                            onClicked: root.setDraftVisible(root.selectedElement,
-                                !root.elementEnabled(root.selectedElement))
+                            onClicked: {
+                                if (root.selectedElements.length > 1) root.setSelectedVisibility(!root.selectionAllVisible());
+                                else root.setDraftVisible(root.selectedElement, !root.elementEnabled(root.selectedElement));
+                            }
                         }
 
                         Text { text: "Scale"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
@@ -2499,13 +2605,12 @@ Singleton {
                             onClicked: root.setDraftScale(root.selectedElement,
                                 root.elementScale(root.selectedElement) - 0.10)
                         }
-                        Text {
-                            text: Math.round(root.elementScale(root.selectedElement) * 100) + "%"
-                            color: Theme.foreground
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            Layout.preferredWidth: 42
-                            horizontalAlignment: Text.AlignHCenter
+                        TextField {
+                            id: elementScaleField; Layout.preferredWidth: 58
+                            text: Number(root.elementScale(root.selectedElement) * 100).toFixed(1)
+                            validator: DoubleValidator { bottom: 50; top: 10000; decimals: 1 }
+                            selectByMouse: true; font.pixelSize: 9
+                            onEditingFinished: root.setDraftScale(root.selectedElement, Number(text) / 100)
                         }
                         SettingsButton {
                             label: "+"
@@ -2545,14 +2650,16 @@ Singleton {
                             font.pixelSize: 9
                         }
                         TextField {
-                            Layout.preferredWidth: 58
+                            id: rotationField; Layout.preferredWidth: 68
                             visible: root.isCustomImage(root.selectedElement)
                             text: Number(root.elementRotation(root.selectedElement)).toFixed(1)
-                            validator: DoubleValidator { bottom: -180; top: 180; decimals: 1 }
-                            selectByMouse: true
-                            font.pixelSize: 9
+                            selectByMouse: true; font.pixelSize: 9
                             onEditingFinished: root.setDraftRotation(root.selectedElement, text)
                         }
+                        SettingsButton { label: "0°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 0) }
+                        SettingsButton { label: "90°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 90) }
+                        SettingsButton { label: "180°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 180) }
+                        SettingsButton { label: "270°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 270) }
 
                         SettingsButton {
                             id: selectedElementColorButton
@@ -2624,13 +2731,12 @@ Singleton {
                             available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0)
                             onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5)
                         }
-                        Text {
-                            text: Math.round(root.elementOpacity(root.selectedElement)) + "%"
-                            color: Theme.foreground
-                            font.family: Theme.fontFamily
-                            font.pixelSize: 9
-                            Layout.preferredWidth: 38
-                            horizontalAlignment: Text.AlignHCenter
+                        TextField {
+                            id: elementOpacityField; Layout.preferredWidth: 52
+                            text: Number(root.elementOpacity(root.selectedElement)).toFixed(0)
+                            validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }
+                            selectByMouse: true; font.pixelSize: 9
+                            onEditingFinished: root.setDraftOpacity(root.selectedElement, text)
                         }
                         SettingsButton {
                             label: "+"
@@ -2641,12 +2747,12 @@ Singleton {
 
                         Text { text: "Stretch X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementStretchX(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) - 0.10, root.elementStretchY(root.selectedElement)) }
-                        Text { text: Math.round(root.elementStretchX(root.selectedElement) * 100) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignHCenter }
+                        TextField { id: elementStretchXField; Layout.preferredWidth: 54; text: Number(root.elementStretchX(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, Number(text) / 100, root.elementStretchY(root.selectedElement)) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchX(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) + 0.10, root.elementStretchY(root.selectedElement)) }
 
                         Text { text: "Stretch Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementStretchY(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) - 0.10) }
-                        Text { text: Math.round(root.elementStretchY(root.selectedElement) * 100) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42; horizontalAlignment: Text.AlignHCenter }
+                        TextField { id: elementStretchYField; Layout.preferredWidth: 54; text: Number(root.elementStretchY(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), Number(text) / 100) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
 
                         Item { Layout.fillWidth: true }
@@ -2723,6 +2829,7 @@ Singleton {
 
                         Text { text: "Width"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
+                            id: visualizerWidthField
                             Layout.preferredWidth: 58
                             text: (Number(root.draftVisualizer.stretch_x || 1) * 100).toFixed(1)
                             validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }
@@ -2733,12 +2840,12 @@ Singleton {
 
                         Text { text: "Height"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.height > 25; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height - 10) }
-                        Text { text: root.draftVisualizer.height + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignHCenter }
+                        TextField { id: visualizerHeightField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.height); validator: IntValidator { bottom: 25; top: 300 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("height", text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.height < 300; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height + 10) }
 
                         Text { text: "Sensitivity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.sensitivity > 25; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity - 10) }
-                        Text { text: root.draftVisualizer.sensitivity + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 38; horizontalAlignment: Text.AlignHCenter }
+                        TextField { id: visualizerSensitivityField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.sensitivity); validator: IntValidator { bottom: 25; top: 300 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("sensitivity", text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.sensitivity < 300; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity + 10) }
 
                         SettingsButton { label: "Straight"; active: root.draftVisualizer.shape === "straight"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "straight") }
@@ -2846,6 +2953,10 @@ Singleton {
                         Text { text: "Fit"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "Cover"; active: root.draftWallpaperFit === "cover"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("cover") }
                         SettingsButton { label: "Contain"; active: root.draftWallpaperFit === "contain"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("contain") }
+                        Text { text: "Focal X"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField { id: wallpaperFocalXField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalX * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(Number(text) / 100, root.draftWallpaperFocalY) }
+                        Text { text: "Focal Y"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField { id: wallpaperFocalYField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalY * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }
                         Text { text: "Brightness"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle {
                             id: brightnessTrack
@@ -2855,7 +2966,7 @@ Singleton {
                             Rectangle { x: (root.draftBrightness() + 100) * parent.width / 200 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBrightnessFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBrightnessFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
-                        Text { text: (root.draftBrightness() > 0 ? "+" : "") + root.draftBrightness() + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42 }
+                        TextField { id: brightnessField; Layout.preferredWidth: 50; text: String(root.draftBrightness()); validator: IntValidator { bottom: -100; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }
                         Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle {
                             id: blurTrack
@@ -2865,7 +2976,7 @@ Singleton {
                             Rectangle { x: root.draftWallpaperBlur * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBlurFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBlurFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
-                        Text { text: root.draftWallpaperBlur + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
+                        TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }
                         Item { Layout.fillWidth: true }
                     }
 
@@ -2884,8 +2995,8 @@ Singleton {
                             Rectangle { x: root.draftBackgroundOpacity * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBackgroundOpacityFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBackgroundOpacityFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
-                        Text { text: root.draftBackgroundOpacity + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 36 }
-                        SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.setDraftBackgroundOpacity(100) }
+                        TextField { id: backgroundOpacityField; Layout.preferredWidth: 46; text: String(root.draftBackgroundOpacity); validator: IntValidator { bottom: 0; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }
+                        SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.toggleBackgroundOpaque() }
                         Item { Layout.fillWidth: true }
                         Text {
                             text: "Transparency can reveal content from the unlocked desktop behind the secure lock surface."
@@ -3001,4 +3112,47 @@ Singleton {
             }
         }
     }
+
+    Variants {
+        id: editorPreviewVariants
+        model: Quickshell.screens
+        PanelWindow {
+            id: secondaryPreviewWindow
+            required property var modelData
+            screen: modelData
+            visible: root.open && !root.pickerSuspended && editorWindow.visible
+                && editorWindow.screen && modelData.name !== editorWindow.screen.name
+            color: "transparent"; focusable: false; aboveWindows: true
+            exclusionMode: ExclusionMode.Ignore
+            anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
+            Item {
+                id: secondaryTransitionStart; anchors.fill: parent
+                Rectangle { anchors.fill: parent; color: "#101318" }
+                Rectangle { anchors.centerIn: parent; width: parent.width*0.62; height: parent.height*0.56; radius: 8; color: "#202731"; border.width: 1; border.color: "#3a4657" }
+            }
+            LockPreviewScene {
+                id: secondaryPreviewScene; anchors.fill: parent; theme: Theme
+                animationPreference: BarState.lockscreenAnimationPreference()
+                entryTransition: root.draftEntryTransition; entryTransitionDuration: root.draftEntryTransitionDuration
+                externallyManagedEntryTransition: true; externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running
+                randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false
+                showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date
+                showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
+                weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"
+                backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
+                wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
+                overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
+                autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages
+                visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
+                previewMode: true; editorMode: false
+            }
+            LockPreviewTransitionLayer {
+                id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160
+                startSource: secondaryTransitionStart; endSource: secondaryPreviewScene
+                mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration
+                replayToken: root.entryTransitionReplayToken
+            }
+        }
+    }
+
 }

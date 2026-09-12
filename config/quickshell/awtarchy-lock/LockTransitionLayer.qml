@@ -119,20 +119,20 @@ Item {
         }
     }
 
-    // Edges reveals the lockscreen from every edge toward the center.
+    // Edges reveals the lockscreen from the left/right edges only.
     Item {
         id: edgesClip
         z: 2
         width: Math.max(0, root.width * (1 - root.progress))
-        height: Math.max(0, root.height * (1 - root.progress))
+        height: root.height
         x: (root.width - width) / 2
-        y: (root.height - height) / 2
+        y: 0
         clip: true
         visible: root.running && root.normalizedMode === "edges"
 
         ShaderEffectSource {
             x: -edgesClip.x
-            y: -edgesClip.y
+            y: 0
             width: root.width
             height: root.height
             sourceItem: root.startSource
@@ -142,13 +142,25 @@ Item {
         }
     }
 
-    // Reverse Iris masks the frozen desktop away from the center outward.
-    // The mask texture is kept off-screen; hideSource prevents its white
-    // circle source from becoming part of the presentation.
+    // Reverse Iris keeps the frozen desktop as the base and directly
+    // reveals the real lockscreen destination through an expanding mask.
+    ShaderEffectSource {
+        id: irisStartSource
+        anchors.fill: parent
+        z: 2
+        sourceItem: root.startSource
+        live: true
+        recursive: false
+        smooth: true
+        visible: root.running && root.normalizedMode === "iris"
+    }
+
     Item {
         id: irisMaskShape
         anchors.fill: parent
-
+        visible: false
+        layer.enabled: true
+        layer.smooth: true
         Rectangle {
             anchors.centerIn: parent
             width: root.irisDiameter
@@ -158,30 +170,15 @@ Item {
         }
     }
 
-    ShaderEffectSource {
-        id: irisMaskTexture
-        x: root.width + 64
-        y: 0
-        width: root.width
-        height: root.height
-        sourceItem: irisMaskShape
-        hideSource: true
-        live: true
-        recursive: false
-        smooth: true
-        textureSize: Qt.size(Math.max(1, Math.round(root.width)),
-            Math.max(1, Math.round(root.height)))
-    }
-
     MultiEffect {
-        id: irisStartEffect
+        id: irisEndEffect
         anchors.fill: parent
-        z: 2
-        source: root.startSource
+        z: 3
+        source: root.endSource
         autoPaddingEnabled: false
         maskEnabled: true
-        maskInverted: true
-        maskSource: irisMaskTexture
+        maskInverted: false
+        maskSource: irisMaskShape
         maskSpreadAtMin: 0.015
         maskSpreadAtMax: 0.015
         visible: root.running && root.normalizedMode === "iris"

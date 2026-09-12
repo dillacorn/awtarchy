@@ -80,7 +80,7 @@ contains "$SCENE" 'source: wallpaperImage' \
     'wallpaper blur effect is not sourced from the wallpaper image'
 contains "$SCENE" 'visible: root.backgroundMode === "wallpaper"' \
     'wallpaper blur effect is not tied to wallpaper presentation'
-contains "$SURFACE" 'root.transitionComplete || root.wallpaperBlur <= 0' \
+contains "$SURFACE" '!root.transitionComplete || root.wallpaperBlur <= 0' \
     'captured desktop source is not hidden after handoff when blur is active'
 contains "$SURFACE" 'source: desktopCapture' \
     'captured desktop blur is not sourced from the secure capture image'

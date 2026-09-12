@@ -142,7 +142,8 @@ Singleton {
         lockscreen_wallpaper_focal_y: 0.5,
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
-        lockscreen_wallpaper_blur: 0
+        lockscreen_wallpaper_blur: 0,
+        lockscreen_background_opacity_previous: 100
     })
     readonly property var defaultLockscreenVisualizer: ({
         enabled: false,
@@ -748,6 +749,14 @@ Singleton {
         if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 100)
             return 100;
         return value;
+    }
+
+    function lockscreenPreviousBackgroundOpacity() {
+        const value = Number(data().lockscreen_background_opacity_previous);
+        if (Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value < 100)
+            return value;
+        const current = lockscreenBackgroundOpacity();
+        return current < 100 ? current : 100;
     }
 
     function lockscreenAudioReactiveEnabled() {

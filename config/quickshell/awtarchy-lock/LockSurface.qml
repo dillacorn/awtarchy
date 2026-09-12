@@ -48,24 +48,28 @@ WlSessionLockSurface {
     readonly property bool transitionComplete: !transitionLayer.running
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
-    readonly property int maskedCount: Math.min(password.text.length, 10)
+    readonly property int maskedCount: root.passwordFailureMaskCount > 0
+        ? root.passwordFailureMaskCount : Math.min(password.text.length, 10)
     readonly property real maskSpread: maskedCount === 0 ? 0
         : Math.round((24 + maskedCount * 14) * uiScale * passwordScale)
 
     property bool entered: false
+    property int submittedMaskCount: 0
+    property int passwordFailureMaskCount: 0
 
     function submitPassword() {
         if ((auth.busy && !auth.responseRequired) || password.text.length === 0)
             return;
 
         const response = password.text;
+        root.submittedMaskCount = Math.min(response.length, 10);
+        root.passwordFailureMaskCount = 0;
         if (auth.submit(response))
             password.text = "";
     }
 
     function focusPasswordWhenReady() {
-        if (root.transitionComplete)
-            Qt.callLater(() => password.forceActiveFocus());
+        Qt.callLater(() => password.forceActiveFocus());
     }
 
     PinchHandler {
@@ -100,6 +104,7 @@ WlSessionLockSurface {
                 cache: false
                 fillMode: Image.Stretch
                 visible: status === Image.Ready
+                    && (!root.transitionComplete || root.wallpaperBlur <= 0)
             }
         }
 
@@ -190,9 +195,8 @@ WlSessionLockSurface {
         y: scene.passwordCenterY - height / 2
         width: scene.passwordWidth
         height: scene.passwordHeight
-        z: 20
+        z: 1100
         opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")
-            * (root.transitionComplete ? 1 : 0)
         transform: Scale {
             origin.x: passwordBlock.width / 2
             origin.y: passwordBlock.height / 2
@@ -207,13 +211,6 @@ WlSessionLockSurface {
             }
         }
 
-        Rectangle {
-            anchors.centerIn: parent
-            width: root.maskSpread
-            height: Math.round(14 * root.uiScale * root.passwordScale)
-            color: scene.elementColor("password")
-            opacity: password.text.length > 0 ? 0.09 : 0
-        }
 
         Row {
             anchors.centerIn: parent
@@ -225,7 +222,8 @@ WlSessionLockSurface {
                 Rectangle {
                     width: Math.round(7 * root.uiScale * root.passwordScale)
                     height: Math.round(10 * root.uiScale * root.passwordScale)
-                    color: scene.elementColor("password")
+                    color: root.auth.statusIsError || root.passwordFailureMaskCount > 0
+                        ? "#ff4d4d" : scene.elementColor("password")
                     opacity: 0.82
                 }
             }
@@ -249,8 +247,11 @@ WlSessionLockSurface {
             activeFocusOnTab: true
 
             onTextChanged: {
-                if (text.length > 0 && root.auth.statusIsError)
-                    root.auth.clearStatus();
+                if (text.length > 0) {
+                    root.passwordFailureMaskCount = 0;
+                    if (root.auth.statusIsError)
+                        root.auth.clearStatus();
+                }
             }
 
             Keys.onReturnPressed: event => {
@@ -275,6 +276,7 @@ WlSessionLockSurface {
         target: root.auth
 
         function onAuthenticationFailed() {
+            root.passwordFailureMaskCount = Math.max(1, root.submittedMaskCount);
             password.text = "";
             root.focusPasswordWhenReady();
         }
@@ -290,5 +292,8 @@ WlSessionLockSurface {
         }
     }
 
-    Component.onCompleted: root.entered = true
+    Component.onCompleted: {
+        root.entered = true;
+        root.focusPasswordWhenReady();
+    }
 }

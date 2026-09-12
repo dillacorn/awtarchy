@@ -220,7 +220,8 @@ lockscreen_composition_defaults() {
         lockscreen_wallpaper_focal_y: 0.5,
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
-        lockscreen_wallpaper_blur: 0
+        lockscreen_wallpaper_blur: 0,
+        lockscreen_background_opacity_previous: 100
     }'
 }
 
@@ -352,8 +353,10 @@ set_lockscreen_background_opacity() {
     local value
     value="$(normalize_percent_integer "$1" 'lockscreen background opacity')"
     new_tmp
-    jq --argjson value "$value" '.lockscreen_background_opacity = $value' \
-        "$STATE_FILE" >"$TMP_FILE"
+    jq --argjson value "$value" '
+        if $value < 100 then .lockscreen_background_opacity_previous = $value else . end
+        | .lockscreen_background_opacity = $value
+    ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
 
@@ -616,7 +619,8 @@ save_lockscreen_editor() {
     local background_opacity_input="${15:-100}"
     local entry_transition_input="${16:-}"
     local entry_transition_duration_input="${17:-1800}"
-    local custom_images visualizer background_opacity entry_transition entry_transition_duration
+    local background_opacity_previous_input="${18:-100}"
+    local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout
 ' >&2
@@ -625,6 +629,7 @@ save_lockscreen_editor() {
     custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
     visualizer="$(normalize_lockscreen_visualizer_json "$visualizer_input")"
     background_opacity="$(normalize_percent_integer "$background_opacity_input" 'lockscreen background opacity')"
+    background_opacity_previous="$(normalize_percent_integer "$background_opacity_previous_input" 'lockscreen previous background opacity')"
     validate_int_range "$entry_transition_duration_input" 800 6000 'lockscreen entry transition duration'
     entry_transition_duration=$((10#$entry_transition_duration_input))
     if [[ -n "$entry_transition_input" ]]; then
@@ -671,12 +676,14 @@ save_lockscreen_editor() {
         --argjson custom_images "$custom_images" \
         --argjson visualizer "$visualizer" \
         --argjson background_opacity "$background_opacity" \
+        --argjson background_opacity_previous "$background_opacity_previous" \
         --arg entry_transition "$entry_transition" \
         --argjson entry_transition_duration "$entry_transition_duration" '
         .lockscreen_layout = $layout
         | .lockscreen_custom_images = $custom_images
         | .lockscreen_visualizer = $visualizer
         | .lockscreen_background_opacity = $background_opacity
+        | .lockscreen_background_opacity_previous = $background_opacity_previous
         | .lockscreen_entry_transition = $entry_transition
         | .lockscreen_entry_transition_duration = $entry_transition_duration
         | .lockscreen_show_logo = $visibility.logo
@@ -727,6 +734,7 @@ reset_lockscreen_presentation() {
         | .lockscreen_custom_images = []
         | .lockscreen_visualizer = $visualizer
         | .lockscreen_background_opacity = 100
+        | .lockscreen_background_opacity_previous = 100
     ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }

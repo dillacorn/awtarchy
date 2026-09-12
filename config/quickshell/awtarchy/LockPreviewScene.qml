@@ -55,13 +55,8 @@ Item {
     readonly property bool logoHoverActive: mouseInteractive && pointerActive && showLogo
         && logoContainsPoint(lastPointerX, lastPointerY) && !logoExplosionActive
     readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty
-    readonly property real securePasswordEntryOpacity: root.unlocking ? 0
-        : !root.entered ? 0
-        : root.externallyManagedEntryTransition
-            ? (root.externalEntryTransitionRunning ? 0 : 1)
-        : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
-        : root.entryTransitionRunning ? 0 : 1
-
+    readonly property real securePasswordEntryOpacity: root.unlocking
+        ? 0 : root.entered ? 1 : 0
     readonly property real uiScale: Math.max(0.72, Math.min(1.35,
         Math.min(width / 1920, height / 1080)))
     readonly property var wordmarkRows: [
@@ -740,10 +735,28 @@ Item {
             width: geometry.width
             height: geometry.height
             visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+                && root.wallpaperBlur <= 0
             source: root.wallpaperSource
             fillMode: Image.Stretch
             asynchronous: true
             cache: true
+        }
+
+        MultiEffect {
+            id: wallpaperBlurEffect
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            source: wallpaperImage
+            autoPaddingEnabled: false
+            blurEnabled: root.wallpaperBlur > 0
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && root.wallpaperBlur > 0
+                && wallpaperImage.status === Image.Ready
         }
 
         Rectangle {
@@ -1135,13 +1148,6 @@ Item {
             width: root.passwordWidth
             height: root.passwordHeight
 
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.round(80 * root.uiScale * root.elementScale("password"))
-                height: Math.round(14 * root.uiScale * root.elementScale("password"))
-                color: root.elementColor("password")
-                opacity: 0.09
-            }
 
             Row {
                 anchors.centerIn: parent
@@ -1249,22 +1255,6 @@ Item {
             }
         }
 
-        Rectangle {
-            visible: root.entryTransitionMode() === "edges"
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: parent.height * 0.5 * (1 - root.entryTransitionProgress)
-            color: "#000000"
-        }
-        Rectangle {
-            visible: root.entryTransitionMode() === "edges"
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            height: parent.height * 0.5 * (1 - root.entryTransitionProgress)
-            color: "#000000"
-        }
         Rectangle {
             visible: root.entryTransitionMode() === "edges"
             anchors.left: parent.left

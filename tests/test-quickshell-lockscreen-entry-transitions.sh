@@ -178,7 +178,7 @@ rejects "$AUTH" 'lockscreen_entry_transition' \
 contains "$SCENE" 'property bool externallyManagedEntryTransition' \
     'presentation scene cannot defer entry timing to the shared renderer'
 contains "$SCENE" 'effectiveEntryTransitionRunning' \
-    'logo/password entry gating is not coordinated with the shared renderer'
+    'logo entry gating is not coordinated with the shared renderer'
 
 # Temporary implementation helpers must never survive into a candidate.
 [[ ! -e "$ROOT/.github/workflows/dev-lockscreen-entry-transitions.yml" ]] \
