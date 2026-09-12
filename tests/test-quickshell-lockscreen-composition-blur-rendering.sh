@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SURFACE="$ROOT/config/quickshell/awtarchy-lock/LockSurface.qml"
 SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
+EDITOR="$ROOT/config/quickshell/awtarchy/LockscreenEditor.qml"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -127,7 +128,18 @@ for label, configured_background in (
         )
 PY
 
+# The unlocked editor cannot blur the live compositor behind a transparent
+# PanelWindow.  Its primary and secondary previews must feed their synthetic
+# desktop frames into the same desktopBackingSource input used by secure runtime,
+# so moving the Blur slider updates the complete preview composition live.
+contains "$EDITOR" 'desktopBackingSource: editorTransitionStart' \
+    'primary editor preview does not feed its synthetic desktop into live blur composition'
+contains "$EDITOR" 'desktopBackingSource: secondaryTransitionStart' \
+    'secondary editor preview does not feed its synthetic desktop into live blur composition'
+contains "$EDITOR" 'wallpaperBlur: root.draftWallpaperBlur' \
+    'editor preview blur strength is not bound to the live draft value'
+
 cmp -s "$SCENE" "$PREVIEW" \
     || fail 'secure/editor presentation scenes diverged'
 
-printf '%s\n' 'PASS: blur consumes the complete translucent background composition, including secure desktop backing'
+printf '%s\n' 'PASS: blur consumes the complete translucent runtime and editor-preview background composition'
