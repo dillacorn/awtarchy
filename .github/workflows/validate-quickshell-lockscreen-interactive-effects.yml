@@ -23,6 +23,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
           bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
           bash -n tests/test-quickshell-lockscreen-capture.sh
           bash -n tests/test-quickshell-lockscreen-transition-layer.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
@@ -66,6 +67,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
           shellcheck tests/test-quickshell-lockscreen-capture.sh
           shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
@@ -116,6 +118,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
           bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-picker-targeting.sh
       - name: Secure transition capture contract
         run: bash tests/test-quickshell-lockscreen-capture.sh
       - name: Desktop transition layer contract
