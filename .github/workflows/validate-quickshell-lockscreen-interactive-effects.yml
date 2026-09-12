@@ -1,7 +1,9 @@
 name: Validate Quickshell Lockscreen Interactive Effects
 
 on:
-  pull_request:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
 
 permissions:
   contents: write
@@ -42,7 +44,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
 
-          git show HEAD^:.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml > .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml
+          git show 92f5ff88423c8b05cdf34908c1b98952e7d74e01:.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml > .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml
 
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
