@@ -16,7 +16,7 @@ jobs:
         with:
           ref: feature/lockscreen-interactive-effects
           fetch-depth: 0
-      - name: Apply save arity fix and restore workflow
+      - name: Apply save arity fix
         shell: bash
         run: |
           python3 - <<'PY'
@@ -26,10 +26,16 @@ jobs:
           text = path.read_text(encoding="utf-8")
           old = "6|12|13|14|16|17|18) ;;"
           new = "6|12|13|14|16|17|18|19) ;;"
-          count = text.count(old)
-          if count != 1:
-              raise SystemExit(f"expected exactly one stale save-lockscreen-editor arity guard, found {count}")
-          path.write_text(text.replace(old, new), encoding="utf-8")
+          old_count = text.count(old)
+          new_count = text.count(new)
+          if old_count == 1 and new_count == 0:
+              path.write_text(text.replace(old, new), encoding="utf-8")
+          elif old_count == 0 and new_count == 1:
+              pass
+          else:
+              raise SystemExit(
+                  f"unexpected save-lockscreen-editor arity state: old={old_count}, new={new_count}"
+              )
           PY
 
           hash="$(sha256sum config/hypr/scripts/quickshell_application_state.sh | awk '{print $1}')"
@@ -44,11 +50,13 @@ jobs:
           bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
 
-          git show 92f5ff88423c8b05cdf34908c1b98952e7d74e01:.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml > .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml
-
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add config/hypr/scripts/quickshell_application_state.sh local/share/awtarchy/quickshell-managed-history.sha256 .github/workflows/validate-quickshell-lockscreen-interactive-effects.yml
-          test "$(git diff --cached --name-only | wc -l)" -eq 3
-          git commit -m "fix: accept current lockscreen editor save payload"
-          git push origin HEAD:feature/lockscreen-interactive-effects
+          if git diff --quiet -- config/hypr/scripts/quickshell_application_state.sh local/share/awtarchy/quickshell-managed-history.sha256; then
+            printf '%s\n' 'save arity fix already applied'
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add config/hypr/scripts/quickshell_application_state.sh local/share/awtarchy/quickshell-managed-history.sha256
+            test "$(git diff --cached --name-only | wc -l)" -eq 2
+            git commit -m "fix: accept current lockscreen editor save payload"
+            git push origin HEAD:feature/lockscreen-interactive-effects
+          fi
