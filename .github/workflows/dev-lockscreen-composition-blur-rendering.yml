@@ -18,17 +18,23 @@ jobs:
           fetch-depth: 0
       - name: Apply composition blur patch
         run: python3 .github/scripts/dev-fix-lockscreen-composition-blur.py
-      - name: Validate affected contracts
+      - name: Validate new composition blur regression
         run: |
           bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
           shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
           bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
-          bash tests/test-quickshell-lockscreen-background-composition.sh
-          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
-          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
-          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          git diff --check
+      - name: Validate background composition
+        run: bash tests/test-quickshell-lockscreen-background-composition.sh
+      - name: Validate blur Iris editor controls
+        run: bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+      - name: Validate third runtime pass
+        run: bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+      - name: Validate issue 187 acceptance
+        run: bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+      - name: Validate managed history
+        run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+      - name: Validate diff whitespace
+        run: git diff --check
       - name: Commit production patch
         run: |
           git config user.name "github-actions[bot]"
