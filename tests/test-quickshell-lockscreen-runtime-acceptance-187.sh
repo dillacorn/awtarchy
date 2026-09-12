@@ -74,13 +74,13 @@ lacks "$EDITOR" 'enabled: root.draftBackgroundMode === "wallpaper"' 'blur remain
 lacks "$QUICK_SETTINGS" 'text: "Background Opacity"' 'detailed opacity still duplicated in Quick Settings'
 
 # Delete removes only a selected custom image through the existing undo path;
-# custom images alone receive a high defensive scale ceiling.
+# all elements share one high defensive scale ceiling instead of a 200% UX cap.
 has "$EDITOR" 'event.key === Qt.Key_Delete' 'Delete key is not routed in editor'
 has "$EDITOR" 'root.removeCustomImage(root.selectedElement)' 'Delete does not use safe image removal'
-has "$EDITOR" 'readonly property real customImageScaleMaximum: 10.0' 'custom image scale ceiling is not 10x'
-has "$STATE" '.scale <= 10.00' 'persisted custom images still reject useful scales'
-has "$BAR_STATE" 'scale > 10.00' 'BarState custom image validation ceiling is not 10x'
-has "$SCENE" 'customImageForName(name) ? 10.00 : 2.00' 'renderer does not distinguish custom image scale'
+has "$EDITOR" 'readonly property real elementScaleMaximum: 100.0' 'common scale safety bound is missing'
+has "$STATE" '.scale <= 100.00' 'persisted custom images do not use the common scale bound'
+has "$BAR_STATE" 'scale > 100.00' 'BarState does not use the common scale bound'
+has "$SCENE" 'const maximum = 100.00;' 'renderer still uses a visible 200%/10x ceiling'
 
 # Production picker owns an exact identity and has a Hyprland fallback in
 # addition to Alacritty's startup request.

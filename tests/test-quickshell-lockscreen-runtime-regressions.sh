@@ -190,8 +190,8 @@ require_text "$SURFACE_QML" 'width: Math.round(7 * root.uiScale * root.passwordS
     'password block width does not scale from the shared password anchor'
 require_text "$SURFACE_QML" 'height: Math.round(10 * root.uiScale * root.passwordScale)' \
     'password block height does not scale from the shared password anchor'
-require_text "$SCENE_QML" 'customImageForName(name) ? 10.00 : 2.00' \
-    'shared scene does not distinguish bounded custom-image and built-in scale limits'
+require_text "$SCENE_QML" 'const maximum = 100.00;' \
+    'shared scene does not use the common defensive scale bound'
 reject_text "$SURFACE_QML" 'index % 3' \
     'password blocks still vary in height by index'
 reject_text "$SURFACE_QML" 'index % 4' \

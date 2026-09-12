@@ -227,7 +227,7 @@ Item {
     function elementScale(name) {
         const point = presentationPoint(name);
         const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
-        const maximum = customImageForName(name) ? 10.00 : 2.00;
+        const maximum = 100.00;
         const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(maximum, value)) : 1;
         const holdScale = root.editorMode && name === editorHeldElement ? editorHoldScale : 1.0;
         const safeHoldScale = Number.isFinite(Number(holdScale))

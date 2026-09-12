@@ -297,7 +297,7 @@ normalize_lockscreen_visualizer_json() {
                 ($enabled | type) == "boolean"
                 and ($x | type) == "number" and $x >= 0.05 and $x <= 0.95
                 and ($y | type) == "number" and $y >= 0.08 and $y <= 0.92
-                and ($scale | type) == "number" and $scale >= 0.5 and $scale <= 2
+                and ($scale | type) == "number" and $scale >= 0.5 and $scale <= 100
                 and ($stretch_x | type) == "number" and $stretch_x >= 0.25 and $stretch_x <= 4
                 and ($stretch_y | type) == "number" and $stretch_y >= 0.25 and $stretch_y <= 4
                 and ($opacity | type) == "number" and $opacity >= 0 and $opacity <= 100
@@ -482,7 +482,7 @@ normalize_lockscreen_layout_json() {
                         and ($candidate[$key].color == "auto"
                             or ($candidate[$key].color | test("^#[0-9A-Fa-f]{6}$")))))
                 and (($candidate[$key].scale // 1) >= 0.50)
-                and (($candidate[$key].scale // 1) <= 2.00)
+                and (($candidate[$key].scale // 1) <= 100.00)
                 and (($candidate[$key].stretch_x // 1) >= 0.25)
                 and (($candidate[$key].stretch_x // 1) <= 4.00)
                 and (($candidate[$key].stretch_y // 1) >= 0.25)
@@ -534,7 +534,7 @@ normalize_lockscreen_custom_images_json() {
                 and (.path | test("[\u0000-\u001f\u007f-\u009f]") | not)
                 and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
                 and (.y | type) == "number" and .y >= 0.08 and .y <= 0.92
-                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 10.00
+                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 100.00
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
                 and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100

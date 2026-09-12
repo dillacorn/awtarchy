@@ -709,7 +709,7 @@ Singleton {
 
         if (!Number.isFinite(x) || x < 0.05 || x > 0.95
                 || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                || !Number.isFinite(scale) || scale < 0.5 || scale > 2
+                || !Number.isFinite(scale) || scale < 0.5 || scale > 100
                 || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4
                 || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4
                 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
@@ -873,7 +873,7 @@ Singleton {
                 || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
                 || !Number.isFinite(opacity)
                 || x < minX || x > maxX || y < minY || y > maxY
-                || scale < 0.50 || scale > 2.00
+                || scale < 0.50 || scale > 100.00
                 || stretchX < 0.25 || stretchX > 4.00
                 || stretchY < 0.25 || stretchY > 4.00
                 || opacity < minOpacity || opacity > 100)
@@ -918,7 +918,7 @@ Singleton {
                     || /[\u0000-\u001f\u007f-\u009f]/.test(path)
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                    || !Number.isFinite(scale) || scale < 0.50 || scale > 10.00
+                    || !Number.isFinite(scale) || scale < 0.50 || scale > 100.00
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100

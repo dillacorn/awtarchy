@@ -115,7 +115,7 @@ ShellRoot {
         const performance = String(value.performance === undefined ? defaults.performance : value.performance);
         if (!Number.isFinite(x) || x < 0.05 || x > 0.95
                 || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
+                || !Number.isFinite(scale) || scale < 0.50 || scale > 100.00
                 || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                 || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
@@ -247,7 +247,7 @@ ShellRoot {
                 || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
                 || !Number.isFinite(opacity)
                 || x < minX || x > maxX || y < minY || y > maxY
-                || scale < 0.50 || scale > 2.00
+                || scale < 0.50 || scale > 100.00
                 || stretchX < 0.25 || stretchX > 4.00
                 || stretchY < 0.25 || stretchY > 4.00
                 || opacity < minOpacity || opacity > 100)
@@ -288,7 +288,7 @@ ShellRoot {
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                    || !Number.isFinite(scale) || scale < 0.50 || scale > 10.00
+                    || !Number.isFinite(scale) || scale < 0.50 || scale > 100.00
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100

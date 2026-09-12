@@ -23,7 +23,7 @@ Singleton {
     property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
     readonly property int customImageMaximum: 12
-    readonly property real customImageScaleMaximum: 10.0
+    readonly property real elementScaleMaximum: 100.0
 
     property var draftLayout: defaultLayout()
     property var draftCustomImages: []
@@ -122,7 +122,7 @@ Singleton {
             enabled: enabled,
             x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : defaults.x)),
             y: Math.max(0.08, Math.min(0.92, Number.isFinite(y) ? y : defaults.y)),
-            scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : defaults.scale)),
+            scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : defaults.scale)),
             stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : defaults.stretch_x)),
             stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : defaults.stretch_y)),
             opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
@@ -454,7 +454,7 @@ Singleton {
         if (!Number.isFinite(numeric))
             return;
         const value = Math.max(0.50, Math.min(
-            isCustomImage(name) ? customImageScaleMaximum : 2.00, numeric));
+            elementScaleMaximum, numeric));
         if (name === "visualizer") {
             const next = cloneVisualizer(draftVisualizer);
             next.scale = value;
@@ -923,7 +923,7 @@ Singleton {
                 path: imagePath,
                 x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : 0.5)),
                 y: Math.max(0.08, Math.min(0.92, Number.isFinite(y) ? y : 0.5)),
-                scale: Math.max(0.50, Math.min(customImageScaleMaximum, Number.isFinite(scale) ? scale : 1)),
+                scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
                 opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
@@ -989,7 +989,7 @@ Singleton {
                 y: Math.max(password ? 0.20 : 0.08,
                     Math.min(password ? 0.86 : 0.92,
                         Number.isFinite(y) ? y : defaults[name].y)),
-                scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : 1)),
+                scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
                 opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
@@ -1093,7 +1093,7 @@ Singleton {
     function elementScale(name) {
         const point = elementPoint(name);
         const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
-        return Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
+        return Number.isFinite(value) ? Math.max(0.50, Math.min(elementScaleMaximum, value)) : 1;
     }
 
     function elementStretchX(name) {
@@ -1153,7 +1153,7 @@ Singleton {
         if (!Number.isFinite(value))
             return;
         recordUndoBeforeChange();
-        const maximum = isCustomImage(name) ? customImageScaleMaximum : 2.00;
+        const maximum = elementScaleMaximum;
         setDraftScaleSilently(name, Math.round(Math.max(0.50, Math.min(maximum, value)) * 100) / 100);
         selectElement(name, false);
     }
@@ -2171,7 +2171,7 @@ Singleton {
                         }
                         SettingsButton {
                             label: "+"
-                            available: root.elementScale(root.selectedElement) < 2.00
+                            available: root.elementScale(root.selectedElement) < root.elementScaleMaximum
                             textSize: 10
                             onClicked: root.setDraftScale(root.selectedElement,
                                 root.elementScale(root.selectedElement) + 0.10)
