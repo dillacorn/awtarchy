@@ -78,7 +78,7 @@ jq -e '
     and .lockscreen_visualizer.bands == 16
     and .lockscreen_visualizer.gap == 4
     and .lockscreen_visualizer.height == 100
-    and .lockscreen_visualizer.sensitivity == 140
+    and .lockscreen_visualizer.sensitivity == 180
     and .lockscreen_visualizer.shape == "straight"
     and .lockscreen_visualizer.bend == 45
     and .lockscreen_visualizer.performance == "balanced"
@@ -128,11 +128,11 @@ if run_state save-lockscreen-editor \
     fail 'unsupported visualizer shape was accepted'
 fi
 
-bad_bend="${visualizer/\"bend\":-55/\"bend\":361}"
+bad_bend="${visualizer/\"bend\":-55/\"bend\":2001}"
 if run_state save-lockscreen-editor \
     "$layout" "$visibility" black '#000000' '' \
     cover 0.5 0.5 none 0 0 auto '[]' "$bad_bend" 60 >/dev/null 2>&1; then
-    fail 'visualizer bend outside -360..360 was accepted'
+    fail 'visualizer bend outside -2000..2000 was accepted'
 fi
 
 if run_state set-lockscreen-background-opacity 101 >/dev/null 2>&1; then
@@ -169,7 +169,9 @@ require_text "$CAVA_CONFIG" 'method = pipewire' \
 require_text "$CAVA_CONFIG" 'source = auto' \
     'CAVA visualizer source does not use the automatic output source'
 require_text "$AUDIO_HELPER" 'responsive) framerate=90' \
-    'audio helper has no explicit higher-responsiveness mode'
+    'audio helper has no explicit responsive mode'
+require_text "$AUDIO_HELPER" 'high) framerate=120' \
+    'audio helper has no explicit High 120 mode'
 require_text "$ANALYZER" 'property var bands:' \
     'secure analyzer exposes no normalized band array'
 require_text "$ANALYZER" 'onEnabledChanged:' \

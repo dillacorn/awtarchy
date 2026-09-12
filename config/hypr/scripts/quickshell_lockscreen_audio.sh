@@ -12,6 +12,7 @@ mode="${1:-balanced}"
 case "$mode" in
     balanced) framerate=60 ;;
     responsive) framerate=90 ;;
+    high) framerate=120 ;;
     *) framerate=60 ;;
 esac
 

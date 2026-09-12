@@ -302,14 +302,14 @@ Item {
     }
 
     function visualizerBend() {
-        return Math.round(visualizerNumber("bend", 45, -360, 360));
+        return Math.round(visualizerNumber("bend", 45, -2000, 2000));
     }
 
     function visualizerBands() {
         const count = Math.min(64, root.visualizerBandCount());
         const source = Array.isArray(root.audioBands) ? root.audioBands : [];
         const result = [];
-        const sensitivity = visualizerNumber("sensitivity", 100, 25, 300) / 100;
+        const sensitivity = visualizerNumber("sensitivity", 180, 25, 300) / 100;
         for (let i = 0; i < count; ++i) {
             if (source.length === 0) {
                 result.push(0);

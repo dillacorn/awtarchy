@@ -156,7 +156,7 @@ Singleton {
         bands: 16,
         gap: 4,
         height: 100,
-        sensitivity: 140,
+        sensitivity: 180,
         shape: "straight",
         bend: 45,
         performance: "balanced"
@@ -720,8 +720,8 @@ Singleton {
                 || !Number.isInteger(height) || height < 25 || height > 300
                 || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
                 || ["straight", "arc", "circle"].indexOf(shape) < 0
-                || ["balanced", "responsive"].indexOf(performance) < 0
-                || !Number.isInteger(bend) || bend < -360 || bend > 360)
+                || ["balanced", "responsive", "high"].indexOf(performance) < 0
+                || !Number.isInteger(bend) || bend < -2000 || bend > 2000)
             return defaults;
 
         return ({

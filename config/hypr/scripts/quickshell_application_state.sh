@@ -28,7 +28,7 @@ LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","passwor
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 LOCKSCREEN_CUSTOM_IMAGE_MAX=12
 LOCKSCREEN_VISUALIZER_SHAPES_JSON='["straight","arc","circle"]'
-LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":140,"shape":"straight","bend":45,"performance":"balanced"}'
+LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
 QUICK_SETTINGS_SECTIONS_JSON='["brightness","output-volume","bar","display-effects","submap","wallpaper","awtarchy","smtty","scheduler","numlock","title-bars"]'
 WORKSPACE_STYLES_JSON='["awtarchy","numbers","icons","workflow","phases","custom-symbol"]'
@@ -308,8 +308,8 @@ normalize_lockscreen_visualizer_json() {
                 and ($height | type) == "number" and ($height | floor) == $height and $height >= 25 and $height <= 300
                 and ($sensitivity | type) == "number" and ($sensitivity | floor) == $sensitivity and $sensitivity >= 25 and $sensitivity <= 300
                 and ($shape | type) == "string" and ($shapes | index($shape) != null)
-                and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -360 and $bend <= 360
-                and ($performance == "balanced" or $performance == "responsive")
+                and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -2000 and $bend <= 2000
+                and ($performance == "balanced" or $performance == "responsive" or $performance == "high")
               then {
                 enabled: $enabled,
                 x: $x,

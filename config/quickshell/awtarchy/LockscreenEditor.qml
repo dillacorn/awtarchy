@@ -101,7 +101,7 @@ Singleton {
             bands: 16,
             gap: 4,
             height: 100,
-            sensitivity: 140,
+            sensitivity: 180,
             shape: "straight",
             bend: 45,
             performance: "balanced"
@@ -142,8 +142,8 @@ Singleton {
             height: Number.isInteger(responseHeight) ? Math.max(25, Math.min(300, responseHeight)) : defaults.height,
             sensitivity: Number.isInteger(sensitivity) ? Math.max(25, Math.min(300, sensitivity)) : defaults.sensitivity,
             shape: ["straight", "arc", "circle"].indexOf(shape) >= 0 ? shape : defaults.shape,
-            bend: Number.isInteger(bend) ? Math.max(-360, Math.min(360, bend)) : defaults.bend,
-            performance: ["balanced", "responsive"].indexOf(performance) >= 0
+            bend: Number.isInteger(bend) ? Math.max(-2000, Math.min(2000, bend)) : defaults.bend,
+            performance: ["balanced", "responsive", "high"].indexOf(performance) >= 0
                 ? performance : defaults.performance
         });
     }
@@ -955,7 +955,7 @@ Singleton {
             next.shape = shape;
         } else if (name === "performance") {
             const performance = String(value || "");
-            if (["balanced", "responsive"].indexOf(performance) < 0)
+            if (["balanced", "responsive", "high"].indexOf(performance) < 0)
                 return;
             recordUndoBeforeChange();
             next.performance = performance;
@@ -968,7 +968,7 @@ Singleton {
                 gap: ({ min: 0, max: 24 }),
                 height: ({ min: 25, max: 300 }),
                 sensitivity: ({ min: 25, max: 300 }),
-                bend: ({ min: -360, max: 360 })
+                bend: ({ min: -2000, max: 2000 })
             });
             const range = bounds[name];
             if (!range)
@@ -2745,15 +2745,16 @@ Singleton {
                         SettingsButton { label: "Arc"; active: root.draftVisualizer.shape === "arc"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "arc") }
                         SettingsButton { label: "Circle"; active: root.draftVisualizer.shape === "circle"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "circle") }
                         Text { text: "Response"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        SettingsButton { label: "Balanced"; active: root.draftVisualizer.performance === "balanced"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "balanced") }
-                        SettingsButton { label: "Responsive"; active: root.draftVisualizer.performance === "responsive"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "responsive") }
+                        SettingsButton { label: "Balanced 60"; active: root.draftVisualizer.performance === "balanced"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "balanced") }
+                        SettingsButton { label: "Responsive 90"; active: root.draftVisualizer.performance === "responsive"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "responsive") }
+                        SettingsButton { label: "High 120"; active: root.draftVisualizer.performance === "high"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "high") }
 
                         Text { text: "Arc Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
                             Layout.preferredWidth: 58
                             visible: root.draftVisualizer.shape === "arc"
                             text: String(Math.round(Number(root.draftVisualizer.bend || 0)))
-                            validator: DoubleValidator { bottom: -360; top: 360; decimals: 0 }
+                            validator: DoubleValidator { bottom: -2000; top: 2000; decimals: 0 }
                             selectByMouse: true
                             font.pixelSize: 9
                             onEditingFinished: root.setDraftVisualizerSetting("bend", text)
