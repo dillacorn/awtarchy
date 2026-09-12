@@ -76,7 +76,8 @@ if [[ "${1:-}" == clients && "${2:-}" == -j ]]; then
     queries="$(cat "$PICKER_CLIENT_QUERIES")"
     queries=$((queries + 1))
     printf '%s\n' "$queries" >"$PICKER_CLIENT_QUERIES"
-    if (( queries < 3 )); then
+    # Deliberately appear after the rejected 20 x 50ms (~1 second) window.
+    if (( queries < 26 )); then
         printf '%s\n' '[]'
         exit 0
     fi
@@ -111,8 +112,8 @@ picker_output="$(
 
 [[ "$picker_output" == "$selected_image" ]] \
     || fail 'picker did not preserve the selected absolute image path'
-[[ "$(cat "$TMP/client-queries")" -ge 4 ]] \
-    || fail 'picker did not re-query the exact client to verify fullscreen state'
+[[ "$(cat "$TMP/client-queries")" -ge 27 ]] \
+    || fail 'picker did not wait beyond the rejected one-second map window and re-query fullscreen state'
 [[ "$(cat "$TMP/fullscreen-state")" == 2 ]] \
     || fail 'picker never put the exact mapped client into true fullscreen state'
 require_text "$TMP/hypr.log" 'address:0xabc123' \
