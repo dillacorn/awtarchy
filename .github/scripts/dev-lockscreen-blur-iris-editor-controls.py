@@ -1,0 +1,724 @@
+#!/usr/bin/env python3
+from pathlib import Path
+import shutil
+
+
+def replace_exact(path, old, new, expected=1):
+    p = Path(path)
+    text = p.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(
+            f"{path}: expected {expected} occurrences, found {count}: {old[:100]!r}"
+        )
+    p.write_text(text.replace(old, new), encoding="utf-8")
+
+
+state = "config/hypr/scripts/quickshell_application_state.sh"
+replace_exact(
+    state,
+    "LOCKSCREEN_OVERLAY_MODES_JSON='[\"none\",\"dark\",\"light\"]'\n",
+    "LOCKSCREEN_OVERLAY_MODES_JSON='[\"none\",\"dark\",\"light\"]'\n"
+    "LOCKSCREEN_BLUR_STYLES_JSON='[\"smooth\",\"pixelated\"]'\n",
+)
+replace_exact(
+    state,
+    '        lockscreen_wallpaper_blur: 0,\n'
+    '        lockscreen_background_opacity_previous: 100\n',
+    '        lockscreen_wallpaper_blur: 0,\n'
+    '        lockscreen_blur_style: "smooth",\n'
+    '        lockscreen_background_opacity_previous: 100\n',
+)
+replace_exact(
+    state,
+    """validate_lockscreen_overlay_mode() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_OVERLAY_MODES_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen overlay mode: %s\\n' "$value" >&2
+        exit 2
+    fi
+}
+
+""",
+    """validate_lockscreen_overlay_mode() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_OVERLAY_MODES_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen overlay mode: %s\\n' "$value" >&2
+        exit 2
+    fi
+}
+
+validate_lockscreen_blur_style() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_BLUR_STYLES_JSON" \\
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen blur style: %s\\n' "$value" >&2
+        exit 2
+    fi
+}
+
+""",
+)
+replace_exact(
+    state,
+    '    local background_opacity_previous_input="${18:-100}"\n'
+    '    local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration\n',
+    '    local background_opacity_previous_input="${18:-100}"\n'
+    '    local blur_style="${19:-smooth}"\n'
+    '    local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration\n',
+)
+replace_exact(
+    state,
+    '    validate_lockscreen_overlay_mode "$overlay_mode"\n'
+    '    validate_lockscreen_weather_units "$weather_units"\n',
+    '    validate_lockscreen_overlay_mode "$overlay_mode"\n'
+    '    validate_lockscreen_blur_style "$blur_style"\n'
+    '    validate_lockscreen_weather_units "$weather_units"\n',
+)
+replace_exact(
+    state,
+    '        --argjson wallpaper_blur "$wallpaper_blur" \\\n'
+    '        --arg weather_units "$weather_units" \\\n',
+    '        --argjson wallpaper_blur "$wallpaper_blur" \\\n'
+    '        --arg blur_style "$blur_style" \\\n'
+    '        --arg weather_units "$weather_units" \\\n',
+)
+replace_exact(
+    state,
+    '        | .lockscreen_wallpaper_blur = $wallpaper_blur\n'
+    '        | .lockscreen_weather_units = $weather_units\n',
+    '        | .lockscreen_wallpaper_blur = $wallpaper_blur\n'
+    '        | .lockscreen_blur_style = $blur_style\n'
+    '        | .lockscreen_weather_units = $weather_units\n',
+)
+replace_exact(
+    state,
+    '        | .lockscreen_wallpaper_blur = 0\n'
+    '        | .lockscreen_weather_units = "auto"\n',
+    '        | .lockscreen_wallpaper_blur = 0\n'
+    '        | .lockscreen_blur_style = "smooth"\n'
+    '        | .lockscreen_weather_units = "auto"\n',
+)
+replace_exact(
+    state,
+    '            6|12|13|14|16|17|18|19) ;;',
+    '            6|12|13|14|16|17|18|19|20) ;;',
+)
+
+bar = "config/quickshell/awtarchy/BarState.qml"
+replace_exact(
+    bar,
+    '{ key: "iris", label: "Reverse Iris" }',
+    '{ key: "iris", label: "Iris Reveal" }',
+)
+replace_exact(
+    bar,
+    '        lockscreen_wallpaper_blur: 0,\n'
+    '        lockscreen_background_opacity_previous: 100\n',
+    '        lockscreen_wallpaper_blur: 0,\n'
+    '        lockscreen_blur_style: "smooth",\n'
+    '        lockscreen_background_opacity_previous: 100\n',
+)
+replace_exact(
+    bar,
+    """    function lockscreenWallpaperBlur() {
+        const value = Number(data().lockscreen_wallpaper_blur);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+""",
+    """    function lockscreenWallpaperBlur() {
+        const value = Number(data().lockscreen_wallpaper_blur);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+    function lockscreenBlurStyle() {
+        const value = String(data().lockscreen_blur_style || "smooth");
+        return ["smooth", "pixelated"].indexOf(value) >= 0 ? value : "smooth";
+    }
+
+""",
+)
+
+shell = "config/quickshell/awtarchy-lock/shell.qml"
+replace_exact(
+    shell,
+    '    property int lockWallpaperBlur: 0\n'
+    '    property string lockWeatherLocation: ""\n',
+    '    property int lockWallpaperBlur: 0\n'
+    '    property string lockBlurStyle: "smooth"\n'
+    '    property string lockWeatherLocation: ""\n',
+)
+replace_exact(
+    shell,
+    '    readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)\n',
+    '    readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)\n'
+    '    readonly property string blurStyle: normalizedBlurStyle(lockBlurStyle)\n',
+)
+replace_exact(
+    shell,
+    """    function normalizedOverlayMode(value) {
+        const key = String(value || "");
+        return ["none", "dark", "light"].indexOf(key) >= 0 ? key : "none";
+    }
+
+""",
+    """    function normalizedOverlayMode(value) {
+        const key = String(value || "");
+        return ["none", "dark", "light"].indexOf(key) >= 0 ? key : "none";
+    }
+
+    function normalizedBlurStyle(value) {
+        const key = String(value || "");
+        return ["smooth", "pixelated"].indexOf(key) >= 0 ? key : "smooth";
+    }
+
+""",
+)
+replace_exact(
+    shell,
+    '        lockWallpaperBlur = 0;\n        lockWeatherLocation = "";\n',
+    '        lockWallpaperBlur = 0;\n'
+    '        lockBlurStyle = "smooth";\n'
+    '        lockWeatherLocation = "";\n',
+)
+replace_exact(
+    shell,
+    '            lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);\n'
+    '            lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);\n',
+    '            lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);\n'
+    '            lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);\n'
+    '            lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);\n',
+)
+replace_exact(
+    shell,
+    '                wallpaperBlur: root.wallpaperBlur\n'
+    '                autoAccents: lockContrastCache.colors\n',
+    '                wallpaperBlur: root.wallpaperBlur\n'
+    '                blurStyle: root.blurStyle\n'
+    '                autoAccents: lockContrastCache.colors\n',
+)
+
+scene = "config/quickshell/awtarchy-lock/LockScene.qml"
+replace_exact(
+    scene,
+    '    required property real wallpaperBlur\n'
+    '    required property var autoAccents\n',
+    '    required property real wallpaperBlur\n'
+    '    required property string blurStyle\n'
+    '    required property var autoAccents\n',
+)
+old_wallpaper = """        Image {
+            id: wallpaperImage
+            readonly property var geometry: root.wallpaperGeometry()
+            x: geometry.x
+            y: geometry.y
+            width: geometry.width
+            height: geometry.height
+            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+                && root.wallpaperBlur <= 0
+            source: root.wallpaperSource
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: true
+        }
+
+        MultiEffect {
+            id: wallpaperBlurEffect
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            source: wallpaperImage
+            autoPaddingEnabled: false
+            blurEnabled: root.wallpaperBlur > 0
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && root.wallpaperBlur > 0
+                && wallpaperImage.status === Image.Ready
+        }
+"""
+new_wallpaper = """        Image {
+            id: wallpaperImage
+            readonly property var geometry: root.wallpaperGeometry()
+            x: geometry.x
+            y: geometry.y
+            width: geometry.width
+            height: geometry.height
+            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+            source: root.wallpaperSource
+            fillMode: Image.Stretch
+            asynchronous: true
+            cache: true
+        }
+
+        ShaderEffectSource {
+            id: wallpaperTexture
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            sourceItem: wallpaperImage
+            hideSource: true
+            live: true
+            recursive: false
+            smooth: true
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && wallpaperImage.status === Image.Ready
+        }
+
+        MultiEffect {
+            id: wallpaperSmoothBlur
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            source: wallpaperTexture
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && root.wallpaperBlur > 0
+                && root.blurStyle === "smooth"
+                && wallpaperImage.status === Image.Ready
+        }
+
+        ShaderEffectSource {
+            id: wallpaperPixelatedBlur
+            x: wallpaperImage.x
+            y: wallpaperImage.y
+            width: wallpaperImage.width
+            height: wallpaperImage.height
+            sourceItem: wallpaperImage
+            live: true
+            recursive: false
+            smooth: false
+            readonly property real pixelFactor: 1
+                + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+            textureSize: Qt.size(
+                Math.max(1, Math.round(width / pixelFactor)),
+                Math.max(1, Math.round(height / pixelFactor)))
+            visible: root.backgroundMode === "wallpaper"
+                && root.wallpaperSource.length > 0
+                && root.wallpaperBlur > 0
+                && root.blurStyle === "pixelated"
+                && wallpaperImage.status === Image.Ready
+        }
+"""
+replace_exact(scene, old_wallpaper, new_wallpaper)
+shutil.copyfile(scene, "config/quickshell/awtarchy/LockPreviewScene.qml")
+
+surface = "config/quickshell/awtarchy-lock/LockSurface.qml"
+replace_exact(
+    surface,
+    '    required property real wallpaperBlur\n'
+    '    required property var autoAccents\n',
+    '    required property real wallpaperBlur\n'
+    '    required property string blurStyle\n'
+    '    required property var autoAccents\n',
+)
+old_desktop = """            Image {
+                id: desktopCapture
+                anchors.fill: parent
+                source: root.captureSource
+                asynchronous: false
+                cache: false
+                fillMode: Image.Stretch
+                visible: status === Image.Ready
+                    && (!root.transitionComplete || root.wallpaperBlur <= 0)
+            }
+        }
+
+        MultiEffect {
+            id: desktopCaptureBlur
+            anchors.fill: parent
+            visible: root.wallpaperBlur > 0 && desktopCapture.status === Image.Ready
+            source: desktopCapture
+            autoPaddingEnabled: false
+            blurEnabled: root.wallpaperBlur > 0
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+        }
+"""
+new_desktop = """            Image {
+                id: desktopCapture
+                anchors.fill: parent
+                source: root.captureSource
+                asynchronous: false
+                cache: false
+                fillMode: Image.Stretch
+                visible: status === Image.Ready
+            }
+
+            ShaderEffectSource {
+                id: desktopCaptureTexture
+                anchors.fill: parent
+                sourceItem: desktopCapture
+                hideSource: true
+                live: true
+                recursive: false
+                smooth: true
+                visible: desktopCapture.status === Image.Ready
+            }
+
+            MultiEffect {
+                id: desktopCaptureSmoothBlur
+                anchors.fill: parent
+                source: desktopCaptureTexture
+                autoPaddingEnabled: false
+                blurEnabled: true
+                blurMax: 32
+                blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+                visible: root.transitionComplete
+                    && root.wallpaperBlur > 0
+                    && root.blurStyle === "smooth"
+                    && desktopCapture.status === Image.Ready
+            }
+
+            ShaderEffectSource {
+                id: desktopCapturePixelatedBlur
+                anchors.fill: parent
+                sourceItem: desktopCapture
+                live: true
+                recursive: false
+                smooth: false
+                readonly property real pixelFactor: 1
+                    + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+                textureSize: Qt.size(
+                    Math.max(1, Math.round(width / pixelFactor)),
+                    Math.max(1, Math.round(height / pixelFactor)))
+                visible: root.transitionComplete
+                    && root.wallpaperBlur > 0
+                    && root.blurStyle === "pixelated"
+                    && desktopCapture.status === Image.Ready
+            }
+        }
+"""
+replace_exact(surface, old_desktop, new_desktop)
+replace_exact(
+    surface,
+    '            wallpaperBlur: root.wallpaperBlur\n'
+    '            autoAccents: root.autoAccents\n',
+    '            wallpaperBlur: root.wallpaperBlur\n'
+    '            blurStyle: root.blurStyle\n'
+    '            autoAccents: root.autoAccents\n',
+)
+
+layer = "config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
+replace_exact(
+    layer,
+    """    Item {
+        id: irisMaskShape
+        anchors.fill: parent
+        visible: false
+        layer.enabled: true
+        layer.smooth: true
+        Rectangle {
+            anchors.centerIn: parent
+            width: root.irisDiameter
+            height: width
+            radius: width / 2
+            color: "#ffffff"
+        }
+    }
+
+    MultiEffect {
+""",
+    """    Item {
+        id: irisMaskShape
+        anchors.fill: parent
+        layer.enabled: true
+        layer.smooth: true
+        Rectangle {
+            anchors.centerIn: parent
+            width: root.irisDiameter
+            height: width
+            radius: width / 2
+            color: "#ffffff"
+        }
+    }
+
+    ShaderEffectSource {
+        id: irisMaskTexture
+        x: root.width + 64
+        y: 0
+        width: root.width
+        height: root.height
+        sourceItem: irisMaskShape
+        hideSource: true
+        live: true
+        recursive: false
+        smooth: true
+    }
+
+    MultiEffect {
+""",
+)
+replace_exact(layer, '        maskSource: irisMaskShape\n', '        maskSource: irisMaskTexture\n')
+shutil.copyfile(layer, "config/quickshell/awtarchy/LockPreviewTransitionLayer.qml")
+
+editor = "config/quickshell/awtarchy/LockscreenEditor.qml"
+replace_exact(
+    editor,
+    '    property int draftWallpaperBlur: 0\n'
+    '    property bool draftWallpaperBlurExplicit: false\n',
+    '    property int draftWallpaperBlur: 0\n'
+    '    property string draftBlurStyle: "smooth"\n'
+    '    property bool draftWallpaperBlurExplicit: false\n',
+)
+replace_exact(
+    editor,
+    '    property bool showEditorGrid: false\n',
+    '    property bool showEditorGrid: false\n'
+    '    property real settingsBarOffsetY: 0\n',
+)
+replace_exact(
+    editor,
+    '            wallpaperBlur: draftWallpaperBlur,\n'
+    '            wallpaperBlurExplicit: draftWallpaperBlurExplicit,\n',
+    '            wallpaperBlur: draftWallpaperBlur,\n'
+    '            blurStyle: draftBlurStyle,\n'
+    '            wallpaperBlurExplicit: draftWallpaperBlurExplicit,\n',
+)
+replace_exact(
+    editor,
+    '        draftWallpaperBlurExplicit = snapshot.wallpaperBlurExplicit === true;\n'
+    '        draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0\n',
+    '        draftWallpaperBlurExplicit = snapshot.wallpaperBlurExplicit === true;\n'
+    '        draftBlurStyle = ["smooth", "pixelated"].indexOf(String(snapshot.blurStyle)) >= 0\n'
+    '            ? String(snapshot.blurStyle) : "smooth";\n'
+    '        draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0\n',
+)
+replace_exact(
+    editor,
+    """    function setDraftWallpaperBlur(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next))
+            return;
+        recordUndoBeforeChange();
+        draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+        draftWallpaperBlurExplicit = true;
+    }
+
+""",
+    """    function setDraftWallpaperBlur(value) {
+        const next = Number(value);
+        if (!Number.isFinite(next))
+            return;
+        recordUndoBeforeChange();
+        draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+        draftWallpaperBlurExplicit = true;
+    }
+
+    function setDraftBlurStyle(value) {
+        const style = String(value || "");
+        if (["smooth", "pixelated"].indexOf(style) < 0 || draftBlurStyle === style)
+            return;
+        recordUndoBeforeChange();
+        draftBlurStyle = style;
+    }
+
+    function resetDraftBrightness() {
+        setDraftBrightness(0);
+    }
+
+    function resetDraftWallpaperBlur() {
+        setDraftWallpaperBlur(0);
+    }
+
+    function resetDraftBackgroundOpacity() {
+        setDraftBackgroundOpacity(100);
+    }
+
+    function resetDraftWallpaperFocal() {
+        setDraftWallpaperFocal(0.5, 0.5);
+    }
+
+""",
+)
+replace_exact(
+    editor,
+    """    function setDraftEntryTransitionDuration(value) {
+        const numeric = Math.round(Number(value));
+        if (!Number.isFinite(numeric)) return;
+        recordUndoBeforeChange();
+        draftEntryTransitionDuration = Math.max(800, Math.min(6000, numeric));
+    }
+
+""",
+    """    function setDraftEntryTransitionDuration(value) {
+        const numeric = Math.round(Number(value));
+        if (!Number.isFinite(numeric)) return;
+        recordUndoBeforeChange();
+        draftEntryTransitionDuration = Math.max(800, Math.min(6000, numeric));
+    }
+
+    function resetDraftEntryTransitionDuration() {
+        setDraftEntryTransitionDuration(1800);
+    }
+
+""",
+)
+replace_exact(
+    editor,
+    '        draftWallpaperBlur = 0;\n'
+    '        draftWallpaperBlurExplicit = false;\n',
+    '        draftWallpaperBlur = 0;\n'
+    '        draftBlurStyle = "smooth";\n'
+    '        draftWallpaperBlurExplicit = false;\n',
+)
+replace_exact(
+    editor,
+    '        draftWallpaperBlur = BarState.lockscreenWallpaperBlur();\n'
+    '        draftWallpaperBlurExplicit = false;\n',
+    '        draftWallpaperBlur = BarState.lockscreenWallpaperBlur();\n'
+    '        draftBlurStyle = BarState.lockscreenBlurStyle();\n'
+    '        draftWallpaperBlurExplicit = false;\n',
+)
+replace_exact(
+    editor,
+    '        loadPersistedDraft();\n        undoStack = [];\n',
+    '        loadPersistedDraft();\n'
+    '        settingsBarOffsetY = 0;\n'
+    '        undoStack = [];\n',
+)
+replace_exact(
+    editor,
+    '            String(draftEntryTransitionDuration),\n'
+    '            String(draftLastBackgroundOpacity)\n',
+    '            String(draftEntryTransitionDuration),\n'
+    '            String(draftLastBackgroundOpacity),\n'
+    '            String(draftBlurStyle)\n',
+)
+replace_exact(
+    editor,
+    '                wallpaperBlur: root.draftWallpaperBlur\n'
+    '                autoAccents: root.draftAutoAccents\n',
+    '                wallpaperBlur: root.draftWallpaperBlur\n'
+    '                blurStyle: root.draftBlurStyle\n'
+    '                autoAccents: root.draftAutoAccents\n',
+)
+replace_exact(
+    editor,
+    '                overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur\n',
+    '                overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur\n'
+    '                blurStyle: root.draftBlurStyle\n',
+)
+replace_exact(
+    editor,
+    """            Rectangle {
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                height: editorDockContent.implicitHeight + 18
+""",
+    """            Rectangle {
+                id: settingsBar
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.bottom: parent.bottom
+                anchors.bottomMargin: root.settingsBarOffsetY
+                height: editorDockContent.implicitHeight + 18
+""",
+)
+replace_exact(
+    editor,
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }\n'
+    '                        Text { text: "Brightness";',
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }\n'
+    '                        SettingsButton { label: "Reset"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; textSize: 9; onClicked: root.resetDraftWallpaperFocal() }\n'
+    '                        Text { text: "Brightness";',
+)
+replace_exact(
+    editor,
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }\n'
+    '                        Text { text: "Blur";',
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }\n'
+    '                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBrightness() }\n'
+    '                        Text { text: "Blur";',
+)
+replace_exact(
+    editor,
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }\n'
+    '                        Item { Layout.fillWidth: true }\n',
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }\n'
+    '                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftWallpaperBlur() }\n'
+    '                        Text { text: "Blur Type"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }\n'
+    '                        SettingsButton { label: "Smooth"; active: root.draftBlurStyle === "smooth"; textSize: 9; onClicked: root.setDraftBlurStyle("smooth") }\n'
+    '                        SettingsButton { label: "Pixelated"; active: root.draftBlurStyle === "pixelated"; textSize: 9; onClicked: root.setDraftBlurStyle("pixelated") }\n'
+    '                        Item { Layout.fillWidth: true }\n',
+)
+replace_exact(
+    editor,
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }\n'
+    '                        SettingsButton { label: "Opaque";',
+    '                        selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }\n'
+    '                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBackgroundOpacity() }\n'
+    '                        SettingsButton { label: "Opaque";',
+)
+replace_exact(editor, 'SettingsButton { label: "Reverse Iris";', 'SettingsButton { label: "Iris Reveal";')
+replace_exact(
+    editor,
+    '                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(2) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }\n'
+    '                        Item { Layout.fillWidth: true }\n',
+    '                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(2) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }\n'
+    '                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftEntryTransitionDuration() }\n'
+    '                        Item { Layout.fillWidth: true }\n',
+)
+replace_exact(
+    editor,
+    """                    }
+                }
+            }
+        }
+    }
+
+    Variants {
+""",
+    """                    }
+                }
+
+                MouseArea {
+                    id: settingsBarAltDrag
+                    anchors.fill: parent
+                    z: 1000
+                    acceptedButtons: Qt.LeftButton
+                    property real dragStartSceneY: 0
+                    property real dragStartOffsetY: 0
+
+                    onPressed: mouse => {
+                        if (!(mouse.modifiers & Qt.AltModifier)) {
+                            mouse.accepted = false;
+                            return;
+                        }
+                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                        dragStartSceneY = point.y;
+                        dragStartOffsetY = root.settingsBarOffsetY;
+                        mouse.accepted = true;
+                    }
+                    onPositionChanged: mouse => {
+                        if (!pressed)
+                            return;
+                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                        const limit = Math.max(0, editorFocus.height - settingsBar.height);
+                        root.settingsBarOffsetY = Math.max(0, Math.min(
+                            limit, dragStartOffsetY + dragStartSceneY - point.y));
+                    }
+                }
+            }
+        }
+    }
+
+    Variants {
+""",
+)
+
+if Path(scene).read_bytes() != Path("config/quickshell/awtarchy/LockPreviewScene.qml").read_bytes():
+    raise SystemExit("scene parity copy failed")
+if Path(layer).read_bytes() != Path("config/quickshell/awtarchy/LockPreviewTransitionLayer.qml").read_bytes():
+    raise SystemExit("transition parity copy failed")
