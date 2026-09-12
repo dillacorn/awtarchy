@@ -26,6 +26,11 @@ rejects() {
     ! grep -Fq -- "$needle" "$file" || fail "$message"
 }
 
+rejects_regex() {
+    local file="$1" pattern="$2" message="$3"
+    ! grep -Eq -- "$pattern" "$file" || fail "$message"
+}
+
 # Pass A: secure password presentation is immediately usable above the running
 # transition, but authentication ownership and logo sequencing do not move.
 contains "$SURFACE" 'z: 1100' \
@@ -116,6 +121,8 @@ contains "$EDITOR" 'onEditingFinished: root.setDraftWallpaperBlur(text)' \
     'blur numeric entry is not bound to authoritative blur state'
 contains "$EDITOR" 'onEditingFinished: root.setDraftBackgroundOpacity(text)' \
     'background opacity numeric entry is not bound to authoritative opacity state'
+rejects_regex "$EDITOR" 'validator: (Int|Double)Validator \{[^}]*\};' \
+    'inline validator object is terminated by a semicolon and breaks QML parsing'
 
 # Pass C: one shared draft drives clean preview windows on every non-editing
 # display. Selection/group operations remain transient while transforms and
