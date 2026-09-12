@@ -233,7 +233,7 @@ WlSessionLockSurface {
             verticalAlignment: TextInput.AlignVCenter
             echoMode: TextInput.Password
             inputMethodHints: Qt.ImhSensitiveData
-            enabled: root.transitionComplete && (!auth.busy || auth.responseRequired)
+            enabled: !auth.busy || auth.responseRequired
             activeFocusOnTab: true
 
             onTextChanged: {
