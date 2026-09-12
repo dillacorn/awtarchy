@@ -140,10 +140,14 @@ contains "$EDITOR" 'function beginGroupResize(' \
     'group proportional scaling operation is missing'
 contains "$EDITOR" 'function updateGroupResize(' \
     'group proportional scaling update is missing'
-contains "$EDITOR" 'function beginGroupDrag(' \
-    'group drag operation is missing'
-contains "$EDITOR" 'function updateGroupDrag(' \
-    'group drag update is missing'
+contains "$EDITOR" 'function translateSelectedElements(dx, dy, selectPrimary)' \
+    'group drag translation path is missing'
+contains "$EDITOR" 'root.translateSelectedElements(' \
+    'pointer dragging does not move the selected group through the shared translation path'
+contains "$EDITOR" 'root.beginHistoryTransaction()' \
+    'group drag does not begin an atomic undo transaction'
+contains "$EDITOR" 'root.commitHistoryTransaction()' \
+    'group drag does not commit its atomic undo transaction'
 
 # Pass D: custom image rotation presets and arbitrary numeric input all use the
 # same draft rotation value and existing history/persistence path.
