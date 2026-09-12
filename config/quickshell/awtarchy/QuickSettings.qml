@@ -40,6 +40,11 @@ Singleton {
     property bool barIconsOpen: false
     property bool barAppearanceOpen: false
     property bool barVisibilityOpen: false
+    property bool awtarchyEditMode: false
+    property bool cursorSectionExpanded: false
+    property bool lockscreenSectionExpanded: false
+    property string lockscreenWeatherLocationDraft: ""
+    property string lockscreenWeatherLocationError: ""
     property var layoutOrderDraft: []
     property var layoutHiddenDraft: []
     property var savedLayout: ({ order: [], hidden: [] })
@@ -242,7 +247,6 @@ Singleton {
             String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
         ]);
     }
-
     function finishPreparedOpen() {
         if (!openPreparing)
             return;
@@ -533,6 +537,30 @@ Singleton {
         close();
     }
 
+    function openLockscreenEditor() {
+        const target = root.activeScreen;
+        root.close();
+        Qt.callLater(() => LockscreenEditor.openForScreen(target));
+    }
+
+    function saveLockscreenWeatherLocation() {
+        const value = String(lockscreenWeatherLocationDraft || "").trim();
+        const points = Array.from(value);
+        if (points.length > 96 || /[\u0000-\u001f\u007f-\u009f]/.test(value)) {
+            lockscreenWeatherLocationError = "Use at most 96 characters with no control characters";
+            return;
+        }
+        lockscreenWeatherLocationError = "";
+        lockscreenWeatherLocationDraft = value;
+        root.queueStateCommand(["set-lockscreen-weather-location", value]);
+    }
+
+    function resetLockscreenPresentation() {
+        lockscreenWeatherLocationDraft = "";
+        lockscreenWeatherLocationError = "";
+        root.queueStateCommand(["reset-lockscreen-presentation"]);
+    }
+
     function openSchedulerAuthorization() {
         if (schedulerAuthBusy)
             return;
@@ -768,6 +796,8 @@ Singleton {
         schedulerArgsDirty = false;
         nightLightScheduleEditorOpen = false;
         nightLightScheduleError = "";
+        lockscreenWeatherLocationDraft = BarState.lockscreenWeatherLocation();
+        lockscreenWeatherLocationError = "";
         loadSavedView(targetScreen);
         prepareWindowOpen(targetScreen);
     }
@@ -2100,53 +2130,236 @@ Singleton {
                                         textSize: root.scaledText(9)
                                         onClicked: root.openAwtarchyTips()
                                     }
+                                    SettingsButton {
+                                        label: root.awtarchyEditMode ? "Done" : "Edit"
+                                        active: root.awtarchyEditMode
+                                        textSize: root.scaledText(9)
+                                        onClicked: {
+                                            root.awtarchyEditMode = !root.awtarchyEditMode;
+                                            if (!root.awtarchyEditMode) {
+                                                root.cursorSectionExpanded = false;
+                                                root.lockscreenSectionExpanded = false;
+                                            }
+                                        }
+                                    }
                                 }
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Built-in manual for keybinds, Quickshell, display, gaming, packages, maintenance, networking, troubleshooting, and Extra Notes."
+                                    visible: !root.awtarchyEditMode
+                                    text: "Built-in manual and Awtarchy desktop preferences."
                                     color: Theme.muted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: root.scaledText(8)
                                     wrapMode: Text.Wrap
                                 }
 
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    spacing: 8
+                                    visible: root.awtarchyEditMode
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Cursor"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(9)
+                                        font.bold: true
+                                    }
+                                    SettingsButton {
+                                        label: root.cursorSectionExpanded ? "Collapse" : "Expand"
+                                        active: root.cursorSectionExpanded
+                                        textSize: root.scaledText(9)
+                                        onClicked: root.cursorSectionExpanded = !root.cursorSectionExpanded
+                                    }
+                                }
+
                                 CursorThemeSettings {
                                     id: awtarchyCursorThemeSection
                                     Layout.fillWidth: true
-                                    active: quickSettingsWindow.visible
+                                    visible: root.awtarchyEditMode && root.cursorSectionExpanded
+                                    active: visible && quickSettingsWindow.visible
                                         && !root.settingsOpen
                                         && root.quickSettingsSectionVisible("awtarchy")
                                 }
 
-                                Text {
+                                RowLayout {
                                     Layout.fillWidth: true
-                                    text: "Lockscreen Animation"
-                                    color: Theme.foreground
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: root.scaledText(9)
-                                    font.bold: true
+                                    spacing: 8
+                                    visible: root.awtarchyEditMode
+
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Lockscreen"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(9)
+                                        font.bold: true
+                                    }
+                                    Text {
+                                        text: BarState.lockscreenAnimationPreference()
+                                        color: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(8)
+                                    }
+                                    ColumnLayout {
+                                        id: lockscreenHeaderActions
+                                        spacing: 5
+                                        Layout.alignment: Qt.AlignTop
+                                        SettingsButton {
+                                            label: root.lockscreenSectionExpanded ? "Collapse" : "Expand"
+                                            active: root.lockscreenSectionExpanded
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
+                                        }
+                                        SettingsButton {
+                                            label: "Edit Layout"
+                                            active: true
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.openLockscreenEditor()
+                                        }
+                                    }
                                 }
 
-                                Flow {
+                                ColumnLayout {
                                     Layout.fillWidth: true
-                                    Layout.preferredHeight: childrenRect.height
+                                    visible: root.awtarchyEditMode && root.lockscreenSectionExpanded
                                     spacing: 5
 
-                                    Repeater {
-                                        model: BarState.lockscreenAnimationPresets
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Lockscreen Animation"
+                                        color: Theme.foreground
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(9)
+                                        font.bold: true
+                                    }
 
+                                    Flow {
+                                        Layout.fillWidth: true
+                                        Layout.preferredHeight: childrenRect.height
+                                        spacing: 5
+
+                                        Repeater {
+                                            model: BarState.lockscreenAnimationPresets
+
+                                            SettingsButton {
+                                                required property var modelData
+                                                label: String(modelData.label)
+                                                active: BarState.lockscreenAnimationPreference()
+                                                    === String(modelData.key)
+                                                textSize: root.scaledText(9)
+                                                onClicked: root.queueStateCommand([
+                                                    "set-lockscreen-animation", String(modelData.key)
+                                                ])
+                                            }
+                                        }
+                                    }
+
+                                    Text { Layout.fillWidth: true; text: "Background"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
                                         SettingsButton {
-                                            required property var modelData
-                                            label: String(modelData.label)
-                                            active: BarState.lockscreenAnimationPreference()
-                                                === String(modelData.key)
+                                            label: "Black"
+                                            active: BarState.lockscreenBackground() === "black"
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.queueStateCommand(["set-lockscreen-background", "black"])
+                                        }
+                                        SettingsButton {
+                                            label: "Wallpaper"
+                                            active: BarState.lockscreenBackground() === "wallpaper"
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.queueStateCommand(["set-lockscreen-background", "wallpaper"])
+                                        }
+                                        Item { Layout.fillWidth: true }
+                                    }
+
+                                    GridLayout {
+                                        Layout.fillWidth: true
+                                        columns: 2
+                                        columnSpacing: 8
+                                        rowSpacing: 4
+
+                                        Text { Layout.fillWidth: true; text: "Mouse Interaction"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }
+                                        Text { Layout.fillWidth: true; text: "Logo Physics"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        RowLayout {
+                                            spacing: 5
+                                            SettingsButton { label: "30 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 30; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "30"]) }
+                                            SettingsButton { label: "60 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 60; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "60"]) }
+                                            SettingsButton { label: "90 Hz"; active: BarState.lockscreenLogoPhysicsHz() === 90; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-logo-physics-hz", "90"]) }
+                                        }
+
+                                        Text { Layout.fillWidth: true; text: "Entry Transition"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        Flow {
+                                            Layout.fillWidth: true
+                                            spacing: 5
+                                            SettingsButton { label: "Fade"; active: BarState.lockscreenEntryTransition() === "fade"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "fade"]) }
+                                            SettingsButton { label: "Pixel"; active: BarState.lockscreenEntryTransition() === "pixel"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "pixel"]) }
+                                            SettingsButton { label: "Reverse Iris"; active: BarState.lockscreenEntryTransition() === "iris"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "iris"]) }
+                                            SettingsButton { label: "Edges"; active: BarState.lockscreenEntryTransition() === "edges"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "edges"]) }
+                                            SettingsButton { label: "Wipe"; active: BarState.lockscreenEntryTransition() === "wipe"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "wipe"]) }
+                                        }
+                                        Text { Layout.fillWidth: true; text: "Visualizer"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        SettingsButton {
+                                            label: BarState.lockscreenVisualizer().enabled ? "On" : "Off"
+                                            active: BarState.lockscreenVisualizer().enabled
                                             textSize: root.scaledText(9)
                                             onClicked: root.queueStateCommand([
-                                                "set-lockscreen-animation", String(modelData.key)
+                                                "set-lockscreen-visualizer-enabled",
+                                                BarState.lockscreenVisualizer().enabled ? "false" : "true"
                                             ])
                                         }
                                     }
+
+                                    Text { Layout.fillWidth: true; text: "Location override (optional)"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9); font.bold: true }
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 5
+                                        Rectangle {
+                                            Layout.fillWidth: true
+                                            Layout.preferredHeight: 28
+                                            color: Theme.popupBackground
+                                            border.width: 1
+                                            border.color: lockscreenWeatherLocationInput.activeFocus ? Theme.focus : Theme.active
+                                            TextInput {
+                                                id: lockscreenWeatherLocationInput
+                                                anchors.fill: parent
+                                                anchors.margins: 6
+                                                text: root.lockscreenWeatherLocationDraft
+                                                maximumLength: 96
+                                                color: Theme.foreground
+                                                selectionColor: Theme.focus
+                                                selectedTextColor: Theme.background
+                                                font.family: Theme.fontFamily
+                                                font.pixelSize: root.scaledText(9)
+                                                clip: true
+                                                onTextChanged: root.lockscreenWeatherLocationDraft = text
+                                                Keys.onReturnPressed: event => { root.saveLockscreenWeatherLocation(); event.accepted = true; }
+                                            }
+                                        }
+                                        SettingsButton { label: "Save Location"; textSize: root.scaledText(9); onClicked: root.saveLockscreenWeatherLocation() }
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        visible: root.lockscreenWeatherLocationError.length > 0
+                                        text: root.lockscreenWeatherLocationError
+                                        color: Theme.error
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(8)
+                                        wrapMode: Text.Wrap
+                                    }
+                                    Text {
+                                        Layout.fillWidth: true
+                                        text: "Automatic location uses your approximate public-IP location from ipwho.is, then sends coordinates to Open-Meteo. Enter a location above only to override it."
+                                        color: Theme.muted
+                                        font.family: Theme.fontFamily
+                                        font.pixelSize: root.scaledText(8)
+                                        wrapMode: Text.Wrap
+                                    }
+                                    SettingsButton { label: "Restore Awtarchy Defaults"; textSize: root.scaledText(9); onClicked: root.resetLockscreenPresentation() }
                                 }
                             }
                         }

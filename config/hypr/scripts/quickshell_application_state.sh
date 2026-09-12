@@ -19,6 +19,17 @@ MAX_ICON_SCALE=200
 SAVE_VERSION=2
 QUICK_SETTINGS_LAYOUT_SAVE_VERSION=1
 LOCKSCREEN_ANIMATIONS_JSON='["random","swarm","edges","center","split","off"]'
+LOCKSCREEN_ENTRY_TRANSITIONS_JSON='["fade","pixel","iris","edges","wipe"]'
+LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
+LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
+LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
+LOCKSCREEN_BLUR_STYLES_JSON='["smooth","pixelated"]'
+LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
+LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
+LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
+LOCKSCREEN_CUSTOM_IMAGE_MAX=12
+LOCKSCREEN_VISUALIZER_SHAPES_JSON='["straight","arc","circle"]'
+LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
 QUICK_SETTINGS_SECTIONS_JSON='["brightness","output-volume","bar","display-effects","submap","wallpaper","awtarchy","smtty","scheduler","numlock","title-bars"]'
 WORKSPACE_STYLES_JSON='["awtarchy","numbers","icons","workflow","phases","custom-symbol"]'
@@ -89,6 +100,17 @@ validate_lockscreen_animation() {
     fi
 }
 
+validate_lockscreen_entry_transition() {
+    local value="$1"
+    if ! jq -e -n \
+        --arg value "$value" \
+        --argjson allowed "$LOCKSCREEN_ENTRY_TRANSITIONS_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen entry transition: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
 
 validate_cursor_variant() {
     local value="$1"
@@ -151,6 +173,585 @@ set_lockscreen_animation() {
     validate_lockscreen_animation "$value"
     new_tmp
     jq --arg value "$value" '.lockscreen_animation = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+set_lockscreen_entry_transition() {
+    local value="$1"
+    validate_lockscreen_entry_transition "$value"
+    new_tmp
+    jq --arg value "$value" '.lockscreen_entry_transition = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+set_lockscreen_logo_physics_hz() {
+    local value="$1"
+    case "$value" in
+        30|60|90) ;;
+        *)
+            printf 'lockscreen logo physics Hz must be 30, 60, or 90\n' >&2
+            exit 2
+            ;;
+    esac
+    new_tmp
+    jq --argjson value "$value" '.lockscreen_logo_physics_hz = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+set_lockscreen_option() {
+    local field="$1" value="$2" label="$3" enabled
+    case "$field" in
+        lockscreen_audio_reactive|lockscreen_mouse_interactive|lockscreen_show_logo|lockscreen_show_time|lockscreen_show_date|lockscreen_show_username|lockscreen_show_weather) ;;
+        *)
+            printf 'unsupported lockscreen option: %s\n' "$field" >&2
+            exit 2
+            ;;
+    esac
+    enabled="$(parse_bool "$value" "$label")"
+    new_tmp
+    jq --arg field "$field" --argjson enabled "$enabled" '.[$field] = $enabled' \
+        "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+lockscreen_composition_defaults() {
+    jq -cn '{
+        lockscreen_wallpaper_fit: "cover",
+        lockscreen_wallpaper_focal_x: 0.5,
+        lockscreen_wallpaper_focal_y: 0.5,
+        lockscreen_overlay_mode: "none",
+        lockscreen_overlay_strength: 0,
+        lockscreen_wallpaper_blur: 0,
+        lockscreen_blur_style: "smooth",
+        lockscreen_background_opacity_previous: 100
+    }'
+}
+
+validate_lockscreen_wallpaper_fit() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_WALLPAPER_FITS_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen wallpaper fit: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+validate_lockscreen_overlay_mode() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_OVERLAY_MODES_JSON"         '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen overlay mode: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+validate_lockscreen_blur_style() {
+    local value="$1"
+    if ! jq -e -n --arg value "$value" --argjson allowed "$LOCKSCREEN_BLUR_STYLES_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen blur style: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+normalize_unit_interval() {
+    local value="$1" label="$2" normalized
+    if ! normalized="$(jq -er -n --arg value "$value" '
+        ($value | tonumber?) as $number
+        | if $number != null and $number >= 0 and $number <= 1 then $number
+          else error("out of range") end
+    ' 2>/dev/null)"; then
+        printf '%s must be 0-1\n' "$label" >&2
+        exit 2
+    fi
+    printf '%s' "$normalized"
+}
+
+normalize_percent_integer() {
+    local value="$1" label="$2"
+    [[ "$value" =~ ^[0-9]+$ ]] || {
+        printf '%s must be an integer\n' "$label" >&2
+        exit 2
+    }
+    local numeric=$((10#$value))
+    (( numeric >= 0 && numeric <= 100 )) || {
+        printf '%s must be 0-100\n' "$label" >&2
+        exit 2
+    }
+    printf '%d' "$numeric"
+}
+
+normalize_lockscreen_visualizer_json() {
+    local value="$1"
+    jq -ce -n \
+        --argjson candidate "$value" \
+        --argjson defaults "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" \
+        --argjson shapes "$LOCKSCREEN_VISUALIZER_SHAPES_JSON" '
+        def allowed_keys: ["bands", "bend", "color", "enabled", "gap", "height", "opacity", "performance", "scale", "sensitivity", "shape", "stretch_x", "stretch_y", "x", "y"];
+        if ($candidate | type) != "object"
+            or (($candidate | keys - allowed_keys | length) != 0)
+        then error("invalid lockscreen visualizer")
+        else
+            ($candidate.enabled // $defaults.enabled) as $enabled
+            | ($candidate.x // $defaults.x) as $x
+            | ($candidate.y // $defaults.y) as $y
+            | ($candidate.scale // $defaults.scale) as $scale
+            | ($candidate.stretch_x // $defaults.stretch_x) as $stretch_x
+            | ($candidate.stretch_y // $defaults.stretch_y) as $stretch_y
+            | ($candidate.opacity // $defaults.opacity) as $opacity
+            | ($candidate.color // $defaults.color) as $color
+            | ($candidate.bands // $defaults.bands) as $bands
+            | ($candidate.gap // $defaults.gap) as $gap
+            | ($candidate.height // $defaults.height) as $height
+            | ($candidate.sensitivity // $defaults.sensitivity) as $sensitivity
+            | ($candidate.shape // $defaults.shape) as $shape
+            | ($candidate.bend // $defaults.bend) as $bend
+            | ($candidate.performance // $defaults.performance) as $performance
+            | if
+                ($enabled | type) == "boolean"
+                and ($x | type) == "number" and $x >= 0.05 and $x <= 0.95
+                and ($y | type) == "number" and $y >= 0.08 and $y <= 0.92
+                and ($scale | type) == "number" and $scale >= 0.5 and $scale <= 100
+                and ($stretch_x | type) == "number" and $stretch_x >= 0.25 and $stretch_x <= 4
+                and ($stretch_y | type) == "number" and $stretch_y >= 0.25 and $stretch_y <= 4
+                and ($opacity | type) == "number" and $opacity >= 0 and $opacity <= 100
+                and ($color | type) == "string"
+                and ($color == "auto" or ($color | test("^#[0-9A-Fa-f]{6}$")))
+                and ($bands | type) == "number" and ($bands | floor) == $bands and $bands >= 4 and $bands <= 64
+                and ($gap | type) == "number" and ($gap | floor) == $gap and $gap >= 0 and $gap <= 24
+                and ($height | type) == "number" and ($height | floor) == $height and $height >= 25 and $height <= 300
+                and ($sensitivity | type) == "number" and ($sensitivity | floor) == $sensitivity and $sensitivity >= 25 and $sensitivity <= 300
+                and ($shape | type) == "string" and ($shapes | index($shape) != null)
+                and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -2000 and $bend <= 2000
+                and ($performance == "balanced" or $performance == "responsive" or $performance == "high")
+              then {
+                enabled: $enabled,
+                x: $x,
+                y: $y,
+                scale: $scale,
+                stretch_x: $stretch_x,
+                stretch_y: $stretch_y,
+                opacity: $opacity,
+                color: (if $color == "auto" then "auto" else ($color | ascii_downcase) end),
+                bands: $bands,
+                gap: $gap,
+                height: $height,
+                sensitivity: $sensitivity,
+                shape: $shape,
+                bend: $bend,
+                performance: $performance
+              }
+              else error("invalid lockscreen visualizer")
+              end
+        end
+    '
+}
+
+set_lockscreen_visualizer_enabled() {
+    local enabled current normalized
+    enabled="$(parse_bool "$1" 'lockscreen visualizer enabled')"
+    current="$(jq -c --argjson defaults "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" \
+        '.lockscreen_visualizer // $defaults' "$STATE_FILE")"
+    if ! normalized="$(normalize_lockscreen_visualizer_json "$current" 2>/dev/null)"; then
+        normalized="$LOCKSCREEN_VISUALIZER_DEFAULT_JSON"
+    fi
+    new_tmp
+    jq --argjson visualizer "$normalized" --argjson enabled "$enabled" '
+        .lockscreen_visualizer = ($visualizer | .enabled = $enabled)
+    ' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+set_lockscreen_background_opacity() {
+    local value
+    value="$(normalize_percent_integer "$1" 'lockscreen background opacity')"
+    new_tmp
+    jq --argjson value "$value" '
+        if $value < 100 then .lockscreen_background_opacity_previous = $value else . end
+        | .lockscreen_background_opacity = $value
+    ' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+validate_lockscreen_background() {
+    local value="$1"
+    if ! jq -e -n \
+        --arg value "$value" \
+        --argjson allowed "$LOCKSCREEN_BACKGROUNDS_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen background: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+set_lockscreen_background() {
+    local value="$1"
+    validate_lockscreen_background "$value"
+    new_tmp
+    jq --arg value "$value" '.lockscreen_background = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+validate_lockscreen_hex_color() {
+    local value="$1" label="$2"
+    [[ "$value" =~ ^#[0-9A-Fa-f]{6}$ ]] || {
+        printf '%s must be #RRGGBB\n' "$label" >&2
+        exit 2
+    }
+}
+
+set_lockscreen_background_color() {
+    local value="${1,,}"
+    validate_lockscreen_hex_color "$value" 'lockscreen background color'
+    new_tmp
+    jq --arg value "$value" '.lockscreen_background_color = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+normalize_lockscreen_wallpaper_path() {
+    local value="$1" resolved
+    [[ -n "$value" ]] || {
+        printf '%s' ''
+        return 0
+    }
+    [[ "$value" == /* && "$value" != *$'\n'* && "$value" != *$'\r'*         && -f "$value" && -r "$value" ]] || {
+        printf 'lockscreen wallpaper must be a readable absolute local file\n' >&2
+        exit 2
+    }
+    resolved="$(readlink -f -- "$value" 2>/dev/null || true)"
+    [[ -n "$resolved" && "$resolved" == /* && -f "$resolved" && -r "$resolved" ]] || {
+        printf 'lockscreen wallpaper could not be resolved\n' >&2
+        exit 2
+    }
+    printf '%s' "$resolved"
+}
+
+set_lockscreen_wallpaper() {
+    local path
+    path="$(normalize_lockscreen_wallpaper_path "$1")"
+    [[ -n "$path" ]] || {
+        printf 'lockscreen wallpaper is required\n' >&2
+        exit 2
+    }
+    new_tmp
+    jq --arg path "$path" '
+        .lockscreen_wallpaper_path = $path
+        | .lockscreen_background = "wallpaper"
+    ' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+validate_lockscreen_weather_units() {
+    local value="$1"
+    if ! jq -e -n \
+        --arg value "$value" \
+        --argjson allowed "$LOCKSCREEN_WEATHER_UNITS_JSON" \
+        '$allowed | index($value) != null' >/dev/null 2>&1; then
+        printf 'invalid lockscreen weather units: %s\n' "$value" >&2
+        exit 2
+    fi
+}
+
+normalize_lockscreen_weather_location() {
+    local value="$1" normalized
+    normalized="$(jq -nr --arg value "$value" '$value | gsub("^\\s+|\\s+$"; "")')"
+    if ! jq -e -n --arg value "$normalized" '
+        ($value | explode) as $points
+        | ($points | length) <= 96
+        and ($points | all(. >= 32 and (. < 127 or . > 159)))
+    ' >/dev/null 2>&1; then
+        printf 'lockscreen weather location must be at most 96 Unicode code points with no control characters\n' >&2
+        exit 2
+    fi
+    printf '%s' "$normalized"
+}
+
+set_lockscreen_weather_location() {
+    local normalized
+    normalized="$(normalize_lockscreen_weather_location "$1")"
+    new_tmp
+    jq --arg value "$normalized" '.lockscreen_weather_location = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+normalize_lockscreen_layout_json() {
+    local value="$1"
+    jq -ce -n \
+        --argjson candidate "$value" \
+        --argjson keys "$LOCKSCREEN_LAYOUT_KEYS_JSON" '
+        def allowed_keys: ["color", "opacity", "scale", "stretch_x", "stretch_y", "x", "y"];
+        if (
+            ($candidate | type) == "object"
+            and (($candidate | keys | sort) == ($keys | sort))
+            and all($keys[];
+                . as $key
+                | ($candidate[$key] | type) == "object"
+                and (($candidate[$key] | keys - allowed_keys | length) == 0)
+                and ($candidate[$key].x | type) == "number"
+                and ($candidate[$key].y | type) == "number"
+                and (($candidate[$key].scale // 1) | type) == "number"
+                and (($candidate[$key].stretch_x // 1) | type) == "number"
+                and (($candidate[$key].stretch_y // 1) | type) == "number"
+                and (($candidate[$key].opacity // 100) | type) == "number"
+                and (($candidate[$key] | has("color") | not)
+                    or (($candidate[$key].color | type) == "string"
+                        and ($candidate[$key].color == "auto"
+                            or ($candidate[$key].color | test("^#[0-9A-Fa-f]{6}$")))))
+                and (($candidate[$key].scale // 1) >= 0.50)
+                and (($candidate[$key].scale // 1) <= 100.00)
+                and (($candidate[$key].stretch_x // 1) >= 0.25)
+                and (($candidate[$key].stretch_x // 1) <= 4.00)
+                and (($candidate[$key].stretch_y // 1) >= 0.25)
+                and (($candidate[$key].stretch_y // 1) <= 4.00)
+                and (($candidate[$key].opacity // 100) >= (if $key == "password" then 20 else 0 end))
+                and (($candidate[$key].opacity // 100) <= 100)
+                and (if $key == "password" then
+                    $candidate[$key].x >= 0.15 and $candidate[$key].x <= 0.85
+                    and $candidate[$key].y >= 0.20 and $candidate[$key].y <= 0.86
+                else
+                    $candidate[$key].x >= 0.05 and $candidate[$key].x <= 0.95
+                    and $candidate[$key].y >= 0.08 and $candidate[$key].y <= 0.92
+                end)
+            )
+        ) then
+            reduce $keys[] as $key ({};
+                .[$key] = {
+                    x: $candidate[$key].x,
+                    y: $candidate[$key].y,
+                    scale: ($candidate[$key].scale // 1),
+                    stretch_x: ($candidate[$key].stretch_x // 1),
+                    stretch_y: ($candidate[$key].stretch_y // 1),
+                    opacity: ($candidate[$key].opacity // 100),
+                    color: ($candidate[$key].color // "auto")
+                })
+        else
+            error("invalid lockscreen layout")
+        end
+    '
+}
+
+normalize_lockscreen_custom_images_json() {
+    local value="$1" normalized count index path resolved
+    if ! normalized="$(jq -ce -n \
+        --argjson candidate "$value" \
+        --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" '
+        def keys_ok: ["id", "opacity", "path", "rotation", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
+        if (($candidate | type) == "array"
+            and ($candidate | length) <= $maximum
+            and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
+            and all($candidate[];
+                (. | type) == "object"
+                and ((. | keys - keys_ok | length) == 0)
+                and (.id | type) == "string"
+                and (.id | test("^image-[A-Za-z0-9_-]{1,64}$"))
+                and (.path | type) == "string"
+                and (.path | startswith("/"))
+                and (.path | contains("://") | not)
+                and (.path | test("[\u0000-\u001f\u007f-\u009f]") | not)
+                and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
+                and (.y | type) == "number" and .y >= 0.08 and .y <= 0.92
+                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 100.00
+                and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
+                and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
+                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and ((.rotation // 0) | type) == "number"
+                and (.rotation // 0) >= -180 and (.rotation // 0) <= 180
+                and (.visible | type) == "boolean"))
+        then [$candidate[] | . + {rotation: (.rotation // 0)}]
+        else error("invalid custom images") end
+    ' 2>/dev/null)"; then
+        printf 'invalid lockscreen custom images
+' >&2
+        exit 2
+    fi
+
+    count="$(jq -r 'length' <<<"$normalized")"
+    for ((index = 0; index < count; ++index)); do
+        path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$normalized")"
+        [[ -f "$path" && -r "$path" ]] || {
+            printf 'lockscreen custom image must be a readable absolute local file
+' >&2
+            exit 2
+        }
+        resolved="$(readlink -f -- "$path" 2>/dev/null || true)"
+        [[ -n "$resolved" && "$resolved" == /* && -f "$resolved" && -r "$resolved" ]] || {
+            printf 'lockscreen custom image could not be resolved
+' >&2
+            exit 2
+        }
+        normalized="$(jq -c --argjson index "$index" --arg path "$resolved" '.[$index].path = $path' <<<"$normalized")"
+    done
+    printf '%s' "$normalized"
+}
+
+validate_lockscreen_layout() {
+    local normalized
+    if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
+        printf 'invalid lockscreen layout\n' >&2
+        exit 2
+    fi
+}
+
+save_lockscreen_layout() {
+    local normalized
+    if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
+        printf 'invalid lockscreen layout\n' >&2
+        exit 2
+    fi
+    new_tmp
+    jq --argjson value "$normalized" '.lockscreen_layout = $value' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
+validate_lockscreen_editor_visibility() {
+    local value="$1"
+    if ! jq -e -n \
+        --argjson candidate "$value" \
+        --argjson keys "$LOCKSCREEN_LAYOUT_KEYS_JSON" '
+        ($candidate | type) == "object"
+        and (($candidate | keys | sort) == ($keys | sort))
+        and all($keys[]; . as $key | ($candidate[$key] | type) == "boolean")
+        and $candidate.password == true
+    ' >/dev/null 2>&1; then
+        printf 'invalid lockscreen editor visibility\n' >&2
+        exit 2
+    fi
+}
+
+save_lockscreen_editor() {
+    local normalized visibility="$2" background="$3" background_color="${4,,}" wallpaper="$5"
+    local wallpaper_fit="${6:-cover}"
+    local focal_x="${7:-0.5}"
+    local focal_y="${8:-0.5}"
+    local overlay_mode="${9:-none}"
+    local overlay_strength="${10:-0}"
+    local wallpaper_blur="${11:-0}"
+    local weather_units="${12:-auto}"
+    local custom_images_input="${13:-[]}"
+    local visualizer_input="${14:-$LOCKSCREEN_VISUALIZER_DEFAULT_JSON}"
+    local background_opacity_input="${15:-100}"
+    local entry_transition_input="${16:-}"
+    local entry_transition_duration_input="${17:-1800}"
+    local background_opacity_previous_input="${18:-100}"
+    local blur_style="${19:-smooth}"
+    local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration
+    if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
+        printf 'invalid lockscreen layout
+' >&2
+        exit 2
+    fi
+    custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
+    visualizer="$(normalize_lockscreen_visualizer_json "$visualizer_input")"
+    background_opacity="$(normalize_percent_integer "$background_opacity_input" 'lockscreen background opacity')"
+    background_opacity_previous="$(normalize_percent_integer "$background_opacity_previous_input" 'lockscreen previous background opacity')"
+    validate_int_range "$entry_transition_duration_input" 800 6000 'lockscreen entry transition duration'
+    entry_transition_duration=$((10#$entry_transition_duration_input))
+    if [[ -n "$entry_transition_input" ]]; then
+        entry_transition="$entry_transition_input"
+        validate_lockscreen_entry_transition "$entry_transition"
+    else
+        entry_transition="$(jq -r '.lockscreen_entry_transition // "fade"' "$STATE_FILE")"
+        if ! jq -e -n --arg value "$entry_transition" \
+            --argjson allowed "$LOCKSCREEN_ENTRY_TRANSITIONS_JSON" \
+            '$allowed | index($value) != null' >/dev/null 2>&1; then
+            entry_transition="fade"
+        fi
+    fi
+    validate_lockscreen_editor_visibility "$visibility"
+    validate_lockscreen_background "$background"
+    validate_lockscreen_hex_color "$background_color" 'lockscreen background color'
+    validate_lockscreen_wallpaper_fit "$wallpaper_fit"
+    validate_lockscreen_overlay_mode "$overlay_mode"
+    validate_lockscreen_blur_style "$blur_style"
+    validate_lockscreen_weather_units "$weather_units"
+    focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
+    focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
+    overlay_strength="$(normalize_percent_integer "$overlay_strength" 'lockscreen overlay strength')"
+    wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
+    wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
+    if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
+        printf 'wallpaper background requires a selected local image
+' >&2
+        exit 2
+    fi
+    new_tmp
+    jq \
+        --argjson layout "$normalized" \
+        --argjson visibility "$visibility" \
+        --arg background "$background" \
+        --arg background_color "$background_color" \
+        --arg wallpaper "$wallpaper" \
+        --arg wallpaper_fit "$wallpaper_fit" \
+        --argjson focal_x "$focal_x" \
+        --argjson focal_y "$focal_y" \
+        --arg overlay_mode "$overlay_mode" \
+        --argjson overlay_strength "$overlay_strength" \
+        --argjson wallpaper_blur "$wallpaper_blur" \
+        --arg blur_style "$blur_style" \
+        --arg weather_units "$weather_units" \
+        --argjson custom_images "$custom_images" \
+        --argjson visualizer "$visualizer" \
+        --argjson background_opacity "$background_opacity" \
+        --argjson background_opacity_previous "$background_opacity_previous" \
+        --arg entry_transition "$entry_transition" \
+        --argjson entry_transition_duration "$entry_transition_duration" '
+        .lockscreen_layout = $layout
+        | .lockscreen_custom_images = $custom_images
+        | .lockscreen_visualizer = $visualizer
+        | .lockscreen_background_opacity = $background_opacity
+        | .lockscreen_background_opacity_previous = $background_opacity_previous
+        | .lockscreen_entry_transition = $entry_transition
+        | .lockscreen_entry_transition_duration = $entry_transition_duration
+        | .lockscreen_show_logo = $visibility.logo
+        | .lockscreen_show_time = $visibility.time
+        | .lockscreen_show_date = $visibility.date
+        | .lockscreen_show_username = $visibility.username
+        | .lockscreen_show_weather = $visibility.weather
+        | .lockscreen_background = $background
+        | .lockscreen_background_color = $background_color
+        | .lockscreen_wallpaper_path = $wallpaper
+        | .lockscreen_wallpaper_fit = $wallpaper_fit
+        | .lockscreen_wallpaper_focal_x = $focal_x
+        | .lockscreen_wallpaper_focal_y = $focal_y
+        | .lockscreen_overlay_mode = $overlay_mode
+        | .lockscreen_overlay_strength = $overlay_strength
+        | .lockscreen_wallpaper_blur = $wallpaper_blur
+        | .lockscreen_blur_style = $blur_style
+        | .lockscreen_weather_units = $weather_units
+    ' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+reset_lockscreen_presentation() {
+    new_tmp
+    jq --argjson layout "$LOCKSCREEN_LAYOUT_DEFAULT_JSON" \
+        --argjson visualizer "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" '
+        .lockscreen_animation = "split"
+        | .lockscreen_entry_transition = "fade"
+        | .lockscreen_entry_transition_duration = 1800
+        | .lockscreen_logo_physics_hz = 30
+        | .lockscreen_audio_reactive = true
+        | .lockscreen_mouse_interactive = true
+        | .lockscreen_show_logo = true
+        | .lockscreen_show_time = false
+        | .lockscreen_show_date = false
+        | .lockscreen_show_username = false
+        | .lockscreen_show_weather = false
+        | .lockscreen_background = "black"
+        | .lockscreen_background_color = "#000000"
+        | .lockscreen_wallpaper_path = ""
+        | .lockscreen_wallpaper_fit = "cover"
+        | .lockscreen_wallpaper_focal_x = 0.5
+        | .lockscreen_wallpaper_focal_y = 0.5
+        | .lockscreen_overlay_mode = "none"
+        | .lockscreen_overlay_strength = 0
+        | .lockscreen_wallpaper_blur = 0
+        | .lockscreen_blur_style = "smooth"
+        | .lockscreen_weather_units = "auto"
+        | .lockscreen_weather_location = ""
+        | .lockscreen_layout = $layout
+        | .lockscreen_custom_images = []
+        | .lockscreen_visualizer = $visualizer
+        | .lockscreen_background_opacity = 100
+        | .lockscreen_background_opacity_previous = 100
+    ' "$STATE_FILE" >"$TMP_FILE"
     commit_tmp
 }
 
@@ -950,6 +1551,80 @@ case "$cmd" in
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_animation "$2"
         ;;
+    set-lockscreen-entry-transition)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_entry_transition "$2"
+        ;;
+    set-lockscreen-logo-physics-hz)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_logo_physics_hz "$2"
+        ;;
+    set-lockscreen-visualizer-enabled)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_visualizer_enabled "$2"
+        ;;
+    set-lockscreen-background-opacity)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_background_opacity "$2"
+        ;;
+    set-lockscreen-audio-reactive)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_audio_reactive "$2" 'lockscreen audio reactive'
+        ;;
+    set-lockscreen-mouse-interactive)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_mouse_interactive "$2" 'lockscreen mouse interactive'
+        ;;
+    set-lockscreen-show-logo)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_show_logo "$2" 'lockscreen show logo'
+        ;;
+    set-lockscreen-show-time)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_show_time "$2" 'lockscreen show time'
+        ;;
+    set-lockscreen-show-date)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_show_date "$2" 'lockscreen show date'
+        ;;
+    set-lockscreen-show-username)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_show_username "$2" 'lockscreen show username'
+        ;;
+    set-lockscreen-show-weather)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_show_weather "$2" 'lockscreen show weather'
+        ;;
+    set-lockscreen-background)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_background "$2"
+        ;;
+    set-lockscreen-background-color)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_background_color "$2"
+        ;;
+    set-lockscreen-wallpaper)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_wallpaper "$2"
+        ;;
+    set-lockscreen-weather-location)
+        [[ $# -eq 2 ]] || exit 2
+        set_lockscreen_weather_location "$2"
+        ;;
+    save-lockscreen-layout)
+        [[ -n ${2:-} ]] || exit 2
+        save_lockscreen_layout "$2"
+        ;;
+    save-lockscreen-editor)
+        case "$#" in
+            6|12|13|14|16|17|18|19|20) ;;
+            *) exit 2 ;;
+        esac
+        save_lockscreen_editor "${@:2}"
+        ;;
+    reset-lockscreen-presentation)
+        reset_lockscreen_presentation
+        ;;
     set-workspace-numbers)
         [[ -n ${2:-} ]] || exit 2
         set_workspace_numbers "$2"
@@ -1091,7 +1766,7 @@ case "$cmd" in
         reset_defaults
         ;;
     *)
-        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
+        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-lockscreen-logo-physics-hz <30|60|90>|set-lockscreen-visualizer-enabled <true|false>|set-lockscreen-background-opacity <0-100>|set-lockscreen-audio-reactive <true|false>|set-lockscreen-mouse-interactive <true|false>|set-lockscreen-show-logo <true|false>|set-lockscreen-show-time <true|false>|set-lockscreen-show-date <true|false>|set-lockscreen-show-username <true|false>|set-lockscreen-show-weather <true|false>|set-lockscreen-background <black|wallpaper|color>|set-lockscreen-background-color <#RRGGBB>|set-lockscreen-wallpaper <absolute_path>|set-lockscreen-weather-location <location>|save-lockscreen-layout <json>|save-lockscreen-editor <layout_json> <visibility_json> <background> <background_color> <wallpaper_path>|reset-lockscreen-presentation|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
         exit 2
         ;;
 esac

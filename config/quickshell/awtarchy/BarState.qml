@@ -129,6 +129,48 @@ Singleton {
         { key: "split", label: "Split" },
         { key: "off", label: "Off" }
     ]
+    readonly property var lockscreenEntryTransitionPresets: [
+        { key: "fade", label: "Fade" },
+        { key: "pixel", label: "Pixel" },
+        { key: "iris", label: "Iris Reveal" },
+        { key: "edges", label: "Edges" },
+        { key: "wipe", label: "Wipe" }
+    ]
+    readonly property var defaultLockscreenComposition: ({
+        lockscreen_wallpaper_fit: "cover",
+        lockscreen_wallpaper_focal_x: 0.5,
+        lockscreen_wallpaper_focal_y: 0.5,
+        lockscreen_overlay_mode: "none",
+        lockscreen_overlay_strength: 0,
+        lockscreen_wallpaper_blur: 0,
+        lockscreen_blur_style: "smooth",
+        lockscreen_background_opacity_previous: 100
+    })
+    readonly property var defaultLockscreenVisualizer: ({
+        enabled: false,
+        x: 0.50,
+        y: 0.80,
+        scale: 1.0,
+        stretch_x: 1.0,
+        stretch_y: 1.0,
+        opacity: 100,
+        color: "auto",
+        bands: 16,
+        gap: 4,
+        height: 100,
+        sensitivity: 180,
+        shape: "straight",
+        bend: 45,
+        performance: "balanced"
+    })
+    readonly property var defaultLockscreenLayout: ({
+        logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+        time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+        date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+        username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+        weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
+        password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
+    })
     readonly property var workspaceLegacyStyleAliases: ({
         "filled-dot": "workflow",
         "filled-diamond": "workflow",
@@ -341,6 +383,23 @@ Singleton {
             enabled: true,
             update_notifications_enabled: true,
             lockscreen_animation: "split",
+            lockscreen_entry_transition: "fade",
+            lockscreen_logo_physics_hz: 30,
+            lockscreen_audio_reactive: true,
+            lockscreen_mouse_interactive: true,
+            lockscreen_show_logo: true,
+            lockscreen_show_time: false,
+            lockscreen_show_date: false,
+            lockscreen_show_username: false,
+            lockscreen_show_weather: false,
+            lockscreen_background: "black",
+            lockscreen_background_color: "#000000",
+            lockscreen_wallpaper_path: "",
+            lockscreen_weather_location: "",
+            lockscreen_layout: root.defaultLockscreenLayout,
+            lockscreen_custom_images: [],
+            lockscreen_visualizer: root.defaultLockscreenVisualizer,
+            lockscreen_background_opacity: 100,
             monitors: {},
             launcher_sizes: {},
             clipboard_views: {},
@@ -602,6 +661,293 @@ Singleton {
                 return value;
         }
         return "split";
+    }
+
+    function lockscreenEntryTransition() {
+        const value = String(data().lockscreen_entry_transition || "fade");
+        for (const preset of lockscreenEntryTransitionPresets) {
+            if (preset.key === value)
+                return value;
+        }
+        return "fade";
+    }
+
+    function lockscreenEntryTransitionDuration() {
+        const value = Math.round(Number(data().lockscreen_entry_transition_duration));
+        return Number.isFinite(value)
+            ? Math.max(800, Math.min(6000, value)) : 1800;
+    }
+
+    function lockscreenBooleanPreference(field, fallback) {
+        const value = data()[field];
+        return typeof value === "boolean" ? value : fallback;
+    }
+
+    function lockscreenLogoPhysicsHz() {
+        const value = Math.round(Number(data().lockscreen_logo_physics_hz));
+        return [30, 60, 90].indexOf(value) >= 0 ? value : 30;
+    }
+
+    function lockscreenVisualizer() {
+        const defaults = root.defaultLockscreenVisualizer;
+        const value = data().lockscreen_visualizer;
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            return defaults;
+
+        const enabled = typeof value.enabled === "boolean" ? value.enabled : defaults.enabled;
+        const x = Number(value.x ?? defaults.x);
+        const y = Number(value.y ?? defaults.y);
+        const scale = Number(value.scale ?? defaults.scale);
+        const stretchX = Number(value.stretch_x ?? defaults.stretch_x);
+        const stretchY = Number(value.stretch_y ?? defaults.stretch_y);
+        const opacity = Number(value.opacity ?? defaults.opacity);
+        const color = String(value.color ?? defaults.color).toLowerCase();
+        const bands = Number(value.bands ?? defaults.bands);
+        const gap = Number(value.gap ?? defaults.gap);
+        const height = Number(value.height ?? defaults.height);
+        const sensitivity = Number(value.sensitivity ?? defaults.sensitivity);
+        const shape = String(value.shape ?? defaults.shape);
+        const bend = Number(value.bend ?? defaults.bend);
+        const performance = String(value.performance ?? defaults.performance);
+
+        if (!Number.isFinite(x) || x < 0.05 || x > 0.95
+                || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                || !Number.isFinite(scale) || scale < 0.5 || scale > 100
+                || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4
+                || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4
+                || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color))
+                || !Number.isInteger(bands) || bands < 4 || bands > 64
+                || !Number.isInteger(gap) || gap < 0 || gap > 24
+                || !Number.isInteger(height) || height < 25 || height > 300
+                || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
+                || ["straight", "arc", "circle"].indexOf(shape) < 0
+                || ["balanced", "responsive", "high"].indexOf(performance) < 0
+                || !Number.isInteger(bend) || bend < -2000 || bend > 2000)
+            return defaults;
+
+        return ({
+            enabled: enabled,
+            x: x,
+            y: y,
+            scale: scale,
+            stretch_x: stretchX,
+            stretch_y: stretchY,
+            opacity: Math.round(opacity),
+            color: color,
+            bands: bands,
+            gap: gap,
+            height: height,
+            sensitivity: sensitivity,
+            shape: shape,
+            bend: bend,
+            performance: performance
+        });
+    }
+
+    function lockscreenBackgroundOpacity() {
+        const value = Number(data().lockscreen_background_opacity);
+        if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0 || value > 100)
+            return 100;
+        return value;
+    }
+
+    function lockscreenPreviousBackgroundOpacity() {
+        const value = Number(data().lockscreen_background_opacity_previous);
+        if (Number.isFinite(value) && Number.isInteger(value) && value >= 0 && value < 100)
+            return value;
+        const current = lockscreenBackgroundOpacity();
+        return current < 100 ? current : 100;
+    }
+
+    function lockscreenAudioReactiveEnabled() {
+        return lockscreenBooleanPreference("lockscreen_audio_reactive", true);
+    }
+
+    function lockscreenMouseInteractiveEnabled() {
+        return lockscreenBooleanPreference("lockscreen_mouse_interactive", true);
+    }
+
+    function lockscreenShowLogo() {
+        return lockscreenBooleanPreference("lockscreen_show_logo", true);
+    }
+
+    function lockscreenShowTime() {
+        return lockscreenBooleanPreference("lockscreen_show_time", false);
+    }
+
+    function lockscreenShowDate() {
+        return lockscreenBooleanPreference("lockscreen_show_date", false);
+    }
+
+    function lockscreenShowUsername() {
+        return lockscreenBooleanPreference("lockscreen_show_username", false);
+    }
+
+    function lockscreenShowWeather() {
+        return lockscreenBooleanPreference("lockscreen_show_weather", false);
+    }
+
+    function lockscreenBackground() {
+        const value = String(data().lockscreen_background || "");
+        return ["black", "wallpaper", "color"].indexOf(value) >= 0 ? value : "black";
+    }
+
+    function lockscreenBackgroundColor() {
+        const value = String(data().lockscreen_background_color || "#000000").toLowerCase();
+        return /^#[0-9a-f]{6}$/.test(value) ? value : "#000000";
+    }
+
+    function lockscreenWallpaperPath() {
+        const value = data().lockscreen_wallpaper_path;
+        if (typeof value !== "string" || !value.startsWith("/")
+                || value.indexOf("://") >= 0 || /[\u0000-\u001f\u007f-\u009f]/.test(value))
+            return "";
+        return value;
+    }
+
+    function lockscreenWallpaperFit() {
+        const value = String(data().lockscreen_wallpaper_fit || "");
+        return ["cover", "contain"].indexOf(value) >= 0 ? value : "cover";
+    }
+
+    function lockscreenWallpaperFocalX() {
+        const value = Number(data().lockscreen_wallpaper_focal_x);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+    }
+
+    function lockscreenWallpaperFocalY() {
+        const value = Number(data().lockscreen_wallpaper_focal_y);
+        return Number.isFinite(value) ? Math.max(0, Math.min(1, value)) : 0.5;
+    }
+
+    function lockscreenOverlayMode() {
+        const value = String(data().lockscreen_overlay_mode || "");
+        return ["none", "dark", "light"].indexOf(value) >= 0 ? value : "none";
+    }
+
+    function lockscreenOverlayStrength() {
+        const value = Number(data().lockscreen_overlay_strength);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+    function lockscreenWallpaperBlur() {
+        const value = Number(data().lockscreen_wallpaper_blur);
+        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+    }
+
+    function lockscreenBlurStyle() {
+        const value = String(data().lockscreen_blur_style || "smooth");
+        return ["smooth", "pixelated"].indexOf(value) >= 0 ? value : "smooth";
+    }
+
+    function lockscreenWeatherUnits() {
+        const value = String(data().lockscreen_weather_units || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(value) >= 0 ? value : "auto";
+    }
+
+    function lockscreenWeatherLocation() {
+        const value = data().lockscreen_weather_location;
+        if (typeof value !== "string")
+            return "";
+        const trimmed = value.trim();
+        const points = Array.from(trimmed);
+        if (points.length > 96)
+            return "";
+        for (const point of points) {
+            const code = point.codePointAt(0);
+            if ((code >= 0 && code <= 31) || (code >= 127 && code <= 159))
+                return "";
+        }
+        return trimmed;
+    }
+
+    function lockscreenLayoutPoint(value, fallback, password) {
+        const fallbackColor = String(fallback.color || "auto");
+        const fallbackPoint = ({
+            x: fallback.x, y: fallback.y, scale: fallback.scale,
+            stretch_x: fallback.stretch_x, stretch_y: fallback.stretch_y,
+            opacity: fallback.opacity, color: fallbackColor
+        });
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            return fallbackPoint;
+        const x = Number(value.x);
+        const y = Number(value.y);
+        const scale = Number(value.scale === undefined ? 1 : value.scale);
+        const stretchX = Number(value.stretch_x === undefined ? 1 : value.stretch_x);
+        const stretchY = Number(value.stretch_y === undefined ? 1 : value.stretch_y);
+        const opacity = Number(value.opacity === undefined ? 100 : value.opacity);
+        const rawColor = String(value.color === undefined ? "auto" : value.color);
+        const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)
+            ? rawColor.toLowerCase() : fallbackColor;
+        const minX = password ? 0.15 : 0.05;
+        const maxX = password ? 0.85 : 0.95;
+        const minY = password ? 0.20 : 0.08;
+        const maxY = password ? 0.86 : 0.92;
+        const minOpacity = password ? 20 : 0;
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)
+                || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
+                || !Number.isFinite(opacity)
+                || x < minX || x > maxX || y < minY || y > maxY
+                || scale < 0.50 || scale > 100.00
+                || stretchX < 0.25 || stretchX > 4.00
+                || stretchY < 0.25 || stretchY > 4.00
+                || opacity < minOpacity || opacity > 100)
+            return fallbackPoint;
+        return ({ x: x, y: y, scale: scale, stretch_x: stretchX,
+            stretch_y: stretchY, opacity: opacity, color: color });
+    }
+    function lockscreenLayout() {
+        const defaults = root.defaultLockscreenLayout;
+        const value = data().lockscreen_layout;
+        if (!value || typeof value !== "object" || Array.isArray(value))
+            return defaults;
+        return ({
+            logo: lockscreenLayoutPoint(value.logo, defaults.logo, false),
+            time: lockscreenLayoutPoint(value.time, defaults.time, false),
+            date: lockscreenLayoutPoint(value.date, defaults.date, false),
+            username: lockscreenLayoutPoint(value.username, defaults.username, false),
+            weather: lockscreenLayoutPoint(value.weather, defaults.weather, false),
+            password: lockscreenLayoutPoint(value.password, defaults.password, true)
+        });
+    }
+
+    function lockscreenCustomImages() {
+        const value = data().lockscreen_custom_images;
+        if (!Array.isArray(value) || value.length > 12)
+            return [];
+        const result = [];
+        const ids = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw))
+                return [];
+            const id = String(raw.id || "");
+            const path = String(raw.path || "");
+            const x = Number(raw.x);
+            const y = Number(raw.y);
+            const scale = Number(raw.scale);
+            const stretchX = Number(raw.stretch_x);
+            const stretchY = Number(raw.stretch_y);
+            const opacity = Number(raw.opacity);
+            const rotation = Number(raw.rotation === undefined ? 0 : raw.rotation);
+            if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
+                    || !path.startsWith("/") || path.indexOf("://") >= 0
+                    || /[\u0000-\u001f\u007f-\u009f]/.test(path)
+                    || !Number.isFinite(x) || x < 0.05 || x > 0.95
+                    || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                    || !Number.isFinite(scale) || scale < 0.50 || scale > 100.00
+                    || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
+                    || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
+                    || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                    || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
+                    || typeof raw.visible !== "boolean")
+                return [];
+            ids[id] = true;
+            result.push(({ id: id, path: path, x: x, y: y, scale: scale,
+                stretch_x: stretchX, stretch_y: stretchY,
+                opacity: opacity, rotation: rotation, visible: raw.visible }));
+        }
+        return result;
     }
 
     function updateNotificationsEnabled() {

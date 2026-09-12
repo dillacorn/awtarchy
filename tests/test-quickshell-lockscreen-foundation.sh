@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 LOCK_DIR="${ROOT}/config/quickshell/awtarchy-lock"
 SHELL_QML="${LOCK_DIR}/shell.qml"
 SURFACE_QML="${LOCK_DIR}/LockSurface.qml"
+SCENE_QML="${LOCK_DIR}/LockScene.qml"
 AUTH_QML="${LOCK_DIR}/LockAuth.qml"
 THEME_QML="${LOCK_DIR}/LockTheme.qml"
 PAM_CONFIG="${LOCK_DIR}/pam/password.conf"
@@ -35,6 +36,7 @@ reject_text() {
 
 require_file "$SHELL_QML"
 require_file "$SURFACE_QML"
+require_file "$SCENE_QML"
 require_file "$AUTH_QML"
 require_file "$THEME_QML"
 require_file "$PAM_CONFIG"
@@ -55,24 +57,39 @@ require_text "$SHELL_QML" 'sessionLock.secure ? "secure"' \
 require_text "$SHELL_QML" 'sessionLock.locked = false' \
     'successful authentication does not request compositor unlock'
 
+# Security remains on LockSurface even though presentation is shared with the
+# unlocked editor through LockScene.
 require_text "$SURFACE_QML" 'WlSessionLockSurface {' \
     'lock surface is not a real WlSessionLockSurface'
-require_text "$SURFACE_QML" 'color: "#000000"' \
-    'lock surface does not use an opaque black stock background'
-reject_text "$SURFACE_QML" '/fastfetch/ascii/awtarchy.txt' \
-    'lock surface still references the retired Fastfetch ASCII mark'
-require_text "$SURFACE_QML" '▄▄▄      ██     █ ▄▄▄█████ ▄▄▄      ██▀███  ▄████▄  ██  ██ ██   ██' \
-    'lock surface does not use the approved large Awtarchy ASCII wordmark'
-reject_text "$SURFACE_QML" 'text: "── AWTARCHY ──"' \
-    'lock surface still uses the retired compact Awtarchy heading'
+require_text "$SURFACE_QML" 'required property int backgroundOpacity' \
+    'lock surface has no presentation-only background opacity input'
+require_text "$SCENE_QML" 'id: backgroundLayer' \
+    'shared scene does not isolate background alpha from secure presentation'
+require_text "$SURFACE_QML" 'LockScene {' \
+    'secure lock surface does not embed the shared presentation scene'
+reject_text "$SCENE_QML" 'WlSessionLock' \
+    'shared presentation scene owns session-lock authority'
+reject_text "$SCENE_QML" 'LockAuth' \
+    'shared presentation scene references PAM ownership'
+reject_text "$SCENE_QML" 'auth.submit' \
+    'shared presentation scene can submit authentication'
+reject_text "$SCENE_QML" '/fastfetch/ascii/awtarchy.txt' \
+    'shared lock scene still references the retired Fastfetch ASCII mark'
+require_text "$SCENE_QML" '▄▄▄      ██     █ ▄▄▄█████ ▄▄▄      ██▀███  ▄████▄  ██  ██ ██   ██' \
+    'shared lock scene does not use the approved large Awtarchy ASCII wordmark'
+reject_text "$SCENE_QML" 'text: "── AWTARCHY ──"' \
+    'shared lock scene still uses the retired compact Awtarchy heading'
+
 require_text "$SURFACE_QML" 'echoMode: TextInput.Password' \
     'password field is not always masked for the password-only PAM service'
 require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
     'password field is not marked as sensitive input'
 require_text "$SURFACE_QML" 'color: "transparent"' \
     'native password glyphs are still directly visible instead of using the custom mask'
-require_text "$SURFACE_QML" 'readonly property int maskedCount: Math.min(password.text.length, 10)' \
-    'custom password mask does not cap displayed password length'
+require_text "$SURFACE_QML" 'Math.min(password.text.length, 10)' \
+    'typed custom password mask does not cap displayed password length'
+require_text "$SURFACE_QML" 'root.submittedMaskCount = Math.min(response.length, 10);' \
+    'failed-attempt password mask does not retain the same 10-block cap'
 require_text "$SURFACE_QML" 'model: root.maskedCount' \
     'custom block mask is not driven by the capped password length'
 require_text "$SURFACE_QML" 'readonly property real maskSpread:' \
@@ -148,9 +165,6 @@ reject_text "$MANAGER" 'pkill' \
 reject_text "$MANAGER" 'CONFIG_NAME="awtarchy"' \
     'lock manager must not target the normal Awtarchy shell'
 
-# Behavior-test the manager without a compositor or real Quickshell. The fake qs
-# implements only the dedicated awtarchy-lock IPC/start surface used by the
-# manager. Any attempt to target another config fails immediately.
 FAKE_QS="$TMP/qs"
 FAKE_STATE="$TMP/state"
 FAKE_LOG="$TMP/qs.log"

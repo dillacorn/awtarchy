@@ -12,6 +12,8 @@ POLL_INTERVAL="${AWTARCHY_LOCK_POLL_INTERVAL:-0.05}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 LOG_DIR="${CACHE_HOME}/awtarchy"
 LOG_FILE="${AWTARCHY_LOCK_LOG:-${LOG_DIR}/lockscreen.log}"
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+CAPTURE_HELPER="${SCRIPT_DIR}/quickshell_lockscreen_capture.sh"
 
 usage() {
     cat <<'EOF'
@@ -66,8 +68,15 @@ status_lock() {
     esac
 }
 
+cleanup_capture() {
+    local capture_dir="$1"
+
+    [[ -n "$capture_dir" && -f "$CAPTURE_HELPER" ]] || return 0
+    bash "$CAPTURE_HELPER" cleanup "$capture_dir" >>"$LOG_FILE" 2>&1 || true
+}
+
 start_lock() {
-    local state
+    local state capture_dir=""
 
     need_qs || return $?
 
@@ -79,7 +88,18 @@ start_lock() {
     esac
 
     mkdir -p -- "$LOG_DIR"
-    nohup "$QS_BIN" -c "$CONFIG_NAME" >>"$LOG_FILE" 2>&1 &
+
+    if [[ -f "$CAPTURE_HELPER" ]]; then
+        capture_dir="$(bash "$CAPTURE_HELPER" prepare 2>>"$LOG_FILE")" || capture_dir=""
+    fi
+
+    if [[ -n "$capture_dir" ]]; then
+        AWTARCHY_LOCK_CAPTURE_DIR="$capture_dir" \
+            nohup "$QS_BIN" -c "$CONFIG_NAME" >>"$LOG_FILE" 2>&1 &
+    else
+        env -u AWTARCHY_LOCK_CAPTURE_DIR \
+            nohup "$QS_BIN" -c "$CONFIG_NAME" >>"$LOG_FILE" 2>&1 &
+    fi
     disown 2>/dev/null || true
 
     for _ in {1..100}; do
@@ -92,6 +112,7 @@ start_lock() {
         sleep "$POLL_INTERVAL"
     done
 
+    cleanup_capture "$capture_dir"
     printf 'awtarchy_lock.sh: awtarchy-lock did not become reachable; see %s\n' \
         "$LOG_FILE" >&2
     return 1
