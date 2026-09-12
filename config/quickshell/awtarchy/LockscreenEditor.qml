@@ -2118,6 +2118,7 @@ Singleton {
                 visualizer: root.draftVisualizer
                 audioBands: previewAudioAnalyzer.bands
                 backgroundOpacity: root.draftBackgroundOpacity
+                desktopBackingSource: editorTransitionStart
                 previewMode: true
                 editorMode: true
                 editorVisibility: root.draftVisibility
@@ -3230,6 +3231,7 @@ Singleton {
                 blurStyle: root.draftBlurStyle
                 autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages
                 visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
+                desktopBackingSource: secondaryTransitionStart
                 previewMode: true; editorMode: false
             }
             LockPreviewTransitionLayer {
