@@ -73,10 +73,14 @@ jobs:
               replace_once(path, scene_old_duration, scene_new_duration)
               replace_once(path, scene_old_visible, scene_new_visible)
 
+          # Quickshell configurations are isolated import roots. Keep an unlocked
+          # config-local renderer in exact byte parity with the secure renderer
+          # rather than importing the secure configuration directory.
+          secure_layer = Path("config/quickshell/awtarchy-lock/LockTransitionLayer.qml")
+          preview_layer = Path("config/quickshell/awtarchy/LockPreviewTransitionLayer.qml")
+          preview_layer.write_text(secure_layer.read_text(encoding="utf-8"), encoding="utf-8")
+
           editor = "config/quickshell/awtarchy/LockscreenEditor.qml"
-          replace_once(editor,
-              'import Quickshell.Wayland\n',
-              'import Quickshell.Wayland\nimport "../awtarchy-lock" as LockRuntime\n')
           replace_once(editor,
               '    property int draftEntryTransitionDuration: 1200\n',
               '    property int draftEntryTransitionDuration: 1800\n')
@@ -86,24 +90,43 @@ jobs:
           replace_once(editor,
               '        draftEntryTransitionDuration = 1200;\n',
               '        draftEntryTransitionDuration = 1800;\n')
-
           replace_once(editor,
               '''            LockPreviewScene {\n                id: previewScene\n''',
-              '''            Item {\n                id: editorTransitionStart\n                x: editorFocus.width + 64\n                y: 0\n                width: editorFocus.width\n                height: editorFocus.height\n\n                Rectangle {\n                    anchors.fill: parent\n                    color: "#101318"\n                }\n                Rectangle {\n                    x: 0\n                    y: 0\n                    width: parent.width\n                    height: Math.max(28, parent.height * 0.035)\n                    color: "#1c222b"\n                }\n                Rectangle {\n                    anchors.centerIn: parent\n                    width: parent.width * 0.62\n                    height: parent.height * 0.56\n                    radius: 8\n                    color: "#202731"\n                    border.width: 1\n                    border.color: "#3a4657"\n\n                    Rectangle {\n                        x: 0\n                        y: 0\n                        width: parent.width\n                        height: Math.max(26, parent.height * 0.07)\n                        radius: parent.radius\n                        color: "#2a3340"\n                    }\n                    Text {\n                        anchors.centerIn: parent\n                        text: "Synthetic desktop preview"\n                        color: "#8d99aa"\n                        font.family: Theme.fontFamily\n                        font.pixelSize: Math.max(12, parent.height * 0.035)\n                    }\n                }\n            }\n\n            LockPreviewScene {\n                id: previewScene\n''')
+              '''            Item {\n                id: editorTransitionStart\n                x: editorFocus.width + 64\n                y: 0\n                width: editorFocus.width\n                height: editorFocus.height\n\n                Rectangle { anchors.fill: parent; color: "#101318" }\n                Rectangle {\n                    x: 0\n                    y: 0\n                    width: parent.width\n                    height: Math.max(28, parent.height * 0.035)\n                    color: "#1c222b"\n                }\n                Rectangle {\n                    anchors.centerIn: parent\n                    width: parent.width * 0.62\n                    height: parent.height * 0.56\n                    radius: 8\n                    color: "#202731"\n                    border.width: 1\n                    border.color: "#3a4657"\n                    Rectangle {\n                        x: 0\n                        y: 0\n                        width: parent.width\n                        height: Math.max(26, parent.height * 0.07)\n                        radius: parent.radius\n                        color: "#2a3340"\n                    }\n                    Text {\n                        anchors.centerIn: parent\n                        text: "Synthetic desktop preview"\n                        color: "#8d99aa"\n                        font.family: Theme.fontFamily\n                        font.pixelSize: Math.max(12, parent.height * 0.035)\n                    }\n                }\n            }\n\n            LockPreviewScene {\n                id: previewScene\n''')
           replace_once(editor,
               '                entryTransitionReplayToken: root.entryTransitionReplayToken\n',
               '''                externallyManagedEntryTransition: true\n                externalEntryTransitionRunning: editorTransitionLayer.running\n''')
           replace_once(editor,
               '''                editorHeldElement: root.heldElement\n                editorHoldScale: root.heldScaleBoost\n            }\n\n            Item {\n                id: editorGridOverlay\n''',
-              '''                editorHeldElement: root.heldElement\n                editorHoldScale: root.heldScaleBoost\n            }\n\n            LockRuntime.LockTransitionLayer {\n                id: editorTransitionLayer\n                anchors.fill: parent\n                z: 160\n                startSource: editorTransitionStart\n                endSource: previewScene\n                mode: root.draftEntryTransition\n                duration: root.draftEntryTransitionDuration\n                replayToken: root.entryTransitionReplayToken\n            }\n\n            Item {\n                id: editorGridOverlay\n''')
+              '''                editorHeldElement: root.heldElement\n                editorHoldScale: root.heldScaleBoost\n            }\n\n            LockPreviewTransitionLayer {\n                id: editorTransitionLayer\n                anchors.fill: parent\n                z: 160\n                startSource: editorTransitionStart\n                endSource: previewScene\n                mode: root.draftEntryTransition\n                duration: root.draftEntryTransitionDuration\n                replayToken: root.entryTransitionReplayToken\n            }\n\n            Item {\n                id: editorGridOverlay\n''')
           replace_once(editor,
               '''                        Text { text: "Transition Speed"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }\n                        Slider { Layout.preferredWidth: 120; from: 400; to: 4000; stepSize: 100; value: root.draftEntryTransitionDuration; onMoved: root.setDraftEntryTransitionDuration(value) }\n                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(1) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }\n''',
               '''                        Text { text: "Transition Speed"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }\n                        Rectangle {\n                            id: entryTransitionDurationTrack\n                            Layout.preferredWidth: 140\n                            Layout.preferredHeight: 14\n                            radius: height / 2\n                            color: Theme.popupBackground\n                            border.width: 1\n                            border.color: Theme.active\n                            Rectangle {\n                                width: Math.max(0, Math.min(1,\n                                    (root.draftEntryTransitionDuration - 800) / 5200)) * parent.width\n                                height: parent.height\n                                radius: height / 2\n                                color: Theme.focus\n                            }\n                            Rectangle {\n                                width: 12\n                                height: 12\n                                radius: 6\n                                anchors.verticalCenter: parent.verticalCenter\n                                x: Math.max(0, Math.min(parent.width - width,\n                                    (root.draftEntryTransitionDuration - 800)\n                                        * (parent.width - width) / 5200))\n                                color: Theme.foreground\n                            }\n                            MouseArea {\n                                anchors.fill: parent\n                                onPressed: mouse => {\n                                    root.beginHistoryTransaction();\n                                    root.setEntryTransitionDurationFromPointer(mouse.x, width);\n                                }\n                                onPositionChanged: mouse => {\n                                    if (pressed)\n                                        root.setEntryTransitionDurationFromPointer(mouse.x, width);\n                                }\n                                onReleased: root.commitHistoryTransaction()\n                                onCanceled: root.commitHistoryTransaction()\n                            }\n                        }\n                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(2) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }\n''')
 
           test = "tests/test-quickshell-lockscreen-entry-transitions.sh"
           replace_once(test,
+              'LAYER="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"\n',
+              'LAYER="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"\nPREVIEW_LAYER="$ROOT/config/quickshell/awtarchy/LockPreviewTransitionLayer.qml"\n')
+          replace_once(test,
               '''contains "$BAR_STATE" 'lockscreen_entry_transition_duration: 1800' \\\n    'BarState empty state does not default to 1800ms'\n''',
               '''contains "$BAR_STATE" '? Math.max(800, Math.min(6000, value)) : 1800;' \\\n    'BarState does not clamp persisted duration to 800-6000ms with an 1800ms fallback'\n''')
+          replace_once(test,
+              '''contains "$EDITOR" 'import "../awtarchy-lock" as LockRuntime' \\\n    'editor does not import the shared secure transition renderer'\n''',
+              '''[[ -f "$PREVIEW_LAYER" ]] || fail 'config-local preview transition renderer is missing'\ncmp -s "$LAYER" "$PREVIEW_LAYER" \\\n    || fail 'secure/editor transition renderers diverged'\nrejects "$EDITOR" 'import "../awtarchy-lock"' \\\n    'editor crosses the secure Quickshell configuration boundary'\n''')
+          replace_once(test,
+              '''contains "$EDITOR" 'LockRuntime.LockTransitionLayer {' \\\n    'editor Replay does not use the shared transition renderer'\n''',
+              '''contains "$EDITOR" 'LockPreviewTransitionLayer {' \\\n    'editor Replay does not use the config-local parity transition renderer'\n''')
+
+          boundary = "tests/test-quickshell-lockscreen-editor-config-boundary.sh"
+          replace_once(boundary,
+              'LOCK_SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"\n',
+              'LOCK_SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"\nPREVIEW_TRANSITION="${ROOT}/config/quickshell/awtarchy/LockPreviewTransitionLayer.qml"\nLOCK_TRANSITION="${ROOT}/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"\n')
+          replace_once(boundary,
+              '''require_file "$PREVIEW_SCENE" 'desktop editor preview scene is missing'\nrequire_file "$PREVIEW_WALLPAPER" 'desktop editor wallpaper preview state is missing'\n''',
+              '''require_file "$PREVIEW_SCENE" 'desktop editor preview scene is missing'\nrequire_file "$PREVIEW_WALLPAPER" 'desktop editor wallpaper preview state is missing'\nrequire_file "$PREVIEW_TRANSITION" 'desktop editor preview transition renderer is missing'\n''')
+          replace_once(boundary,
+              '''cmp -s "$LOCK_WALLPAPER" "$PREVIEW_WALLPAPER" \\\n    || fail 'desktop wallpaper preview state drifted from the secure lock wallpaper state'\n''',
+              '''cmp -s "$LOCK_WALLPAPER" "$PREVIEW_WALLPAPER" \\\n    || fail 'desktop wallpaper preview state drifted from the secure lock wallpaper state'\ncmp -s "$LOCK_TRANSITION" "$PREVIEW_TRANSITION" \\\n    || fail 'desktop transition renderer drifted from the secure lock transition renderer'\n''')
           PY
 
       - name: Update managed stock history
@@ -120,17 +143,20 @@ jobs:
           add_current_hash config/quickshell/awtarchy/BarState.qml .config/quickshell/awtarchy/BarState.qml
           add_current_hash config/quickshell/awtarchy/LockscreenEditor.qml .config/quickshell/awtarchy/LockscreenEditor.qml
           add_current_hash config/quickshell/awtarchy/LockPreviewScene.qml .config/quickshell/awtarchy/LockPreviewScene.qml
+          add_current_hash config/quickshell/awtarchy/LockPreviewTransitionLayer.qml .config/quickshell/awtarchy/LockPreviewTransitionLayer.qml
           add_current_hash config/quickshell/awtarchy-lock/LockScene.qml .config/quickshell/awtarchy-lock/LockScene.qml
           add_current_hash config/quickshell/awtarchy-lock/shell.qml .config/quickshell/awtarchy-lock/shell.qml
 
       - name: Focused validation
         run: |
           cmp -s config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy-lock/LockScene.qml
+          cmp -s config/quickshell/awtarchy/LockPreviewTransitionLayer.qml config/quickshell/awtarchy-lock/LockTransitionLayer.qml
           bash tests/test-quickshell-lockscreen-entry-transitions.sh
           bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
           bash tests/test-quickshell-lockscreen-transition-layer.sh
           bash tests/test-quickshell-lockscreen-background-composition.sh
           bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
           bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
 
@@ -144,9 +170,11 @@ jobs:
             config/quickshell/awtarchy/BarState.qml \
             config/quickshell/awtarchy/LockscreenEditor.qml \
             config/quickshell/awtarchy/LockPreviewScene.qml \
+            config/quickshell/awtarchy/LockPreviewTransitionLayer.qml \
             config/quickshell/awtarchy-lock/LockScene.qml \
             config/quickshell/awtarchy-lock/shell.qml \
             tests/test-quickshell-lockscreen-entry-transitions.sh \
+            tests/test-quickshell-lockscreen-editor-config-boundary.sh \
             local/share/awtarchy/quickshell-managed-history.sha256
           git commit -m 'Use shared editor lock transition replay'
           git push origin HEAD:feature/lockscreen-interactive-effects
