@@ -104,8 +104,8 @@ require_text "$EDITOR" 'overlayStrength: root.draftOverlayStrength' 'preview doe
 require_text "$EDITOR" 'wallpaperBlur: root.draftWallpaperBlur' 'preview does not receive blur'
 require_text "$EDITOR" 'blurStyle: root.draftBlurStyle' 'preview does not receive blur style'
 
-# LockScene renders exactly one wallpaper source: smooth blur is an Image
-# layer effect, while pixelated mode conditionally hides the sharp image.
+# LockScene composes the optional secure frozen desktop underneath the
+# configured translucent background, then applies one final blur before UI.
 require_text "$PREVIEW" 'required property string wallpaperFit' 'scene has no wallpaper-fit input'
 require_text "$PREVIEW" 'required property real wallpaperFocalX' 'scene has no focal-x input'
 require_text "$PREVIEW" 'required property real wallpaperFocalY' 'scene has no focal-y input'
@@ -113,36 +113,32 @@ require_text "$PREVIEW" 'required property string overlayMode' 'scene has no ove
 require_text "$PREVIEW" 'required property real overlayStrength' 'scene has no overlay-strength input'
 require_text "$PREVIEW" 'required property real wallpaperBlur' 'scene has no blur input for shared editor/runtime state'
 require_text "$PREVIEW" 'required property string blurStyle' 'scene has no blur-style input'
+require_text "$PREVIEW" 'property Item desktopBackingSource: null' 'scene has no optional frozen desktop composition input'
 require_text "$PREVIEW" 'function wallpaperGeometry()' 'scene has no cover/contain focal geometry helper'
 require_text "$PREVIEW" 'root.wallpaperFit === "contain"' 'scene does not distinguish contain from cover'
-require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'wallpaper smooth blur layer is not enabled'
-require_text "$PREVIEW" 'layer.effect: MultiEffect' 'wallpaper smooth blur has no direct layer effect'
-require_text "$PREVIEW" 'root.blurStyle === "smooth"' 'wallpaper smooth blur is not style-gated'
-forbid_text "$PREVIEW" 'id: wallpaperTexture' 'wallpaper still has a competing texture-provider copy'
-require_text "$PREVIEW" 'hideSource: root.wallpaperBlur > 0' 'pixelated wallpaper does not hide the sharp source'
-require_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper pixelated blur has no rendered effect path'
-require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'wallpaper pixelated blur is not style-gated'
+require_text "$PREVIEW" 'id: backgroundCompositionContent' 'scene has no final background composition item'
+require_text "$PREVIEW" 'id: desktopBackingTexture' 'scene cannot include the secure frozen desktop in final composition'
+require_text "$PREVIEW" 'sourceItem: root.desktopBackingSource' 'scene desktop texture does not consume the secure frozen backing'
+require_text "$PREVIEW" 'id: backgroundLayer' 'configured background layer is missing'
+require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'final composition smooth blur layer is not enabled'
+require_text "$PREVIEW" 'layer.effect: MultiEffect' 'final composition smooth blur has no MultiEffect'
+require_text "$PREVIEW" 'root.blurStyle === "smooth"' 'final composition smooth blur is not style-gated'
+require_text "$PREVIEW" 'id: backgroundCompositionPixelatedBlur' 'final composition pixelated blur path is missing'
+require_text "$PREVIEW" 'sourceItem: backgroundCompositionContent' 'pixelated blur does not source final composition'
+forbid_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper is still pixelated independently of final composition'
 require_text "$PREVIEW" 'id: backgroundOverlay' 'scene has no readability overlay'
 require_text "$PREVIEW" 'root.overlayMode === "light" ? "#ffffff" : "#000000"' 'overlay cannot switch dark/light'
 require_text "$PREVIEW" 'Math.max(0, Math.min(100, root.overlayStrength)) / 100' 'overlay strength is not bounded'
 require_text "$PREVIEW" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' 'scene background opacity is not bounded'
 
-# Secure LockSurface owns the frozen-desktop blur. Smooth mode transforms
-# the capture directly; pixelated mode conditionally hides that same source.
-require_text "$SURFACE" 'import QtQuick.Effects' 'secure surface cannot blur the frozen desktop backing'
+# LockSurface remains the opaque capture/fallback and transition owner, but no
+# longer attempts to blur that capture independently from the translucent layer.
 require_text "$SURFACE" 'color: "#000000"' 'secure surface does not fail closed to opaque black'
+require_text "$SURFACE" 'id: desktopBacking' 'secure surface has no frozen desktop backing'
 require_text "$SURFACE" 'id: desktopCapture' 'secure surface has no per-output frozen desktop image'
-require_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'secure capture has no direct smooth-blur layer gate'
-require_text "$SURFACE" 'layer.effect: MultiEffect' 'secure capture has no direct smooth-blur effect'
-require_text "$SURFACE" 'root.blurStyle === "smooth"' 'smooth desktop blur is not style-gated'
-forbid_text "$SURFACE" 'id: desktopCaptureTexture' 'secure surface still renders a competing desktop texture copy'
-require_text "$SURFACE" 'hideSource: root.transitionComplete' 'pixelated desktop path does not hide the sharp source'
-require_text "$SURFACE" 'desktopCapture.status === Image.Ready' 'desktop blur is not gated on a valid loaded capture'
-require_text "$SURFACE" 'blurEnabled: true' 'smooth desktop blur is not enabled'
-require_text "$SURFACE" 'blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))' 'desktop blur is not bounded'
-require_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'secure surface has no pixelated desktop blur effect'
-require_text "$SURFACE" 'root.blurStyle === "pixelated"' 'pixelated desktop blur is not style-gated'
-require_text "$SURFACE" 'textureSize:' 'pixelated desktop blur does not downsample the frozen capture'
+require_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure scene does not receive frozen desktop composition input'
+forbid_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'surface still pixelates desktop independently of final composition'
+forbid_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'surface still smooth-blurs desktop independently of final composition'
 
 # Detailed composition stays editor-owned rather than duplicated in Quick Settings.
 forbid_text "$QUICK_SETTINGS" 'Background Opacity' 'Quick Settings duplicates editor-owned background opacity control'

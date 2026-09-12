@@ -76,11 +76,14 @@ has "$EDITOR" 'if (draftBackgroundOpacity === 100 && next < 100 && draftWallpape
 has "$EDITOR" '&& !draftWallpaperBlurExplicit)' 'explicit blur choice is not respected by opacity seeding'
 lacks "$EDITOR" 'enabled: root.draftBackgroundMode === "wallpaper"' 'blur remains wallpaper-gated'
 lacks "$QUICK_SETTINGS" 'text: "Background Opacity"' 'detailed opacity still duplicated in Quick Settings'
-has "$SURFACE" 'layer.enabled: root.transitionComplete' 'secure frozen desktop has no direct smooth-blur layer gate'
-has "$SURFACE" 'layer.effect: MultiEffect' 'smooth blur is not applied directly to the secure frozen desktop'
-lacks "$SURFACE" 'id: desktopCaptureTexture' 'secure frozen desktop still has a competing texture-provider copy'
-has "$SURFACE" 'id: desktopCapturePixelatedBlur' 'pixelated blur is not applied to the secure frozen desktop backing'
-has "$SURFACE" 'root.blurStyle === "pixelated"' 'secure pixelated blur is not style-gated'
+has "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not fed into final background composition'
+lacks "$SURFACE" 'id: desktopCapturePixelatedBlur' 'secure frozen desktop still has an independent pixelated blur path'
+lacks "$SURFACE" 'layer.enabled: root.transitionComplete' 'secure frozen desktop still has an independent smooth blur path'
+has "$SCENE" 'id: backgroundCompositionContent' 'complete visible background has no shared composition item'
+has "$SCENE" 'sourceItem: root.desktopBackingSource' 'shared composition does not consume frozen desktop backing'
+has "$SCENE" 'layer.effect: MultiEffect' 'smooth blur is not applied to the complete visible background'
+has "$SCENE" 'id: backgroundCompositionPixelatedBlur' 'pixelated blur is not applied to the complete visible background'
+has "$SCENE" 'sourceItem: backgroundCompositionContent' 'pixelated blur does not consume complete visible background'
 
 # Delete removes only a selected custom image through the existing undo path;
 # all elements share one high defensive scale ceiling instead of a 200% UX cap.

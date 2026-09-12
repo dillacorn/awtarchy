@@ -80,34 +80,33 @@ contains "$LAYER" 'Math.min(1, (root.progress - 0.45) / 0.10)' \
 cmp -s "$LAYER" "$PREVIEW_LAYER" \
     || fail 'secure/editor transition renderers diverged'
 
-# Pass B: wallpaper and captured desktop each have real rendered composition
-# paths. Smooth uses MultiEffect; pixelated uses nearest-neighbor downsampling.
-# The underlying captured desktop remains independently blur-capable beneath a
-# wallpaper instead of the wallpaper consuming the blur control.
+# Pass B: Blur owns the complete visible background composition. The frozen
+# desktop is copied into LockScene first, Background Opacity blends the configured
+# wallpaper/color above it, and only then Smooth/Pixelated is applied.
+contains "$SURFACE" 'desktopBackingSource: desktopBacking' \
+    'secure frozen desktop is not passed into the final background composition'
+rejects "$SURFACE" 'id: desktopCapturePixelatedBlur' \
+    'desktop still has an independent pixelated blur path'
+rejects "$SURFACE" 'layer.enabled: root.transitionComplete' \
+    'desktop still has an independent smooth blur path'
+contains "$SCENE" 'property Item desktopBackingSource: null' \
+    'scene has no optional frozen desktop composition input'
+contains "$SCENE" 'id: backgroundCompositionContent' \
+    'scene has no final background composition item'
+contains "$SCENE" 'sourceItem: root.desktopBackingSource' \
+    'final composition does not consume frozen desktop backing'
+contains "$SCENE" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' \
+    'configured background opacity is not inside final composition'
 contains "$SCENE" 'layer.enabled: root.wallpaperBlur > 0' \
-    'wallpaper has no direct smooth-blur layer gate'
+    'final composition has no smooth blur gate'
 contains "$SCENE" 'layer.effect: MultiEffect' \
-    'wallpaper has no direct MultiEffect smooth blur path'
-rejects "$SCENE" 'id: wallpaperTexture' \
-    'wallpaper still has a competing texture-provider copy'
-contains "$SCENE" 'hideSource: root.wallpaperBlur > 0' \
-    'pixelated wallpaper path does not hide the sharp image'
-contains "$SCENE" 'id: wallpaperPixelatedBlur' \
-    'wallpaper has no pixelated composition blur render path'
-contains "$SCENE" 'root.blurStyle === "pixelated"' \
-    'wallpaper pixelated blur is not style-gated'
-contains "$SURFACE" 'layer.enabled: root.transitionComplete' \
-    'captured desktop has no direct smooth-blur layer gate'
-contains "$SURFACE" 'layer.effect: MultiEffect' \
-    'captured desktop has no direct MultiEffect smooth blur path'
-rejects "$SURFACE" 'id: desktopCaptureTexture' \
-    'captured desktop still has a competing texture-provider copy'
-contains "$SURFACE" 'hideSource: root.transitionComplete' \
-    'pixelated desktop path does not hide the sharp capture'
-contains "$SURFACE" 'id: desktopCapturePixelatedBlur' \
-    'captured desktop has no pixelated composition blur render path'
-contains "$SURFACE" 'root.blurStyle === "pixelated"' \
-    'captured desktop pixelated blur is not style-gated'
+    'final composition has no smooth MultiEffect path'
+contains "$SCENE" 'id: backgroundCompositionPixelatedBlur' \
+    'final composition has no pixelated blur path'
+contains "$SCENE" 'sourceItem: backgroundCompositionContent' \
+    'pixelated blur does not consume final composition'
+rejects "$SCENE" 'id: wallpaperPixelatedBlur' \
+    'wallpaper still has an independent pixelated blur path'
 cmp -s "$SCENE" "$PREVIEW_SCENE" \
     || fail 'secure/editor scene copies diverged'
 

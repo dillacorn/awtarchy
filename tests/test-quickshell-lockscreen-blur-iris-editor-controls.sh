@@ -89,28 +89,26 @@ require_text "$EDITOR" 'root.settingsBarOffsetY' 'settings bar drag does not upd
 require_text "$EDITOR" 'Math.max(0, Math.min(' 'settings bar movement is not clamped on-screen'
 forbid_text "$EDITOR" 'settingsBarOffsetY: root.settingsBarOffsetY' 'settings bar position leaked into presentation snapshot/save data'
 
-# Secure runtime renders one captured desktop source: direct smooth layer or
-# conditionally source-hiding pixelated provider under every background mode.
+# Secure runtime passes the frozen desktop into the same final composition as
+# the configured background. Smooth/Pixelated consume that final composition.
 require_text "$LOCK_SHELL" 'property string lockBlurStyle: "smooth"' 'secure shell has no blur-style state'
 require_text "$LOCK_SHELL" 'readonly property string blurStyle:' 'secure shell does not normalize blur style'
 require_text "$LOCK_SHELL" 'blurStyle: root.blurStyle' 'secure surface does not receive blur style'
 require_text "$SURFACE" 'required property string blurStyle' 'secure surface has no blur-style input'
-require_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'desktop capture has no direct smooth-blur layer'
-require_text "$SURFACE" 'layer.effect: MultiEffect' 'desktop capture has no direct MultiEffect layer'
-require_text "$SURFACE" 'hideSource: root.transitionComplete' 'pixelated desktop path does not hide the sharp capture'
-forbid_text "$SURFACE" 'id: desktopCaptureTexture' 'competing desktop texture-provider path remains'
-require_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'pixelated desktop blur path is missing'
-require_text "$SURFACE" 'root.blurStyle === "pixelated"' 'desktop blur style does not switch to pixelated rendering'
-require_text "$SURFACE" 'textureSize:' 'pixelated desktop blur does not downsample the captured session'
+require_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not passed into final composition'
+forbid_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'desktop still has an independent pixelated blur path'
+forbid_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'desktop still has an independent smooth blur path'
 
-# Wallpaper uses the same blur strength/style, independently layered above the
-# already blurred captured desktop.
 require_text "$PREVIEW" 'required property string blurStyle' 'presentation scene has no blur-style input'
-require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'wallpaper has no direct smooth-blur layer'
-require_text "$PREVIEW" 'layer.effect: MultiEffect' 'wallpaper has no direct MultiEffect layer'
-forbid_text "$PREVIEW" 'id: wallpaperTexture' 'competing wallpaper texture-provider path remains'
-require_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'pixelated wallpaper blur path is missing'
-require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'wallpaper blur style does not switch to pixelated rendering'
+require_text "$PREVIEW" 'property Item desktopBackingSource: null' 'presentation scene has no optional frozen desktop input'
+require_text "$PREVIEW" 'id: backgroundCompositionContent' 'presentation scene has no final background composition'
+require_text "$PREVIEW" 'sourceItem: root.desktopBackingSource' 'final composition cannot consume secure desktop backing'
+require_text "$PREVIEW" 'layer.enabled: root.wallpaperBlur > 0' 'final composition has no smooth-blur layer'
+require_text "$PREVIEW" 'layer.effect: MultiEffect' 'final composition has no MultiEffect smooth blur'
+require_text "$PREVIEW" 'id: backgroundCompositionPixelatedBlur' 'final composition has no pixelated blur path'
+require_text "$PREVIEW" 'sourceItem: backgroundCompositionContent' 'pixelated blur does not consume final composition'
+require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'final composition pixelated blur is not style-gated'
+forbid_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper still has an independent pixelated blur path'
 
 # Iris Reveal must have a live texture-provider mask instead of a hidden source
 # item that can render as an empty mask on Qt/Quickshell.

@@ -105,39 +105,6 @@ WlSessionLockSurface {
                 cache: false
                 fillMode: Image.Stretch
                 visible: status === Image.Ready
-
-                layer.enabled: root.transitionComplete
-                    && root.wallpaperBlur > 0
-                    && root.blurStyle === "smooth"
-                layer.effect: MultiEffect {
-                    autoPaddingEnabled: false
-                    blurEnabled: true
-                    blurMax: 32
-                    blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
-                }
-            }
-
-
-            ShaderEffectSource {
-                id: desktopCapturePixelatedBlur
-                anchors.fill: parent
-                sourceItem: desktopCapture
-                hideSource: root.transitionComplete
-                    && root.wallpaperBlur > 0
-                    && root.blurStyle === "pixelated"
-                    && desktopCapture.status === Image.Ready
-                live: true
-                recursive: false
-                smooth: false
-                readonly property real pixelFactor: 1
-                    + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
-                textureSize: Qt.size(
-                    Math.max(1, Math.round(width / pixelFactor)),
-                    Math.max(1, Math.round(height / pixelFactor)))
-                visible: root.transitionComplete
-                    && root.wallpaperBlur > 0
-                    && root.blurStyle === "pixelated"
-                    && desktopCapture.status === Image.Ready
             }
         }
 
@@ -174,6 +141,7 @@ WlSessionLockSurface {
             visualizer: root.visualizer
             audioBands: root.audioBands
             backgroundOpacity: root.backgroundOpacity
+            desktopBackingSource: desktopBacking
             previewMode: false
             externallyManagedEntryTransition: true
             externalEntryTransitionRunning: transitionLayer.running

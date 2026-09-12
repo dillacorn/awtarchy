@@ -35,6 +35,7 @@ Item {
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
+    property Item desktopBackingSource: null
 
     property bool previewMode: false
     property bool editorMode: false
@@ -719,71 +720,79 @@ Item {
         logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);
     }
     Item {
-        id: backgroundLayer
+        id: backgroundCompositionContent
         anchors.fill: parent
-        opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100
 
-        Rectangle {
+        ShaderEffectSource {
+            id: desktopBackingTexture
             anchors.fill: parent
-            color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
+            sourceItem: root.desktopBackingSource
+            hideSource: root.desktopBackingSource !== null
+            live: true
+            recursive: false
+            smooth: true
+            visible: root.desktopBackingSource !== null
         }
 
-        Image {
-            id: wallpaperImage
-            readonly property var geometry: root.wallpaperGeometry()
-            x: geometry.x
-            y: geometry.y
-            width: geometry.width
-            height: geometry.height
-            visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
-            source: root.wallpaperSource
-            fillMode: Image.Stretch
-            asynchronous: true
-            cache: true
+        Item {
+            id: backgroundLayer
+            anchors.fill: parent
+            opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100
 
-            layer.enabled: root.wallpaperBlur > 0
-                && root.blurStyle === "smooth"
-            layer.effect: MultiEffect {
-                autoPaddingEnabled: false
-                blurEnabled: true
-                blurMax: 32
-                blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
+            Rectangle {
+                anchors.fill: parent
+                color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
+            }
+
+            Image {
+                id: wallpaperImage
+                readonly property var geometry: root.wallpaperGeometry()
+                x: geometry.x
+                y: geometry.y
+                width: geometry.width
+                height: geometry.height
+                visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+                source: root.wallpaperSource
+                fillMode: Image.Stretch
+                asynchronous: true
+                cache: true
+            }
+
+            Rectangle {
+                id: backgroundOverlay
+                anchors.fill: parent
+                visible: root.overlayMode !== "none" && root.overlayStrength > 0
+                color: root.overlayMode === "light" ? "#ffffff" : "#000000"
+                opacity: Math.max(0, Math.min(100, root.overlayStrength)) / 100
             }
         }
 
-
-        ShaderEffectSource {
-            id: wallpaperPixelatedBlur
-            x: wallpaperImage.x
-            y: wallpaperImage.y
-            width: wallpaperImage.width
-            height: wallpaperImage.height
-            sourceItem: wallpaperImage
-            hideSource: root.wallpaperBlur > 0
-                && root.blurStyle === "pixelated"
-                && wallpaperImage.status === Image.Ready
-            live: true
-            recursive: false
-            smooth: false
-            readonly property real pixelFactor: 1
-                + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
-            textureSize: Qt.size(
-                Math.max(1, Math.round(width / pixelFactor)),
-                Math.max(1, Math.round(height / pixelFactor)))
-            visible: root.backgroundMode === "wallpaper"
-                && root.wallpaperSource.length > 0
-                && root.wallpaperBlur > 0
-                && root.blurStyle === "pixelated"
-                && wallpaperImage.status === Image.Ready
+        layer.enabled: root.wallpaperBlur > 0
+            && root.blurStyle === "smooth"
+        layer.effect: MultiEffect {
+            autoPaddingEnabled: false
+            blurEnabled: true
+            blurMax: 32
+            blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
         }
+    }
 
-        Rectangle {
-            id: backgroundOverlay
-            anchors.fill: parent
-            visible: root.overlayMode !== "none" && root.overlayStrength > 0
-            color: root.overlayMode === "light" ? "#ffffff" : "#000000"
-            opacity: Math.max(0, Math.min(100, root.overlayStrength)) / 100
-        }
+    ShaderEffectSource {
+        id: backgroundCompositionPixelatedBlur
+        anchors.fill: parent
+        sourceItem: backgroundCompositionContent
+        hideSource: root.wallpaperBlur > 0
+            && root.blurStyle === "pixelated"
+        live: true
+        recursive: false
+        smooth: false
+        readonly property real pixelFactor: 1
+            + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+        textureSize: Qt.size(
+            Math.max(1, Math.round(width / pixelFactor)),
+            Math.max(1, Math.round(height / pixelFactor)))
+        visible: root.wallpaperBlur > 0
+            && root.blurStyle === "pixelated"
     }
 
     Item {
