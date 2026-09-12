@@ -45,6 +45,10 @@ Item {
     property int entryTransitionReplayToken: 0
     property real entryTransitionProgress: 0
     property bool entryTransitionRunning: true
+    property bool externallyManagedEntryTransition: false
+    property bool externalEntryTransitionRunning: false
+    readonly property bool effectiveEntryTransitionRunning:
+        externallyManagedEntryTransition ? externalEntryTransitionRunning : entryTransitionRunning
 
     readonly property int entryTileColumns: 24
     readonly property int entryTileRows: 14
@@ -53,6 +57,8 @@ Item {
     readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty
     readonly property real securePasswordEntryOpacity: root.unlocking ? 0
         : !root.entered ? 0
+        : root.externallyManagedEntryTransition
+            ? (root.externalEntryTransitionRunning ? 0 : 1)
         : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
         : root.entryTransitionRunning ? 0 : 1
 
@@ -134,6 +140,11 @@ Item {
 
     function replayEntryTransition() {
         entryTransitionAnimation.stop();
+        if (externallyManagedEntryTransition) {
+            entryTransitionProgress = 1;
+            entryTransitionRunning = false;
+            return;
+        }
         entryTransitionProgress = 0;
         entryTransitionRunning = true;
         if (!entered || unlocking)
@@ -753,6 +764,7 @@ Item {
         id: visualLayer
         anchors.fill: parent
         opacity: root.unlocking ? 0
+            : root.externallyManagedEntryTransition ? (root.entered ? 1 : 0)
             : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
             : root.entered ? 1 : 0
 
@@ -1015,7 +1027,7 @@ Item {
                             SequentialAnimation on formationProgress {
                                 running: wordmarkCell.isFilledGlyph
                                     && root.entered && !root.unlocking
-                                    && !root.entryTransitionRunning
+                                    && !root.effectiveEntryTransitionRunning
                                     && root.animationPreference !== "off"
 
                                 PauseAnimation { duration: wordmarkCell.formationDelay }
@@ -1195,7 +1207,8 @@ Item {
         id: entryFadeBacking
         anchors.fill: parent
         z: 499
-        visible: !root.unlocking && root.entryTransitionRunning
+        visible: !root.externallyManagedEntryTransition
+            && !root.unlocking && root.entryTransitionRunning
             && root.entryTransitionMode() === "fade"
         color: "#000000"
         opacity: 1 - root.entryTransitionProgress
@@ -1205,7 +1218,8 @@ Item {
         id: entryTransitionCover
         anchors.fill: parent
         z: 500
-        visible: !root.unlocking && root.entryTransitionRunning
+        visible: !root.externallyManagedEntryTransition
+            && !root.unlocking && root.entryTransitionRunning
             && root.entryTransitionMode() !== "fade"
 
         Repeater {
