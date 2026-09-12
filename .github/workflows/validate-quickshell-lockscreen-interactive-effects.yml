@@ -24,6 +24,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
           bash -n tests/test-quickshell-lockscreen-capture.sh
+          bash -n tests/test-quickshell-lockscreen-transition-layer.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash -n tests/test-quickshell-lockscreen-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -64,6 +65,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
           shellcheck tests/test-quickshell-lockscreen-capture.sh
+          shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
           shellcheck tests/test-quickshell-lockscreen-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -112,6 +114,8 @@ jobs:
           bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
       - name: Secure transition capture contract
         run: bash tests/test-quickshell-lockscreen-capture.sh
+      - name: Desktop transition layer contract
+        run: bash tests/test-quickshell-lockscreen-transition-layer.sh
       - name: Background composition contracts
         run: |
           bash tests/test-quickshell-lockscreen-background-composition.sh
