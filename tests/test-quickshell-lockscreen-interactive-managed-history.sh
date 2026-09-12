@@ -15,6 +15,7 @@ managed_files=(
     'config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh:.config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh'
     'config/hypr/scripts/quickshell_lockscreen_weather.sh:.config/hypr/scripts/quickshell_lockscreen_weather.sh'
     'config/hypr/scripts/quickshell_lockscreen_contrast.sh:.config/hypr/scripts/quickshell_lockscreen_contrast.sh'
+    'config/hypr/scripts/quickshell_lockscreen_preview_capture.sh:.config/hypr/scripts/quickshell_lockscreen_preview_capture.sh'
     'config/quickshell/awtarchy/shell.qml:.config/quickshell/awtarchy/shell.qml'
     'config/quickshell/awtarchy/BarState.qml:.config/quickshell/awtarchy/BarState.qml'
     'config/quickshell/awtarchy/QuickSettings.qml:.config/quickshell/awtarchy/QuickSettings.qml'

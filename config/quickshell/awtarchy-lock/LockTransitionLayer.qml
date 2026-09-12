@@ -157,9 +157,11 @@ Item {
 
     Item {
         id: irisMaskShape
-        anchors.fill: parent
-        layer.enabled: true
-        layer.smooth: true
+        x: root.width + 64
+        y: 0
+        width: root.width
+        height: root.height
+        visible: root.running && root.normalizedMode === "iris"
         Rectangle {
             anchors.centerIn: parent
             width: root.irisDiameter
@@ -171,12 +173,12 @@ Item {
 
     ShaderEffectSource {
         id: irisMaskTexture
-        x: root.width + 64
+        x: root.width * 2 + 128
         y: 0
         width: root.width
         height: root.height
         sourceItem: irisMaskShape
-        hideSource: true
+        hideSource: false
         live: true
         recursive: false
         smooth: true

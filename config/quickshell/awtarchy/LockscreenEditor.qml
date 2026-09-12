@@ -17,6 +17,9 @@ Singleton {
     readonly property string stateBackend: configHome + "/hypr/scripts/quickshell_application_state.sh"
     readonly property string contrastBackend: configHome + "/hypr/scripts/quickshell_lockscreen_contrast.sh"
     readonly property string wallpaperPickerBackend: configHome + "/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh"
+    readonly property string previewCaptureBackend: configHome + "/hypr/scripts/quickshell_lockscreen_preview_capture.sh"
+    property string previewCaptureDirectory: ""
+    property string previewCapturePendingDirectory: ""
     property bool editingActive: false
     readonly property bool open: editingActive
     property bool pickerSuspended: false
@@ -1706,6 +1709,36 @@ Singleton {
         return screens.length > 0 ? screens[0] : null;
     }
 
+    function previewCaptureSourceForScreen(screen) {
+        if (previewCaptureDirectory.length === 0 || !screen || !screen.name)
+            return "";
+        const name = String(screen.name);
+        if (!/^[A-Za-z0-9._-]+$/.test(name))
+            return "";
+        return "file://" + previewCaptureDirectory + "/" + name + ".png";
+    }
+
+    function presentEditorAfterPreviewCapture(message) {
+        if (!open || pickerSuspended)
+            return;
+        if (message.length > 0)
+            statusMessage = message;
+        editorWindow.visible = true;
+        FlyoutManager.claimOverlay("lockscreen-editor");
+        scheduleContrastRefresh();
+        Qt.callLater(() => {
+            editorFocus.forceActiveFocus();
+            replayEntryTransition();
+        });
+    }
+
+    function cleanupPreviewCaptureDirectory(directory) {
+        const value = String(directory || "");
+        if (value.length === 0)
+            return;
+        Quickshell.execDetached(["bash", previewCaptureBackend, "cleanup", value]);
+    }
+
     function toggleDrawer(name) {
         const allowed = ["element", "layout", "background", "weather"];
         if (allowed.indexOf(String(name || "")) < 0)
@@ -1730,10 +1763,11 @@ Singleton {
         activeDrawer = "";
         pickerSuspended = false;
         editingActive = true;
-        editorWindow.visible = true;
-        FlyoutManager.claimOverlay("lockscreen-editor");
-        scheduleContrastRefresh();
-        Qt.callLater(() => editorFocus.forceActiveFocus());
+        previewCaptureDirectory = "";
+        previewCapturePendingDirectory = "";
+        editorWindow.visible = false;
+        statusMessage = "Capturing current desktop preview…";
+        previewCaptureDelay.restart();
     }
 
     function openFocused() {
@@ -1795,8 +1829,13 @@ Singleton {
         backgroundPaletteOpen = false;
         pickerSuspended = false;
         editingActive = false;
+        previewCaptureDelay.stop();
+        const capturedPreview = previewCaptureDirectory;
+        previewCaptureDirectory = "";
+        previewCapturePendingDirectory = "";
         FlyoutManager.releaseOverlay("lockscreen-editor");
         editorWindow.visible = false;
+        cleanupPreviewCaptureDirectory(capturedPreview);
         loadPersistedDraft();
     }
 
@@ -1902,6 +1941,43 @@ Singleton {
     LockPreviewWallpaperState {
         id: wallpaperState
         path: root.draftWallpaperPath
+    }
+
+    Timer {
+        id: previewCaptureDelay
+        interval: 120
+        repeat: false
+        onTriggered: {
+            if (!root.open || root.pickerSuspended)
+                return;
+            root.previewCapturePendingDirectory = "";
+            previewCaptureProcess.exec(["bash", root.previewCaptureBackend, "prepare"]);
+        }
+    }
+
+    Process {
+        id: previewCaptureProcess
+        stdout: SplitParser {
+            onRead: line => root.previewCapturePendingDirectory = String(line || "").trim()
+        }
+        onExited: (exitCode, exitStatus) => {
+            const captured = root.previewCapturePendingDirectory;
+            root.previewCapturePendingDirectory = "";
+            if (!root.open || root.pickerSuspended) {
+                root.cleanupPreviewCaptureDirectory(captured);
+                return;
+            }
+            if (exitCode === 0 && captured.length > 0) {
+                const previous = root.previewCaptureDirectory;
+                root.previewCaptureDirectory = captured;
+                root.cleanupPreviewCaptureDirectory(previous);
+                root.presentEditorAfterPreviewCapture("");
+            } else {
+                root.previewCaptureDirectory = "";
+                root.presentEditorAfterPreviewCapture(
+                    "Desktop preview capture unavailable; using black fallback.");
+            }
+        }
     }
 
     Timer {
@@ -2049,37 +2125,13 @@ Singleton {
                 width: editorFocus.width
                 height: editorFocus.height
 
-                Rectangle { anchors.fill: parent; color: "#101318" }
-                Rectangle {
-                    x: 0
-                    y: 0
-                    width: parent.width
-                    height: Math.max(28, parent.height * 0.035)
-                    color: "#1c222b"
-                }
-                Rectangle {
-                    anchors.centerIn: parent
-                    width: parent.width * 0.62
-                    height: parent.height * 0.56
-                    radius: 8
-                    color: "#202731"
-                    border.width: 1
-                    border.color: "#3a4657"
-                    Rectangle {
-                        x: 0
-                        y: 0
-                        width: parent.width
-                        height: Math.max(26, parent.height * 0.07)
-                        radius: parent.radius
-                        color: "#2a3340"
-                    }
-                    Text {
-                        anchors.centerIn: parent
-                        text: "Synthetic desktop preview"
-                        color: "#8d99aa"
-                        font.family: Theme.fontFamily
-                        font.pixelSize: Math.max(12, parent.height * 0.035)
-                    }
+                Rectangle { anchors.fill: parent; color: "#000000" }
+                Image {
+                    anchors.fill: parent
+                    source: root.previewCaptureSourceForScreen(editorWindow.screen)
+                    fillMode: Image.Stretch
+                    asynchronous: false
+                    cache: false
                 }
             }
 
@@ -3168,31 +3220,18 @@ Singleton {
                     }
                 }
 
-                MouseArea {
+                DragHandler {
                     id: settingsBarAltDrag
-                    anchors.fill: parent
-                    z: 1000
+                    target: null
                     acceptedButtons: Qt.LeftButton
-                    property real dragStartSceneY: 0
-                    property real dragStartOffsetY: 0
-
-                    onPressed: mouse => {
-                        if (!(mouse.modifiers & Qt.AltModifier)) {
-                            mouse.accepted = false;
-                            return;
-                        }
-                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
-                        dragStartSceneY = point.y;
-                        dragStartOffsetY = root.settingsBarOffsetY;
-                        mouse.accepted = true;
-                    }
-                    onPositionChanged: mouse => {
-                        if (!pressed)
-                            return;
-                        const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                    acceptedModifiers: Qt.AltModifier
+                    dragThreshold: 0
+                    xAxis.enabled: false
+                    yAxis.enabled: true
+                    yAxis.onActiveValueChanged: (delta) => {
                         const limit = Math.max(0, editorFocus.height - settingsBar.height);
                         root.settingsBarOffsetY = Math.max(0, Math.min(
-                            limit, dragStartOffsetY + dragStartSceneY - point.y));
+                            limit, root.settingsBarOffsetY - delta));
                     }
                 }
             }
@@ -3212,9 +3251,16 @@ Singleton {
             exclusionMode: ExclusionMode.Ignore
             anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
             Item {
-                id: secondaryTransitionStart; anchors.fill: parent
-                Rectangle { anchors.fill: parent; color: "#101318" }
-                Rectangle { anchors.centerIn: parent; width: parent.width*0.62; height: parent.height*0.56; radius: 8; color: "#202731"; border.width: 1; border.color: "#3a4657" }
+                id: secondaryTransitionStart
+                x: parent.width + 64; y: 0; width: parent.width; height: parent.height
+                Rectangle { anchors.fill: parent; color: "#000000" }
+                Image {
+                    anchors.fill: parent
+                    source: root.previewCaptureSourceForScreen(modelData)
+                    fillMode: Image.Stretch
+                    asynchronous: false
+                    cache: false
+                }
             }
             LockPreviewScene {
                 id: secondaryPreviewScene; anchors.fill: parent; theme: Theme

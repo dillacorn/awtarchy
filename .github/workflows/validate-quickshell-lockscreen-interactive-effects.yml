@@ -38,6 +38,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-transition-layer.sh
           bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
           bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash -n tests/test-quickshell-lockscreen-editor-preview-runtime.sh
           bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
           bash -n tests/test-quickshell-lockscreen-editor.sh
           bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -71,6 +72,9 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
             bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh
           fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
       - name: ShellCheck
         run: |
           shellcheck tests/test-quickshell-lockscreen-interactive-effects.sh
@@ -85,6 +89,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
           shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
           shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-preview-runtime.sh
           shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
           shellcheck tests/test-quickshell-lockscreen-editor.sh
           shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
@@ -118,6 +123,9 @@ jobs:
           if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh
           fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
       - name: Runtime helper mode
         run: |
           test -x config/hypr/scripts/quickshell_lockscreen_audio.sh
@@ -146,6 +154,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
           bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
           bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-editor-preview-runtime.sh
       - name: Weather refresh contracts
         run: |
           bash tests/test-quickshell-lockscreen-weather.sh

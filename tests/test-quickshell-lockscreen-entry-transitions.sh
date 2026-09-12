@@ -137,7 +137,7 @@ cmp -s "$LAYER" "$PREVIEW_LAYER" \
 rejects "$EDITOR" 'import "../awtarchy-lock"' \
     'editor crosses the secure Quickshell configuration boundary'
 contains "$EDITOR" 'id: editorTransitionStart' \
-    'editor has no synthetic transition start source'
+    'editor has no desktop transition start source'
 contains "$EDITOR" 'LockPreviewTransitionLayer {' \
     'editor Replay does not use the config-local parity transition renderer'
 contains "$EDITOR" 'startSource: editorTransitionStart' \
@@ -153,9 +153,13 @@ contains "$EDITOR" 'externalEntryTransitionRunning: editorTransitionLayer.runnin
 rejects "$EDITOR" 'entryTransitionReplayToken: root.entryTransitionReplayToken' \
     'editor Replay still drives the legacy LockScene transition directly'
 rejects "$EDITOR" 'AWTARCHY_LOCK_CAPTURE_DIR' \
-    'editor must not consume secure live desktop captures'
+    'editor must not consume the secure lock capture environment'
 rejects "$EDITOR" 'quickshell_lockscreen_capture.sh' \
-    'editor Replay must use a synthetic source instead of capturing the desktop'
+    'editor must not call the secure lock capture helper'
+contains "$EDITOR" 'quickshell_lockscreen_preview_capture.sh' \
+    'editor Replay does not use its isolated unlocked desktop preview capture helper'
+rejects "$EDITOR" 'Synthetic desktop preview' \
+    'editor Replay still uses the synthetic desktop placeholder'
 
 # Transition speed uses an Awtarchy-style direct pointer control, not the stock
 # QML Slider that previously duplicated the wrong range.

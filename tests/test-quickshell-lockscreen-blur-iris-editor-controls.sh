@@ -114,7 +114,7 @@ forbid_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper still has an inde
 # item that can render as an empty mask on Qt/Quickshell.
 require_text "$LAYER" 'id: irisMaskTexture' 'Iris Reveal has no mask texture provider'
 require_text "$LAYER" 'sourceItem: irisMaskShape' 'Iris Reveal mask texture does not source the circle'
-require_text "$LAYER" 'hideSource: true' 'Iris Reveal mask source is not hidden safely'
+require_text "$LAYER" 'hideSource: false' 'Iris Reveal mask staging still depends on hideSource suppression'
 require_text "$LAYER" 'maskSource: irisMaskTexture' 'Iris Reveal does not consume the live mask texture'
 forbid_text "$LAYER" 'id: irisMaskShape\n        anchors.fill: parent\n        visible: false' 'Iris Reveal still disables its mask source'
 require_text "$EDITOR" 'label: "Iris Reveal"' 'editor transition control still says Reverse Iris'

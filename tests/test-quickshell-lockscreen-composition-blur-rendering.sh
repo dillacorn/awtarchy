@@ -128,10 +128,10 @@ for label, configured_background in (
         )
 PY
 
-# The unlocked editor cannot blur the live compositor behind a transparent
-# PanelWindow.  Its primary and secondary previews must feed their synthetic
-# desktop frames into the same desktopBackingSource input used by secure runtime,
-# so moving the Blur slider updates the complete preview composition live.
+# The unlocked editor captures each real output while its own windows are hidden.
+# Primary and secondary previews feed those frozen frames into the same
+# desktopBackingSource composition used by secure runtime, so Blur updates the
+# complete preview composition live without recursively capturing the editor UI.
 contains "$EDITOR" 'desktopBackingSource: editorTransitionStart' \
     'primary editor preview does not feed its synthetic desktop into live blur composition'
 contains "$EDITOR" 'desktopBackingSource: secondaryTransitionStart' \
