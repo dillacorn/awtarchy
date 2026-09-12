@@ -66,9 +66,8 @@ done
 require_text "$QUICK_SETTINGS" '"set-lockscreen-logo-physics-hz"' \
     'Quick Settings does not persist logo physics rate'
 
-# Pointer motion keeps only the lightweight ghost. Logo blocks move only while
-# the bounded click explosion simulation is active, and only logo clicks may
-# start or reinforce that simulation.
+# Pointer motion feeds a coherent hover field into the same bounded, active-only
+# solver used by logo-click explosions.
 for legacy in \
     'property real pointerFieldX:' \
     'property real pointerFieldY:' \
@@ -111,8 +110,10 @@ require_text "$SCENE" 'function stepLogoExplosion()' \
     'logo explosion has no bounded physics step'
 require_text "$SCENE" 'id: logoPhysicsTimer' \
     'logo explosion has no root physics timer'
-require_text "$SCENE" 'running: root.logoExplosionActive' \
+require_text "$SCENE" 'running: root.logoSimulationActive' \
     'logo physics timer runs while idle'
+require_text "$SCENE" 'function logoHoverTarget(row, column)' \
+    'coherent hover deformation is missing'
 require_text "$SCENE" 'interval: root.logoPhysicsIntervalMs' \
     'logo physics timer does not follow the selected refresh rate'
 require_text "$SCENE" 'particle.vx +=' \
@@ -121,8 +122,8 @@ require_text "$SCENE" 'root.triggerLogoExplosion(x, y);' \
     'logo pointer click does not trigger the block explosion'
 require_text "$SCENE" 'const ghostDx = x - ghostHeadX;' \
     'high-polling-rate ghost movement accumulation regressed'
-reject_text "$SCENE" 'updatePointerField(x, y, speed);' \
-    'ordinary pointer motion still drives logo physics'
+require_text "$SCENE" 'logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);' \
+    'logo-local pointer motion does not wake the bounded hover solver'
 reject_text "$SCENE" 'const margin = 90 * uiScale;' \
     'logo hit testing regressed to the old oversized fixed margin'
 reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \

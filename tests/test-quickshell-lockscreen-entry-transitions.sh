@@ -60,9 +60,31 @@ if run_state set-lockscreen-entry-transition glitch >/dev/null 2>&1; then
 fi
 [[ "$(jq -r '.lockscreen_entry_transition' "$TMP/cache/awtarchy/quickshell-state.json")" == pixel ]] \
     || fail 'invalid transition attempt changed persisted state'
+
+layout='{"logo":{"x":0.5,"y":0.34},"time":{"x":0.5,"y":0.51},"date":{"x":0.5,"y":0.555},"username":{"x":0.5,"y":0.595},"weather":{"x":0.5,"y":0.635},"password":{"x":0.5,"y":0.7}}'
+visibility='{"logo":true,"time":false,"date":false,"username":false,"weather":false,"password":true}'
+run_state save-lockscreen-editor "$layout" "$visibility" black '#000000' '' \
+    cover 0.5 0.5 none 0 0 auto '[]' \
+    '{"enabled":false,"shape":"straight","sensitivity":140,"performance":"balanced"}' \
+    100 pixel 1800
+jq -e '.lockscreen_entry_transition == "pixel"
+    and .lockscreen_entry_transition_duration == 1800' \
+    "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
+    || fail 'atomic editor save did not persist transition duration'
+duration_state_before="$(sha256sum "$TMP/cache/awtarchy/quickshell-state.json" | awk '{print $1}')"
+if run_state save-lockscreen-editor "$layout" "$visibility" black '#000000' '' \
+    cover 0.5 0.5 none 0 0 auto '[]' \
+    '{"enabled":false,"shape":"straight","sensitivity":140,"performance":"balanced"}' \
+    100 pixel 399 >/dev/null 2>&1; then
+    fail 'transition duration below 400ms was accepted'
+fi
+[[ "$(sha256sum "$TMP/cache/awtarchy/quickshell-state.json" | awk '{print $1}')" == "$duration_state_before" ]] \
+    || fail 'invalid transition duration partially changed persisted state'
 run_state reset-lockscreen-presentation
 [[ "$(jq -r '.lockscreen_entry_transition' "$TMP/cache/awtarchy/quickshell-state.json")" == fade ]] \
     || fail 'reset-lockscreen-presentation did not restore Fade entry transition'
+[[ "$(jq -r '.lockscreen_entry_transition_duration' "$TMP/cache/awtarchy/quickshell-state.json")" == 1200 ]] \
+    || fail 'reset-lockscreen-presentation did not restore 1200ms transition duration'
 
 contains "$BAR_STATE" 'lockscreenEntryTransitionPresets' \
     'BarState transition presets are missing'

@@ -22,12 +22,12 @@ require_text "$SCENE_QML" 'logoPhysicsHz >= 90 ? 11' \
     '90 Hz mode does not reduce the active simulation interval'
 require_text "$SCENE_QML" 'logoPhysicsHz >= 60 ? 17 : 33' \
     '30/60 Hz active simulation intervals are missing'
-require_text "$SCENE_QML" 'running: root.logoExplosionActive' \
+require_text "$SCENE_QML" 'running: root.logoSimulationActive' \
     'logo physics timer is not strictly active-only'
 require_text "$SCENE_QML" 'logoExplosionElapsedMs >= logoExplosionScatterMs' \
     'explosion has no scatter-to-return phase boundary'
-require_text "$SCENE_QML" 'particle.vx += -Number(particle.x || 0) * spring * dt;' \
-    'return phase does not spring blocks toward home'
+require_text "$SCENE_QML" 'particle.vx += (hoverTarget.x - Number(particle.x || 0)) * spring * dt;' \
+    'return phase does not spring blocks toward the coherent hover/home target'
 require_text "$SCENE_QML" 'logoParticleBuckets' \
     'collision system does not use spatial buckets'
 reject_text "$SCENE_QML" 'audioEffectsEnabled' \
@@ -35,11 +35,11 @@ reject_text "$SCENE_QML" 'audioEffectsEnabled' \
 reject_text "$SCENE_QML" 'audioOffsetX' \
     'logo blocks still carry audio displacement'
 
-# The existing analyzer component stays inert until the dedicated visualizer pass;
-# its smoothing still has to settle safely if constructed later.
-require_text "$AUDIO_QML" 'function settled()' \
-    'audio analyzer has no explicit settled state'
-require_text "$AUDIO_QML" 'if (root.settled())' \
-    'audio smoothing does not stop after settling'
+# Parsed CAVA frames are presented directly; a second QML smoothing cadence
+# would reintroduce the lag observed in the first runtime pass.
+require_text "$AUDIO_QML" 'bands = normalizedSpectrum(values);' \
+    'audio analyzer does not publish frames directly'
+reject_text "$AUDIO_QML" 'smoothingTimer' \
+    'retired QML smoothing cadence remains'
 
 printf '%s\n' 'PASS: lockscreen active-only explosion physics regressions'

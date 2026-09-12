@@ -74,7 +74,7 @@ valid_visibility='{"logo":true,"time":true,"date":false,"username":true,"weather
 image_path="$TMP/custom image.png"
 printf 'not-a-real-png-but-readable-for-path-validation\n' >"$image_path"
 custom_images="$(jq -cn --arg path "$image_path" '[{
-    id:"image-test_1", path:$path, x:0.42, y:0.46, scale:1.2,
+    id:"image-test_1", path:$path, x:0.42, y:0.46, scale:6,
     stretch_x:1.4, stretch_y:0.8, opacity:65, visible:true
 }]')"
 
@@ -90,6 +90,7 @@ jq -e --arg expected "$(readlink -f -- "$image_path")" '
     and (.lockscreen_custom_images | length) == 1
     and .lockscreen_custom_images[0].id == "image-test_1"
     and .lockscreen_custom_images[0].path == $expected
+    and .lockscreen_custom_images[0].scale == 6
     and .lockscreen_custom_images[0].stretch_x == 1.4
     and .lockscreen_custom_images[0].stretch_y == 0.8
     and .lockscreen_custom_images[0].opacity == 65
@@ -120,6 +121,16 @@ if run_state save-lockscreen-editor \
     "$expanded_layout" "$valid_visibility" black '#000000' '' \
     cover 0.5 0.5 none 0 0 auto "$duplicate_images" >/dev/null 2>&1; then
     fail 'duplicate custom image IDs were accepted'
+fi
+
+overscale_images="$(jq -cn --arg path "$image_path" '[{
+    id:"image-too-large",path:$path,x:0.5,y:0.5,scale:10.01,
+    stretch_x:1,stretch_y:1,opacity:100,visible:true
+}]')"
+if run_state save-lockscreen-editor \
+    "$expanded_layout" "$valid_visibility" black '#000000' '' \
+    cover 0.5 0.5 none 0 0 auto "$overscale_images" >/dev/null 2>&1; then
+    fail 'custom image scale above 10x was accepted'
 fi
 
 [[ "$(sha256sum "$state_file" | awk '{print $1}')" == "$state_before" ]] \

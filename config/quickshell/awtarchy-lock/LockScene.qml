@@ -9,6 +9,7 @@ Item {
     required property var theme
     required property string animationPreference
     required property string entryTransition
+    required property int entryTransitionDuration
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -43,10 +44,13 @@ Item {
     property bool entered: false
     property int entryTransitionReplayToken: 0
     property real entryTransitionProgress: 0
-    property bool entryTransitionRunning: false
+    property bool entryTransitionRunning: true
 
     readonly property int entryTileColumns: 24
     readonly property int entryTileRows: 14
+    readonly property bool logoHoverActive: mouseInteractive && pointerActive && showLogo
+        && logoContainsPoint(lastPointerX, lastPointerY) && !logoExplosionActive
+    readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty
     readonly property real securePasswordEntryOpacity: root.unlocking ? 0
         : !root.entered ? 0
         : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
@@ -97,6 +101,7 @@ Item {
 
     property bool pointerActive: false
     property bool logoExplosionActive: false
+    property bool logoHoverDirty: false
     property var logoParticles: ({})
     property var logoParticleBuckets: ({})
     property real logoExplosionElapsedMs: 0
@@ -111,6 +116,8 @@ Item {
     property double lastPointerSampleTime: 0
     property real lastPointerX: -1
     property real lastPointerY: -1
+
+    onLogoHoverActiveChanged: logoHoverDirty = true
     property string timeText: ""
     property string dateText: "";
 
@@ -120,12 +127,9 @@ Item {
             ? key : "fade";
     }
 
-    function entryTransitionDuration() {
-        const mode = entryTransitionMode();
-        if (mode === "pixel" || mode === "iris") return 560;
-        if (mode === "edges") return 460;
-        if (mode === "wipe") return 380;
-        return 220;
+    function effectiveEntryTransitionDuration() {
+        const value = Math.round(Number(root.entryTransitionDuration));
+        return Number.isFinite(value) ? Math.max(400, Math.min(4000, value)) : 1200;
     }
 
     function replayEntryTransition() {
@@ -212,7 +216,8 @@ Item {
     function elementScale(name) {
         const point = presentationPoint(name);
         const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1;
-        const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(2.00, value)) : 1;
+        const maximum = customImageForName(name) ? 10.00 : 2.00;
+        const baseScale = Number.isFinite(value) ? Math.max(0.50, Math.min(maximum, value)) : 1;
         const holdScale = root.editorMode && name === editorHeldElement ? editorHoldScale : 1.0;
         const safeHoldScale = Number.isFinite(Number(holdScale))
             ? Math.max(1.0, Math.min(1.12, Number(holdScale))) : 1.0;
@@ -390,6 +395,49 @@ Item {
         return Math.max(-logoExplosionMaxSpeed, Math.min(logoExplosionMaxSpeed, numeric));
     }
 
+    function bounceLogoParticleAtBounds(particle) {
+        const cap = logoExplosionOffsetCap;
+        const restitution = 0.42;
+        if (particle.x < -cap) {
+            particle.x = -cap;
+            particle.vx = Math.abs(particle.vx) * restitution;
+        } else if (particle.x > cap) {
+            particle.x = cap;
+            particle.vx = -Math.abs(particle.vx) * restitution;
+        }
+        if (particle.y < -cap) {
+            particle.y = -cap;
+            particle.vy = Math.abs(particle.vy) * restitution;
+        } else if (particle.y > cap) {
+            particle.y = cap;
+            particle.vy = -Math.abs(particle.vy) * restitution;
+        }
+    }
+
+    function ensureLogoParticle(row, column) {
+        const key = logoCellKey(row, column);
+        const existing = logoParticles[key];
+        return existing ? Object.assign({}, existing) : ({
+            row: row, column: column, x: 0, y: 0, vx: 0, vy: 0
+        });
+    }
+
+    function logoHoverTarget(row, column) {
+        if (!logoHoverActive)
+            return ({ x: 0, y: 0 });
+        const local = wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY);
+        const centerX = (column + 0.5) * wordmarkCellWidth;
+        const centerY = (row + 0.5) * wordmarkCellHeight;
+        let dx = centerX - local.x;
+        let dy = centerY - local.y;
+        const distance = Math.max(0.001, Math.sqrt(dx * dx + dy * dy));
+        const radius = Math.max(wordmarkCellWidth, wordmarkCellHeight) * 4.2;
+        const unit = Math.max(0, Math.min(1, 1 - distance / radius));
+        const weight = unit * unit * (3 - 2 * unit);
+        const displacement = 34 * uiScale * weight;
+        return ({ x: dx / distance * displacement, y: dy / distance * displacement });
+    }
+
     function triggerLogoExplosion(x, y) {
         if (!mouseInteractive || !showLogo)
             return;
@@ -401,15 +449,7 @@ Item {
                 if (!isFilledWordmarkCell(row, column))
                     continue;
                 const key = logoCellKey(row, column);
-                const previous = logoParticles[key];
-                const particle = previous ? Object.assign({}, previous) : ({
-                    row: row,
-                    column: column,
-                    x: 0,
-                    y: 0,
-                    vx: 0,
-                    vy: 0
-                });
+                const particle = ensureLogoParticle(row, column);
                 const homeX = (column + 0.5) * wordmarkCellWidth;
                 const homeY = (row + 0.5) * wordmarkCellHeight;
                 let dx = homeX + Number(particle.x || 0) - local.x;
@@ -436,6 +476,7 @@ Item {
         logoParticles = next;
         logoExplosionElapsedMs = 0;
         logoExplosionActive = Object.keys(next).length > 0;
+        logoHoverDirty = logoExplosionActive;
     }
 
     function rebuildLogoBuckets() {
@@ -531,49 +572,58 @@ Item {
     }
 
     function stepLogoExplosion() {
-        if (!logoExplosionActive)
+        if (!logoSimulationActive)
             return;
         const dt = logoPhysicsIntervalMs / 1000;
-        logoExplosionElapsedMs += logoPhysicsIntervalMs;
-        const returning = logoExplosionElapsedMs >= logoExplosionScatterMs;
+        if (logoExplosionActive)
+            logoExplosionElapsedMs += logoPhysicsIntervalMs;
+        const returning = !logoExplosionActive
+            || logoExplosionElapsedMs >= logoExplosionScatterMs;
         const next = ({});
         let maxMotion = 0;
-        for (const key in logoParticles) {
-            const particle = Object.assign({}, logoParticles[key]);
-            if (returning) {
-                const spring = 28;
-                particle.vx += -Number(particle.x || 0) * spring * dt;
-                particle.vy += -Number(particle.y || 0) * spring * dt;
-                const damping = Math.exp(-8.4 * dt);
-                particle.vx *= damping;
-                particle.vy *= damping;
-            } else {
-                const drag = Math.exp(-1.6 * dt);
-                particle.vx *= drag;
-                particle.vy *= drag;
+        for (let row = 0; row < wordmarkRows.length; ++row) {
+            for (let column = 0; column < wordmarkColumns; ++column) {
+                if (!isFilledWordmarkCell(row, column)) continue;
+                const key = logoCellKey(row, column);
+                const particle = ensureLogoParticle(row, column);
+                const hoverTarget = logoHoverTarget(row, column);
+                if (returning) {
+                    const spring = logoHoverActive ? 34 : 24;
+                    particle.vx += (hoverTarget.x - Number(particle.x || 0)) * spring * dt;
+                    particle.vy += (hoverTarget.y - Number(particle.y || 0)) * spring * dt;
+                    const damping = Math.exp(-(logoHoverActive ? 10.5 : 7.2) * dt);
+                    particle.vx *= damping;
+                    particle.vy *= damping;
+                } else {
+                    const drag = Math.exp(-1.6 * dt);
+                    particle.vx *= drag;
+                    particle.vy *= drag;
+                }
+                particle.vx = clampedParticleVelocity(particle.vx);
+                particle.vy = clampedParticleVelocity(particle.vy);
+                particle.x = Number(particle.x || 0) + particle.vx * dt;
+                particle.y = Number(particle.y || 0) + particle.vy * dt;
+                bounceLogoParticleAtBounds(particle);
+                maxMotion = Math.max(maxMotion,
+                    Math.abs(particle.x - hoverTarget.x) + Math.abs(particle.y - hoverTarget.y)
+                    + (Math.abs(particle.vx) + Math.abs(particle.vy)) * 0.02);
+                next[key] = particle;
             }
-            particle.vx = clampedParticleVelocity(particle.vx);
-            particle.vy = clampedParticleVelocity(particle.vy);
-            particle.x = Math.max(-logoExplosionOffsetCap,
-                Math.min(logoExplosionOffsetCap, Number(particle.x || 0) + particle.vx * dt));
-            particle.y = Math.max(-logoExplosionOffsetCap,
-                Math.min(logoExplosionOffsetCap, Number(particle.y || 0) + particle.vy * dt));
-            maxMotion = Math.max(maxMotion,
-                Math.abs(particle.x) + Math.abs(particle.y)
-                + (Math.abs(particle.vx) + Math.abs(particle.vy)) * 0.02);
-            next[key] = particle;
         }
         logoParticles = next;
         if (!returning) {
             rebuildLogoBuckets();
             resolveLogoCollisions();
         }
-        if (logoExplosionElapsedMs >= logoExplosionMaxMs
-                || (returning && maxMotion < 2.2)) {
+        if (logoExplosionActive && logoExplosionElapsedMs >= logoExplosionMaxMs) {
             logoExplosionActive = false;
             logoExplosionElapsedMs = 0;
-            logoParticles = ({});
             logoParticleBuckets = ({});
+        }
+        if (returning && maxMotion < 1.2) {
+            logoHoverDirty = false;
+            if (!logoHoverActive)
+                logoParticles = ({});
         }
     }
 
@@ -636,6 +686,7 @@ Item {
         if (!mouseInteractive)
             return;
 
+        const wasLogoHovering = logoHoverActive;
         pointerActive = true;
         const now = Date.now();
         const hasPrevious = lastPointerX >= 0 && lastPointerY >= 0
@@ -650,6 +701,7 @@ Item {
         lastPointerX = x;
         lastPointerY = y;
         lastPointerSampleTime = now;
+        logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);
     }
     Item {
         id: backgroundLayer
@@ -963,6 +1015,7 @@ Item {
                             SequentialAnimation on formationProgress {
                                 running: wordmarkCell.isFilledGlyph
                                     && root.entered && !root.unlocking
+                                    && !root.entryTransitionRunning
                                     && root.animationPreference !== "off"
 
                                 PauseAnimation { duration: wordmarkCell.formationDelay }
@@ -1138,8 +1191,15 @@ Item {
             }
         }
     }
-
-
+    Rectangle {
+        id: entryFadeBacking
+        anchors.fill: parent
+        z: 499
+        visible: !root.unlocking && root.entryTransitionRunning
+            && root.entryTransitionMode() === "fade"
+        color: "#000000"
+        opacity: 1 - root.entryTransitionProgress
+    }
 
     Item {
         id: entryTransitionCover
@@ -1238,8 +1298,8 @@ Item {
         property: "entryTransitionProgress"
         from: 0
         to: 1
-        duration: root.entryTransitionDuration()
-        easing.type: Easing.OutCubic
+        duration: root.effectiveEntryTransitionDuration()
+        easing.type: Easing.InOutCubic
         onFinished: {
             root.entryTransitionProgress = 1;
             root.entryTransitionRunning = false;
@@ -1267,7 +1327,7 @@ Item {
         id: logoPhysicsTimer
         interval: root.logoPhysicsIntervalMs
         repeat: true
-        running: root.logoExplosionActive
+        running: root.logoSimulationActive
         onTriggered: root.stepLogoExplosion()
     }
 

@@ -91,7 +91,7 @@ require_text "$SCENE_QML" 'readonly property int cursorFadeDurationMs: 320' \
     'ghost cursor fade duration changed unexpectedly'
 require_text "$SCENE_QML" 'function triggerLogoExplosion(x, y)' \
     'shared scene has no click explosion path'
-require_text "$SCENE_QML" 'running: root.logoExplosionActive' \
+require_text "$SCENE_QML" 'running: root.logoSimulationActive' \
     'logo physics runs while idle'
 reject_text "$SCENE_QML" 'required property bool audioReactive' \
     'shared scene still exposes logo audio-reactive state'
@@ -119,4 +119,4 @@ for token in logoPhysicsHz LockAudioAnalyzer LockWeatherCache weatherText mouseI
         "authentication owner was coupled to optional lockscreen state: $token"
 done
 
-printf '%s\n' 'PASS: lockscreen click-only interactive effects contracts'
+printf '%s\n' 'PASS: lockscreen coherent pointer and interactive effects contracts'

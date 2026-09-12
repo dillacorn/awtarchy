@@ -41,14 +41,32 @@ set +e
 terminal_name="$(basename -- "$TERMINAL_CMD")"
 if [[ "$terminal_name" == "alacritty" ]]; then
     "$TERMINAL_CMD" --option window.startup_mode=Fullscreen \
-        --class awtarchy-lock-wallpaper -e "$awtwall_path" \
-        --select-only --type images --resume --select-result "$RESULT_FILE"
-    terminal_rc=$?
+        --class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper \
+        -e "$awtwall_path" --select-only --type images --resume \
+        --select-result "$RESULT_FILE" &
+    terminal_pid=$!
 else
-    "$TERMINAL_CMD" --class awtarchy-lock-wallpaper -e "$awtwall_path" \
-        --select-only --type images --resume --select-result "$RESULT_FILE"
-    terminal_rc=$?
+    "$TERMINAL_CMD" --class awtarchy-lock-wallpaper \
+        --title Awtarchy-Lockscreen-Wallpaper -e "$awtwall_path" \
+        --select-only --type images --resume --select-result "$RESULT_FILE" &
+    terminal_pid=$!
 fi
+
+if have hyprctl && have jq; then
+    for _attempt in {1..20}; do
+        if hyprctl clients -j 2>/dev/null | jq -e '
+            any(.[]; .class == "awtarchy-lock-wallpaper"
+                and .title == "Awtarchy-Lockscreen-Wallpaper")
+        ' >/dev/null 2>&1; then
+            hyprctl dispatch focuswindow 'class:^(awtarchy-lock-wallpaper)$' >/dev/null 2>&1 || true
+            hyprctl dispatch fullscreen 1 >/dev/null 2>&1 || true
+            break
+        fi
+        sleep 0.05
+    done
+fi
+wait "$terminal_pid"
+terminal_rc=$?
 set -e
 
 # Closing/cancelling the picker is a clean no-change result.

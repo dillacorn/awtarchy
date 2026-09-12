@@ -78,15 +78,16 @@ jq -e '
     and .lockscreen_visualizer.bands == 16
     and .lockscreen_visualizer.gap == 4
     and .lockscreen_visualizer.height == 100
-    and .lockscreen_visualizer.sensitivity == 100
+    and .lockscreen_visualizer.sensitivity == 140
     and .lockscreen_visualizer.shape == "straight"
     and .lockscreen_visualizer.bend == 45
+    and .lockscreen_visualizer.performance == "balanced"
     and .lockscreen_background_opacity == 75
 ' "$state_file" >/dev/null || fail 'Pass 3 independent setters did not normalize safe defaults'
 
 layout='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 visibility='{"logo":true,"time":false,"date":false,"username":false,"weather":false,"password":true}'
-visualizer='{"enabled":true,"x":0.44,"y":0.79,"scale":1.25,"stretch_x":1.5,"stretch_y":0.75,"opacity":68,"color":"#33aaff","bands":24,"gap":6,"height":145,"sensitivity":130,"shape":"arc","bend":-55}'
+visualizer='{"enabled":true,"x":0.44,"y":0.79,"scale":1.25,"stretch_x":1.5,"stretch_y":0.75,"opacity":68,"color":"#33aaff","bands":24,"gap":6,"height":145,"sensitivity":130,"shape":"arc","bend":-55,"performance":"responsive"}'
 
 run_state save-lockscreen-editor \
     "$layout" "$visibility" black '#000000' '' \
@@ -107,6 +108,7 @@ jq -e '
     and .lockscreen_visualizer.sensitivity == 130
     and .lockscreen_visualizer.shape == "arc"
     and .lockscreen_visualizer.bend == -55
+    and .lockscreen_visualizer.performance == "responsive"
     and .lockscreen_background_opacity == 60
 ' "$state_file" >/dev/null || fail 'atomic Pass 3 editor save did not persist visualizer/background opacity'
 
@@ -158,16 +160,16 @@ require_text "$BAR_STATE" 'function lockscreenBackgroundOpacity()' \
     'BarState has no normalized background-opacity reader'
 
 # Audio analyzer is one bounded spectrum source, not logo motion.
-require_text "$CAVA_CONFIG" 'framerate = 30' \
-    'CAVA visualizer source is not fixed at 30 FPS'
+require_text "$CAVA_CONFIG" 'framerate = 60' \
+    'balanced CAVA visualizer source is not 60 FPS'
 require_text "$CAVA_CONFIG" 'bars = 64' \
     'CAVA visualizer source is not fixed at 64 bands'
 require_text "$CAVA_CONFIG" 'method = pipewire' \
     'CAVA visualizer source is not PipeWire'
 require_text "$CAVA_CONFIG" 'source = auto' \
     'CAVA visualizer source does not use the automatic output source'
-require_text "$AUDIO_HELPER" "exec cava -p \"\$config_path\"" \
-    'audio helper no longer owns the bounded CAVA process'
+require_text "$AUDIO_HELPER" 'responsive) framerate=90' \
+    'audio helper has no explicit higher-responsiveness mode'
 require_text "$ANALYZER" 'property var bands:' \
     'secure analyzer exposes no normalized band array'
 require_text "$ANALYZER" 'onEnabledChanged:' \
@@ -275,16 +277,8 @@ require_text "$EDITOR" 'Transparency can reveal content' \
 # Quick Settings intentionally exposes only high-value global controls.
 require_text "$QUICK_SETTINGS" 'text: "Visualizer"' \
     'Quick Settings has no visualizer toggle'
-require_text "$QUICK_SETTINGS" 'text: "Background Opacity"' \
-    'Quick Settings has no background-opacity controls'
-require_text "$QUICK_SETTINGS" 'Transparency can reveal content' \
-    'Quick Settings has no transparency privacy warning'
-for preset in 100 75 50 25 0; do
-    require_text "$QUICK_SETTINGS" "label: \"${preset}%\"" \
-        "Quick Settings is missing ${preset}% background-opacity preset"
-    require_text "$QUICK_SETTINGS" "\"set-lockscreen-background-opacity\", \"${preset}\"" \
-        "Quick Settings ${preset}% preset does not persist through the state helper"
-done
+reject_text "$QUICK_SETTINGS" 'text: "Background Opacity"' \
+    'detailed background opacity remains duplicated in Quick Settings'
 reject_text "$QUICK_SETTINGS" 'Audio Reactive' \
     'obsolete audio-reactive logo control returned to Quick Settings'
 

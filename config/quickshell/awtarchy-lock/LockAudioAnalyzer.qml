@@ -10,7 +10,8 @@ Item {
     height: 0
 
     property var bands: []
-    property var targetBands: []
+    required property string performanceMode
+    property bool restartRequested: false
 
     readonly property int maximumBands: 64
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
@@ -57,23 +58,7 @@ Item {
         }
         if (values.length === 0)
             return;
-        targetBands = normalizedSpectrum(values);
-        ensureSmoothing();
-    }
-
-    function smoothed(current, target) {
-        const factor = target > current ? 0.42 : 0.16;
-        const next = current + (target - current) * factor;
-        return Math.abs(next - target) < 0.001 ? target : next;
-    }
-
-    function ensureSmoothing() {
-        if (!smoothingTimer.running)
-            smoothingTimer.start();
-    }
-
-    function clearTargets() {
-        targetBands = zeroSpectrum();
+        bands = normalizedSpectrum(values);
     }
 
     function startAnalyzer() {
@@ -81,60 +66,47 @@ Item {
             audioProcess.running = true;
     }
 
-    function settled() {
-        if (bands.length !== targetBands.length)
-            return false;
-        for (let i = 0; i < targetBands.length; ++i) {
-            if (Math.abs(Number(bands[i] || 0) - Number(targetBands[i] || 0)) >= 0.001)
-                return false;
+    function restartAnalyzer() {
+        if (!root.enabled)
+            return;
+        if (audioProcess.running) {
+            restartRequested = true;
+            audioProcess.running = false;
+        } else {
+            startAnalyzer();
         }
-        return true;
     }
+
+    onPerformanceModeChanged: root.restartAnalyzer()
 
     onEnabledChanged: {
         if (enabled) {
             startAnalyzer();
         } else {
+            restartRequested = false;
             if (audioProcess.running)
                 audioProcess.running = false;
-            clearTargets();
-            ensureSmoothing();
+            bands = zeroSpectrum();
         }
     }
 
     Component.onCompleted: {
         bands = zeroSpectrum();
-        targetBands = zeroSpectrum();
         root.startAnalyzer();
     }
 
     Process {
         id: audioProcess
-        command: [root.helper]
+        command: [root.helper, root.performanceMode]
         stdout: SplitParser {
             onRead: data => root.parseFrame(data)
         }
         onExited: {
-            root.clearTargets();
-            root.ensureSmoothing();
-        }
-    }
-
-    Timer {
-        id: smoothingTimer
-        interval: 33
-        repeat: true
-        running: false
-        onTriggered: {
-            const next = [];
-            for (let i = 0; i < root.maximumBands; ++i) {
-                const current = i < root.bands.length ? Number(root.bands[i]) : 0;
-                const target = i < root.targetBands.length ? Number(root.targetBands[i]) : 0;
-                next.push(root.smoothed(current, target));
+            root.bands = root.zeroSpectrum();
+            if (root.restartRequested && root.enabled) {
+                root.restartRequested = false;
+                root.startAnalyzer();
             }
-            root.bands = next;
-            if (root.settled())
-                stop();
         }
     }
 }

@@ -28,7 +28,7 @@ LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","passwor
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 LOCKSCREEN_CUSTOM_IMAGE_MAX=12
 LOCKSCREEN_VISUALIZER_SHAPES_JSON='["straight","arc","circle"]'
-LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":100,"shape":"straight","bend":45}'
+LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":140,"shape":"straight","bend":45,"performance":"balanced"}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
 QUICK_SETTINGS_SECTIONS_JSON='["brightness","output-volume","bar","display-effects","submap","wallpaper","awtarchy","smtty","scheduler","numlock","title-bars"]'
 WORKSPACE_STYLES_JSON='["awtarchy","numbers","icons","workflow","phases","custom-symbol"]'
@@ -273,7 +273,7 @@ normalize_lockscreen_visualizer_json() {
         --argjson candidate "$value" \
         --argjson defaults "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" \
         --argjson shapes "$LOCKSCREEN_VISUALIZER_SHAPES_JSON" '
-        def allowed_keys: ["bands", "bend", "color", "enabled", "gap", "height", "opacity", "scale", "sensitivity", "shape", "stretch_x", "stretch_y", "x", "y"];
+        def allowed_keys: ["bands", "bend", "color", "enabled", "gap", "height", "opacity", "performance", "scale", "sensitivity", "shape", "stretch_x", "stretch_y", "x", "y"];
         if ($candidate | type) != "object"
             or (($candidate | keys - allowed_keys | length) != 0)
         then error("invalid lockscreen visualizer")
@@ -292,6 +292,7 @@ normalize_lockscreen_visualizer_json() {
             | ($candidate.sensitivity // $defaults.sensitivity) as $sensitivity
             | ($candidate.shape // $defaults.shape) as $shape
             | ($candidate.bend // $defaults.bend) as $bend
+            | ($candidate.performance // $defaults.performance) as $performance
             | if
                 ($enabled | type) == "boolean"
                 and ($x | type) == "number" and $x >= 0.05 and $x <= 0.95
@@ -308,6 +309,7 @@ normalize_lockscreen_visualizer_json() {
                 and ($sensitivity | type) == "number" and ($sensitivity | floor) == $sensitivity and $sensitivity >= 25 and $sensitivity <= 300
                 and ($shape | type) == "string" and ($shapes | index($shape) != null)
                 and ($bend | type) == "number" and ($bend | floor) == $bend and $bend >= -100 and $bend <= 100
+                and ($performance == "balanced" or $performance == "responsive")
               then {
                 enabled: $enabled,
                 x: $x,
@@ -322,7 +324,8 @@ normalize_lockscreen_visualizer_json() {
                 height: $height,
                 sensitivity: $sensitivity,
                 shape: $shape,
-                bend: $bend
+                bend: $bend,
+                performance: $performance
               }
               else error("invalid lockscreen visualizer")
               end
@@ -531,7 +534,7 @@ normalize_lockscreen_custom_images_json() {
                 and (.path | test("[\u0000-\u001f\u007f-\u009f]") | not)
                 and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
                 and (.y | type) == "number" and .y >= 0.08 and .y <= 0.92
-                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 2.00
+                and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 10.00
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
                 and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
@@ -609,7 +612,8 @@ save_lockscreen_editor() {
     local visualizer_input="${14:-$LOCKSCREEN_VISUALIZER_DEFAULT_JSON}"
     local background_opacity_input="${15:-100}"
     local entry_transition_input="${16:-}"
-    local custom_images visualizer background_opacity entry_transition
+    local entry_transition_duration_input="${17:-1200}"
+    local custom_images visualizer background_opacity entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout
 ' >&2
@@ -618,6 +622,8 @@ save_lockscreen_editor() {
     custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
     visualizer="$(normalize_lockscreen_visualizer_json "$visualizer_input")"
     background_opacity="$(normalize_percent_integer "$background_opacity_input" 'lockscreen background opacity')"
+    validate_int_range "$entry_transition_duration_input" 400 4000 'lockscreen entry transition duration'
+    entry_transition_duration=$((10#$entry_transition_duration_input))
     if [[ -n "$entry_transition_input" ]]; then
         entry_transition="$entry_transition_input"
         validate_lockscreen_entry_transition "$entry_transition"
@@ -662,12 +668,14 @@ save_lockscreen_editor() {
         --argjson custom_images "$custom_images" \
         --argjson visualizer "$visualizer" \
         --argjson background_opacity "$background_opacity" \
-        --arg entry_transition "$entry_transition" '
+        --arg entry_transition "$entry_transition" \
+        --argjson entry_transition_duration "$entry_transition_duration" '
         .lockscreen_layout = $layout
         | .lockscreen_custom_images = $custom_images
         | .lockscreen_visualizer = $visualizer
         | .lockscreen_background_opacity = $background_opacity
         | .lockscreen_entry_transition = $entry_transition
+        | .lockscreen_entry_transition_duration = $entry_transition_duration
         | .lockscreen_show_logo = $visibility.logo
         | .lockscreen_show_time = $visibility.time
         | .lockscreen_show_date = $visibility.date
@@ -692,6 +700,7 @@ reset_lockscreen_presentation() {
         --argjson visualizer "$LOCKSCREEN_VISUALIZER_DEFAULT_JSON" '
         .lockscreen_animation = "split"
         | .lockscreen_entry_transition = "fade"
+        | .lockscreen_entry_transition_duration = 1200
         | .lockscreen_logo_physics_hz = 30
         | .lockscreen_audio_reactive = true
         | .lockscreen_mouse_interactive = true
@@ -1581,7 +1590,7 @@ case "$cmd" in
         ;;
     save-lockscreen-editor)
         case "$#" in
-            6|12|13|14|16|17) ;;
+            6|12|13|14|16|17|18) ;;
             *) exit 2 ;;
         esac
         save_lockscreen_editor "${@:2}"

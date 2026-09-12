@@ -9,6 +9,7 @@ WlSessionLockSurface {
     required property bool unlocking
     required property string animationPreference
     required property string entryTransition
+    required property int entryTransitionDuration
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -68,6 +69,7 @@ WlSessionLockSurface {
         unlocking: root.unlocking
         animationPreference: root.animationPreference
         entryTransition: root.entryTransition
+        entryTransitionDuration: root.entryTransitionDuration
         randomFormationMode: root.randomFormationMode
         logoPhysicsHz: root.logoPhysicsHz
         mouseInteractive: root.mouseInteractive

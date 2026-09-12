@@ -15,6 +15,7 @@ ShellRoot {
         || (Quickshell.env("HOME") + "/.cache")) + "/awtarchy/quickshell-state.json"
     property string lockAnimationPreference: "split"
     property string lockEntryTransition: "fade"
+    property int lockEntryTransitionDuration: 1200
     property int lockLogoPhysicsHz: 30
     property bool lockMouseInteractive: true
     property bool lockShowLogo: true
@@ -60,9 +61,10 @@ ShellRoot {
             bands: 16,
             gap: 4,
             height: 100,
-            sensitivity: 100,
+            sensitivity: 140,
             shape: "straight",
-            bend: 45
+            bend: 45,
+            performance: "balanced"
         });
     }
 
@@ -84,6 +86,7 @@ ShellRoot {
         const sensitivity = Number(value.sensitivity === undefined ? defaults.sensitivity : value.sensitivity);
         const shape = String(value.shape === undefined ? defaults.shape : value.shape);
         const bend = Number(value.bend === undefined ? defaults.bend : value.bend);
+        const performance = String(value.performance === undefined ? defaults.performance : value.performance);
         if (!Number.isFinite(x) || x < 0.05 || x > 0.95
                 || !Number.isFinite(y) || y < 0.08 || y > 0.92
                 || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
@@ -96,6 +99,7 @@ ShellRoot {
                 || !Number.isInteger(responseHeight) || responseHeight < 25 || responseHeight > 300
                 || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
                 || ["straight", "arc", "circle"].indexOf(shape) < 0
+                || ["balanced", "responsive"].indexOf(performance) < 0
                 || !Number.isInteger(bend) || bend < -100 || bend > 100)
             return defaults;
         return ({
@@ -112,7 +116,8 @@ ShellRoot {
             height: responseHeight,
             sensitivity: sensitivity,
             shape: shape,
-            bend: bend
+            bend: bend,
+            performance: performance
         });
     }
 
@@ -257,7 +262,7 @@ ShellRoot {
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                    || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
+                    || !Number.isFinite(scale) || scale < 0.50 || scale > 10.00
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
@@ -285,6 +290,7 @@ ShellRoot {
     function resetPreferences() {
         lockAnimationPreference = "split";
         lockEntryTransition = "fade";
+        lockEntryTransitionDuration = 1200;
         lockLogoPhysicsHz = 30;
         lockMouseInteractive = true;
         lockShowLogo = true;
@@ -324,6 +330,10 @@ ShellRoot {
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
             lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
+            const transitionDuration = Math.round(Number(parsed.lockscreen_entry_transition_duration));
+            lockEntryTransitionDuration = Number.isFinite(transitionDuration)
+                && transitionDuration >= 400 && transitionDuration <= 4000
+                ? transitionDuration : 1200;
             lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);
             lockMouseInteractive = normalizedBoolean(parsed.lockscreen_mouse_interactive, true);
             lockShowLogo = normalizedBoolean(parsed.lockscreen_show_logo, true);
@@ -396,6 +406,7 @@ ShellRoot {
     LockAudioAnalyzer {
         id: lockAudioAnalyzer
         enabled: root.lockVisualizer.enabled
+        performanceMode: root.lockVisualizer.performance
     }
 
     WlSessionLock {
@@ -409,6 +420,7 @@ ShellRoot {
                 unlocking: root.unlockRequested
                 animationPreference: root.lockAnimationPreference
                 entryTransition: root.lockEntryTransition
+                entryTransitionDuration: root.lockEntryTransitionDuration
                 randomFormationMode: root.randomFormationMode
                 logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive

@@ -156,9 +156,10 @@ Singleton {
         bands: 16,
         gap: 4,
         height: 100,
-        sensitivity: 100,
+        sensitivity: 140,
         shape: "straight",
-        bend: 45
+        bend: 45,
+        performance: "balanced"
     })
     readonly property var defaultLockscreenLayout: ({
         logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
@@ -669,6 +670,11 @@ Singleton {
         return "fade";
     }
 
+    function lockscreenEntryTransitionDuration() {
+        const value = Math.round(Number(data().lockscreen_entry_transition_duration));
+        return Number.isFinite(value) && value >= 400 && value <= 4000 ? value : 1200;
+    }
+
     function lockscreenBooleanPreference(field, fallback) {
         const value = data()[field];
         return typeof value === "boolean" ? value : fallback;
@@ -699,6 +705,7 @@ Singleton {
         const sensitivity = Number(value.sensitivity ?? defaults.sensitivity);
         const shape = String(value.shape ?? defaults.shape);
         const bend = Number(value.bend ?? defaults.bend);
+        const performance = String(value.performance ?? defaults.performance);
 
         if (!Number.isFinite(x) || x < 0.05 || x > 0.95
                 || !Number.isFinite(y) || y < 0.08 || y > 0.92
@@ -712,6 +719,7 @@ Singleton {
                 || !Number.isInteger(height) || height < 25 || height > 300
                 || !Number.isInteger(sensitivity) || sensitivity < 25 || sensitivity > 300
                 || ["straight", "arc", "circle"].indexOf(shape) < 0
+                || ["balanced", "responsive"].indexOf(performance) < 0
                 || !Number.isInteger(bend) || bend < -100 || bend > 100)
             return defaults;
 
@@ -729,7 +737,8 @@ Singleton {
             height: height,
             sensitivity: sensitivity,
             shape: shape,
-            bend: bend
+            bend: bend,
+            performance: performance
         });
     }
 
@@ -909,7 +918,7 @@ Singleton {
                     || /[\u0000-\u001f\u007f-\u009f]/.test(path)
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
-                    || !Number.isFinite(scale) || scale < 0.50 || scale > 2.00
+                    || !Number.isFinite(scale) || scale < 0.50 || scale > 10.00
                     || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                     || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                     || !Number.isFinite(opacity) || opacity < 0 || opacity > 100

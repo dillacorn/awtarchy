@@ -23,12 +23,14 @@ Singleton {
     property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
     readonly property int customImageMaximum: 12
+    readonly property real customImageScaleMaximum: 10.0
 
     property var draftLayout: defaultLayout()
     property var draftCustomImages: []
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
     property string draftEntryTransition: "fade"
+    property int draftEntryTransitionDuration: 1200
     property int entryTransitionReplayToken: 0
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
@@ -89,9 +91,10 @@ Singleton {
             bands: 16,
             gap: 4,
             height: 100,
-            sensitivity: 100,
+            sensitivity: 140,
             shape: "straight",
-            bend: 45
+            bend: 45,
+            performance: "balanced"
         });
     }
 
@@ -114,6 +117,7 @@ Singleton {
         const sensitivity = Number(raw.sensitivity === undefined ? defaults.sensitivity : raw.sensitivity);
         const shape = String(raw.shape === undefined ? defaults.shape : raw.shape);
         const bend = Number(raw.bend === undefined ? defaults.bend : raw.bend);
+        const performance = String(raw.performance === undefined ? defaults.performance : raw.performance);
         return ({
             enabled: enabled,
             x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : defaults.x)),
@@ -128,7 +132,9 @@ Singleton {
             height: Number.isInteger(responseHeight) ? Math.max(25, Math.min(300, responseHeight)) : defaults.height,
             sensitivity: Number.isInteger(sensitivity) ? Math.max(25, Math.min(300, sensitivity)) : defaults.sensitivity,
             shape: ["straight", "arc", "circle"].indexOf(shape) >= 0 ? shape : defaults.shape,
-            bend: Number.isInteger(bend) ? Math.max(-100, Math.min(100, bend)) : defaults.bend
+            bend: Number.isInteger(bend) ? Math.max(-100, Math.min(100, bend)) : defaults.bend,
+            performance: ["balanced", "responsive"].indexOf(performance) >= 0
+                ? performance : defaults.performance
         });
     }
 
@@ -277,6 +283,7 @@ Singleton {
             backgroundColor: draftBackgroundColor,
             backgroundOpacity: draftBackgroundOpacity,
             entryTransition: draftEntryTransition,
+            entryTransitionDuration: draftEntryTransitionDuration,
             wallpaperPath: draftWallpaperPath,
             wallpaperFit: draftWallpaperFit,
             wallpaperFocalX: draftWallpaperFocalX,
@@ -329,6 +336,9 @@ Singleton {
         const entryTransition = String(snapshot.entryTransition || "fade");
         draftEntryTransition = ["fade", "pixel", "iris", "edges", "wipe"].indexOf(entryTransition) >= 0
             ? entryTransition : "fade";
+        const transitionDuration = Math.round(Number(snapshot.entryTransitionDuration));
+        draftEntryTransitionDuration = Number.isFinite(transitionDuration)
+            ? Math.max(400, Math.min(4000, transitionDuration)) : 1200;
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
             ? snapshot.wallpaperPath : "";
         draftWallpaperFit = ["cover", "contain"].indexOf(String(snapshot.wallpaperFit)) >= 0
@@ -443,7 +453,8 @@ Singleton {
         const numeric = Number(scaleValue);
         if (!Number.isFinite(numeric))
             return;
-        const value = Math.max(0.50, Math.min(2.00, numeric));
+        const value = Math.max(0.50, Math.min(
+            isCustomImage(name) ? customImageScaleMaximum : 2.00, numeric));
         if (name === "visualizer") {
             const next = cloneVisualizer(draftVisualizer);
             next.scale = value;
@@ -682,8 +693,39 @@ Singleton {
         const numeric = Number(value);
         if (!Number.isFinite(numeric))
             return;
+        const next = Math.max(0, Math.min(100, Math.round(numeric)));
         recordUndoBeforeChange();
-        draftBackgroundOpacity = Math.max(0, Math.min(100, Math.round(numeric)));
+        if (draftBackgroundOpacity === 100 && next < 100 && draftWallpaperBlur === 0)
+            draftWallpaperBlur = 20;
+        draftBackgroundOpacity = next;
+    }
+
+    function setBackgroundOpacityFromPointer(pointerX, trackWidth) {
+        if (trackWidth > 0)
+            setDraftBackgroundOpacity(Number(pointerX) * 100 / Number(trackWidth));
+    }
+
+    function setBlurFromPointer(pointerX, trackWidth) {
+        if (trackWidth > 0)
+            setDraftWallpaperBlur(Number(pointerX) * 100 / Number(trackWidth));
+    }
+
+    function draftBrightness() {
+        if (draftOverlayMode === "dark") return -draftOverlayStrength;
+        if (draftOverlayMode === "light") return draftOverlayStrength;
+        return 0;
+    }
+
+    function setDraftBrightness(value) {
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) return;
+        const next = Math.max(-100, Math.min(100, Math.round(numeric)));
+        setDraftOverlay(next < 0 ? "dark" : next > 0 ? "light" : "none", Math.abs(next));
+    }
+
+    function setBrightnessFromPointer(pointerX, trackWidth) {
+        if (trackWidth > 0)
+            setDraftBrightness(Number(pointerX) * 200 / Number(trackWidth) - 100);
     }
 
     function setDraftBackgroundColor(colorValue) {
@@ -745,6 +787,12 @@ Singleton {
                 return;
             recordUndoBeforeChange();
             next.shape = shape;
+        } else if (name === "performance") {
+            const performance = String(value || "");
+            if (["balanced", "responsive"].indexOf(performance) < 0)
+                return;
+            recordUndoBeforeChange();
+            next.performance = performance;
         } else {
             const numeric = Math.round(Number(value));
             if (!Number.isFinite(numeric))
@@ -875,7 +923,7 @@ Singleton {
                 path: imagePath,
                 x: Math.max(0.05, Math.min(0.95, Number.isFinite(x) ? x : 0.5)),
                 y: Math.max(0.08, Math.min(0.92, Number.isFinite(y) ? y : 0.5)),
-                scale: Math.max(0.50, Math.min(2.00, Number.isFinite(scale) ? scale : 1)),
+                scale: Math.max(0.50, Math.min(customImageScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
                 opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
@@ -1105,7 +1153,8 @@ Singleton {
         if (!Number.isFinite(value))
             return;
         recordUndoBeforeChange();
-        setDraftScaleSilently(name, Math.round(Math.max(0.50, Math.min(2.00, value)) * 100) / 100);
+        const maximum = isCustomImage(name) ? customImageScaleMaximum : 2.00;
+        setDraftScaleSilently(name, Math.round(Math.max(0.50, Math.min(maximum, value)) * 100) / 100);
         selectElement(name, false);
     }
 
@@ -1265,6 +1314,13 @@ Singleton {
         replayEntryTransition();
     }
 
+    function setDraftEntryTransitionDuration(value) {
+        const numeric = Math.round(Number(value));
+        if (!Number.isFinite(numeric)) return;
+        recordUndoBeforeChange();
+        draftEntryTransitionDuration = Math.max(400, Math.min(4000, numeric));
+    }
+
     function replayEntryTransition() {
         entryTransitionReplayToken = entryTransitionReplayToken >= 2147483646
             ? 1 : entryTransitionReplayToken + 1;
@@ -1278,6 +1334,7 @@ Singleton {
         draftVisualizer = defaultVisualizer();
         draftBackgroundOpacity = 100;
         draftEntryTransition = "fade";
+        draftEntryTransitionDuration = 1200;
         draftVisibility = defaultVisibility();
         draftBackgroundMode = "black";
         draftBackgroundColor = "#000000";
@@ -1305,6 +1362,7 @@ Singleton {
         draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer());
         draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity();
         draftEntryTransition = BarState.lockscreenEntryTransition();
+        draftEntryTransitionDuration = BarState.lockscreenEntryTransitionDuration();
         draftVisibility = cloneVisibility(({
             logo: BarState.lockscreenShowLogo(),
             time: BarState.lockscreenShowTime(),
@@ -1458,7 +1516,8 @@ Singleton {
             JSON.stringify(draftCustomImages),
             JSON.stringify(draftVisualizer),
             String(draftBackgroundOpacity),
-            String(draftEntryTransition)
+            String(draftEntryTransition),
+            String(draftEntryTransitionDuration)
         ]);
     }
 
@@ -1597,6 +1656,7 @@ Singleton {
         id: previewAudioAnalyzer
         enabled: root.editingActive && !root.pickerSuspended
             && root.draftVisualizer.enabled
+        performanceMode: root.draftVisualizer.performance
     }
 
     PanelWindow {
@@ -1660,6 +1720,9 @@ Singleton {
                 } else if (event.key === Qt.Key_Down) {
                     root.nudgeSelection(0, step);
                     event.accepted = true;
+                } else if (event.key === Qt.Key_Delete && root.isCustomImage(root.selectedElement)) {
+                    root.removeCustomImage(root.selectedElement);
+                    event.accepted = true;
                 }
             }
 
@@ -1669,6 +1732,7 @@ Singleton {
                 theme: Theme
                 animationPreference: BarState.lockscreenAnimationPreference()
                 entryTransition: root.draftEntryTransition
+                entryTransitionDuration: root.draftEntryTransitionDuration
                 entryTransitionReplayToken: root.entryTransitionReplayToken
                 randomFormationMode: 3
                 logoPhysicsHz: BarState.lockscreenLogoPhysicsHz()
@@ -2310,6 +2374,9 @@ Singleton {
                         SettingsButton { label: "Straight"; active: root.draftVisualizer.shape === "straight"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "straight") }
                         SettingsButton { label: "Arc"; active: root.draftVisualizer.shape === "arc"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "arc") }
                         SettingsButton { label: "Circle"; active: root.draftVisualizer.shape === "circle"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "circle") }
+                        Text { text: "Response"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton { label: "Balanced"; active: root.draftVisualizer.performance === "balanced"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "balanced") }
+                        SettingsButton { label: "Responsive"; active: root.draftVisualizer.performance === "responsive"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "responsive") }
 
                         Text { text: "Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Slider {
@@ -2408,28 +2475,24 @@ Singleton {
                         Text { text: "Fit"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "Cover"; active: root.draftWallpaperFit === "cover"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("cover") }
                         SettingsButton { label: "Contain"; active: root.draftWallpaperFit === "contain"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("contain") }
-                        Text { text: "Overlay"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        SettingsButton { label: "None"; active: root.draftOverlayMode === "none"; textSize: 9; onClicked: root.setDraftOverlay("none", root.draftOverlayStrength) }
-                        SettingsButton { label: "Darken"; active: root.draftOverlayMode === "dark"; textSize: 9; onClicked: root.setDraftOverlay("dark", root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35) }
-                        SettingsButton { label: "Lighten"; active: root.draftOverlayMode === "light"; textSize: 9; onClicked: root.setDraftOverlay("light", root.draftOverlayStrength > 0 ? root.draftOverlayStrength : 35) }
-                        Slider {
-                            id: overlaySlider
-                            Layout.preferredWidth: 120
-                            from: 0; to: 100; stepSize: 1
-                            value: root.draftOverlayStrength
-                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
-                            onMoved: root.setDraftOverlay(root.draftOverlayMode, value)
+                        Text { text: "Brightness"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Rectangle {
+                            id: brightnessTrack
+                            Layout.preferredWidth: 150; Layout.preferredHeight: 14
+                            radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
+                            Rectangle { x: parent.width / 2; width: Math.abs(root.draftBrightness()) * parent.width / 200; height: parent.height; radius: height / 2; color: Theme.focus; transform: Scale { xScale: root.draftBrightness() < 0 ? -1 : 1; origin.x: 0 } }
+                            Rectangle { x: (root.draftBrightness() + 100) * parent.width / 200 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
+                            MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBrightnessFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBrightnessFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
-                        Text { text: root.draftOverlayStrength + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
+                        Text { text: (root.draftBrightness() > 0 ? "+" : "") + root.draftBrightness() + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 42 }
                         Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        Slider {
-                            id: blurSlider
-                            Layout.preferredWidth: 110
-                            from: 0; to: 100; stepSize: 1
-                            value: root.draftWallpaperBlur
-                            enabled: root.draftBackgroundMode === "wallpaper"
-                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
-                            onMoved: root.setDraftWallpaperBlur(value)
+                        Rectangle {
+                            id: blurTrack
+                            Layout.preferredWidth: 110; Layout.preferredHeight: 14
+                            radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
+                            Rectangle { width: root.draftWallpaperBlur * parent.width / 100; height: parent.height; radius: height / 2; color: Theme.focus }
+                            Rectangle { x: root.draftWallpaperBlur * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
+                            MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBlurFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBlurFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
                         Text { text: root.draftWallpaperBlur + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 34 }
                         Item { Layout.fillWidth: true }
@@ -2442,13 +2505,13 @@ Singleton {
                         visible: root.activeDrawer === "background"
 
                         Text { text: "Background Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        Slider {
-                            id: backgroundOpacitySlider
-                            Layout.preferredWidth: 150
-                            from: 0; to: 100; stepSize: 1
-                            value: root.draftBackgroundOpacity
-                            onPressedChanged: { if (pressed) root.beginHistoryTransaction(); else root.commitHistoryTransaction(); }
-                            onMoved: root.setDraftBackgroundOpacity(value)
+                        Rectangle {
+                            id: backgroundOpacityTrack
+                            Layout.preferredWidth: 150; Layout.preferredHeight: 14
+                            radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
+                            Rectangle { width: root.draftBackgroundOpacity * parent.width / 100; height: parent.height; radius: height / 2; color: Theme.focus }
+                            Rectangle { x: root.draftBackgroundOpacity * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
+                            MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBackgroundOpacityFromPointer(mouse.x, width); } onPositionChanged: mouse => { if (pressed) root.setBackgroundOpacityFromPointer(mouse.x, width); } onReleased: root.commitHistoryTransaction() }
                         }
                         Text { text: root.draftBackgroundOpacity + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 36 }
                         SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.setDraftBackgroundOpacity(100) }
@@ -2476,6 +2539,9 @@ Singleton {
                         SettingsButton { label: "Edges"; active: root.draftEntryTransition === "edges"; textSize: 9; onClicked: root.setDraftEntryTransition("edges") }
                         SettingsButton { label: "Wipe"; active: root.draftEntryTransition === "wipe"; textSize: 9; onClicked: root.setDraftEntryTransition("wipe") }
                         SettingsButton { label: "Replay Transition"; textSize: 9; onClicked: root.replayEntryTransition() }
+                        Text { text: "Transition Speed"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Slider { Layout.preferredWidth: 120; from: 400; to: 4000; stepSize: 100; value: root.draftEntryTransitionDuration; onMoved: root.setDraftEntryTransitionDuration(value) }
+                        Text { text: (root.draftEntryTransitionDuration / 1000).toFixed(1) + "s"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Item { Layout.fillWidth: true }
                     }
 
