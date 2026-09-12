@@ -38,12 +38,17 @@ picker_fullscreen_state() {
 request_picker_fullscreen() {
     local address="$1"
     local selector="address:${address}"
+    local focus_request=""
+    local fullscreen_request=""
 
     # Hyprland 0.55+ dispatchers accept an exact window selector directly.
     # Use an explicit set action so retries cannot toggle the picker back out.
-    hyprctl dispatch "hl.dsp.focus({ window = \"${selector}\" })" >/dev/null 2>&1 || true
-    hyprctl dispatch "hl.dsp.window.fullscreen({ window = \"${selector}\", mode = \"fullscreen\", action = \"set\" })" \
-        >/dev/null 2>&1 || true
+    printf -v focus_request 'hl.dsp.focus({ window = "%s" })' "$selector"
+    printf -v fullscreen_request \
+        'hl.dsp.window.fullscreen({ window = "%s", mode = "fullscreen", action = "set" })' \
+        "$selector"
+    hyprctl dispatch "$focus_request" >/dev/null 2>&1 || true
+    hyprctl dispatch "$fullscreen_request" >/dev/null 2>&1 || true
 }
 
 ensure_picker_fullscreen() {
