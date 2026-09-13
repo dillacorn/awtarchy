@@ -159,6 +159,8 @@ require_text "$MANAGER" 'CONFIG_NAME="awtarchy-lock"' \
     'lock manager does not target only awtarchy-lock for lock authority'
 require_text "$MANAGER" 'SHELL_CONFIG_NAME="awtarchy"' \
     'capture fallback does not name the unlocked shell separately from lock authority'
+# The command below is intentionally matched as literal shell source.
+# shellcheck disable=SC2016
 require_text "$MANAGER" '"$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close' \
     'capture fallback does not limit unlocked-shell IPC to closing Quick Settings'
 # The expansion syntax below is intentionally matched as literal shell source.
