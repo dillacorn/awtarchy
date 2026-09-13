@@ -45,6 +45,15 @@ reject_text "$SHELL_QML" 'auth: auth' \
 reject_text "$EDITOR_QML" '}; onExited:' \
     'lockscreen editor uses invalid separators after inline SplitParser objects'
 
+# PanelWindow is a window surface, not an Item, and does not expose Item.opacity.
+# Secondary editor entrance fading must therefore live on a full-window child.
+reject_text "$EDITOR_QML" 'anchors.right: true; opacity: root.editorEntranceOpacity' \
+    'secondary lockscreen editor assigns Item.opacity directly to PanelWindow'
+require_text "$EDITOR_QML" 'id: secondaryPreviewContent' \
+    'secondary lockscreen editor has no child item for entrance opacity'
+require_text "$EDITOR_QML" 'opacity: root.editorEntranceOpacity' \
+    'secondary lockscreen editor child does not consume entrance opacity'
+
 # The approved wordmark is presentation-only now and is shared by both the
 # secure surface and unlocked editor through LockScene.
 reject_text "$SCENE_QML" '/fastfetch/ascii/awtarchy.txt' \
