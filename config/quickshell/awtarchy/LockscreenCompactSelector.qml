@@ -7,12 +7,20 @@ FocusScope {
     property int currentIndex: 0
     property bool menuOpen: false
     property int highlightedIndex: Math.max(0, currentIndex)
+    readonly property bool directClockToggle: Array.isArray(model)
+        && model.length === 2
+        && model[0] && model[1]
+        && String(model[0].key || "") === "24h"
+        && String(model[1].key || "") === "12h"
     property string selectedLabel: {
         if (!Array.isArray(model) || currentIndex < 0 || currentIndex >= model.length)
             return "";
         const item = model[currentIndex];
         return item && item.label !== undefined ? String(item.label) : String(item || "");
     }
+    readonly property string displayLabel: directClockToggle
+        ? (currentIndex === 0 ? "24-hour" : "12-hour")
+        : selectedLabel
     signal activated(int index)
 
     implicitWidth: 220
@@ -27,7 +35,18 @@ FocusScope {
         activated(bounded);
     }
 
+    function toggleClockFormat() {
+        if (!directClockToggle)
+            return;
+        activateIndex(currentIndex === 0 ? 1 : 0);
+        closeMenu();
+    }
+
     function openMenu() {
+        if (directClockToggle) {
+            toggleClockFormat();
+            return;
+        }
         if (!Array.isArray(model) || model.length === 0)
             return;
         highlightedIndex = Math.max(0, Math.min(model.length - 1, currentIndex));
@@ -91,7 +110,7 @@ FocusScope {
             anchors.right: disclosure.left
             anchors.rightMargin: 8
             anchors.verticalCenter: parent.verticalCenter
-            text: root.selectedLabel
+            text: root.displayLabel
             color: Theme.foreground
             font.family: Theme.fontFamily
             font.pixelSize: 9
@@ -106,7 +125,7 @@ FocusScope {
             anchors.right: parent.right
             anchors.rightMargin: 9
             anchors.verticalCenter: parent.verticalCenter
-            text: root.menuOpen ? "▴" : "▾"
+            text: root.directClockToggle ? "↔" : (root.menuOpen ? "▴" : "▾")
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: 10
@@ -119,17 +138,20 @@ FocusScope {
             cursorShape: Qt.PointingHandCursor
             onPressed: root.forceActiveFocus()
             onClicked: {
-                if (root.menuOpen)
+                if (root.directClockToggle) {
+                    root.toggleClockFormat();
+                } else if (root.menuOpen) {
                     root.closeMenu();
-                else
+                } else {
                     root.openMenu();
+                }
             }
         }
     }
 
     Rectangle {
         id: flyout
-        visible: root.menuOpen
+        visible: root.menuOpen && !root.directClockToggle
         anchors.top: parent.bottom
         anchors.topMargin: 4
         anchors.left: parent.left
