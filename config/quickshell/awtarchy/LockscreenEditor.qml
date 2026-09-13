@@ -1408,7 +1408,7 @@ Singleton {
                 blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
                 desktopBackingSource: editorTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility; editorHeldElement: root.heldElement; editorHoldScale: root.heldScaleBoost
             }
-            LockPreviewTransitionLayer { id: editorTransitionLayer; anchors.fill: parent; z: 160; startSource: editorTransitionStart; endSource: previewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken }
+            LockPreviewTransitionLayer { id: editorTransitionLayer; anchors.fill: parent; z: 160; startSource: editorTransitionStart; endSource: previewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
 
             Item { id: editorGridOverlay; anchors.fill: parent; visible: root.showEditorGrid; enabled: false; z: 175
                 Rectangle { id: safeAreaGuide; x: parent.width * 0.05; y: parent.height * 0.08; width: parent.width * 0.90; height: parent.height * 0.84; color: "transparent"; border.width: 1; border.color: Theme.muted; opacity: 0.72 }
@@ -1728,7 +1728,7 @@ Singleton {
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
                 overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: false
             }
-            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken }
+            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
         }
     }
 }

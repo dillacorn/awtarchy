@@ -2284,6 +2284,8 @@ Singleton {
 
                                         Text { Layout.fillWidth: true; text: "Mouse Interaction"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }
+                                        Text { Layout.fillWidth: true; text: "Hide Quick Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        SettingsButton { label: BarState.lockscreenHideQuickshellBeforeCapture() ? "On" : "Off"; active: BarState.lockscreenHideQuickshellBeforeCapture(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", BarState.lockscreenHideQuickshellBeforeCapture() ? "false" : "true"]) }
                                         Text { Layout.fillWidth: true; text: "Logo Physics"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         RowLayout {
                                             spacing: 5

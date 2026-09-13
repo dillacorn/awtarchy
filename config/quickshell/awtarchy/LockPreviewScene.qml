@@ -49,14 +49,25 @@ Item {
     property bool entryTransitionRunning: true
     property bool externallyManagedEntryTransition: false
     property bool externalEntryTransitionRunning: false
+    property real externalEntryTransitionProgress: 1
+    property int presentationReplayToken: 0
+    property int customImageSpawnEpoch: 0
     readonly property bool effectiveEntryTransitionRunning:
         externallyManagedEntryTransition ? externalEntryTransitionRunning : entryTransitionRunning
+    readonly property real effectiveEntryTransitionProgress:
+        externallyManagedEntryTransition ? externalEntryTransitionProgress : entryTransitionProgress
+
+    onEffectiveEntryTransitionRunningChanged: {
+        if (!effectiveEntryTransitionRunning && entered
+                && (!previewMode || presentationReplayToken > 0))
+            customImageSpawnEpoch++;
+    }
 
     readonly property int entryTileColumns: 24
     readonly property int entryTileRows: 14
     readonly property bool logoHoverActive: mouseInteractive && pointerActive && showLogo
         && logoContainsPoint(lastPointerX, lastPointerY) && !logoExplosionActive
-    readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty
+    readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty || logoReturnPending
     readonly property real securePasswordEntryOpacity: root.unlocking
         ? 0 : root.entered ? 1 : 0
     readonly property real uiScale: Math.max(0.72, Math.min(1.35,
@@ -105,6 +116,7 @@ Item {
     property bool pointerActive: false
     property bool logoExplosionActive: false
     property bool logoHoverDirty: false
+    property bool logoReturnPending: false
     property var logoParticles: ({})
     property var logoParticleBuckets: ({})
     property real logoExplosionElapsedMs: 0
@@ -120,13 +132,19 @@ Item {
     property real lastPointerX: -1
     property real lastPointerY: -1
 
-    onLogoHoverActiveChanged: logoHoverDirty = true
+    onLogoHoverActiveChanged: {
+        logoHoverDirty = true;
+        if (logoHoverActive)
+            logoReturnPending = false;
+        else if (!logoExplosionActive)
+            logoReturnPending = true;
+    }
     property string timeText: ""
     property string dateText: "";
 
     function entryTransitionMode() {
         const key = String(root.entryTransition || "fade");
-        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) >= 0
+        return ["fade", "pixel", "edges", "wipe"].indexOf(key) >= 0
             ? key : "fade";
     }
 
@@ -200,6 +218,35 @@ Item {
                 return image;
         }
         return null;
+    }
+
+    function customImageSpawnMode(image) {
+        const value = String(image && image.spawn_animation !== undefined
+            ? image.spawn_animation : "none");
+        return ["none", "pixel-warp", "closest-edge", "top", "bottom", "left", "right"].indexOf(value) >= 0
+            ? value : "none";
+    }
+
+    function customImageSpawnOffset(image, itemWidth, itemHeight) {
+        let mode = customImageSpawnMode(image);
+        if (mode === "none" || mode === "pixel-warp")
+            return Qt.point(0, 0);
+        const x = Math.max(0, Math.min(1, Number(image && image.x !== undefined ? image.x : 0.5)));
+        const y = Math.max(0, Math.min(1, Number(image && image.y !== undefined ? image.y : 0.5)));
+        if (mode === "closest-edge") {
+            let distance = x;
+            mode = "left";
+            if (1 - x < distance) { distance = 1 - x; mode = "right"; }
+            if (y < distance) { distance = y; mode = "top"; }
+            if (1 - y < distance) { mode = "bottom"; }
+        }
+        const centerX = x * root.width;
+        const centerY = y * root.height;
+        const margin = Math.max(24, 32 * root.uiScale);
+        if (mode === "left") return Qt.point(-(centerX + itemWidth / 2 + margin), 0);
+        if (mode === "right") return Qt.point(root.width - centerX + itemWidth / 2 + margin, 0);
+        if (mode === "top") return Qt.point(0, -(centerY + itemHeight / 2 + margin));
+        return Qt.point(0, root.height - centerY + itemHeight / 2 + margin);
     }
 
     function presentationPoint(name) {
@@ -637,10 +684,12 @@ Item {
             logoParticleBuckets = ({});
         }
         if (returning && maxMotion < 1.2) {
-            logoHoverDirty = false;
-            if (!logoHoverActive)
-                logoParticles = ({});
+        logoHoverDirty = false;
+        if (!logoHoverActive && !logoExplosionActive) {
+            logoReturnPending = false;
+            logoParticles = ({});
         }
+    }
     }
 
     function minuteTimeFormat() {
@@ -717,7 +766,23 @@ Item {
         lastPointerX = x;
         lastPointerY = y;
         lastPointerSampleTime = now;
-        logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);
+        const isLogoHovering = logoContainsPoint(x, y);
+        logoHoverDirty = wasLogoHovering || isLogoHovering;
+        if (isLogoHovering && !logoExplosionActive)
+            logoReturnPending = false;
+        else if (wasLogoHovering && !logoExplosionActive)
+            logoReturnPending = true;
+    }
+
+    function handlePointerExit() {
+        if (!mouseInteractive)
+            return;
+        pointerActive = false;
+        lastPointerSampleTime = 0;
+        if (!logoExplosionActive) {
+            logoReturnPending = true;
+            logoHoverDirty = true;
+        }
     }
     Item {
         id: backgroundCompositionContent
@@ -814,21 +879,22 @@ Item {
             id: customImageRepeater
             model: Array.isArray(root.customImages) ? root.customImages : []
 
-            Image {
+            Item {
+                id: customImageDelegate
                 required property var modelData
                 readonly property string elementName: String(modelData.id || "")
+                readonly property string spawnMode: root.customImageSpawnMode(modelData)
+                readonly property real finalX: root.normalizedX(elementName, 0.50) * parent.width - width / 2
+                readonly property real finalY: root.normalizedY(elementName, 0.50) * parent.height - height / 2
+                readonly property point spawnOffset: root.customImageSpawnOffset(modelData, width, height)
+                property real spawnProgress: 1
 
                 visible: modelData.visible !== false || root.editorMode
-                source: String(modelData.path || "").startsWith("/")
-                    ? "file://" + String(modelData.path) : ""
-                asynchronous: true
-                cache: true
-                fillMode: Image.PreserveAspectFit
                 width: Math.round(180 * root.uiScale)
                 height: Math.round(180 * root.uiScale)
-                x: root.normalizedX(elementName, 0.50) * parent.width - width / 2
-                y: root.normalizedY(elementName, 0.50) * parent.height - height / 2
-                scale: root.elementScale(elementName)
+                x: finalX + spawnOffset.x * (1 - spawnProgress)
+                y: finalY + spawnOffset.y * (1 - spawnProgress)
+                scale: root.elementScale(elementName) * (spawnMode === "pixel-warp" ? 0.82 + 0.18 * spawnProgress : 1)
                 rotation: root.elementRotation(elementName)
                 transformOrigin: Item.Center
                 transform: Scale {
@@ -839,7 +905,54 @@ Item {
                 }
                 opacity: root.elementOpacity(elementName)
                     * (modelData.visible !== false ? 1.0 : root.editorMode ? 0.30 : 0.0)
+                    * (spawnMode === "pixel-warp" ? spawnProgress : 1)
                 z: 4
+
+                function restartSpawnAnimation() {
+                    spawnAnimation.stop();
+                    if (spawnMode === "none") { spawnProgress = 1; return; }
+                    spawnProgress = 0;
+                    spawnAnimation.restart();
+                }
+
+                Image {
+                    id: customImageSource
+                    anchors.fill: parent
+                    source: String(customImageDelegate.modelData.path || "").startsWith("/")
+                        ? "file://" + String(customImageDelegate.modelData.path) : ""
+                    asynchronous: true
+                    cache: true
+                    fillMode: Image.PreserveAspectFit
+                    smooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.spawnProgress >= 0.999
+                }
+
+                ShaderEffectSource {
+                    id: pixelWarpSource
+                    anchors.fill: parent
+                    sourceItem: customImageSource
+                    hideSource: visible
+                    live: true
+                    recursive: false
+                    smooth: false
+                    readonly property real pixelFactor: 1 + 31 * Math.pow(Math.max(0, 1 - customImageDelegate.spawnProgress), 1.25)
+                    textureSize: Qt.size(Math.max(1, Math.round(width / pixelFactor)), Math.max(1, Math.round(height / pixelFactor)))
+                    visible: customImageDelegate.spawnMode === "pixel-warp" && customImageDelegate.spawnProgress < 0.999
+                }
+
+                NumberAnimation {
+                    id: spawnAnimation
+                    target: customImageDelegate
+                    property: "spawnProgress"
+                    from: 0
+                    to: 1
+                    duration: customImageDelegate.spawnMode === "pixel-warp" ? 620 : 520
+                    easing.type: Easing.OutCubic
+                }
+
+                Connections {
+                    target: root
+                    function onCustomImageSpawnEpochChanged() { customImageDelegate.restartSpawnAnimation(); }
+                }
             }
         }
 
@@ -1030,7 +1143,8 @@ Item {
                             readonly property int formationDuration: 1700
                                 + Math.floor(Math.random() * 351)
                             property real formationProgress:
-                                root.animationPreference === "off" ? 1 : 0
+                                root.animationPreference === "off"
+                                    || (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0
 
 
                             x: finalCellX
@@ -1254,31 +1368,20 @@ Item {
 
         Repeater {
             model: entryTransitionCover.visible
-                && (root.entryTransitionMode() === "pixel"
-                    || root.entryTransitionMode() === "iris")
+                && root.entryTransitionMode() === "pixel"
                 ? root.entryTileColumns * root.entryTileRows : 0
 
             Rectangle {
                 readonly property int tileColumn: index % root.entryTileColumns
                 readonly property int tileRow: Math.floor(index / root.entryTileColumns)
-                readonly property real centerX: (tileColumn + 0.5) / root.entryTileColumns
-                readonly property real centerY: (tileRow + 0.5) / root.entryTileRows
-                readonly property real distanceFromCenter: Math.min(1,
-                    Math.sqrt(Math.pow((centerX - 0.5) * 2, 2)
-                        + Math.pow((centerY - 0.5) * 2, 2)) / Math.sqrt(2))
                 readonly property real pixelThreshold: 0.08
                     + (((index * 73 + 19) % 337) / 336) * 0.84
-                readonly property real irisThreshold: 0.10
-                    + (1 - distanceFromCenter) * 0.82
-
                 x: tileColumn * entryTransitionCover.width / root.entryTileColumns
                 y: tileRow * entryTransitionCover.height / root.entryTileRows
                 width: Math.ceil(entryTransitionCover.width / root.entryTileColumns) + 1
                 height: Math.ceil(entryTransitionCover.height / root.entryTileRows) + 1
                 color: "#000000"
-                visible: root.entryTransitionMode() === "pixel"
-                    ? root.entryTransitionProgress < pixelThreshold
-                    : root.entryTransitionProgress < irisThreshold
+                visible: root.entryTransitionProgress < pixelThreshold
             }
         }
 
