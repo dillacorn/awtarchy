@@ -58,6 +58,12 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-user-cutover.sh
       - name: Runtime regression contracts
         run: bash tests/test-quickshell-lockscreen-runtime-regressions.sh
+      - name: Editor theme color regression
+        run: |
+          if grep -Fq 'color: Theme.text' config/quickshell/awtarchy/LockscreenEditor.qml; then
+            printf '%s\n' 'FAIL: lockscreen editor references undefined Theme.text QColor' >&2
+            false
+          fi
       - name: Foundation contracts
         run: |
           bash tests/test-quickshell-lockscreen-foundation.sh
