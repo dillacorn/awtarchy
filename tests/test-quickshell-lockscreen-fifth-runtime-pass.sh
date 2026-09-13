@@ -57,6 +57,10 @@ contains "$EDITOR" 'id: editorEntranceFade' \
     'editor has no dedicated quick entrance fade'
 contains "$EDITOR" 'duration: root.editorEntranceFadeDuration' \
     'editor entrance does not use its dedicated short fade duration'
+contains "$LAYER" 'property bool autoStart: true' \
+    'transition layer has no explicit auto-start control'
+contains "$EDITOR" 'autoStart: false' \
+    'editor transition preview still auto-starts on editor entry'
 rejects "$EDITOR" 'closeAfterSave' \
     'Save still schedules editor dismissal'
 contains "$EDITOR" 'root.statusMessage = exitCode === 0 ? "Saved"' \
