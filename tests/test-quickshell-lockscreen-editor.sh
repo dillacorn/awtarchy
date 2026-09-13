@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
+EDITOR_SAVE="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
 BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 DESKTOP_SHELL="${ROOT}/config/quickshell/awtarchy/shell.qml"
@@ -52,6 +53,7 @@ printf '%s\n' '{"enabled":true,"monitors":{},"launcher_sizes":{},"update_notific
 
 require_file "$LOCK_SCENE" 'shared LockScene.qml is missing'
 require_file "$EDITOR_QML" 'unlocked LockscreenEditor.qml is missing'
+require_file "$EDITOR_SAVE" 'dedicated lockscreen editor save wrapper is missing'
 require_file "$PREVIEW_SCENE" 'unlocked LockPreviewScene.qml is missing'
 require_file "$PREVIEW_WALLPAPER" 'unlocked LockPreviewWallpaperState.qml is missing'
 require_file "$DESKTOP_WEATHER" 'unlocked LockscreenWeather.qml is missing'
@@ -89,8 +91,12 @@ require_text "$EDITOR_QML" 'function close()' \
     'LockscreenEditor has no Cancel/close path'
 require_text "$EDITOR_QML" 'function resetDraft()' \
     'LockscreenEditor has no Restore Defaults draft path'
-require_text "$EDITOR_QML" 'save-lockscreen-editor' \
-    'LockscreenEditor does not atomically persist layout and visibility'
+require_text "$EDITOR_QML" 'editorSaveBackend: configHome + "/hypr/scripts/quickshell_lockscreen_editor_save.sh"' \
+    'LockscreenEditor does not use the dedicated presentation save wrapper'
+require_text "$EDITOR_QML" 'saveProcess.exec(["bash", editorSaveBackend,' \
+    'LockscreenEditor Save path does not invoke the dedicated save wrapper'
+require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${@:1:19}"' \
+    'editor save wrapper no longer delegates the original atomic layout/visibility save'
 require_text "$EDITOR_QML" 'label: "Save"' \
     'LockscreenEditor has no Save control'
 require_text "$EDITOR_QML" 'label: "Cancel"' \
