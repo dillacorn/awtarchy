@@ -1471,7 +1471,7 @@ Singleton {
             }
 
             Rectangle { id: rotationHandle; visible: root.isCustomImage(root.selectedElement); width: 20; height: 20; radius: 10; x: Math.round(root.primaryPoint().x * parent.width - width / 2); y: Math.round(root.primaryPoint().y * parent.height - Math.max(54, 100 * root.elementScale(root.selectedElement)) - height / 2); color: Theme.background; border.width: 2; border.color: Theme.focus; z: 40
-                Text { anchors.centerIn: parent; text: "↻"; color: Theme.text; font.family: Theme.fontFamily; font.pixelSize: 11 }
+                Text { anchors.centerIn: parent; text: "↻"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 11 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.SizeAllCursor; preventStealing: true; onPressed: mouse => { const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.beginRotateElement(root.selectedElement, point.x, point.y); mouse.accepted = true; }; onPositionChanged: mouse => { if (!pressed) return; const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.updateRotateElement(point.x, point.y); }; onReleased: root.endRotateElement(); onCanceled: root.endRotateElement() }
             }
             Rectangle { visible: root.guideX >= 0; x: Math.round(root.guideX * parent.width); y: 0; width: 1; height: parent.height; color: Theme.focus; opacity: 0.72; z: 250 }

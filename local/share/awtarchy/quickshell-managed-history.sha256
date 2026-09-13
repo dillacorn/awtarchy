@@ -1248,3 +1248,6 @@ b72e9cef8b7d4d1696c29c2990656be6bbc70de47a9de1eb9e7fb9703ed713a7	.config/quicksh
 
 # 2026-09-13 secondary editor PanelWindow opacity runtime fix stock hash.
 41407902ca58159d6c9b06bcc24a2ef92719bf208642fa36e2510fbd6a3b6120	.config/quickshell/awtarchy/LockscreenEditor.qml
+
+# 2026-09-13 lockscreen editor rotation-handle QColor runtime fix stock hash.
+a3c32e47e5a7607e3154d315c11486a4b5a88a9dd8ac37bf12d5257f003d4294	.config/quickshell/awtarchy/LockscreenEditor.qml
