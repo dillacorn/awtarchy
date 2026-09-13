@@ -32,15 +32,15 @@ has "$SCENE" 'logoHoverTarget(row, column, hoverLocal)' \
 lacks "$SCENE" 'const local = wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY);' \
     'logo hover still remaps the pointer once per particle'
 
-# CAVA frame parsing should publish one result array without a second normalization array.
+# CAVA frame parsing should publish one result array without a second normalization pass.
 has "$ANALYZER" 'const result = [];' \
     'audio analyzer does not build one parsed-frame result'
+has "$ANALYZER" 'for (let i = 0; i < fields.length && result.length < maximumBands; ++i)' \
+    'audio analyzer parser does not fill the result directly'
 has "$ANALYZER" 'bands = result;' \
     'audio analyzer does not publish the parsed-frame result directly'
 lacks "$ANALYZER" 'function normalizedSpectrum' \
     'audio analyzer still performs a second normalization pass'
-lacks "$ANALYZER" 'const values = [];' \
-    'audio analyzer still allocates an intermediate values array'
 
 cmp -s "$SCENE" "$PREVIEW_SCENE" || fail 'secure/editor scene parity is broken'
 cmp -s "$ANALYZER" "$PREVIEW_ANALYZER" || fail 'secure/editor analyzer parity is broken'
