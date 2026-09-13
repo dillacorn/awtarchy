@@ -175,7 +175,7 @@ ShellRoot {
 
     function normalizedEntryTransition(value) {
         const key = String(value || "");
-        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) >= 0
+        return ["fade", "pixel", "edges", "wipe"].indexOf(key) >= 0
             ? key : "fade";
     }
 
@@ -281,6 +281,12 @@ ShellRoot {
         });
     }
 
+    function normalizedCustomImageSpawn(value) {
+        const key = String(value === undefined ? "none" : value);
+        return ["none", "pixel-warp", "closest-edge", "top", "bottom", "left", "right"].indexOf(key) >= 0
+            ? key : "none";
+    }
+
     function normalizedCustomImages(value) {
         if (!Array.isArray(value) || value.length > 12)
             return [];
@@ -299,6 +305,7 @@ ShellRoot {
             const stretchY = Number(image.stretch_y);
             const opacity = Number(image.opacity);
             const rotation = Number(image.rotation === undefined ? 0 : image.rotation);
+            const spawnAnimation = normalizedCustomImageSpawn(image.spawn_animation);
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
@@ -313,7 +320,8 @@ ShellRoot {
             result.push(({
                 id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY, opacity: opacity,
-                rotation: rotation, visible: image.visible
+                rotation: rotation, spawn_animation: spawnAnimation,
+                visible: image.visible
             }));
         }
         return result;
