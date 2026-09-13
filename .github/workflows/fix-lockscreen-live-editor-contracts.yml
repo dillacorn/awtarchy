@@ -1,0 +1,91 @@
+name: Refresh Lockscreen Live Editor Contracts
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+
+      - name: Refresh stale live-editor assertions and validate editor group
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update >/dev/null
+          sudo apt-get install -y jq shellcheck >/dev/null
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test-quickshell-lockscreen-live-editor.sh")
+          text = path.read_text()
+
+          old_time = '''# Time must remain minute-only without forcing a 12/24-hour convention.
+          require_text "$SCENE" 'function minuteTimeFormat()' \\
+              'lockscreen has no locale-aware minute-only clock formatter'
+          require_text "$SCENE" 'timeFormat(Locale.ShortFormat)' \\
+              'minute-only clock no longer derives the user locale time format'
+          reject_text "$SCENE" 'Qt.formatTime(now, Locale.ShortFormat)' \\
+              'lockscreen still delegates directly to a locale format that may contain seconds'
+          '''
+          new_time = '''# Time remains minute-only while honoring the explicit 12/24-hour presentation preference.
+          require_text "$SCENE" 'required property string clockFormat' \\
+              'shared lockscreen scene has no explicit clock-format input'
+          require_text "$SCENE" 'Qt.formatTime(now, root.clockFormat === "12h" ? "h:mm AP" : "HH:mm")' \\
+              'shared lockscreen scene no longer formats the saved 12/24-hour preference through one path'
+          reject_text "$SCENE" 'Qt.formatTime(now, Locale.ShortFormat)' \\
+              'lockscreen still delegates directly to a locale format that may contain seconds'
+          '''
+
+          old_save = '''require_text "$EDITOR" 'save-lockscreen-editor' \\
+              'editor does not atomically save layout and visibility'
+          '''
+          new_save = '''require_text "$EDITOR" 'editorSaveBackend: configHome + "/hypr/scripts/quickshell_lockscreen_editor_save.sh"' \\
+              'editor does not route atomic presentation saves through the dedicated wrapper'
+          require_text "$EDITOR" 'saveProcess.exec(["bash", editorSaveBackend,' \\
+              'editor Save path does not invoke the dedicated presentation wrapper'
+          '''
+
+          if text.count(old_time) != 1:
+              raise SystemExit(f"expected one stale time-format contract, found {text.count(old_time)}")
+          if text.count(old_save) != 1:
+              raise SystemExit(f"expected one stale direct-save contract, found {text.count(old_save)}")
+
+          text = text.replace(old_time, new_time, 1).replace(old_save, new_save, 1)
+          path.write_text(text)
+          PY
+
+          bash -n tests/test-quickshell-lockscreen-live-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-live-editor.sh
+
+          bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-flick.sh
+          bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash tests/test-quickshell-lockscreen-visualizer-editing.sh
+          bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+
+          rm -- .github/workflows/fix-lockscreen-live-editor-contracts.yml
+          git add -A
+          git diff --cached --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(lockscreen): refresh live editor contracts'
+          git push origin HEAD:feature/lockscreen-interactive-effects
