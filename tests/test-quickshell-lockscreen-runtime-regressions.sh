@@ -208,10 +208,16 @@ require_text "$SURFACE_QML" 'root.submittedMaskCount = Math.min(response.length,
     'failed-attempt lockscreen password mask does not retain the same visible-length cap'
 require_text "$SURFACE_QML" 'readonly property real passwordScale: scene.elementScale("password")' \
     'secure password visuals do not consume the shared bounded password scale'
-require_text "$SURFACE_QML" 'width: Math.round(7 * root.uiScale * root.passwordScale)' \
-    'password block width does not scale from the shared password anchor'
-require_text "$SURFACE_QML" 'height: Math.round(10 * root.uiScale * root.passwordScale)' \
-    'password block height does not scale from the shared password anchor'
+require_text "$SURFACE_QML" 'scene.effectivePasswordMaskMode === "dots"' \
+    'secure password visuals no longer branch into dot-mask presentation'
+require_text "$SURFACE_QML" ': Math.round(7 * root.uiScale * root.passwordScale)' \
+    'square password mask width does not scale from the shared password anchor'
+require_text "$SURFACE_QML" ': Math.round(10 * root.uiScale * root.passwordScale)' \
+    'square password mask height does not scale from the shared password anchor'
+require_text "$SURFACE_QML" 'visible: scene.effectivePasswordMaskMode === "custom"' \
+    'secure password visuals no longer render custom mask characters'
+require_text "$SURFACE_QML" 'font.pixelSize: Math.round(16 * root.uiScale * root.passwordScale)' \
+    'custom password mask character does not scale from the shared password anchor'
 require_text "$SCENE_QML" 'const maximum = 100.00;' \
     'shared scene does not use the common defensive scale bound'
 reject_text "$SURFACE_QML" 'index % 3' \
