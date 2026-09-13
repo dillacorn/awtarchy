@@ -34,6 +34,13 @@ reject_text() {
     fi
 }
 
+reject_exact_line() {
+    local file="$1" text="$2" message="$3"
+    if grep -Fxq -- "$text" "$file"; then
+        fail "$message"
+    fi
+}
+
 require_file "$SHELL_QML"
 require_file "$SURFACE_QML"
 require_file "$SCENE_QML"
@@ -149,7 +156,11 @@ require_text "$THEME_QML" 'function themeData() {' \
     'LockTheme does not use a non-conflicting JSON reader name'
 
 require_text "$MANAGER" 'CONFIG_NAME="awtarchy-lock"' \
-    'lock manager does not target only awtarchy-lock'
+    'lock manager does not target only awtarchy-lock for lock authority'
+require_text "$MANAGER" 'SHELL_CONFIG_NAME="awtarchy"' \
+    'capture fallback does not name the unlocked shell separately from lock authority'
+require_text "$MANAGER" '"$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close' \
+    'capture fallback does not limit unlocked-shell IPC to closing Quick Settings'
 # The expansion syntax below is intentionally matched as literal shell source.
 # shellcheck disable=SC2016
 require_text "$MANAGER" 'QS_BIN="${QS_BIN:-qs}"' \
@@ -162,8 +173,8 @@ reject_text "$MANAGER" 'killall' \
     'lock manager must not broadly kill processes'
 reject_text "$MANAGER" 'pkill' \
     'lock manager must not use generic pkill'
-reject_text "$MANAGER" 'CONFIG_NAME="awtarchy"' \
-    'lock manager must not target the normal Awtarchy shell'
+reject_exact_line "$MANAGER" 'CONFIG_NAME="awtarchy"' \
+    'normal Awtarchy shell must never replace awtarchy-lock as lock authority'
 
 FAKE_QS="$TMP/qs"
 FAKE_STATE="$TMP/state"
