@@ -42,9 +42,23 @@ not_contains "$SELECTOR" 'text: "‹"' \
 not_contains "$SELECTOR" 'text: "›"' \
     'compact selector still exposes a next-value arrow control'
 
-contains "$EDITOR" 'onClicked: root.setDraftClockFormat(root.draftClockFormat === "24h" ? "12h" : "24h")' \
-    'primary clock format toggle does not use the shared normalized state path'
-contains "$EDITOR" 'label: root.draftClockFormat === "24h" ? "24-hour" : "12-hour"' \
+contains "$SELECTOR" 'readonly property bool directClockToggle:' \
+    'compact selector does not recognize the primary 24h/12h clock model'
+contains "$SELECTOR" 'String(model[0].key || "") === "24h"' \
+    'direct clock toggle is not restricted to the 24-hour key'
+contains "$SELECTOR" 'String(model[1].key || "") === "12h"' \
+    'direct clock toggle is not restricted to the 12-hour key'
+contains "$SELECTOR" 'function toggleClockFormat()' \
+    'primary clock selector has no direct toggle path'
+contains "$SELECTOR" 'activateIndex(currentIndex === 0 ? 1 : 0);' \
+    'primary clock selector does not switch directly between the two normalized states'
+contains "$SELECTOR" 'visible: root.menuOpen && !root.directClockToggle' \
+    'primary clock toggle can still open the option fly-out'
+contains "$SELECTOR" '? (currentIndex === 0 ? "24-hour" : "12-hour")' \
     'primary clock toggle does not show its current format directly'
+contains "$EDITOR" 'model: root.clockFormatPresets' \
+    'editor clock control does not use the normalized clock-format model'
+contains "$EDITOR" 'onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)' \
+    'primary clock toggle does not commit through the shared normalized state path'
 
 printf 'PASS: lockscreen themed fly-out selector and clock toggle contracts\n'
