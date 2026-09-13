@@ -1,158 +1,188 @@
-name: Temporary Apply Approved Lockscreen Optimizations
+name: Validate Quickshell Lockscreen Interactive Effects
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  apply:
-    if: github.event.pull_request.number == 181 && github.head_ref == 'feature/lockscreen-interactive-effects'
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           fetch-depth: 0
-      - name: Apply narrowly scoped production changes
-        shell: bash
+      - name: Diff whitespace validation
         run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          import hashlib
-          import re
-
-          def replace_once(path, old, new):
-              p = Path(path)
-              text = p.read_text()
-              count = text.count(old)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one literal match, found {count}")
-              p.write_text(text.replace(old, new, 1))
-
-          def regex_once(path, pattern, replacement):
-              p = Path(path)
-              text = p.read_text()
-              result, count = re.subn(pattern, replacement, text, count=1, flags=re.S)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected exactly one regex match, found {count}")
-              p.write_text(result)
-
-          scene_path = "config/quickshell/awtarchy-lock/LockScene.qml"
-          replace_once(
-              scene_path,
-              '    readonly property real securePasswordEntryOpacity: root.unlocking\n        ? 0 : root.entered ? 1 : 0\n',
-              '    readonly property real securePasswordEntryOpacity: root.unlocking\n        ? 0 : root.entered && !root.effectiveEntryTransitionRunning ? 1 : 0\n'
-          )
-          replace_once(
-              scene_path,
-              '    function logoHoverTarget(row, column) {\n',
-              '    function logoHoverTarget(row, column, localPointer) {\n'
-          )
-          replace_once(
-              scene_path,
-              '        const local = wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY);\n',
-              '        const local = localPointer;\n'
-          )
-          replace_once(
-              scene_path,
-              '        const next = ({});\n        let maxMotion = 0;\n        for (let row = 0; row < wordmarkRows.length; ++row) {\n',
-              '        const next = ({});\n        let maxMotion = 0;\n        const hoverLocal = logoHoverActive\n            ? wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY)\n            : Qt.point(0, 0);\n        for (let row = 0; row < wordmarkRows.length; ++row) {\n'
-          )
-          replace_once(
-              scene_path,
-              '                const hoverTarget = logoHoverTarget(row, column);\n',
-              '                const hoverTarget = logoHoverTarget(row, column, hoverLocal);\n'
-          )
-          scene_text = Path(scene_path).read_text()
-          Path("config/quickshell/awtarchy/LockPreviewScene.qml").write_text(scene_text)
-
-          surface_path = "config/quickshell/awtarchy-lock/LockSurface.qml"
-          replace_once(
-              surface_path,
-              '    function focusPasswordWhenReady() {\n        Qt.callLater(() => password.forceActiveFocus());\n    }\n',
-              '    function focusPasswordWhenReady() {\n        if (!root.transitionComplete || root.unlocking)\n            return;\n        Qt.callLater(() => {\n            if (root.transitionComplete && !root.unlocking)\n                password.forceActiveFocus();\n        });\n    }\n'
-          )
-
-          analyzer_path = "config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml"
-          regex_once(
-              analyzer_path,
-              r'    function normalizedSpectrum\(values\) \{.*?\n    function startAnalyzer\(\) \{',
-              '''    function parseFrame(data) {\n        const fields = String(data || "").trim().split(";");\n        const result = [];\n        for (let i = 0; i < fields.length && result.length < maximumBands; ++i) {\n            if (fields[i].length === 0)\n                continue;\n            result.push(threshold(Number(fields[i]) / 1000));\n        }\n        if (result.length === 0)\n            return;\n        while (result.length < maximumBands)\n            result.push(0);\n        bands = result;\n    }\n\n    function startAnalyzer() {'''
-          )
-          analyzer_text = Path(analyzer_path).read_text()
-          Path("config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml").write_text(analyzer_text)
-
-          acceptance = "tests/test-quickshell-lockscreen-runtime-acceptance-187.sh"
-          replace_once(
-              acceptance,
-              "has \"$SCENE\" 'function logoHoverTarget(row, column)' 'coherent logo hover field is missing'\n",
-              "has \"$SCENE\" 'function logoHoverTarget(row, column, localPointer)' 'coherent logo hover field is missing'\n"
-          )
-          replace_once(
-              acceptance,
-              "has \"$ANALYZER\" 'bands = normalizedSpectrum(values);' 'analyzer does not publish parsed frames directly'\n",
-              "has \"$ANALYZER\" 'bands = result;' 'analyzer does not publish parsed frames directly'\n"
-          )
-
-          history_path = Path("local/share/awtarchy/quickshell-managed-history.sha256")
-          history = history_path.read_text()
-          managed = [
-              ("config/quickshell/awtarchy-lock/LockScene.qml", ".config/quickshell/awtarchy-lock/LockScene.qml"),
-              ("config/quickshell/awtarchy/LockPreviewScene.qml", ".config/quickshell/awtarchy/LockPreviewScene.qml"),
-              ("config/quickshell/awtarchy-lock/LockSurface.qml", ".config/quickshell/awtarchy-lock/LockSurface.qml"),
-              ("config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml", ".config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml"),
-              ("config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml", ".config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml"),
-          ]
-          entries = []
-          for src, dst in managed:
-              digest = hashlib.sha256(Path(src).read_bytes()).hexdigest()
-              line = f"{digest}\t{dst}"
-              if line not in history.splitlines():
-                  entries.append(line)
-          if entries:
-              history = history.rstrip("\n") + "\n\n# 2026-09-13 pre-runtime optimization pass stock hashes.\n" + "\n".join(entries) + "\n"
-              history_path.write_text(history)
-          PY
-
-      - name: Verify GREEN before commit
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n tests/test-quickshell-lockscreen-pretest-optimizations.sh
-          bash -n tests/test-quickshell-lockscreen-interaction-polish.sh
-          bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          shellcheck tests/test-quickshell-lockscreen-pretest-optimizations.sh
-          shellcheck tests/test-quickshell-lockscreen-interaction-polish.sh
-          shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash tests/test-quickshell-lockscreen-pretest-optimizations.sh
-          bash tests/test-quickshell-lockscreen-interaction-polish.sh
-          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
-          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
-          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
-          cmp -s config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml
-          git diff --check
-
-      - name: Commit verified changes
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name dillacorn
-          git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add \
-            config/quickshell/awtarchy-lock/LockScene.qml \
-            config/quickshell/awtarchy/LockPreviewScene.qml \
-            config/quickshell/awtarchy-lock/LockSurface.qml \
-            config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml \
-            config/quickshell/awtarchy/LockPreviewAudioAnalyzer.qml \
-            tests/test-quickshell-lockscreen-runtime-acceptance-187.sh \
-            local/share/awtarchy/quickshell-managed-history.sha256
-          if git diff --cached --quiet; then
-            printf '%s\n' 'no production changes to commit'
+          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
+            git diff --check "origin/${GITHUB_BASE_REF}...HEAD"
           else
-            git commit -m 'perf: tighten lockscreen runtime paths'
-            git push origin "HEAD:${GITHUB_HEAD_REF}"
+            git diff --check HEAD^
           fi
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Syntax validation
+        run: |
+          bash -n tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash -n tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          bash -n tests/test-quickshell-lockscreen-logo-cohesion.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash -n tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+          bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
+          bash -n tests/test-quickshell-lockscreen-capture.sh
+          bash -n tests/test-quickshell-lockscreen-transition-layer.sh
+          bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash -n tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          bash -n tests/test-quickshell-lockscreen-editor.sh
+          bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash -n tests/test-quickshell-lockscreen-live-editor.sh
+          bash -n tests/test-quickshell-lockscreen-editor-flick.sh
+          bash -n tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
+          bash -n tests/test-quickshell-lockscreen-element-system.sh
+          bash -n tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash -n tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash -n tests/test-quickshell-lockscreen-visualizer-editing.sh
+          bash -n tests/test-quickshell-lockscreen-entry-transitions.sh
+          bash -n tests/test-quickshell-lockscreen-background-composition.sh
+          bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash -n tests/test-quickshell-lockscreen-weather.sh
+          bash -n tests/test-quickshell-lockscreen-weather-units.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-services.sh
+          bash -n tests/test-quickshell-lockscreen-interaction-polish.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_audio.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
+      - name: ShellCheck
+        run: |
+          shellcheck tests/test-quickshell-lockscreen-interactive-effects.sh
+          shellcheck tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          shellcheck tests/test-quickshell-lockscreen-logo-cohesion.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          shellcheck tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+          shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
+          shellcheck tests/test-quickshell-lockscreen-capture.sh
+          shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
+          shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          shellcheck tests/test-quickshell-lockscreen-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          shellcheck tests/test-quickshell-lockscreen-live-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-flick.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-tooling.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
+          shellcheck tests/test-quickshell-lockscreen-element-system.sh
+          shellcheck tests/test-quickshell-lockscreen-rotation-reset.sh
+          shellcheck tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          shellcheck tests/test-quickshell-lockscreen-visualizer-editing.sh
+          shellcheck tests/test-quickshell-lockscreen-entry-transitions.sh
+          shellcheck tests/test-quickshell-lockscreen-background-composition.sh
+          shellcheck tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          shellcheck tests/test-quickshell-lockscreen-weather.sh
+          shellcheck tests/test-quickshell-lockscreen-weather-units.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-services.sh
+          shellcheck tests/test-quickshell-lockscreen-interaction-polish.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_weather.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
+      - name: Runtime helper mode
+        run: |
+          test -x config/hypr/scripts/quickshell_lockscreen_audio.sh
+          test -x config/hypr/scripts/quickshell_lockscreen_weather.sh
+          test -x config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            test -x config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+      - name: Logo cohesion contracts
+        run: bash tests/test-quickshell-lockscreen-logo-cohesion.sh
+      - name: Runtime polish contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-picker-targeting.sh
+      - name: Third and fifth Hyprland runtime pass contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+      - name: Secure transition capture contract
+        run: bash tests/test-quickshell-lockscreen-capture.sh
+      - name: Desktop transition layer contract
+        run: bash tests/test-quickshell-lockscreen-transition-layer.sh
+      - name: Background composition contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-background-composition.sh
+          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+      - name: Weather refresh contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-weather.sh
+          bash tests/test-quickshell-lockscreen-weather-units.sh
+      - name: Runtime service contracts
+        run: bash tests/test-quickshell-lockscreen-runtime-services.sh
+      - name: Interactive effects contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+      - name: Entry transition contracts
+        run: bash tests/test-quickshell-lockscreen-entry-transitions.sh
+      - name: Customization editor contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-flick.sh
+          bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash tests/test-quickshell-lockscreen-visualizer-editing.sh
+      - name: Managed history contracts
+        run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
