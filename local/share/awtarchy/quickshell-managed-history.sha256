@@ -1251,3 +1251,6 @@ b72e9cef8b7d4d1696c29c2990656be6bbc70de47a9de1eb9e7fb9703ed713a7	.config/quicksh
 
 # 2026-09-13 lockscreen editor rotation-handle QColor runtime fix stock hash.
 a3c32e47e5a7607e3154d315c11486a4b5a88a9dd8ac37bf12d5257f003d4294	.config/quickshell/awtarchy/LockscreenEditor.qml
+
+# 2026-09-13 lockscreen presentation settings save helper stock hash.
+084fe9195430a77b31f7126bfb6346e5f6300b5a8ec3e78154a513920c79d231	.config/hypr/scripts/quickshell_lockscreen_editor_save.sh
