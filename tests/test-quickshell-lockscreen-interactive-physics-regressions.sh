@@ -37,8 +37,10 @@ reject_text "$SCENE_QML" 'audioOffsetX' \
 
 # Parsed CAVA frames are presented directly; a second QML smoothing cadence
 # would reintroduce the lag observed in the first runtime pass.
-require_text "$AUDIO_QML" 'bands = normalizedSpectrum(values);' \
+require_text "$AUDIO_QML" 'bands = result;' \
     'audio analyzer does not publish frames directly'
+reject_text "$AUDIO_QML" 'function normalizedSpectrum' \
+    'audio analyzer still performs a second normalization pass'
 reject_text "$AUDIO_QML" 'smoothingTimer' \
     'retired QML smoothing cadence remains'
 
