@@ -173,6 +173,7 @@ WlSessionLockSurface {
         hoverEnabled: true
         cursorShape: Qt.BlankCursor
         onPositionChanged: mouse => scene.handlePointerMotion(mouse.x, mouse.y)
+        onExited: scene.handlePointerExit()
         onClicked: mouse => {
             scene.handlePointerClick(mouse.x, mouse.y);
             password.forceActiveFocus();
@@ -201,7 +202,6 @@ WlSessionLockSurface {
                 easing.type: Easing.OutCubic
             }
         }
-
 
         Row {
             anchors.centerIn: parent
