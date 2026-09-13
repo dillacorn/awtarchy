@@ -132,9 +132,17 @@ Singleton {
     readonly property var lockscreenEntryTransitionPresets: [
         { key: "fade", label: "Fade" },
         { key: "pixel", label: "Pixel" },
-        { key: "iris", label: "Iris Reveal" },
         { key: "edges", label: "Edges" },
         { key: "wipe", label: "Wipe" }
+    ]
+    readonly property var lockscreenCustomImageSpawnPresets: [
+        { key: "none", label: "No Spawn Animation" },
+        { key: "pixel-warp", label: "Pixel Warp In" },
+        { key: "closest-edge", label: "Fly In From Closest Edge" },
+        { key: "top", label: "Fly In From Top" },
+        { key: "bottom", label: "Fly In From Bottom" },
+        { key: "left", label: "Fly In From Left" },
+        { key: "right", label: "Fly In From Right" }
     ]
     readonly property var defaultLockscreenComposition: ({
         lockscreen_wallpaper_fit: "cover",
@@ -144,7 +152,8 @@ Singleton {
         lockscreen_overlay_strength: 0,
         lockscreen_wallpaper_blur: 0,
         lockscreen_blur_style: "smooth",
-        lockscreen_background_opacity_previous: 100
+        lockscreen_background_opacity_previous: 100,
+        lockscreen_hide_quickshell_before_capture: false
     })
     readonly property var defaultLockscreenVisualizer: ({
         enabled: false,
@@ -186,7 +195,6 @@ Singleton {
         "triangles": "workflow",
         "minimal": "workflow"
     })
-
 
     property int revision: 0
     property int idleRevision: 0
@@ -392,6 +400,7 @@ Singleton {
             lockscreen_show_date: false,
             lockscreen_show_username: false,
             lockscreen_show_weather: false,
+            lockscreen_hide_quickshell_before_capture: false,
             lockscreen_background: "black",
             lockscreen_background_color: "#000000",
             lockscreen_wallpaper_path: "",
@@ -788,6 +797,10 @@ Singleton {
         return lockscreenBooleanPreference("lockscreen_show_weather", false);
     }
 
+    function lockscreenHideQuickshellBeforeCapture() {
+        return lockscreenBooleanPreference("lockscreen_hide_quickshell_before_capture", false);
+    }
+
     function lockscreenBackground() {
         const value = String(data().lockscreen_background || "");
         return ["black", "wallpaper", "color"].indexOf(value) >= 0 ? value : "black";
@@ -912,6 +925,15 @@ Singleton {
         });
     }
 
+    function lockscreenCustomImageSpawnMode(value) {
+        const key = String(value === undefined ? "none" : value);
+        for (const preset of lockscreenCustomImageSpawnPresets) {
+            if (preset.key === key)
+                return key;
+        }
+        return "none";
+    }
+
     function lockscreenCustomImages() {
         const value = data().lockscreen_custom_images;
         if (!Array.isArray(value) || value.length > 12)
@@ -930,6 +952,7 @@ Singleton {
             const stretchY = Number(raw.stretch_y);
             const opacity = Number(raw.opacity);
             const rotation = Number(raw.rotation === undefined ? 0 : raw.rotation);
+            const spawnAnimation = lockscreenCustomImageSpawnMode(raw.spawn_animation);
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
                     || !path.startsWith("/") || path.indexOf("://") >= 0
                     || /[\u0000-\u001f\u007f-\u009f]/.test(path)
@@ -945,7 +968,8 @@ Singleton {
             ids[id] = true;
             result.push(({ id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY,
-                opacity: opacity, rotation: rotation, visible: raw.visible }));
+                opacity: opacity, rotation: rotation,
+                spawn_animation: spawnAnimation, visible: raw.visible }));
         }
         return result;
     }
