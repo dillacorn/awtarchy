@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SHELL_QML="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
 SURFACE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 SCENE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
+EDITOR_QML="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
 LOCK_THEME_QML="${ROOT}/config/quickshell/awtarchy-lock/LockTheme.qml"
 THEME_APPLY="${ROOT}/config/hypr/scripts/quickshell_theme_apply.sh"
 PINK_THEME="${ROOT}/config/hypr/themes/pink"
@@ -38,6 +39,11 @@ require_text "$SHELL_QML" 'auth: lockAuth' \
     'lock surface is not bound to the real LockAuth object'
 reject_text "$SHELL_QML" 'auth: auth' \
     'lock surface still self-binds auth and loses the authentication object'
+
+# A real Quickshell load rejects a semicolon immediately after an inline child
+# object declaration, such as `stdout: SplitParser { ... }; onExited: ...`.
+reject_text "$EDITOR_QML" '}; onExited:' \
+    'lockscreen editor uses invalid separators after inline SplitParser objects'
 
 # The approved wordmark is presentation-only now and is shared by both the
 # secure surface and unlocked editor through LockScene.

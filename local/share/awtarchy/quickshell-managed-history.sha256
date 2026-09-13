@@ -1242,3 +1242,6 @@ a9565bc9afcb16049bbfefad941d2787e17356be0e9ae8a1d66574fc59ff2add	.config/quicksh
 012ee6ce147083c8e4206b3389af80f558a507e2b59000260ba51f151f94e1e6	.config/quickshell/awtarchy/LockPreviewScene.qml
 83f726f98abf356c980f42774a25d007961925c88f39c3176d7e085243fb48e2	.config/quickshell/awtarchy-lock/LockSurface.qml
 e1e9e5a1580904de5dcf3ac3ce31a208650e39a839fc53b45e3370a6112e8353	.config/quickshell/awtarchy/LockscreenEditor.qml
+
+# 2026-09-13 lockscreen editor runtime parser fix stock hash.
+b72e9cef8b7d4d1696c29c2990656be6bbc70de47a9de1eb9e7fb9703ed713a7	.config/quickshell/awtarchy/LockscreenEditor.qml

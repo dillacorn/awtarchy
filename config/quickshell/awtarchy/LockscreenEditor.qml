@@ -1367,9 +1367,21 @@ Singleton {
             else { root.previewCaptureDirectory = ""; root.presentEditorAfterPreviewCapture("Desktop preview capture unavailable; using black fallback."); } }
     }
     Timer { id: contrastRefreshDelay; interval: 120; repeat: false; onTriggered: root.refreshPreviewContrast() }
-    Process { id: previewContrastProcess; stdout: SplitParser { onRead: line => root.applyPreviewContrastLine(line) }; onExited: (exitCode, exitStatus) => { if (root.contrastRefreshPending) contrastRefreshDelay.restart(); } }
-    Process { id: wallpaperPickerProcess; stdout: SplitParser { onRead: line => root.acceptWallpaperSelection(line) }; onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Lockscreen wallpaper picker closed without a selection"; else if (root.open && root.statusMessage === "Opening lockscreen wallpaper picker…") root.statusMessage = "No wallpaper selected."; root.resumeAfterWallpaperPicker(); } }
-    Process { id: customImagePickerProcess; stdout: SplitParser { onRead: line => root.acceptCustomImageSelection(line) }; onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom image picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom image picker…") root.statusMessage = "No image selected."; root.resumeAfterWallpaperPicker(); } }
+    Process {
+        id: previewContrastProcess
+        stdout: SplitParser { onRead: line => root.applyPreviewContrastLine(line) }
+        onExited: (exitCode, exitStatus) => { if (root.contrastRefreshPending) contrastRefreshDelay.restart(); }
+    }
+    Process {
+        id: wallpaperPickerProcess
+        stdout: SplitParser { onRead: line => root.acceptWallpaperSelection(line) }
+        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Lockscreen wallpaper picker closed without a selection"; else if (root.open && root.statusMessage === "Opening lockscreen wallpaper picker…") root.statusMessage = "No wallpaper selected."; root.resumeAfterWallpaperPicker(); }
+    }
+    Process {
+        id: customImagePickerProcess
+        stdout: SplitParser { onRead: line => root.acceptCustomImageSelection(line) }
+        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom image picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom image picker…") root.statusMessage = "No image selected."; root.resumeAfterWallpaperPicker(); }
+    }
 
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
 
