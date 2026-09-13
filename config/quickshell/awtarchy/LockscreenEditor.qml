@@ -1729,18 +1729,19 @@ Singleton {
         id: editorPreviewVariants; model: Quickshell.screens
         PanelWindow {
             id: secondaryPreviewWindow; required property var modelData; screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
-            color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true; opacity: root.editorEntranceOpacity
-            Item { id: secondaryTransitionStart; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
+            color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
+            Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }
+            Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
                 Image { anchors.fill: parent; source: root.previewCaptureSourceForScreen(modelData); fillMode: Image.Stretch; asynchronous: false; cache: false }
             }
-            LockPreviewScene { id: secondaryPreviewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()
+            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()
                 externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
                 randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false; showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
                 overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: false
             }
-            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
         }
     }
 }
