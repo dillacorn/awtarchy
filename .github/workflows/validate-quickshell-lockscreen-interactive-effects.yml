@@ -17,7 +17,7 @@ jobs:
         with:
           ref: feature/lockscreen-interactive-effects
           fetch-depth: 2
-      - name: Apply remaining fifth runtime production changes
+      - name: Apply and validate remaining fifth runtime production changes
         run: |
           python3 - <<'PY'
           from pathlib import Path
@@ -182,13 +182,10 @@ jobs:
           text = one_re(text,
               r'^                readonly property real irisThreshold:.*?(?=^                x:)',
               '', 'scene Iris threshold')
-          text = one(text,
-          '''                visible: root.entryTransitionMode() === "pixel"
-                          ? root.entryTransitionProgress < pixelThreshold
-                          : root.entryTransitionProgress < irisThreshold
-          ''',
-          '''                visible: root.entryTransitionProgress < pixelThreshold
-          ''', 'scene Iris visibility')
+          text = one_re(text,
+              r'^                visible: root\.entryTransitionMode\(\) === "pixel"\n\s+\? root\.entryTransitionProgress < pixelThreshold\n\s+: root\.entryTransitionProgress < irisThreshold\n',
+              '                visible: root.entryTransitionProgress < pixelThreshold\n',
+              'scene Iris visibility')
 
           image_block = '''            Image {
                           required property var modelData
@@ -303,6 +300,7 @@ jobs:
                                       root.animationPreference === "off"
                                       || (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0
           ''', 'quiet editor logo formation')
+
           if '"iris"' in text or 'irisThreshold' in text or 'distanceFromCenter' in text:
               raise SystemExit('Iris-specific scene logic remains after patch')
           scene_path.write_text(text)
@@ -334,7 +332,11 @@ jobs:
         run: |
           git config user.name dillacorn
           git config user.email '28743863+dillacorn@users.noreply.github.com'
-          git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy/QuickSettings.qml
+          git add \
+            config/quickshell/awtarchy-lock/LockScene.qml \
+            config/quickshell/awtarchy/LockPreviewScene.qml \
+            config/quickshell/awtarchy/LockscreenEditor.qml \
+            config/quickshell/awtarchy/QuickSettings.qml
           git diff --cached --check
           git commit -m 'feat: complete lockscreen fifth runtime pass'
           git push origin HEAD:feature/lockscreen-interactive-effects
