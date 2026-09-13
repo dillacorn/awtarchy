@@ -17,7 +17,7 @@ Item {
     readonly property bool running: transitionActive
     readonly property string normalizedMode: {
         const value = String(root.mode || "fade");
-        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(value) >= 0
+        return ["fade", "pixel", "edges", "wipe"].indexOf(value) >= 0
             ? value : "fade";
     }
     readonly property int effectiveDuration: {
@@ -34,9 +34,6 @@ Item {
     readonly property size reducedTextureSize: Qt.size(
         Math.max(1, Math.round(root.width / root.coarseFactor)),
         Math.max(1, Math.round(root.height / root.coarseFactor)))
-    readonly property real irisDiameter: Math.sqrt(
-        root.width * root.width + root.height * root.height)
-        * Math.max(0, Math.min(1, root.progress)) * 1.02
 
     signal finished()
 
@@ -140,62 +137,6 @@ Item {
             recursive: false
             smooth: true
         }
-    }
-
-    // Reverse Iris keeps the frozen desktop as the base and directly
-    // reveals the real lockscreen destination through an expanding mask.
-    ShaderEffectSource {
-        id: irisStartSource
-        anchors.fill: parent
-        z: 2
-        sourceItem: root.startSource
-        live: true
-        recursive: false
-        smooth: true
-        visible: root.running && root.normalizedMode === "iris"
-    }
-
-    Item {
-        id: irisMaskShape
-        x: root.width + 64
-        y: 0
-        width: root.width
-        height: root.height
-        visible: root.running && root.normalizedMode === "iris"
-        Rectangle {
-            anchors.centerIn: parent
-            width: root.irisDiameter
-            height: width
-            radius: width / 2
-            color: "#ffffff"
-        }
-    }
-
-    ShaderEffectSource {
-        id: irisMaskTexture
-        x: root.width * 2 + 128
-        y: 0
-        width: root.width
-        height: root.height
-        sourceItem: irisMaskShape
-        hideSource: false
-        live: true
-        recursive: false
-        smooth: true
-    }
-
-    MultiEffect {
-        id: irisEndEffect
-        anchors.fill: parent
-        z: 3
-        source: root.endSource
-        autoPaddingEnabled: false
-        maskEnabled: true
-        maskInverted: false
-        maskSource: irisMaskTexture
-        maskSpreadAtMin: 0.015
-        maskSpreadAtMax: 0.015
-        visible: root.running && root.normalizedMode === "iris"
     }
 
     NumberAnimation {
