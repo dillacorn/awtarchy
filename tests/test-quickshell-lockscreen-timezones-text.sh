@@ -67,6 +67,7 @@ contains "$SAVE" 'lockscreen_custom_texts' \
 test -x "$TZ_HELPER" || fail 'timezone helper is missing or not executable'
 contains "$TZ_HELPER" '/usr/share/zoneinfo' \
     'timezone helper does not validate against local zoneinfo data'
+# shellcheck disable=SC2016 -- this test intentionally searches for a literal shell assignment.
 contains "$TZ_HELPER" 'TZ="$zone"' \
     'timezone helper does not use the validated local timezone with date'
 if grep -Eq '(^|[[:space:]])eval([[:space:]]|$)' "$TZ_HELPER"; then
