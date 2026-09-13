@@ -56,10 +56,11 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-live-hyprland-migration.sh
           shellcheck tests/test-quickshell-lockscreen-power-safety.sh
           shellcheck tests/test-quickshell-lockscreen-user-cutover.sh
+      - name: Runtime regression contracts
+        run: bash tests/test-quickshell-lockscreen-runtime-regressions.sh
       - name: Foundation contracts
         run: |
           bash tests/test-quickshell-lockscreen-foundation.sh
-          bash tests/test-quickshell-lockscreen-runtime-regressions.sh
           bash tests/test-quickshell-lockscreen-animation-preference.sh
           bash tests/test-quickshell-lockscreen-cursor.sh
           bash tests/test-quickshell-lockscreen-theme-update.sh
