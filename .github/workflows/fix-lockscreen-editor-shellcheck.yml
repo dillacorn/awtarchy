@@ -1,0 +1,46 @@
+name: Fix Lockscreen Editor Test ShellCheck
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+
+      - name: Annotate intentional literal expansion check
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("tests/test-quickshell-lockscreen-editor.sh")
+          text = path.read_text()
+          needle = "require_text \"$EDITOR_SAVE\" 'bash \"$STATE_BACKEND\" save-lockscreen-editor \"${@:1:19}\"' \\\n"
+          replacement = "# shellcheck disable=SC2016\n" + needle
+          if text.count(needle) != 1:
+              raise SystemExit(f"expected exactly one editor-save literal assertion, found {text.count(needle)}")
+          path.write_text(text.replace(needle, replacement, 1))
+          PY
+
+          bash -n tests/test-quickshell-lockscreen-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-editor.sh
+
+          rm -- .github/workflows/fix-lockscreen-editor-shellcheck.yml
+          git add -A
+          git diff --cached --check
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'test(lockscreen): annotate literal save-wrapper assertion'
+          git push origin HEAD:feature/lockscreen-interactive-effects
