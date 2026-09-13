@@ -1475,12 +1475,15 @@ Singleton {
                         SettingsButton { label: root.selectedElements.length > 1 ? (root.selectionAllVisible() ? "Hide Selected" : "Show Selected") : root.selectedElement === "logo" ? (root.elementEnabled("logo") ? "Logo visible" : "Logo hidden") : root.elementCanHide(root.selectedElement) ? (root.elementEnabled(root.selectedElement) ? "Visible" : "Hidden") : "Always visible"; active: root.selectedElements.length > 1 ? root.selectionAllVisible() : root.elementEnabled(root.selectedElement); available: root.selectedElements.length > 1 ? root.selectedElements.some(name => name !== "password" && root.elementCanHide(name)) : root.elementCanHide(root.selectedElement); textSize: 9; onClicked: { if (root.selectedElements.length > 1) root.setSelectedVisibility(!root.selectionAllVisible()); else root.setDraftVisible(root.selectedElement, !root.elementEnabled(root.selectedElement)); } }
                         Text { text: "Scale"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; available: root.elementScale(root.selectedElement) > 0.50; textSize: 10; onClicked: root.setDraftScale(root.selectedElement, root.elementScale(root.selectedElement) - 0.10) }
-                        TextField { id: elementScaleField; Layout.preferredWidth: 58; text: Number(root.elementScale(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 50; top: 10000; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftScale(root.selectedElement, Number(text) / 100) }
+                        TextField { id: elementScaleField; Layout.preferredWidth: 58; text: Number(root.elementScale(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 50; top: 10000; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftScale(root.selectedElement, Number(text) / 100) }
                         SettingsButton { label: "+"; available: root.elementScale(root.selectedElement) < root.elementScaleMaximum; textSize: 10; onClicked: root.setDraftScale(root.selectedElement, root.elementScale(root.selectedElement) + 0.10) }
                         Text { text: "X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: positionXField; Layout.preferredWidth: 54; text: Number(root.primaryPoint().x * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setSelectedCoordinate("x", text) }
+                        TextField { id: positionXField; Layout.preferredWidth: 54; text: Number(root.primaryPoint().x * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setSelectedCoordinate("x", text) }
                         Text { text: "Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: positionYField; Layout.preferredWidth: 54; text: Number(root.primaryPoint().y * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setSelectedCoordinate("y", text) }
+                        TextField { id: positionYField; Layout.preferredWidth: 54; text: Number(root.primaryPoint().y * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setSelectedCoordinate("y", text) }
                         Text { text: "Rotation"; visible: root.isCustomImage(root.selectedElement); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField { id: rotationField; Layout.preferredWidth: 68; visible: root.isCustomImage(root.selectedElement); text: Number(root.elementRotation(root.selectedElement)).toFixed(1); selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftRotation(root.selectedElement, text) }
                         SettingsButton { label: "0°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 0) }
@@ -1506,15 +1509,18 @@ Singleton {
                         SettingsButton { label: "Remove Image"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
                         Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0); onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
-                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
+                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementOpacity(root.selectedElement) < 100; onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) + 5) }
                         Text { text: "Stretch X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementStretchX(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) - 0.10, root.elementStretchY(root.selectedElement)) }
-                        TextField { id: elementStretchXField; Layout.preferredWidth: 54; text: Number(root.elementStretchX(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, Number(text) / 100, root.elementStretchY(root.selectedElement)) }
+                        TextField { id: elementStretchXField; Layout.preferredWidth: 54; text: Number(root.elementStretchX(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, Number(text) / 100, root.elementStretchY(root.selectedElement)) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchX(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement) + 0.10, root.elementStretchY(root.selectedElement)) }
                         Text { text: "Stretch Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementStretchY(root.selectedElement) > 0.25; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) - 0.10) }
-                        TextField { id: elementStretchYField; Layout.preferredWidth: 54; text: Number(root.elementStretchY(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), Number(text) / 100) }
+                        TextField { id: elementStretchYField; Layout.preferredWidth: 54; text: Number(root.elementStretchY(root.selectedElement) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), Number(text) / 100) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
                         Item { Layout.fillWidth: true }
                         Text { text: root.isCustomImage(root.selectedElement) ? "Custom images are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
@@ -1570,14 +1576,17 @@ Singleton {
                         Text { text: String(root.draftVisualizer.gap); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; Layout.preferredWidth: 24; horizontalAlignment: Text.AlignHCenter }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.gap < 24; onClicked: root.setDraftVisualizerSetting("gap", root.draftVisualizer.gap + 1) }
                         Text { text: "Width"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: visualizerWidthField; Layout.preferredWidth: 58; text: (Number(root.draftVisualizer.stretch_x || 1) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerWidth(text) }
+                        TextField { id: visualizerWidthField; Layout.preferredWidth: 58; text: (Number(root.draftVisualizer.stretch_x || 1) * 100).toFixed(1); validator: DoubleValidator { bottom: 25; top: 400; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerWidth(text) }
                         Text { text: "Height"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.height > 25; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height - 10) }
-                        TextField { id: visualizerHeightField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.height); validator: IntValidator { bottom: 25; top: 300 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("height", text) }
+                        TextField { id: visualizerHeightField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.height); validator: IntValidator { bottom: 25; top: 300 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("height", text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.height < 300; onClicked: root.setDraftVisualizerSetting("height", root.draftVisualizer.height + 10) }
                         Text { text: "Sensitivity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.draftVisualizer.sensitivity > 25; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity - 10) }
-                        TextField { id: visualizerSensitivityField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.sensitivity); validator: IntValidator { bottom: 25; top: 300 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("sensitivity", text) }
+                        TextField { id: visualizerSensitivityField; Layout.preferredWidth: 48; text: String(root.draftVisualizer.sensitivity); validator: IntValidator { bottom: 25; top: 300 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("sensitivity", text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.draftVisualizer.sensitivity < 300; onClicked: root.setDraftVisualizerSetting("sensitivity", root.draftVisualizer.sensitivity + 10) }
                         SettingsButton { label: "Straight"; active: root.draftVisualizer.shape === "straight"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "straight") }
                         SettingsButton { label: "Arc"; active: root.draftVisualizer.shape === "arc"; textSize: 9; onClicked: root.setDraftVisualizerSetting("shape", "arc") }
@@ -1587,7 +1596,8 @@ Singleton {
                         SettingsButton { label: "Responsive 90"; active: root.draftVisualizer.performance === "responsive"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "responsive") }
                         SettingsButton { label: "High 120"; active: root.draftVisualizer.performance === "high"; textSize: 9; onClicked: root.setDraftVisualizerSetting("performance", "high") }
                         Text { text: "Arc Bend"; visible: root.draftVisualizer.shape === "arc"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { Layout.preferredWidth: 58; visible: root.draftVisualizer.shape === "arc"; text: String(Math.round(Number(root.draftVisualizer.bend || 0))); validator: DoubleValidator { bottom: -2000; top: 2000; decimals: 0 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("bend", text) }
+                        TextField { Layout.preferredWidth: 58; visible: root.draftVisualizer.shape === "arc"; text: String(Math.round(Number(root.draftVisualizer.bend || 0))); validator: DoubleValidator { bottom: -2000; top: 2000; decimals: 0 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftVisualizerSetting("bend", text) }
                         Item { Layout.fillWidth: true }
                     }
 
@@ -1616,9 +1626,11 @@ Singleton {
                         SettingsButton { label: "Cover"; active: root.draftWallpaperFit === "cover"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("cover") }
                         SettingsButton { label: "Contain"; active: root.draftWallpaperFit === "contain"; available: root.draftWallpaperPath.length > 0; textSize: 9; onClicked: root.setDraftWallpaperFit("contain") }
                         Text { text: "Focal X"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: wallpaperFocalXField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalX * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(Number(text) / 100, root.draftWallpaperFocalY) }
+                        TextField { id: wallpaperFocalXField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalX * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(Number(text) / 100, root.draftWallpaperFocalY) }
                         Text { text: "Focal Y"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: wallpaperFocalYField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalY * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }
+                        TextField { id: wallpaperFocalYField; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; Layout.preferredWidth: 54; text: Number(root.draftWallpaperFocalY * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperFocal(root.draftWallpaperFocalX, Number(text) / 100) }
                         SettingsButton { label: "Reset"; visible: root.draftBackgroundMode === "wallpaper" && root.draftWallpaperFit === "cover"; textSize: 9; onClicked: root.resetDraftWallpaperFocal() }
                         Text { text: "Brightness"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle { id: brightnessTrack; Layout.preferredWidth: 150; Layout.preferredHeight: 14; radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
@@ -1626,7 +1638,8 @@ Singleton {
                             Rectangle { x: (root.draftBrightness() + 100) * parent.width / 200 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBrightnessFromPointer(mouse.x, width); }; onPositionChanged: mouse => { if (pressed) root.setBrightnessFromPointer(mouse.x, width); }; onReleased: root.commitHistoryTransaction() }
                         }
-                        TextField { id: brightnessField; Layout.preferredWidth: 50; text: String(root.draftBrightness()); validator: IntValidator { bottom: -100; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }
+                        TextField { id: brightnessField; Layout.preferredWidth: 50; text: String(root.draftBrightness()); validator: IntValidator { bottom: -100; top: 100 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBrightness(text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBrightness() }
                         Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle { id: blurTrack; Layout.preferredWidth: 110; Layout.preferredHeight: 14; radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
@@ -1634,7 +1647,8 @@ Singleton {
                             Rectangle { x: root.draftWallpaperBlur * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBlurFromPointer(mouse.x, width); }; onPositionChanged: mouse => { if (pressed) root.setBlurFromPointer(mouse.x, width); }; onReleased: root.commitHistoryTransaction() }
                         }
-                        TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }
+                        TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 100 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftWallpaperBlur() }
                         Text { text: "Blur Type"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "Smooth"; active: root.draftBlurStyle === "smooth"; textSize: 9; onClicked: root.setDraftBlurStyle("smooth") }
@@ -1649,7 +1663,8 @@ Singleton {
                             Rectangle { x: root.draftBackgroundOpacity * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBackgroundOpacityFromPointer(mouse.x, width); }; onPositionChanged: mouse => { if (pressed) root.setBackgroundOpacityFromPointer(mouse.x, width); }; onReleased: root.commitHistoryTransaction() }
                         }
-                        TextField { id: backgroundOpacityField; Layout.preferredWidth: 46; text: String(root.draftBackgroundOpacity); validator: IntValidator { bottom: 0; top: 100 }; selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }
+                        TextField { id: backgroundOpacityField; Layout.preferredWidth: 46; text: String(root.draftBackgroundOpacity); validator: IntValidator { bottom: 0; top: 100 }
+                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftBackgroundOpacity(text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBackgroundOpacity() }
                         SettingsButton { label: "Opaque"; textSize: 9; active: root.draftBackgroundOpacity === 100; onClicked: root.toggleBackgroundOpaque() }
                         Item { Layout.fillWidth: true }
