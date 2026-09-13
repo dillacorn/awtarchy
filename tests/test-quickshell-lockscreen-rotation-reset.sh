@@ -8,6 +8,7 @@ BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
 SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW_SCENE="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 LOCK_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
+LOCK_SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 LOCK_AUTH="${ROOT}/config/quickshell/awtarchy-lock/LockAuth.qml"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
@@ -88,15 +89,32 @@ require_text "$SCENE" 'rotation: root.elementRotation(elementName)' 'custom imag
 cmp -s "$SCENE" "$PREVIEW_SCENE" || fail 'secure/editor scene parity drifted after rotation support'
 reject_text "$LOCK_AUTH" 'rotation' 'presentation rotation leaked into the PAM/authentication owner'
 
-# Editor rotation is direct, numeric, undoable, and part of the same draft image object.
+# Rotation is a generic transform for every presentation element, not an image-only feature.
+require_text "$BAR_STATE" 'rotation: 0' 'desktop built-in defaults have no zero-degree rotation'
+require_text "$LOCK_SHELL" 'rotation: 0' 'secure built-in defaults have no zero-degree rotation'
+require_text "$EDITOR" 'function setElementRotation(name, value)' 'editor rotation setter is not generic'
+require_text "$EDITOR" 'if (name === "visualizer")' 'generic rotation dispatch does not cover the visualizer'
+require_text "$EDITOR" 'name.startsWith("timezone:")' 'generic rotation dispatch does not cover timezone clocks'
+require_text "$EDITOR" 'name.startsWith("text:")' 'generic rotation dispatch does not cover arbitrary text'
+require_text "$SCENE" 'rotation: root.elementRotation("logo")' 'logo rotation is not rendered'
+require_text "$SCENE" 'rotation: root.elementRotation("time")' 'primary clock rotation is not rendered'
+require_text "$SCENE" 'rotation: root.elementRotation("date")' 'date rotation is not rendered'
+require_text "$SCENE" 'rotation: root.elementRotation("username")' 'username rotation is not rendered'
+require_text "$SCENE" 'rotation: root.elementRotation("weather")' 'weather rotation is not rendered'
+require_text "$SCENE" 'rotation: root.elementRotation("visualizer")' 'visualizer rotation is not rendered'
+require_text "$LOCK_SURFACE" 'rotation: scene.elementRotation("password")' \
+    'visible secure password presentation does not consume shared rotation'
+reject_text "$LOCK_AUTH" 'elementRotation' 'generic presentation transform leaked into LockAuth'
+
+# Editor rotation is direct, numeric, undoable, and part of the same element state.
 require_text "$EDITOR" 'property string rotationElementName: ""' 'editor has no rotation interaction owner'
-require_text "$EDITOR" 'function setDraftRotation(' 'editor has no custom-image rotation setter'
+require_text "$EDITOR" 'function setDraftRotation(' 'editor has no rotation setter implementation'
 require_text "$EDITOR" 'function beginRotateElement(' 'editor has no visible rotation-handle interaction'
 require_text "$EDITOR" 'function updateRotateElement(' 'editor rotation handle does not update the draft transform'
 require_text "$EDITOR" 'function endRotateElement()' 'editor rotation handle does not close its history transaction'
 require_text "$EDITOR" 'text: "Rotation"' 'editor has no signed numeric rotation control'
-require_text "$EDITOR" 'Qt.SizeAllCursor' 'editor has no visible custom-image rotation handle cursor'
-require_text "$EDITOR" 'rotation: 0' 'new custom images do not start at zero rotation'
+require_text "$EDITOR" 'Qt.SizeAllCursor' 'editor has no visible rotation handle cursor'
+require_text "$EDITOR" 'rotation: 0' 'new dynamic elements do not start at zero rotation'
 
 # Every selectable presentation element gets a complete reset without replacing Reset Position/Reset All.
 require_text "$EDITOR" 'function resetElementToDefault(name)' 'editor has no per-element Reset to Default action'
@@ -106,4 +124,4 @@ require_text "$EDITOR" 'label: "Restore Defaults"' 'Reset All/Restore Defaults w
 require_text "$EDITOR" 'if (name === "visualizer")' 'per-element reset does not cover the visualizer'
 require_text "$EDITOR" 'if (isCustomImage(name))' 'per-element reset does not cover custom images'
 
-printf '%s\n' 'PASS: lockscreen custom-image rotation and per-element reset contracts'
+printf '%s\n' 'PASS: lockscreen generic rotation and per-element reset contracts'
