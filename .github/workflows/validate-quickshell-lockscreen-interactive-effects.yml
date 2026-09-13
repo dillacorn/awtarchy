@@ -16,15 +16,15 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           ref: feature/lockscreen-interactive-effects
-          fetch-depth: 2
+          fetch-depth: 3
       - name: Reuse and harden the reviewed production transform
         run: |
-          git show HEAD^:.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml > /tmp/previous-lockscreen-writer.yml
+          git show HEAD^^:.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml > /tmp/full-lockscreen-writer.yml
           python3 - <<'PY'
           from pathlib import Path
           import re
 
-          workflow = Path('/tmp/previous-lockscreen-writer.yml').read_text()
+          workflow = Path('/tmp/full-lockscreen-writer.yml').read_text()
           lines = workflow.splitlines()
           start = next(i for i, line in enumerate(lines) if line.strip() == "python3 - <<'PY'") + 1
           end = next(i for i in range(start, len(lines)) if lines[i].strip() == 'PY')
@@ -44,7 +44,7 @@ jobs:
               r'(^\\s+property real formationProgress:\\n)(\\s+)root\\.animationPreference === "off" \\? 1 : 0\\n',
               r'\\1\\2root.animationPreference === "off"\\n\\2    || (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0\\n',
               'quiet editor logo formation')'''
-          source, count = pattern.subn(replacement, source, count=1)
+          source, count = pattern.subn(lambda _: replacement, source, count=1)
           if count != 1:
               raise SystemExit(f'writer hardening: expected one logo-formation matcher, found {count}')
 
