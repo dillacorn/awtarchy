@@ -44,7 +44,7 @@ not_contains "$SELECTOR" 'text: "›"' \
 
 contains "$EDITOR" 'root.draftClockFormat = root.draftClockFormat === "24h" ? "12h" : "24h"' \
     'primary clock format is not a direct 12h/24h toggle'
-contains "$EDITOR" 'text: root.draftClockFormat === "24h" ? "24-hour" : "12-hour"' \
+contains "$EDITOR" 'label: root.draftClockFormat === "24h" ? "24-hour" : "12-hour"' \
     'primary clock toggle does not show its current format directly'
 
 printf 'PASS: lockscreen themed fly-out selector and clock toggle contracts\n'
