@@ -29,8 +29,8 @@ jobs:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               return text.replace(old, new, 1)
 
-          def one_re(text, pattern, repl, label, flags=0):
-              updated, count = re.subn(pattern, repl, text, count=1, flags=flags)
+          def one_re(text, pattern, repl, label):
+              updated, count = re.subn(pattern, repl, text, count=1, flags=re.MULTILINE | re.DOTALL)
               if count != 1:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               return updated
@@ -157,7 +157,7 @@ jobs:
           ''', 'pointer exit return path')
 
           text = one_re(text,
-              r'(?ms)^        if \(returning && maxMotion < 1\.2\) \{\n            logoHoverDirty = false;\n            if \(!logoHoverActive\)\n                logoParticles = \(\{\}\);\n        \}$',
+              r'^        if \(returning && maxMotion < 1\.2\) \{\n            logoHoverDirty = false;\n            if \(!logoHoverActive\)\n                logoParticles = \(\{\}\);\n        \}$',
               '''        if (returning && maxMotion < 1.2) {
                   logoHoverDirty = false;
                   if (!logoHoverActive && !logoExplosionActive) {
@@ -177,8 +177,11 @@ jobs:
                           ? root.entryTileColumns * root.entryTileRows : 0
           ''', 'scene Iris tile model')
           text = one_re(text,
-              r'(?ms)^                readonly property real centerX:.*?^                readonly property real irisThreshold:.*?^\s*$\n',
-              '', 'scene Iris geometry')
+              r'^                readonly property real centerX:.*?(?=^                readonly property real pixelThreshold:)',
+              '', 'scene Iris center geometry')
+          text = one_re(text,
+              r'^                readonly property real irisThreshold:.*?(?=^                x:)',
+              '', 'scene Iris threshold')
           text = one(text,
           '''                visible: root.entryTransitionMode() === "pixel"
                           ? root.entryTransitionProgress < pixelThreshold
