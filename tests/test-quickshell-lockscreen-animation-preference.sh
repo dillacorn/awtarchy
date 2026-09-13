@@ -121,8 +121,12 @@ require_text "$SCENE_QML" 'root.animationPreference === "off"' \
     'Off does not immediately render the completed wordmark'
 require_text "$SCENE_QML" '|| (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0' \
     'quiet editor entry does not start with the completed wordmark'
-require_text "$SCENE_QML" 'root.animationPreference !== "off"' \
-    'Off does not suppress particle formation animation'
+require_text "$SCENE_QML" 'if (!wordmarkCell.isFilledGlyph || root.animationPreference === "off") {' \
+    'Off no longer short-circuits particle formation before restart'
+require_text "$SCENE_QML" 'wordmarkCell.formationProgress = 1;' \
+    'Off no longer forces the wordmark into its completed formation state'
+require_text "$SCENE_QML" 'formationAnimation.restart();' \
+    'enabled logo formation no longer restarts for a new logo-entry epoch'
 
 require_text "$SCENE_QML" 'readonly property bool pointerEffectsEnabled: mouseInteractive && pointerActive' \
     'pointer effects are not controlled independently from formation animation'
