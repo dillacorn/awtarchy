@@ -69,7 +69,7 @@ Item {
         && logoContainsPoint(lastPointerX, lastPointerY) && !logoExplosionActive
     readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty || logoReturnPending
     readonly property real securePasswordEntryOpacity: root.unlocking
-        ? 0 : root.entered ? 1 : 0
+        ? 0 : root.entered && !root.effectiveEntryTransitionRunning ? 1 : 0
     readonly property real uiScale: Math.max(0.72, Math.min(1.35,
         Math.min(width / 1920, height / 1080)))
     readonly property var wordmarkRows: [
@@ -485,10 +485,10 @@ Item {
         });
     }
 
-    function logoHoverTarget(row, column) {
+    function logoHoverTarget(row, column, localPointer) {
         if (!logoHoverActive)
             return ({ x: 0, y: 0 });
-        const local = wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY);
+        const local = localPointer;
         const centerX = (column + 0.5) * wordmarkCellWidth;
         const centerY = (row + 0.5) * wordmarkCellHeight;
         let dx = centerX - local.x;
@@ -644,12 +644,15 @@ Item {
             || logoExplosionElapsedMs >= logoExplosionScatterMs;
         const next = ({});
         let maxMotion = 0;
+        const hoverLocal = logoHoverActive
+            ? wordmarkItem.mapFromItem(root, lastPointerX, lastPointerY)
+            : Qt.point(0, 0);
         for (let row = 0; row < wordmarkRows.length; ++row) {
             for (let column = 0; column < wordmarkColumns; ++column) {
                 if (!isFilledWordmarkCell(row, column)) continue;
                 const key = logoCellKey(row, column);
                 const particle = ensureLogoParticle(row, column);
-                const hoverTarget = logoHoverTarget(row, column);
+                const hoverTarget = logoHoverTarget(row, column, hoverLocal);
                 if (returning) {
                     const spring = logoHoverActive ? 34 : 24;
                     particle.vx += (hoverTarget.x - Number(particle.x || 0)) * spring * dt;

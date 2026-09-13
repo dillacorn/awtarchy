@@ -70,7 +70,12 @@ WlSessionLockSurface {
     }
 
     function focusPasswordWhenReady() {
-        Qt.callLater(() => password.forceActiveFocus());
+        if (!root.transitionComplete || root.unlocking)
+            return;
+        Qt.callLater(() => {
+            if (root.transitionComplete && !root.unlocking)
+                password.forceActiveFocus();
+        });
     }
 
     PinchHandler {

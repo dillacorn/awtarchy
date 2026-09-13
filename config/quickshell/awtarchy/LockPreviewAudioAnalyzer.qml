@@ -39,26 +39,19 @@ Item {
         return values;
     }
 
-    function normalizedSpectrum(values) {
-        const result = [];
-        for (let i = 0; i < maximumBands; ++i) {
-            const value = i < values.length ? values[i] : 0;
-            result.push(threshold(value));
-        }
-        return result;
-    }
-
     function parseFrame(data) {
         const fields = String(data || "").trim().split(";");
-        const values = [];
-        for (let i = 0; i < fields.length && values.length < maximumBands; ++i) {
+        const result = [];
+        for (let i = 0; i < fields.length && result.length < maximumBands; ++i) {
             if (fields[i].length === 0)
                 continue;
-            values.push(clampUnit(Number(fields[i]) / 1000));
+            result.push(threshold(Number(fields[i]) / 1000));
         }
-        if (values.length === 0)
+        if (result.length === 0)
             return;
-        bands = normalizedSpectrum(values);
+        while (result.length < maximumBands)
+            result.push(0);
+        bands = result;
     }
 
     function startAnalyzer() {

@@ -39,7 +39,7 @@ lacks "$AUTH" 'entryTransitionDuration' 'transition duration leaked into authent
 
 # One bounded simulation owns smooth coherent hover targets, explosion impulse,
 # collision response, and damped spring return. No connector/bridge line returns.
-has "$SCENE" 'function logoHoverTarget(row, column)' 'coherent logo hover field is missing'
+has "$SCENE" 'function logoHoverTarget(row, column, localPointer)' 'coherent logo hover field is missing'
 has "$SCENE" 'function ensureLogoParticle(row, column)' 'hover and explosion do not share particle state'
 has "$SCENE" 'readonly property bool logoHoverActive: mouseInteractive && pointerActive' 'hover does not expire with pointer activity'
 has "$SCENE" 'const isLogoHovering = logoContainsPoint(x, y);' 'pointer motion no longer computes bounded logo hover state'
@@ -59,7 +59,7 @@ has "$AUDIO_HELPER" 'balanced) framerate=60' 'balanced CAVA rate is not 60 Hz'
 has "$AUDIO_HELPER" 'responsive) framerate=90' 'responsive CAVA rate is not 90 Hz'
 has "$AUDIO_HELPER" 'high) framerate=120' 'high-response CAVA rate is not 120 Hz'
 has "$AUDIO_HELPER" 'mkdir -p -- "$runtime_home"' 'CAVA runtime config directory is not prepared'
-has "$ANALYZER" 'bands = normalizedSpectrum(values);' 'analyzer does not publish parsed frames directly'
+has "$ANALYZER" 'bands = result;' 'analyzer does not publish parsed frames directly'
 has "$ANALYZER" 'onPerformanceModeChanged: root.restartAnalyzer()' 'live performance-mode changes do not restart CAVA'
 lacks "$ANALYZER" 'smoothingTimer' 'retired QML smoothing timer remains'
 lacks "$ANALYZER" 'function smoothed' 'retired QML interpolation remains'
