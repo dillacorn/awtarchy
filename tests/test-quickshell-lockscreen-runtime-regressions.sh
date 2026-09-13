@@ -157,8 +157,8 @@ require_text "$SCENE_QML" 'root.animationPreference === "off"' \
     'lockscreen off preference no longer participates in completed formation state'
 require_text "$SCENE_QML" '|| (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0' \
     'quiet editor entry no longer starts logo formation fully settled'
-require_text "$SCENE_QML" 'root.animationPreference !== "off"' \
-    'lockscreen particle animation still runs when disabled'
+require_text "$SCENE_QML" 'if (!wordmarkCell.isFilledGlyph || root.animationPreference === "off") {' \
+    'lockscreen particle animation off guard no longer prevents restart'
 require_text "$SCENE_QML" 'Math.random()' \
     'lockscreen wordmark formation is not randomized per lock'
 require_text "$SCENE_QML" 'readonly property int formationDelay: Math.floor(Math.random() * 301)' \
