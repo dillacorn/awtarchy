@@ -21,7 +21,6 @@ FocusScope {
         if (!Array.isArray(model) || model.length === 0)
             return;
         const wrapped = (Number(index) % model.length + model.length) % model.length;
-        currentIndex = wrapped;
         activated(wrapped);
     }
 
@@ -47,8 +46,6 @@ FocusScope {
 
     Text {
         anchors.centerIn: parent
-        anchors.leftMargin: 28
-        anchors.rightMargin: 28
         width: Math.max(0, parent.width - 58)
         text: root.selectedLabel
         color: Theme.foreground
