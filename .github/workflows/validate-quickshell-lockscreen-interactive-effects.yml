@@ -1,168 +1,14 @@
 name: Validate Quickshell Lockscreen Interactive Effects
 
 on:
-  push:
-    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  validate:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-        with:
-          fetch-depth: 0
-      - name: Diff whitespace validation
-        run: |
-          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
-            git diff --check "origin/${GITHUB_BASE_REF}...HEAD"
-          else
-            git diff --check HEAD^
-          fi
-      - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
-      - name: Syntax validation
-        run: |
-          bash -n tests/test-quickshell-lockscreen-interactive-effects.sh
-          bash -n tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
-          bash -n tests/test-quickshell-lockscreen-logo-cohesion.sh
-          bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
-          bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
-          bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
-          bash -n tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
-          bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
-          bash -n tests/test-quickshell-lockscreen-capture.sh
-          bash -n tests/test-quickshell-lockscreen-transition-layer.sh
-          bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
-          bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
-          bash -n tests/test-quickshell-lockscreen-editor-preview-runtime.sh
-          bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          bash -n tests/test-quickshell-lockscreen-editor.sh
-          bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
-          bash -n tests/test-quickshell-lockscreen-live-editor.sh
-          bash -n tests/test-quickshell-lockscreen-editor-flick.sh
-          bash -n tests/test-quickshell-lockscreen-editor-tooling.sh
-          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
-          bash -n tests/test-quickshell-lockscreen-element-system.sh
-          bash -n tests/test-quickshell-lockscreen-rotation-reset.sh
-          bash -n tests/test-quickshell-lockscreen-visualizer-transparency.sh
-          bash -n tests/test-quickshell-lockscreen-visualizer-editing.sh
-          bash -n tests/test-quickshell-lockscreen-entry-transitions.sh
-          bash -n tests/test-quickshell-lockscreen-background-composition.sh
-          bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
-          bash -n tests/test-quickshell-lockscreen-weather.sh
-          bash -n tests/test-quickshell-lockscreen-weather-units.sh
-          bash -n tests/test-quickshell-lockscreen-runtime-services.sh
-          bash -n tests/test-quickshell-lockscreen-interaction-polish.sh
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_audio.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then bash -n config/hypr/scripts/quickshell_lockscreen_preview_capture.sh; fi
-      - name: ShellCheck
-        run: |
-          shellcheck tests/test-quickshell-lockscreen-interactive-effects.sh
-          shellcheck tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
-          shellcheck tests/test-quickshell-lockscreen-logo-cohesion.sh
-          shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
-          shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
-          shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
-          shellcheck tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
-          shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
-          shellcheck tests/test-quickshell-lockscreen-capture.sh
-          shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
-          shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
-          shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-preview-runtime.sh
-          shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
-          shellcheck tests/test-quickshell-lockscreen-editor.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
-          shellcheck tests/test-quickshell-lockscreen-live-editor.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-flick.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-tooling.sh
-          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
-          shellcheck tests/test-quickshell-lockscreen-element-system.sh
-          shellcheck tests/test-quickshell-lockscreen-rotation-reset.sh
-          shellcheck tests/test-quickshell-lockscreen-visualizer-transparency.sh
-          shellcheck tests/test-quickshell-lockscreen-visualizer-editing.sh
-          shellcheck tests/test-quickshell-lockscreen-entry-transitions.sh
-          shellcheck tests/test-quickshell-lockscreen-background-composition.sh
-          shellcheck tests/test-quickshell-lockscreen-background-save-dispatch.sh
-          shellcheck tests/test-quickshell-lockscreen-weather.sh
-          shellcheck tests/test-quickshell-lockscreen-weather-units.sh
-          shellcheck tests/test-quickshell-lockscreen-runtime-services.sh
-          shellcheck tests/test-quickshell-lockscreen-interaction-polish.sh
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_weather.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_contrast.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh; fi
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then shellcheck config/hypr/scripts/quickshell_lockscreen_preview_capture.sh; fi
-      - name: Runtime helper mode
-        run: |
-          test -x config/hypr/scripts/quickshell_lockscreen_audio.sh
-          test -x config/hypr/scripts/quickshell_lockscreen_weather.sh
-          test -x config/hypr/scripts/quickshell_lockscreen_contrast.sh
-          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then test -x config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh; fi
-      - name: Logo cohesion contracts
-        run: bash tests/test-quickshell-lockscreen-logo-cohesion.sh
-      - name: Runtime polish contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-runtime-polish.sh
-          bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
-          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash tests/test-quickshell-lockscreen-picker-targeting.sh
-      - name: Third and fifth Hyprland runtime pass contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
-          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
-      - name: Secure transition capture contract
-        run: bash tests/test-quickshell-lockscreen-capture.sh
-      - name: Desktop transition layer contract
-        run: bash tests/test-quickshell-lockscreen-transition-layer.sh
-      - name: Background composition contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-background-composition.sh
-          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
-          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
-          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
-          bash tests/test-quickshell-lockscreen-editor-preview-runtime.sh
-      - name: Weather refresh contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-weather.sh
-          bash tests/test-quickshell-lockscreen-weather-units.sh
-      - name: Runtime service contracts
-        run: bash tests/test-quickshell-lockscreen-runtime-services.sh
-      - name: Interactive effects contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-interactive-effects.sh
-          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
-          bash tests/test-quickshell-lockscreen-interaction-polish.sh
-      - name: Entry transition contracts
-        run: bash tests/test-quickshell-lockscreen-entry-transitions.sh
-      - name: Customization editor contracts
-        run: |
-          bash tests/test-quickshell-lockscreen-editor.sh
-          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
-          bash tests/test-quickshell-lockscreen-live-editor.sh
-          bash tests/test-quickshell-lockscreen-editor-flick.sh
-          bash tests/test-quickshell-lockscreen-editor-tooling.sh
-          bash tests/test-quickshell-lockscreen-editor-presets.sh
-          bash tests/test-quickshell-lockscreen-element-system.sh
-          bash tests/test-quickshell-lockscreen-rotation-reset.sh
-          bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
-          bash tests/test-quickshell-lockscreen-visualizer-editing.sh
-      - name: Managed history contracts
-        run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
-
   apply-fifth-runtime-production:
-    if: github.event_name == 'pull_request' && github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -177,16 +23,22 @@ jobs:
           from pathlib import Path
           import re
 
-          def replace_once(text, old, new, label):
+          def one(text, old, new, label):
               count = text.count(old)
               if count != 1:
                   raise SystemExit(f'{label}: expected exactly one match, found {count}')
               return text.replace(old, new, 1)
 
+          def one_re(text, pattern, repl, label, flags=0):
+              updated, count = re.subn(pattern, repl, text, count=1, flags=flags)
+              if count != 1:
+                  raise SystemExit(f'{label}: expected exactly one match, found {count}')
+              return updated
+
           scene_path = Path('config/quickshell/awtarchy-lock/LockScene.qml')
           text = scene_path.read_text()
 
-          text = replace_once(text,
+          text = one(text,
           '''    property bool externallyManagedEntryTransition: false
               property bool externalEntryTransitionRunning: false
               readonly property bool effectiveEntryTransitionRunning:
@@ -208,16 +60,15 @@ jobs:
                       customImageSpawnEpoch++;
               }
           ''', 'scene transition presentation state')
-
-          text = replace_once(text,
+          text = one(text,
               '    readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty\n',
               '    readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty || logoReturnPending\n',
               'logo simulation ownership')
-          text = replace_once(text,
+          text = one(text,
               '    property bool logoHoverDirty: false\n',
               '    property bool logoHoverDirty: false\n    property bool logoReturnPending: false\n',
               'logo return state')
-          text = replace_once(text,
+          text = one(text,
               '    onLogoHoverActiveChanged: logoHoverDirty = true\n',
           '''    onLogoHoverActiveChanged: {
                   logoHoverDirty = true;
@@ -227,7 +78,7 @@ jobs:
                       logoReturnPending = true;
               }
           ''', 'logo hover state change')
-          text = replace_once(text,
+          text = one(text,
               '        return ["fade", "pixel", "iris", "edges", "wipe"].indexOf(key) >= 0\n',
               '        return ["fade", "pixel", "edges", "wipe"].indexOf(key) >= 0\n',
               'scene Iris mode removal')
@@ -244,7 +95,7 @@ jobs:
                   return null;
               }
           '''
-          image_lookup_new = image_lookup + '''
+          text = one(text, image_lookup, image_lookup + '''
               function customImageSpawnMode(image) {
                   const value = String(image && image.spawn_animation !== undefined
                       ? image.spawn_animation : "none");
@@ -268,24 +119,21 @@ jobs:
                   const centerX = x * root.width;
                   const centerY = y * root.height;
                   const margin = Math.max(24, 32 * root.uiScale);
-                  if (mode === "left")
-                      return Qt.point(-(centerX + itemWidth / 2 + margin), 0);
-                  if (mode === "right")
-                      return Qt.point(root.width - centerX + itemWidth / 2 + margin, 0);
-                  if (mode === "top")
-                      return Qt.point(0, -(centerY + itemHeight / 2 + margin));
+                  if (mode === "left") return Qt.point(-(centerX + itemWidth / 2 + margin), 0);
+                  if (mode === "right") return Qt.point(root.width - centerX + itemWidth / 2 + margin, 0);
+                  if (mode === "top") return Qt.point(0, -(centerY + itemHeight / 2 + margin));
                   return Qt.point(0, root.height - centerY + itemHeight / 2 + margin);
               }
-          '''
-          text = replace_once(text, image_lookup, image_lookup_new, 'custom image spawn helpers')
+          ''', 'custom image spawn helpers')
 
-          motion_old = '''        lastPointerX = x;
+          text = one(text,
+          '''        lastPointerX = x;
                   lastPointerY = y;
                   lastPointerSampleTime = now;
                   logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);
               }
-          '''
-          motion_new = '''        lastPointerX = x;
+          ''',
+          '''        lastPointerX = x;
                   lastPointerY = y;
                   lastPointerSampleTime = now;
                   const isLogoHovering = logoContainsPoint(x, y);
@@ -306,26 +154,19 @@ jobs:
                       logoHoverDirty = true;
                   }
               }
-          '''
-          text = replace_once(text, motion_old, motion_new, 'pointer exit return path')
+          ''', 'pointer exit return path')
 
-          settle_old = '''        if (returning && maxMotion < 1.2) {
-                  logoHoverDirty = false;
-                  if (!logoHoverActive)
-                      logoParticles = ({});
-              }
-          '''
-          settle_new = '''        if (returning && maxMotion < 1.2) {
+          text = one_re(text,
+              r'(?ms)^        if \(returning && maxMotion < 1\.2\) \{\n            logoHoverDirty = false;\n            if \(!logoHoverActive\)\n                logoParticles = \(\{\}\);\n        \}$',
+              '''        if (returning && maxMotion < 1.2) {
                   logoHoverDirty = false;
                   if (!logoHoverActive && !logoExplosionActive) {
                       logoReturnPending = false;
                       logoParticles = ({});
                   }
-              }
-          '''
-          text = replace_once(text, settle_old, settle_new, 'logo return convergence')
+              }''', 'logo return convergence')
 
-          text = replace_once(text,
+          text = one(text,
           '''            model: entryTransitionCover.visible
                           && (root.entryTransitionMode() === "pixel"
                               || root.entryTransitionMode() === "iris")
@@ -335,20 +176,10 @@ jobs:
                           && root.entryTransitionMode() === "pixel"
                           ? root.entryTileColumns * root.entryTileRows : 0
           ''', 'scene Iris tile model')
-
-          iris_geometry = '''                readonly property real centerX: (tileColumn + 0.5) / root.entryTileColumns
-                          readonly property real centerY: (tileRow + 0.5) / root.entryTileRows
-                          readonly property real distanceFromCenter: Math.min(1,
-                              Math.sqrt(Math.pow((centerX - 0.5) * 2, 2)
-                                  + Math.pow((centerY - 0.5) * 2, 2)) / Math.sqrt(2))
-          '''
-          text = replace_once(text, iris_geometry, '', 'scene Iris geometry')
-          text = replace_once(text,
-          '''                readonly property real irisThreshold: 0.10
-                          + (1 - distanceFromCenter) * 0.82
-          
-          ''', '', 'scene Iris threshold')
-          text = replace_once(text,
+          text = one_re(text,
+              r'(?ms)^                readonly property real centerX:.*?^                readonly property real irisThreshold:.*?^\s*$\n',
+              '', 'scene Iris geometry')
+          text = one(text,
           '''                visible: root.entryTransitionMode() === "pixel"
                           ? root.entryTransitionProgress < pixelThreshold
                           : root.entryTransitionProgress < irisThreshold
@@ -384,7 +215,7 @@ jobs:
                           z: 4
                       }
           '''
-          image_block_new = '''            Item {
+          image_new = '''            Item {
                           id: customImageDelegate
                           required property var modelData
                           readonly property string elementName: String(modelData.id || "")
@@ -399,8 +230,7 @@ jobs:
                           height: Math.round(180 * root.uiScale)
                           x: finalX + spawnOffset.x * (1 - spawnProgress)
                           y: finalY + spawnOffset.y * (1 - spawnProgress)
-                          scale: root.elementScale(elementName)
-                              * (spawnMode === "pixel-warp" ? 0.82 + 0.18 * spawnProgress : 1)
+                          scale: root.elementScale(elementName) * (spawnMode === "pixel-warp" ? 0.82 + 0.18 * spawnProgress : 1)
                           rotation: root.elementRotation(elementName)
                           transformOrigin: Item.Center
                           transform: Scale {
@@ -416,10 +246,7 @@ jobs:
           
                           function restartSpawnAnimation() {
                               spawnAnimation.stop();
-                              if (spawnMode === "none") {
-                                  spawnProgress = 1;
-                                  return;
-                              }
+                              if (spawnMode === "none") { spawnProgress = 1; return; }
                               spawnProgress = 0;
                               spawnAnimation.restart();
                           }
@@ -432,8 +259,7 @@ jobs:
                               asynchronous: true
                               cache: true
                               fillMode: Image.PreserveAspectFit
-                              smooth: customImageDelegate.spawnMode !== "pixel-warp"
-                                  || customImageDelegate.spawnProgress >= 0.999
+                              smooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.spawnProgress >= 0.999
                           }
           
                           ShaderEffectSource {
@@ -444,13 +270,9 @@ jobs:
                               live: true
                               recursive: false
                               smooth: false
-                              readonly property real pixelFactor: 1 + 31 * Math.pow(
-                                  Math.max(0, 1 - customImageDelegate.spawnProgress), 1.25)
-                              textureSize: Qt.size(
-                                  Math.max(1, Math.round(width / pixelFactor)),
-                                  Math.max(1, Math.round(height / pixelFactor)))
-                              visible: customImageDelegate.spawnMode === "pixel-warp"
-                                  && customImageDelegate.spawnProgress < 0.999
+                              readonly property real pixelFactor: 1 + 31 * Math.pow(Math.max(0, 1 - customImageDelegate.spawnProgress), 1.25)
+                              textureSize: Qt.size(Math.max(1, Math.round(width / pixelFactor)), Math.max(1, Math.round(height / pixelFactor)))
+                              visible: customImageDelegate.spawnMode === "pixel-warp" && customImageDelegate.spawnProgress < 0.999
                           }
           
                           NumberAnimation {
@@ -465,15 +287,12 @@ jobs:
           
                           Connections {
                               target: root
-                              function onCustomImageSpawnEpochChanged() {
-                                  customImageDelegate.restartSpawnAnimation();
-                              }
+                              function onCustomImageSpawnEpochChanged() { customImageDelegate.restartSpawnAnimation(); }
                           }
                       }
           '''
-          text = replace_once(text, image_block, image_block_new, 'custom image spawn renderer')
-
-          text = replace_once(text,
+          text = one(text, image_block, image_new, 'custom image spawn renderer')
+          text = one(text,
           '''                            property real formationProgress:
                                       root.animationPreference === "off" ? 1 : 0
           ''',
@@ -481,7 +300,6 @@ jobs:
                                       root.animationPreference === "off"
                                       || (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0
           ''', 'quiet editor logo formation')
-
           if '"iris"' in text or 'irisThreshold' in text or 'distanceFromCenter' in text:
               raise SystemExit('Iris-specific scene logic remains after patch')
           scene_path.write_text(text)
@@ -489,21 +307,19 @@ jobs:
 
           editor_path = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
           editor = editor_path.read_text()
-          old_transition = 'duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken }'
-          if editor.count(old_transition) != 2:
-              raise SystemExit(f'editor transition auto-start patch expected 2 matches, found {editor.count(old_transition)}')
-          editor = editor.replace(old_transition,
-              'duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }')
-          editor_path.write_text(editor)
+          anchor = 'duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken }'
+          if editor.count(anchor) != 2:
+              raise SystemExit(f'editor transition auto-start patch expected 2 matches, found {editor.count(anchor)}')
+          editor_path.write_text(editor.replace(anchor,
+              'duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }'))
 
           quick_path = Path('config/quickshell/awtarchy/QuickSettings.qml')
           quick = quick_path.read_text()
-          mouse_button = '                                        SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }\n'
-          if quick.count(mouse_button) != 1:
-              raise SystemExit(f'Quick Settings mouse-interaction anchor expected once, found {quick.count(mouse_button)}')
-          capture_rows = mouse_button + '                                        Text { Layout.fillWidth: true; text: "Hide Quick Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }\n' + '                                        SettingsButton { label: BarState.lockscreenHideQuickshellBeforeCapture() ? "On" : "Off"; active: BarState.lockscreenHideQuickshellBeforeCapture(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", BarState.lockscreenHideQuickshellBeforeCapture() ? "false" : "true"]) }\n'
-          quick = quick.replace(mouse_button, capture_rows, 1)
-          quick_path.write_text(quick)
+          mouse = '                                        SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }\n'
+          if quick.count(mouse) != 1:
+              raise SystemExit(f'Quick Settings mouse anchor expected once, found {quick.count(mouse)}')
+          capture = mouse + '                                        Text { Layout.fillWidth: true; text: "Hide Quick Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }\n' + '                                        SettingsButton { label: BarState.lockscreenHideQuickshellBeforeCapture() ? "On" : "Off"; active: BarState.lockscreenHideQuickshellBeforeCapture(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", BarState.lockscreenHideQuickshellBeforeCapture() ? "false" : "true"]) }\n'
+          quick_path.write_text(quick.replace(mouse, capture, 1))
           PY
           bash -n config/hypr/scripts/awtarchy_lock.sh
           bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
@@ -513,13 +329,9 @@ jobs:
           git diff --check
       - name: Commit production changes
         run: |
-          if git diff --quiet -- config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy/QuickSettings.qml; then
-            printf '%s\n' 'Production patch already applied.'
-          else
-            git config user.name dillacorn
-            git config user.email '28743863+dillacorn@users.noreply.github.com'
-            git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy/QuickSettings.qml
-            git diff --cached --check
-            git commit -m 'feat: complete lockscreen fifth runtime pass'
-            git push origin HEAD:feature/lockscreen-interactive-effects
-          fi
+          git config user.name dillacorn
+          git config user.email '28743863+dillacorn@users.noreply.github.com'
+          git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy/QuickSettings.qml
+          git diff --cached --check
+          git commit -m 'feat: complete lockscreen fifth runtime pass'
+          git push origin HEAD:feature/lockscreen-interactive-effects
