@@ -36,6 +36,9 @@ WlSessionLockSurface {
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
+    required property string passwordMaskMode
+    required property string passwordMaskCharacter
+    required property string clockFormat
     required property string captureDirectory
 
     color: "#000000"
@@ -122,7 +125,7 @@ WlSessionLockSurface {
             randomFormationMode: root.randomFormationMode
             logoPhysicsHz: root.logoPhysicsHz
             mouseInteractive: root.mouseInteractive && root.transitionComplete
-            showLogo: root.showLogo && root.transitionComplete
+            showLogo: root.showLogo
             showTime: root.showTime
             showDate: root.showDate
             showUsername: root.showUsername
@@ -144,6 +147,9 @@ WlSessionLockSurface {
             visualizer: root.visualizer
             audioBands: root.audioBands
             backgroundOpacity: root.backgroundOpacity
+            passwordMaskMode: root.passwordMaskMode
+            passwordMaskCharacter: root.passwordMaskCharacter
+            clockFormat: root.clockFormat
             desktopBackingSource: desktopBacking
             previewMode: false
             externalEntryTransitionRunning: transitionLayer.running
@@ -212,12 +218,36 @@ WlSessionLockSurface {
             Repeater {
                 model: root.maskedCount
 
-                Rectangle {
-                    width: Math.round(7 * root.uiScale * root.passwordScale)
-                    height: Math.round(10 * root.uiScale * root.passwordScale)
-                    color: root.auth.statusIsError || root.passwordFailureMaskCount > 0
-                        ? "#ff4d4d" : scene.elementColor("password")
-                    opacity: 0.82
+                Item {
+                    width: scene.effectivePasswordMaskMode === "custom"
+                        ? Math.round(12 * root.uiScale * root.passwordScale)
+                        : Math.round(8 * root.uiScale * root.passwordScale)
+                    height: Math.round(14 * root.uiScale * root.passwordScale)
+
+                    Rectangle {
+                        anchors.centerIn: parent
+                        visible: scene.effectivePasswordMaskMode !== "custom"
+                        width: scene.effectivePasswordMaskMode === "dots"
+                            ? Math.round(8 * root.uiScale * root.passwordScale)
+                            : Math.round(7 * root.uiScale * root.passwordScale)
+                        height: scene.effectivePasswordMaskMode === "dots" ? width
+                            : Math.round(10 * root.uiScale * root.passwordScale)
+                        radius: scene.effectivePasswordMaskMode === "dots" ? width / 2 : 0
+                        color: root.auth.statusIsError || root.passwordFailureMaskCount > 0
+                            ? "#ff4d4d" : scene.elementColor("password")
+                        opacity: 0.82
+                    }
+
+                    Text {
+                        anchors.centerIn: parent
+                        visible: scene.effectivePasswordMaskMode === "custom"
+                        text: scene.effectivePasswordMaskCharacter
+                        color: root.auth.statusIsError || root.passwordFailureMaskCount > 0
+                            ? "#ff4d4d" : scene.elementColor("password")
+                        opacity: 0.82
+                        font.family: root.theme.fontFamily
+                        font.pixelSize: Math.round(16 * root.uiScale * root.passwordScale)
+                    }
                 }
             }
         }
