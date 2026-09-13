@@ -2,7 +2,9 @@ name: Validate Quickshell Lockscreen Foundation
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feature/lockscreen-interactive-effects
   pull_request:
 
 permissions:
@@ -84,3 +86,71 @@ jobs:
           bash tests/test-quickshell-lockscreen-user-cutover.sh
       - name: Secure power-transition contract
         run: bash tests/test-quickshell-lockscreen-power-safety.sh
+
+  apply-qcolor-fix:
+    if: >-
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feature/lockscreen-interactive-effects' &&
+      github.actor == 'dillacorn'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 8
+
+      - name: Verify exact bridge parent
+        shell: bash
+        run: test "$(git rev-parse HEAD^)" = "469030245584dcdab82915cea686453465ca3258"
+
+      - name: Apply scoped QColor fix
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import hashlib
+
+          editor = Path("config/quickshell/awtarchy/LockscreenEditor.qml")
+          text = editor.read_text(encoding="utf-8")
+          old = 'color: Theme.text'
+          new = 'color: Theme.foreground'
+          count = text.count(old)
+          if count != 1:
+              raise RuntimeError(f"expected exactly one Theme.text replacement, found {count}")
+          text = text.replace(old, new, 1)
+          editor.write_text(text, encoding="utf-8")
+
+          digest = hashlib.sha256(editor.read_bytes()).hexdigest()
+          history = Path("local/share/awtarchy/quickshell-managed-history.sha256")
+          history_text = history.read_text(encoding="utf-8")
+          entry = f"{digest}\t.config/quickshell/awtarchy/LockscreenEditor.qml"
+          if entry in history_text:
+              raise RuntimeError("new managed-history hash unexpectedly already exists")
+          if not history_text.endswith("\n"):
+              history_text += "\n"
+          history_text += "\n# 2026-09-13 lockscreen editor rotation-handle QColor runtime fix stock hash.\n" + entry + "\n"
+          history.write_text(history_text, encoding="utf-8")
+          print(f"LockscreenEditor sha256: {digest}")
+          PY
+
+          if grep -Fq 'color: Theme.text' config/quickshell/awtarchy/LockscreenEditor.qml; then
+            printf '%s\n' 'FAIL: Theme.text remains after QColor fix' >&2
+            false
+          fi
+          grep -Fq 'color: Theme.foreground' config/quickshell/awtarchy/LockscreenEditor.qml
+          git diff --check
+
+      - name: Restore workflow and commit production fix
+        shell: bash
+        run: |
+          git config user.name "dillacorn"
+          git config user.email "28743863+dillacorn@users.noreply.github.com"
+          git checkout 469030245584dcdab82915cea686453465ca3258 -- .github/workflows/validate-quickshell-lockscreen-foundation.yml
+          git add .github/workflows/validate-quickshell-lockscreen-foundation.yml \
+            config/quickshell/awtarchy/LockscreenEditor.qml \
+            local/share/awtarchy/quickshell-managed-history.sha256
+          git diff --cached --check
+          git commit -m "fix: use defined editor rotation handle color"
+          git push origin HEAD:feature/lockscreen-interactive-effects
