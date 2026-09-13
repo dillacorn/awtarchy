@@ -23,7 +23,7 @@ jobs:
       - name: Verify exact helper parent
         shell: bash
         run: |
-          test "$(git rev-parse HEAD^)" = "67b9e83c5ad93dcf419669a8c68e6bfe7def08c9"
+          test "$(git rev-parse HEAD^)" = "8ae66bb0d868fa3e2b3947bbd2f0dfb5c19299e0"
 
       - name: Apply production fix
         shell: bash
