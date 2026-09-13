@@ -34,12 +34,15 @@ cmp -s "$SCENE" "$PREVIEW_SCENE" \
     || fail 'secure and preview scene copies diverged'
 
 # Persisted transition choice remains allowlisted and duration is the approved
-# slower 1.8s default with an 0.8-6.0s defensive range everywhere.
+# slower 1.8s default with an 0.8-6.0s defensive range everywhere. Iris is
+# retired and must not remain in the persisted transition allowlist.
 contains "$STATE" 'LOCKSCREEN_ENTRY_TRANSITIONS_JSON=' \
     'entry transition allowlist is missing'
-for key in fade pixel iris edges wipe; do
+for key in fade pixel edges wipe; do
     grep -Fq -- "\"$key\"" "$STATE" || fail "state allowlist is missing transition: $key"
 done
+rejects "$STATE" '"iris"' \
+    'retired Iris transition remains in the state backend'
 contains "$STATE" 'validate_lockscreen_entry_transition()' \
     'entry transition validator is missing'
 contains "$STATE" 'set-lockscreen-entry-transition)' \
@@ -194,4 +197,4 @@ contains "$SCENE" 'effectiveEntryTransitionRunning' \
 rejects "$PERMANENT_WORKFLOW" 'contents: write' \
     'permanent interactive-effects workflow regained branch write permission'
 
-printf '%s\n' 'PASS: shared secure/editor transition replay, 1800ms default, 800-6000ms range, and auth isolation'
+printf '%s\n' 'PASS: shared secure/editor transition replay, retired Iris transition, 1800ms default, 800-6000ms range, and auth isolation'
