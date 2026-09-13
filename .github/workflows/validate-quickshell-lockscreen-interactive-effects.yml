@@ -1,45 +1,188 @@
 name: Validate Quickshell Lockscreen Interactive Effects
 
 on:
+  push:
+    branches: [main]
   pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  align-transparency-privacy-contract:
-    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
-    permissions:
-      contents: write
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          ref: feature/lockscreen-interactive-effects
-      - name: Align and validate privacy warning contract
+          fetch-depth: 0
+      - name: Diff whitespace validation
         run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path('tests/test-quickshell-lockscreen-visualizer-transparency.sh')
-          text = path.read_text()
-          old = "require_text \"$EDITOR\" 'Transparency can reveal content' \\\n    'editor has no transparency privacy warning'\n"
-          new = "require_text \"$EDITOR\" 'Transparency uses the secure frozen pre-lock capture; live unlocked compositor content is never exposed.' \\\n    'editor has no secure frozen-capture transparency privacy warning'\n"
-          if text.count(old) != 1:
-              raise SystemExit(f'expected one stale privacy warning assertion, found {text.count(old)}')
-          path.write_text(text.replace(old, new, 1))
-          PY
+          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
+            git diff --check "origin/${GITHUB_BASE_REF}...HEAD"
+          else
+            git diff --check HEAD^
+          fi
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Syntax validation
+        run: |
+          bash -n tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash -n tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          bash -n tests/test-quickshell-lockscreen-logo-cohesion.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash -n tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+          bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
+          bash -n tests/test-quickshell-lockscreen-capture.sh
+          bash -n tests/test-quickshell-lockscreen-transition-layer.sh
+          bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash -n tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          bash -n tests/test-quickshell-lockscreen-editor.sh
+          bash -n tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash -n tests/test-quickshell-lockscreen-live-editor.sh
+          bash -n tests/test-quickshell-lockscreen-editor-flick.sh
+          bash -n tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash -n tests/test-quickshell-lockscreen-editor-presets.sh
+          bash -n tests/test-quickshell-lockscreen-element-system.sh
+          bash -n tests/test-quickshell-lockscreen-rotation-reset.sh
           bash -n tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          bash -n tests/test-quickshell-lockscreen-visualizer-editing.sh
+          bash -n tests/test-quickshell-lockscreen-entry-transitions.sh
+          bash -n tests/test-quickshell-lockscreen-background-composition.sh
+          bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash -n tests/test-quickshell-lockscreen-weather.sh
+          bash -n tests/test-quickshell-lockscreen-weather-units.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-services.sh
+          bash -n tests/test-quickshell-lockscreen-interaction-polish.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_audio.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
+      - name: ShellCheck
+        run: |
+          shellcheck tests/test-quickshell-lockscreen-interactive-effects.sh
+          shellcheck tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          shellcheck tests/test-quickshell-lockscreen-logo-cohesion.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-polish.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          shellcheck tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+          shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
+          shellcheck tests/test-quickshell-lockscreen-capture.sh
+          shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
+          shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+          shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          shellcheck tests/test-quickshell-lockscreen-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          shellcheck tests/test-quickshell-lockscreen-live-editor.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-flick.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-tooling.sh
+          shellcheck tests/test-quickshell-lockscreen-editor-presets.sh
+          shellcheck tests/test-quickshell-lockscreen-element-system.sh
+          shellcheck tests/test-quickshell-lockscreen-rotation-reset.sh
           shellcheck tests/test-quickshell-lockscreen-visualizer-transparency.sh
+          shellcheck tests/test-quickshell-lockscreen-visualizer-editing.sh
+          shellcheck tests/test-quickshell-lockscreen-entry-transitions.sh
+          shellcheck tests/test-quickshell-lockscreen-background-composition.sh
+          shellcheck tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          shellcheck tests/test-quickshell-lockscreen-weather.sh
+          shellcheck tests/test-quickshell-lockscreen-weather-units.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-services.sh
+          shellcheck tests/test-quickshell-lockscreen-interaction-polish.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_weather.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_weather.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_contrast.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh
+          fi
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_preview_capture.sh ]]; then
+            shellcheck config/hypr/scripts/quickshell_lockscreen_preview_capture.sh
+          fi
+      - name: Runtime helper mode
+        run: |
+          test -x config/hypr/scripts/quickshell_lockscreen_audio.sh
+          test -x config/hypr/scripts/quickshell_lockscreen_weather.sh
+          test -x config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh ]]; then
+            test -x config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
+          fi
+      - name: Logo cohesion contracts
+        run: bash tests/test-quickshell-lockscreen-logo-cohesion.sh
+      - name: Runtime polish contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-runtime-polish.sh
+          bash tests/test-quickshell-lockscreen-runtime-polish-ui.sh
+          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-picker-targeting.sh
+      - name: Third and fifth Hyprland runtime pass contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+      - name: Secure transition capture contract
+        run: bash tests/test-quickshell-lockscreen-capture.sh
+      - name: Desktop transition layer contract
+        run: bash tests/test-quickshell-lockscreen-transition-layer.sh
+      - name: Background composition contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-background-composition.sh
+          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash tests/test-quickshell-lockscreen-composition-blur-rendering.sh
+          bash tests/test-quickshell-lockscreen-editor-preview-runtime.sh
+      - name: Weather refresh contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-weather.sh
+          bash tests/test-quickshell-lockscreen-weather-units.sh
+      - name: Runtime service contracts
+        run: bash tests/test-quickshell-lockscreen-runtime-services.sh
+      - name: Interactive effects contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-interactive-effects.sh
+          bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
+          bash tests/test-quickshell-lockscreen-interaction-polish.sh
+      - name: Entry transition contracts
+        run: bash tests/test-quickshell-lockscreen-entry-transitions.sh
+      - name: Customization editor contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-config-boundary.sh
+          bash tests/test-quickshell-lockscreen-live-editor.sh
+          bash tests/test-quickshell-lockscreen-editor-flick.sh
+          bash tests/test-quickshell-lockscreen-editor-tooling.sh
+          bash tests/test-quickshell-lockscreen-editor-presets.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-rotation-reset.sh
           bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
           bash tests/test-quickshell-lockscreen-visualizer-editing.sh
-          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
-          git diff --check
-      - name: Commit test contract correction
-        run: |
-          git config user.name dillacorn
-          git config user.email '28743863+dillacorn@users.noreply.github.com'
-          git add tests/test-quickshell-lockscreen-visualizer-transparency.sh
-          git diff --cached --check
-          git commit -m 'test: assert secure transparency warning'
-          git push origin HEAD:feature/lockscreen-interactive-effects
+      - name: Managed history contracts
+        run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh

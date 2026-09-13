@@ -273,8 +273,8 @@ require_text "$EDITOR" 'label: "Circle"' \
     'editor has no circle visualizer shape selector'
 require_text "$EDITOR" 'text: "Background Opacity"' \
     'editor has no background opacity control'
-require_text "$EDITOR" 'Transparency can reveal content' \
-    'editor has no transparency privacy warning'
+require_text "$EDITOR" 'Transparency uses the secure frozen pre-lock capture; live unlocked compositor content is never exposed.' \
+    'editor has no secure frozen-capture transparency privacy warning'
 
 # Quick Settings intentionally exposes only high-value global controls.
 require_text "$QUICK_SETTINGS" 'text: "Visualizer"' \
