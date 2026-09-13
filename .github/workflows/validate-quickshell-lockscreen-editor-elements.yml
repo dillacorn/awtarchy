@@ -2,7 +2,7 @@ name: Validate Quickshell Lockscreen Editor Elements
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/lockscreen-interactive-effects]
   pull_request:
 
 permissions:
@@ -52,7 +52,7 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-quicksettings-header.sh
 
   apply-clock-toggle:
-    if: github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects' && github.actor != 'github-actions[bot]'
+    if: github.event_name == 'push' && github.ref_name == 'feature/lockscreen-interactive-effects' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
