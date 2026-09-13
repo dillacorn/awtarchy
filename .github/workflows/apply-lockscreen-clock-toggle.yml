@@ -1,15 +1,14 @@
 name: Apply Lockscreen Clock Toggle
 
 on:
-  push:
-    branches: [feature/lockscreen-interactive-effects]
+  pull_request:
 
 permissions:
   contents: write
 
 jobs:
   apply:
-    if: github.actor != 'github-actions[bot]'
+    if: github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects' && github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
