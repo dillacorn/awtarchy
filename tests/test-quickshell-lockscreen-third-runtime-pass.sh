@@ -51,8 +51,12 @@ contains "$SURFACE" '#ff4d4d' \
     'wrong-password password squares have no visible red failure color'
 rejects "$SURFACE" 'opacity: password.text.length > 0 ? 0.09 : 0' \
     'password background panel remains visible'
-contains "$SURFACE" 'showLogo: root.showLogo && root.transitionComplete' \
-    'logo formation is no longer gated until transition completion'
+contains "$SURFACE" 'externalEntryTransitionRunning: transitionLayer.running' \
+    'shared scene no longer receives the secure transition running state'
+contains "$SCENE" '&& root.presentationPhase !== "transition"' \
+    'logo presentation is no longer gated by the explicit transition phase'
+contains "$SCENE" 'function beginLogoEntry()' \
+    'logo entry no longer has an explicit post-transition phase'
 rejects "$AUTH" 'entryTransition' \
     'LockAuth must remain independent of transition presentation'
 
