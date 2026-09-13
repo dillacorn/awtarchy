@@ -2,7 +2,9 @@ name: Validate Quickshell Lockscreen Foundation
 
 on:
   push:
-    branches: [main]
+    branches:
+      - main
+      - feature/lockscreen-interactive-effects
   pull_request:
 
 permissions:
@@ -80,9 +82,8 @@ jobs:
 
   apply-runtime-fix:
     if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.number == 181 &&
-      github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects' &&
+      github.event_name == 'push' &&
+      github.ref == 'refs/heads/feature/lockscreen-interactive-effects' &&
       github.actor == 'dillacorn'
     permissions:
       contents: write
@@ -91,12 +92,12 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           ref: feature/lockscreen-interactive-effects
-          fetch-depth: 5
+          fetch-depth: 8
 
       - name: Verify exact bridge parent
         shell: bash
         run: |
-          test "$(git rev-parse HEAD^)" = "ead489a02a7df8a2043315d9bd4b8ed628cad6a6"
+          test "$(git rev-parse HEAD^)" = "ff4a72fd55f574e5a27c990f93f8c323887cdcf5"
 
       - name: Apply scoped QML fix
         shell: bash
