@@ -33,6 +33,9 @@ Item {
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
+    required property string passwordMaskMode
+    required property string passwordMaskCharacter
+    required property string clockFormat
     property Item desktopBackingSource: null
 
     property bool previewMode: false
@@ -44,13 +47,27 @@ Item {
     property bool entered: false
     property bool externalEntryTransitionRunning: false
     property int presentationReplayToken: 0
+    property string presentationPhase: "transition"
+    property int logoEntryEpoch: 0
     property int customImageSpawnEpoch: 0
     readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning
+    readonly property bool customImageEntryStarted:
+        presentationPhase === "custom-images" || presentationPhase === "settled"
+    readonly property string effectivePasswordMaskMode:
+        ["squares", "dots", "custom"].indexOf(String(passwordMaskMode)) >= 0
+            ? String(passwordMaskMode) : "squares"
+    readonly property string effectivePasswordMaskCharacter:
+        String(passwordMaskCharacter || "").length > 0 ? String(passwordMaskCharacter) : "•"
 
     onEffectiveEntryTransitionRunningChanged: {
-        if (!effectiveEntryTransitionRunning && entered
-                && (!previewMode || presentationReplayToken > 0))
-            customImageSpawnEpoch++;
+        if (effectiveEntryTransitionRunning) {
+            logoEntryPhaseTimer.stop();
+            customImageEntryPhaseTimer.stop();
+            presentationPhase = "transition";
+            return;
+        }
+        if (entered && (!previewMode || presentationReplayToken > 0))
+            beginLogoEntry();
     }
 
     readonly property bool logoHoverActive: mouseInteractive && pointerActive && showLogo
@@ -95,6 +112,7 @@ Item {
         wordmarkCellWidth, wordmarkCellHeight) * 0.76
     readonly property real logoExplosionBucketSize: Math.max(
         24 * uiScale, logoExplosionCollisionDistance * 1.35)
+    readonly property int logoEntryDurationMs: 2350
     readonly property string usernameText: showUsername ? Quickshell.env("USER") : "";
     readonly property real passwordCenterX: normalizedX("password", 0.50) * width
     readonly property real passwordCenterY: normalizedY("password", 0.70) * height
@@ -129,6 +147,48 @@ Item {
     }
     property string timeText: ""
     property string dateText: "";
+
+    function beginLogoEntry() {
+        logoEntryPhaseTimer.stop();
+        customImageEntryPhaseTimer.stop();
+        logoEntryEpoch++;
+        presentationPhase = "logo";
+        if (!showLogo || animationPreference === "off") {
+            beginCustomImageEntry();
+            return;
+        }
+        logoEntryPhaseTimer.restart();
+    }
+
+    function customImageEntryDurationMs() {
+        if (!Array.isArray(customImages))
+            return 0;
+        let duration = 0;
+        for (const image of customImages) {
+            if (!image || image.visible === false)
+                continue;
+            const mode = customImageSpawnMode(image);
+            if (mode === "pixel-warp")
+                return 620;
+            if (mode !== "none")
+                duration = Math.max(duration, 520);
+        }
+        return duration;
+    }
+
+    function beginCustomImageEntry() {
+        logoEntryPhaseTimer.stop();
+        customImageEntryPhaseTimer.stop();
+        customImageSpawnEpoch++;
+        presentationPhase = "custom-images";
+        const duration = customImageEntryDurationMs();
+        if (duration <= 0) {
+            presentationPhase = "settled";
+            return;
+        }
+        customImageEntryPhaseTimer.interval = duration;
+        customImageEntryPhaseTimer.restart();
+    }
 
     function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
@@ -653,20 +713,9 @@ Item {
     }
     }
 
-    function minuteTimeFormat() {
-        const localeFormat = String(Qt.locale().timeFormat(Locale.ShortFormat) || "");
-        const withoutSeconds = localeFormat
-            .replace(/([:.\-\s])s{1,2}(?:\.z{1,3})?/g, "")
-            .replace(/s{1,2}([:.\-\s])/g, "")
-            .replace(/z{1,3}/g, "")
-            .replace(/\s{2,}/g, " ")
-            .trim();
-        return withoutSeconds.length > 0 ? withoutSeconds : "HH:mm";
-    }
-
     function updateClockText() {
         const now = new Date();
-        timeText = Qt.formatTime(now, minuteTimeFormat());
+        timeText = Qt.formatTime(now, root.clockFormat === "12h" ? "h:mm AP" : "HH:mm");
         dateText = Qt.formatDate(now, Locale.LongFormat);
     }
 
@@ -845,9 +894,10 @@ Item {
                 readonly property real finalX: root.normalizedX(elementName, 0.50) * parent.width - width / 2
                 readonly property real finalY: root.normalizedY(elementName, 0.50) * parent.height - height / 2
                 readonly property point spawnOffset: root.customImageSpawnOffset(modelData, width, height)
-                property real spawnProgress: 1
+                property real spawnProgress: spawnMode === "none" ? 1 : 0
 
-                visible: modelData.visible !== false || root.editorMode
+                visible: (modelData.visible !== false || root.editorMode)
+                    && (spawnMode === "none" || root.customImageEntryStarted)
                 width: Math.round(180 * root.uiScale)
                 height: Math.round(180 * root.uiScale)
                 x: finalX + spawnOffset.x * (1 - spawnProgress)
@@ -909,6 +959,13 @@ Item {
 
                 Connections {
                     target: root
+                    function onPresentationPhaseChanged() {
+                        if (customImageDelegate.spawnMode !== "none"
+                                && !root.customImageEntryStarted) {
+                            spawnAnimation.stop();
+                            customImageDelegate.spawnProgress = 0;
+                        }
+                    }
                     function onCustomImageSpawnEpochChanged() { customImageDelegate.restartSpawnAnimation(); }
                 }
             }
@@ -991,7 +1048,7 @@ Item {
         Item {
             id: wordmarkItem
             visible: root.presentationVisible("logo", root.showLogo)
-                && !root.effectiveEntryTransitionRunning
+                && root.presentationPhase !== "transition"
             opacity: root.presentationOpacity("logo") * root.elementOpacity("logo")
             x: root.normalizedX("logo", 0.50) * parent.width - width / 2
             y: root.normalizedY("logo", 0.34) * parent.height - height / 2
@@ -1104,7 +1161,6 @@ Item {
                                 root.animationPreference === "off"
                                     || (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0
 
-
                             x: finalCellX
                                 + (1 - formationProgress) * startX
                                 + Math.sin(Math.PI * formationProgress) * curveX
@@ -1133,14 +1189,12 @@ Item {
                                 antialiasing: false
                             }
 
-                            SequentialAnimation on formationProgress {
-                                running: wordmarkCell.isFilledGlyph
-                                    && root.entered && !root.unlocking
-                                    && !root.effectiveEntryTransitionRunning
-                                    && root.animationPreference !== "off"
-
+                            SequentialAnimation {
+                                id: formationAnimation
                                 PauseAnimation { duration: wordmarkCell.formationDelay }
                                 NumberAnimation {
+                                    target: wordmarkCell
+                                    property: "formationProgress"
                                     from: 0
                                     to: 1
                                     duration: wordmarkCell.formationDuration
@@ -1148,7 +1202,18 @@ Item {
                                 }
                             }
 
-
+                            Connections {
+                                target: root
+                                function onLogoEntryEpochChanged() {
+                                    formationAnimation.stop();
+                                    if (!wordmarkCell.isFilledGlyph || root.animationPreference === "off") {
+                                        wordmarkCell.formationProgress = 1;
+                                        return;
+                                    }
+                                    wordmarkCell.formationProgress = 0;
+                                    formationAnimation.restart();
+                                }
+                            }
                         }
                     }
                 }
@@ -1247,17 +1312,37 @@ Item {
             width: root.passwordWidth
             height: root.passwordHeight
 
-
             Row {
                 anchors.centerIn: parent
                 spacing: Math.round(7 * root.uiScale * root.elementScale("password"))
                 Repeater {
                     model: 4
-                    Rectangle {
-                        width: Math.round(7 * root.uiScale * root.elementScale("password"))
-                        height: Math.round(10 * root.uiScale * root.elementScale("password"))
-                        color: root.elementColor("password")
-                        opacity: 0.82
+                    Item {
+                        width: root.effectivePasswordMaskMode === "custom"
+                            ? Math.round(12 * root.uiScale * root.elementScale("password"))
+                            : Math.round(8 * root.uiScale * root.elementScale("password"))
+                        height: Math.round(14 * root.uiScale * root.elementScale("password"))
+                        Rectangle {
+                            anchors.centerIn: parent
+                            visible: root.effectivePasswordMaskMode !== "custom"
+                            width: root.effectivePasswordMaskMode === "dots"
+                                ? Math.round(8 * root.uiScale * root.elementScale("password"))
+                                : Math.round(7 * root.uiScale * root.elementScale("password"))
+                            height: root.effectivePasswordMaskMode === "dots" ? width
+                                : Math.round(10 * root.uiScale * root.elementScale("password"))
+                            radius: root.effectivePasswordMaskMode === "dots" ? width / 2 : 0
+                            color: root.elementColor("password")
+                            opacity: 0.82
+                        }
+                        Text {
+                            anchors.centerIn: parent
+                            visible: root.effectivePasswordMaskMode === "custom"
+                            text: root.effectivePasswordMaskCharacter
+                            color: root.elementColor("password")
+                            opacity: 0.82
+                            font.family: root.theme.fontFamily
+                            font.pixelSize: Math.round(16 * root.uiScale * root.elementScale("password"))
+                        }
                     }
                 }
             }
@@ -1331,6 +1416,20 @@ Item {
     }
 
     Timer {
+        id: logoEntryPhaseTimer
+        interval: root.logoEntryDurationMs
+        repeat: false
+        onTriggered: root.beginCustomImageEntry()
+    }
+
+    Timer {
+        id: customImageEntryPhaseTimer
+        interval: 620
+        repeat: false
+        onTriggered: root.presentationPhase = "settled"
+    }
+
+    Timer {
         interval: 15000
         repeat: true
         triggeredOnStart: true
@@ -1341,5 +1440,9 @@ Item {
     Component.onCompleted: {
         root.updateClockText();
         root.entered = true;
+        if (root.previewMode && root.presentationReplayToken === 0)
+            root.presentationPhase = "settled";
+        else if (!root.effectiveEntryTransitionRunning)
+            Qt.callLater(root.beginLogoEntry);
     }
 }
