@@ -67,11 +67,12 @@ contains "$NWG" 'cursor-theme=Bibata-Modern-Ice' \
 contains "$XRESOURCES" 'Xcursor.theme: Bibata-Modern-Ice' \
   'Xresources does not default to Bibata Modern Ice'
 
-# Quick Settings must expose the Bibata selector in both supported settings surfaces.
-contains "$FLYOUT" 'CursorThemeSettings {' \
-  'Quick Settings settings panel does not host the cursor selector'
-contains "$FLYOUT" 'cursorThemeSection.implicitHeight' \
-  'Quick Settings cursor selector height is not included in panel sizing'
+# Cursor preferences belong to the Awtarchy card only; the generic Quick
+# Settings cog must not duplicate them.
+not_contains "$FLYOUT" 'CursorThemeSettings {' \
+  'generic Quick Settings settings panel still duplicates the cursor selector'
+not_contains "$FLYOUT" 'cursorThemeSection.implicitHeight' \
+  'generic Quick Settings settings panel still reserves cursor-selector height'
 python3 - "$QUICK_SETTINGS" <<'PY_QS'
 from pathlib import Path
 import sys
