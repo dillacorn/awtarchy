@@ -1254,3 +1254,11 @@ a3c32e47e5a7607e3154d315c11486a4b5a88a9dd8ac37bf12d5257f003d4294	.config/quicksh
 
 # 2026-09-13 lockscreen presentation settings save helper stock hash.
 084fe9195430a77b31f7126bfb6346e5f6300b5a8ec3e78154a513920c79d231	.config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+
+# 2026-09-13 lockscreen presentation sequencing and editor controls stock hashes.
+6672439222a06f006e49d6dfc47e2f4bb12a5f8e597c6a8bf0d67afdc783d393	.config/quickshell/awtarchy-lock/LockScene.qml
+2fa4167134123e882b0b948a443b3f944859cec803cd37c574e9201a5b887a5e	.config/quickshell/awtarchy-lock/LockSurface.qml
+2ad70576b915d838856d6d5e4358d3abaf72b1fff70724909d4d679d588a3aa2	.config/quickshell/awtarchy-lock/shell.qml
+6672439222a06f006e49d6dfc47e2f4bb12a5f8e597c6a8bf0d67afdc783d393	.config/quickshell/awtarchy/LockPreviewScene.qml
+14614b307f1ee61d92935508606bdb4d47e0cb4c0625e5a5cb4ec1b69ba1d66f	.config/quickshell/awtarchy/LockscreenCompactSelector.qml
+895a98fc33511fc3a96ed987fe24c142adf7f572d0822ffcf89052c03dae8727	.config/quickshell/awtarchy/LockscreenEditor.qml
