@@ -1751,7 +1751,6 @@ Singleton {
                             onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)
                         }
                         Item { Layout.fillWidth: true }
-                        Text { text: root.draftClockFormat === "12h" ? "Preview: 2:59 PM" : "Preview: 14:59"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                     }
 
                     RowLayout {
