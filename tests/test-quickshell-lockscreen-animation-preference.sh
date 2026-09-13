@@ -117,8 +117,10 @@ require_text "$SCENE_QML" 'animationPreference === "center"' \
     'shared lock scene does not map the Center preference'
 require_text "$SCENE_QML" 'animationPreference === "split"' \
     'shared lock scene does not map the Split preference'
-require_text "$SCENE_QML" 'root.animationPreference === "off" ? 1 : 0' \
+require_text "$SCENE_QML" 'root.animationPreference === "off"' \
     'Off does not immediately render the completed wordmark'
+require_text "$SCENE_QML" '|| (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0' \
+    'quiet editor entry does not start with the completed wordmark'
 require_text "$SCENE_QML" 'root.animationPreference !== "off"' \
     'Off does not suppress particle formation animation'
 
