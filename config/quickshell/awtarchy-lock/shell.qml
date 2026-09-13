@@ -31,6 +31,9 @@ ShellRoot {
     property bool lockShowDate: false
     property bool lockShowUsername: false
     property bool lockShowWeather: false
+    property string lockPasswordMaskMode: "squares"
+    property string lockPasswordMaskCharacter: "•"
+    property string lockClockFormat: "24h"
     property string lockBackground: "black"
     property color lockBackgroundColor: "#000000"
     property string lockWallpaperPath: ""
@@ -194,6 +197,24 @@ ShellRoot {
         return typeof value === "boolean" ? value : fallback;
     }
 
+    function normalizedPasswordMaskMode(value) {
+        const key = String(value || "");
+        return ["squares", "dots", "custom"].indexOf(key) >= 0 ? key : "squares";
+    }
+
+    function normalizedPasswordMaskCharacter(value) {
+        const text = String(value || "").trim();
+        if (text.length === 0 || /[\u0000-\u001f\u007f-\u009f]/.test(text))
+            return "•";
+        const points = Array.from(text);
+        return points.length === 1 ? points[0] : "•";
+    }
+
+    function normalizedClockFormat(value) {
+        const key = String(value || "");
+        return ["24h", "12h"].indexOf(key) >= 0 ? key : "24h";
+    }
+
     function normalizedBackground(value) {
         const key = String(value || "");
         return ["black", "wallpaper", "color"].indexOf(key) >= 0 ? key : "black";
@@ -347,6 +368,9 @@ ShellRoot {
         lockShowDate = false;
         lockShowUsername = false;
         lockShowWeather = false;
+        lockPasswordMaskMode = "squares";
+        lockPasswordMaskCharacter = "•";
+        lockClockFormat = "24h";
         lockBackground = "black";
         lockBackgroundColor = "#000000";
         lockWallpaperPath = "";
@@ -389,6 +413,9 @@ ShellRoot {
             lockShowDate = normalizedBoolean(parsed.lockscreen_show_date, false);
             lockShowUsername = normalizedBoolean(parsed.lockscreen_show_username, false);
             lockShowWeather = normalizedBoolean(parsed.lockscreen_show_weather, false);
+            lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_mask_mode);
+            lockPasswordMaskCharacter = normalizedPasswordMaskCharacter(parsed.lockscreen_password_mask_character);
+            lockClockFormat = normalizedClockFormat(parsed.lockscreen_clock_format);
             lockBackground = normalizedBackground(parsed.lockscreen_background);
             lockBackgroundColor = normalizedBackgroundColor(parsed.lockscreen_background_color);
             lockWallpaperPath = normalizedWallpaperPath(parsed.lockscreen_wallpaper_path);
@@ -494,6 +521,9 @@ ShellRoot {
                 visualizer: root.lockVisualizer
                 audioBands: lockAudioAnalyzer.bands
                 backgroundOpacity: root.lockBackgroundOpacity
+                passwordMaskMode: root.lockPasswordMaskMode
+                passwordMaskCharacter: root.lockPasswordMaskCharacter
+                clockFormat: root.lockClockFormat
                 captureDirectory: root.captureDirectory
             }
         }
