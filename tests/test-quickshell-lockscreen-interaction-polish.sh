@@ -122,7 +122,9 @@ require_text "$SCENE" 'root.triggerLogoExplosion(x, y);' \
     'logo pointer click does not trigger the block explosion'
 require_text "$SCENE" 'const ghostDx = x - ghostHeadX;' \
     'high-polling-rate ghost movement accumulation regressed'
-require_text "$SCENE" 'logoHoverDirty = wasLogoHovering || logoContainsPoint(x, y);' \
+require_text "$SCENE" 'const isLogoHovering = logoContainsPoint(x, y);' \
+    'logo-local pointer motion no longer computes bounded hover state'
+require_text "$SCENE" 'logoHoverDirty = wasLogoHovering || isLogoHovering;' \
     'logo-local pointer motion does not wake the bounded hover solver'
 reject_text "$SCENE" 'const margin = 90 * uiScale;' \
     'logo hit testing regressed to the old oversized fixed margin'
