@@ -5,11 +5,14 @@ set -euo pipefail
 export LC_ALL=C.UTF-8
 
 CONFIG_NAME="awtarchy-lock"
+SHELL_CONFIG_NAME="awtarchy"
 QS_BIN="${QS_BIN:-qs}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 LOGINCTL_BIN="${LOGINCTL_BIN:-loginctl}"
 POLL_INTERVAL="${AWTARCHY_LOCK_POLL_INTERVAL:-0.05}"
+CAPTURE_HIDE_DELAY="${AWTARCHY_LOCK_CAPTURE_HIDE_DELAY:-0.18}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
+STATE_FILE="${CACHE_HOME}/awtarchy/quickshell-state.json"
 LOG_DIR="${CACHE_HOME}/awtarchy"
 LOG_FILE="${AWTARCHY_LOCK_LOG:-${LOG_DIR}/lockscreen.log}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -75,6 +78,31 @@ cleanup_capture() {
     bash "$CAPTURE_HELPER" cleanup "$capture_dir" >>"$LOG_FILE" 2>&1 || true
 }
 
+hide_quick_settings_before_capture_enabled() {
+    command -v jq >/dev/null 2>&1 || return 1
+    [[ -s "$STATE_FILE" ]] || return 1
+    jq -e '.lockscreen_hide_quickshell_before_capture == true' \
+        "$STATE_FILE" >/dev/null 2>&1
+}
+
+hide_quick_settings_before_capture() {
+    hide_quick_settings_before_capture_enabled || return 0
+
+    # This is an opt-in presentation fallback only. The secure backing remains
+    # a frozen pre-lock capture and the lock still fails closed if capture fails.
+    "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close \
+        >>"$LOG_FILE" 2>&1 || true
+
+    case "$CAPTURE_HIDE_DELAY" in
+        0|0.[0-9]|0.[0-9][0-9]|0.[0-9][0-9][0-9]|1|1.0|1.00|1.000)
+            sleep "$CAPTURE_HIDE_DELAY"
+            ;;
+        *)
+            sleep 0.18
+            ;;
+    esac
+}
+
 start_lock() {
     local state capture_dir=""
 
@@ -88,6 +116,7 @@ start_lock() {
     esac
 
     mkdir -p -- "$LOG_DIR"
+    hide_quick_settings_before_capture
 
     if [[ -f "$CAPTURE_HELPER" ]]; then
         capture_dir="$(bash "$CAPTURE_HELPER" prepare 2>>"$LOG_FILE")" || capture_dir=""
