@@ -56,19 +56,9 @@ contains "$SURFACE" 'showLogo: root.showLogo && root.transitionComplete' \
 rejects "$AUTH" 'entryTransition' \
     'LockAuth must remain independent of transition presentation'
 
-# Iris Reveal must directly reveal the destination through a live mask texture,
-# and Edges must contract horizontally only. Pixel markers are pinned to prevent
-# accidental retuning of the runtime-approved effect.
-contains "$LAYER" 'id: irisStartSource' \
-    'Iris Reveal has no explicit frozen-desktop base layer'
-contains "$LAYER" 'source: root.endSource' \
-    'Iris Reveal does not directly reveal the lockscreen destination'
-contains "$LAYER" 'id: irisMaskTexture' \
-    'Iris Reveal has no live texture-provider mask'
-contains "$LAYER" 'maskSource: irisMaskTexture' \
-    'Iris Reveal does not consume its live mask texture'
-contains "$LAYER" 'maskInverted: false' \
-    'Iris Reveal still relies on the ineffective inverted start-source mask'
+# Iris Reveal is retired by the fifth runtime pass. Edges remains horizontal
+# only, and Pixel markers are pinned to prevent accidental retuning of the
+# runtime-approved effect.
 contains "$LAYER" 'height: root.height' \
     'Edges no longer keeps full output height'
 rejects "$LAYER" 'height: Math.max(0, root.height * (1 - root.progress))' \
