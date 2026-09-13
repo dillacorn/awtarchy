@@ -97,7 +97,7 @@ jobs:
       - name: Verify exact bridge parent
         shell: bash
         run: |
-          test "$(git rev-parse HEAD^)" = "ff4a72fd55f574e5a27c990f93f8c323887cdcf5"
+          test "$(git rev-parse HEAD^)" = "4753991b919806c4ecd8465afe80ca9d54e9a110"
 
       - name: Apply scoped QML fix
         shell: bash
@@ -109,26 +109,31 @@ jobs:
           editor = Path("config/quickshell/awtarchy/LockscreenEditor.qml")
           text = editor.read_text(encoding="utf-8")
 
-          old_header = '''            color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true; opacity: root.editorEntranceOpacity
-            Item { id: secondaryTransitionStart; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
-'''
-          new_header = '''            color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
-            Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }
-            Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
-'''
-          old_scene = '            LockPreviewScene { id: secondaryPreviewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()\n'
-          new_scene = '            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()\n'
-          old_transition = '            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }\n'
-          new_transition = '            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }\n'
+          replacements = [
+              (
+                  'anchors.left: true; anchors.right: true; opacity: root.editorEntranceOpacity',
+                  'anchors.left: true; anchors.right: true'
+              ),
+              (
+                  '            Item { id: secondaryTransitionStart; x: parent.width + 64; y: 0; width: parent.width; height: parent.height',
+                  '            Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }\n            Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height'
+              ),
+              (
+                  '            LockPreviewScene { id: secondaryPreviewScene; anchors.fill: parent; theme: Theme;',
+                  '            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme;'
+              ),
+              (
+                  '            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; anchors.fill: parent; z: 160;',
+                  '            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160;'
+              ),
+          ]
 
-          for label, old in (("secondary window header", old_header), ("secondary preview scene", old_scene), ("secondary transition layer", old_transition)):
+          for old, new in replacements:
               count = text.count(old)
               if count != 1:
-                  raise RuntimeError(f"expected exactly one {label} match, found {count}")
+                  raise RuntimeError(f"expected exactly one replacement match, found {count}: {old}")
+              text = text.replace(old, new, 1)
 
-          text = text.replace(old_header, new_header, 1)
-          text = text.replace(old_scene, new_scene, 1)
-          text = text.replace(old_transition, new_transition, 1)
           editor.write_text(text, encoding="utf-8")
 
           digest = hashlib.sha256(editor.read_bytes()).hexdigest()
