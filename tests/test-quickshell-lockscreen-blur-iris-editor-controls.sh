@@ -61,10 +61,11 @@ fi
 [[ "$(sha256sum "$TMP/cache/awtarchy/quickshell-state.json" | awk '{print $1}')" == "$state_before" ]] \
     || fail 'invalid blur style partially changed persisted state'
 
-# Unlocked state/editor expose the same persisted blur style.
+# Unlocked state/editor expose the same persisted blur style. Iris is retired;
+# the editor and BarState must not advertise the removed transition.
 require_text "$BAR" 'lockscreen_blur_style: "smooth"' 'BarState default lacks blur style'
 require_text "$BAR" 'function lockscreenBlurStyle()' 'BarState blur style getter is missing'
-require_text "$BAR" '{ key: "iris", label: "Iris Reveal" }' 'transition preset still calls iris Reverse Iris'
+forbid_text "$BAR" '{ key: "iris"' 'retired Iris transition remains in BarState presets'
 require_text "$EDITOR" 'property string draftBlurStyle: "smooth"' 'editor has no blur-style draft'
 require_text "$EDITOR" 'blurStyle: draftBlurStyle' 'editor history snapshot does not include blur style'
 require_text "$EDITOR" 'function setDraftBlurStyle(value)' 'editor cannot switch blur style'
@@ -72,6 +73,7 @@ require_text "$EDITOR" 'label: "Smooth"' 'smooth blur style control is missing'
 require_text "$EDITOR" 'label: "Pixelated"' 'pixelated blur style control is missing'
 require_text "$EDITOR" 'blurStyle: root.draftBlurStyle' 'editor preview does not receive blur style'
 require_text "$EDITOR" 'String(draftBlurStyle)' 'editor save payload does not include blur style'
+forbid_text "$EDITOR" 'Iris Reveal' 'retired Iris transition remains in editor controls'
 
 # Explicit reset controls restore the existing defaults through editor history.
 require_text "$EDITOR" 'function resetDraftBrightness()' 'brightness reset helper is missing'
@@ -110,13 +112,12 @@ require_text "$PREVIEW" 'sourceItem: backgroundCompositionContent' 'pixelated bl
 require_text "$PREVIEW" 'root.blurStyle === "pixelated"' 'final composition pixelated blur is not style-gated'
 forbid_text "$PREVIEW" 'id: wallpaperPixelatedBlur' 'wallpaper still has an independent pixelated blur path'
 
-# Iris Reveal must have a live texture-provider mask instead of a hidden source
-# item that can render as an empty mask on Qt/Quickshell.
-require_text "$LAYER" 'id: irisMaskTexture' 'Iris Reveal has no mask texture provider'
-require_text "$LAYER" 'sourceItem: irisMaskShape' 'Iris Reveal mask texture does not source the circle'
-require_text "$LAYER" 'hideSource: false' 'Iris Reveal mask staging still depends on hideSource suppression'
-require_text "$LAYER" 'maskSource: irisMaskTexture' 'Iris Reveal does not consume the live mask texture'
-forbid_text "$LAYER" 'id: irisMaskShape\n        anchors.fill: parent\n        visible: false' 'Iris Reveal still disables its mask source'
-require_text "$EDITOR" 'label: "Iris Reveal"' 'editor transition control still says Reverse Iris'
+# Pixel/Resolution Collapse is the approved retained pixel transition. Its
+# timing and collapse curve are pinned while all Iris renderer state stays gone.
+require_text "$LAYER" 'Math.min(1, (root.progress - 0.45) / 0.10)' 'approved Pixel reveal timing changed'
+require_text "$LAYER" '+ 47 * Math.pow(Math.max(0, root.collapseAmount), 1.35)' 'approved Pixel collapse curve changed'
+forbid_text "$LAYER" 'irisMaskTexture' 'retired Iris mask texture remains in transition renderer'
+forbid_text "$LAYER" 'irisMaskShape' 'retired Iris mask shape remains in transition renderer'
+forbid_text "$LAYER" 'maskSource: iris' 'retired Iris mask source remains in transition renderer'
 
-printf '%s\n' 'PASS: composition blur styles, explicit resets, Iris Reveal, and Alt-drag editor bar contracts'
+printf '%s\n' 'PASS: composition blur styles, explicit resets, retired Iris transition, Pixel constants, and Alt-drag editor bar contracts'
