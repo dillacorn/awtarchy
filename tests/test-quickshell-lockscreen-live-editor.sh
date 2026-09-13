@@ -138,11 +138,11 @@ require_text "$SCENE" 'Math.round(420 * uiScale * elementScale("password"))' \
 require_text "$SCENE" 'Math.round(58 * uiScale * elementScale("password"))' \
     'stock password interaction height is still too small'
 
-# Time must remain minute-only without forcing a 12/24-hour convention.
-require_text "$SCENE" 'function minuteTimeFormat()' \
-    'lockscreen has no locale-aware minute-only clock formatter'
-require_text "$SCENE" 'timeFormat(Locale.ShortFormat)' \
-    'minute-only clock no longer derives the user locale time format'
+# Time remains minute-only while honoring the explicit 12/24-hour presentation preference.
+require_text "$SCENE" 'required property string clockFormat' \
+    'shared lockscreen scene has no explicit clock-format input'
+require_text "$SCENE" 'Qt.formatTime(now, root.clockFormat === "12h" ? "h:mm AP" : "HH:mm")' \
+    'shared lockscreen scene no longer formats the saved 12/24-hour preference through one path'
 reject_text "$SCENE" 'Qt.formatTime(now, Locale.ShortFormat)' \
     'lockscreen still delegates directly to a locale format that may contain seconds'
 
@@ -189,8 +189,10 @@ reject_text "$EDITOR" 'text: root.elementLabel(parent.elementName)' \
     'editor still covers lockscreen elements with generic text-labelled handles'
 reject_text "$EDITOR" ' · Off' \
     'editor still describes hidden elements with generic handle text'
-require_text "$EDITOR" 'save-lockscreen-editor' \
-    'editor does not atomically save layout and visibility'
+require_text "$EDITOR" 'editorSaveBackend: configHome + "/hypr/scripts/quickshell_lockscreen_editor_save.sh"' \
+    'editor does not route atomic presentation saves through the dedicated wrapper'
+require_text "$EDITOR" 'saveProcess.exec(["bash", editorSaveBackend,' \
+    'editor Save path does not invoke the dedicated presentation wrapper'
 reject_text "$EDITOR" 'visible: enabledElement' \
     'disabled element handles disappear and cannot be re-enabled from the live editor'
 
