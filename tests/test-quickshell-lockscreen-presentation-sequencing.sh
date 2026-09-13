@@ -7,8 +7,9 @@ PREVIEW_SCENE="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 AUTH="${ROOT}/config/quickshell/awtarchy-lock/LockAuth.qml"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
-STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
+EDITOR_SAVE="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
 SECURE_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
+WORKFLOW="${ROOT}/.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml"
 
 require_text() {
     local file="$1" text="$2" message="$3"
@@ -75,6 +76,8 @@ require_text "$EDITOR" 'property string draftPasswordMaskCharacter: "•"' \
     'editor has no normalized custom password mask character'
 require_text "$EDITOR" 'property string draftClockFormat: "24h"' \
     'clock format does not preserve the existing 24-hour default'
+require_absent "$EDITOR" 'Preview: 14:59' \
+    'editor still uses a hardcoded one-off clock preview string'
 require_text "$SCENE" 'required property string passwordMaskMode' \
     'shared scene has no password mask mode'
 require_text "$SCENE" 'required property string passwordMaskCharacter' \
@@ -105,21 +108,31 @@ require_absent "$EDITOR" 'Quickshell.Services.Pam' \
 require_absent "$EDITOR" 'PamContext' \
     'editor gained authentication context ownership'
 
+# The new persistence wrapper itself is part of the tested validation surface.
+require_text "$WORKFLOW" 'bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh' \
+    'editor save wrapper is missing from workflow syntax validation'
+require_text "$WORKFLOW" 'shellcheck config/hypr/scripts/quickshell_lockscreen_editor_save.sh' \
+    'editor save wrapper is missing from workflow ShellCheck coverage'
+
 # Persistence/normalization contract: old state may omit all new keys; saving
 # the editor writes normalized values without ever storing password contents.
 work="$(mktemp -d)"
 trap 'rm -rf -- "$work"' EXIT
-mkdir -p "$work/cache/awtarchy"
+mkdir -p "$work/cache/awtarchy" "$work/home"
 printf '%s\n' '{"enabled":true,"monitors":{}}' >"$work/cache/awtarchy/quickshell-state.json"
 
 layout='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 visibility='{"logo":true,"time":true,"date":false,"username":false,"weather":false,"password":true}'
+visualizer='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}'
 
-HOME="$work/home" XDG_CACHE_HOME="$work/cache" \
-    bash "$STATE" save-lockscreen-editor \
-    "$layout" "$visibility" black '#000000' '' cover 0.5 0.5 none 0 0 auto \
-    '[]' '{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}' \
-    100 fade 1800 100 smooth edges dots 'AB' 12h
+save_editor() {
+    HOME="$work/home" XDG_CONFIG_HOME="$ROOT/config" XDG_CACHE_HOME="$work/cache" \
+        bash "$EDITOR_SAVE" \
+        "$layout" "$visibility" black '#000000' '' cover 0.5 0.5 none 0 0 auto \
+        '[]' "$visualizer" 100 fade 1800 100 smooth edges dots 'AB' 12h
+}
+
+save_editor
 
 state_file="$work/cache/awtarchy/quickshell-state.json"
 jq -e '
@@ -133,5 +146,30 @@ jq -e '
     printf 'FAIL: lockscreen presentation settings were not normalized/persisted safely\n' >&2
     return 1
 }
+
+# Force only the wrapper's second-stage jq invocation to fail. The established
+# state backend remains functional, and the wrapper must remove its staged file.
+real_jq="$(command -v jq)"
+mkdir -p "$work/bin"
+cat >"$work/bin/jq" <<EOF
+#!/usr/bin/env bash
+for arg in "\$@"; do
+    if [[ "\$arg" == "logo_animation" ]]; then
+        false
+    fi
+done
+"$real_jq" "\$@"
+EOF
+chmod +x "$work/bin/jq"
+
+if PATH="$work/bin:$PATH" save_editor >/dev/null 2>&1; then
+    printf 'FAIL: forced wrapper-stage jq failure unexpectedly succeeded\n' >&2
+    return 1
+fi
+
+if compgen -G "$state_file.tmp.*" >/dev/null; then
+    printf 'FAIL: editor save wrapper leaked a temporary state file after failure\n' >&2
+    return 1
+fi
 
 printf 'quickshell lockscreen presentation sequencing contracts passed\n'
