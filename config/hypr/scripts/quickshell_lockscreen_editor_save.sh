@@ -5,10 +5,18 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-${HOME}/.config}"
 CACHE_HOME="${XDG_CACHE_HOME:-${HOME}/.cache}"
 STATE_BACKEND="${CONFIG_HOME}/hypr/scripts/quickshell_application_state.sh"
 STATE_FILE="${CACHE_HOME}/awtarchy/quickshell-state.json"
+tmp_file=""
+
+cleanup_tmp() {
+    if [[ -n "$tmp_file" ]]; then
+        rm -f -- "$tmp_file" >/dev/null 2>&1 || true
+    fi
+}
+trap cleanup_tmp EXIT
 
 if [[ $# -ne 23 ]]; then
     printf 'usage: %s <19 existing editor fields> <logo-animation> <mask-mode> <mask-character> <clock-format>\n' "${0##*/}" >&2
-    return 2 2>/dev/null || false
+    false
 fi
 
 logo_animation="${20}"
@@ -46,7 +54,6 @@ bash "$STATE_BACKEND" save-lockscreen-editor "${@:1:19}"
 
 mkdir -p -- "$(dirname -- "$STATE_FILE")"
 tmp_file="$(mktemp "${STATE_FILE}.tmp.XXXXXX")"
-trap 'rm -f -- "$tmp_file"' RETURN
 
 jq \
     --arg logo_animation "$logo_animation" \
@@ -61,4 +68,4 @@ jq \
 
 chmod --reference="$STATE_FILE" "$tmp_file" 2>/dev/null || true
 mv -f -- "$tmp_file" "$STATE_FILE"
-trap - RETURN
+tmp_file=""
