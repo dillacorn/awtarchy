@@ -42,8 +42,8 @@ not_contains "$SELECTOR" 'text: "‹"' \
 not_contains "$SELECTOR" 'text: "›"' \
     'compact selector still exposes a next-value arrow control'
 
-contains "$EDITOR" 'root.draftClockFormat = root.draftClockFormat === "24h" ? "12h" : "24h"' \
-    'primary clock format is not a direct 12h/24h toggle'
+contains "$EDITOR" 'onClicked: root.setDraftClockFormat(root.draftClockFormat === "24h" ? "12h" : "24h")' \
+    'primary clock format toggle does not use the shared normalized state path'
 contains "$EDITOR" 'label: root.draftClockFormat === "24h" ? "24-hour" : "12-hour"' \
     'primary clock toggle does not show its current format directly'
 
