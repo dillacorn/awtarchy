@@ -19,7 +19,7 @@ MAX_ICON_SCALE=200
 SAVE_VERSION=2
 QUICK_SETTINGS_LAYOUT_SAVE_VERSION=1
 LOCKSCREEN_ANIMATIONS_JSON='["random","swarm","edges","center","split","off"]'
-LOCKSCREEN_ENTRY_TRANSITIONS_JSON='["fade","pixel","iris","edges","wipe"]'
+LOCKSCREEN_ENTRY_TRANSITIONS_JSON='["fade","pixel","edges","wipe"]'
 LOCKSCREEN_BACKGROUNDS_JSON='["black","wallpaper","color"]'
 LOCKSCREEN_WALLPAPER_FITS_JSON='["cover","contain"]'
 LOCKSCREEN_OVERLAY_MODES_JSON='["none","dark","light"]'
@@ -28,6 +28,7 @@ LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 LOCKSCREEN_CUSTOM_IMAGE_MAX=12
+LOCKSCREEN_CUSTOM_IMAGE_SPAWNS_JSON='["none","pixel-warp","closest-edge","top","bottom","left","right"]'
 LOCKSCREEN_VISUALIZER_SHAPES_JSON='["straight","arc","circle"]'
 LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}'
 CURSOR_VARIANTS_JSON='["ice","classic","amber","ice-sharp","classic-sharp","amber-sharp","ice-right","classic-right","amber-right","ice-sharp-right","classic-sharp-right","amber-sharp-right"]'
@@ -110,7 +111,6 @@ validate_lockscreen_entry_transition() {
         exit 2
     fi
 }
-
 
 validate_cursor_variant() {
     local value="$1"
@@ -201,7 +201,7 @@ set_lockscreen_logo_physics_hz() {
 set_lockscreen_option() {
     local field="$1" value="$2" label="$3" enabled
     case "$field" in
-        lockscreen_audio_reactive|lockscreen_mouse_interactive|lockscreen_show_logo|lockscreen_show_time|lockscreen_show_date|lockscreen_show_username|lockscreen_show_weather) ;;
+        lockscreen_audio_reactive|lockscreen_mouse_interactive|lockscreen_show_logo|lockscreen_show_time|lockscreen_show_date|lockscreen_show_username|lockscreen_show_weather|lockscreen_hide_quickshell_before_capture) ;;
         *)
             printf 'unsupported lockscreen option: %s\n' "$field" >&2
             exit 2
@@ -223,7 +223,8 @@ lockscreen_composition_defaults() {
         lockscreen_overlay_strength: 0,
         lockscreen_wallpaper_blur: 0,
         lockscreen_blur_style: "smooth",
-        lockscreen_background_opacity_previous: 100
+        lockscreen_background_opacity_previous: 100,
+        lockscreen_hide_quickshell_before_capture: false
     }'
 }
 
@@ -532,8 +533,9 @@ normalize_lockscreen_custom_images_json() {
     local value="$1" normalized count index path resolved
     if ! normalized="$(jq -ce -n \
         --argjson candidate "$value" \
-        --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" '
-        def keys_ok: ["id", "opacity", "path", "rotation", "scale", "stretch_x", "stretch_y", "visible", "x", "y"];
+        --argjson maximum "$LOCKSCREEN_CUSTOM_IMAGE_MAX" \
+        --argjson spawns "$LOCKSCREEN_CUSTOM_IMAGE_SPAWNS_JSON" '
+        def keys_ok: ["id", "opacity", "path", "rotation", "scale", "spawn_animation", "stretch_x", "stretch_y", "visible", "x", "y"];
         if (($candidate | type) == "array"
             and ($candidate | length) <= $maximum
             and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
@@ -554,12 +556,16 @@ normalize_lockscreen_custom_images_json() {
                 and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
                 and ((.rotation // 0) | type) == "number"
                 and (.rotation // 0) >= -180 and (.rotation // 0) <= 180
+                and ((.spawn_animation // "none") | type) == "string"
+                and ($spawns | index(.spawn_animation // "none") != null)
                 and (.visible | type) == "boolean"))
-        then [$candidate[] | . + {rotation: (.rotation // 0)}]
+        then [$candidate[] | . + {
+            rotation: (.rotation // 0),
+            spawn_animation: (.spawn_animation // "none")
+        }]
         else error("invalid custom images") end
     ' 2>/dev/null)"; then
-        printf 'invalid lockscreen custom images
-' >&2
+        printf 'invalid lockscreen custom images\n' >&2
         exit 2
     fi
 
@@ -567,14 +573,12 @@ normalize_lockscreen_custom_images_json() {
     for ((index = 0; index < count; ++index)); do
         path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$normalized")"
         [[ -f "$path" && -r "$path" ]] || {
-            printf 'lockscreen custom image must be a readable absolute local file
-' >&2
+            printf 'lockscreen custom image must be a readable absolute local file\n' >&2
             exit 2
         }
         resolved="$(readlink -f -- "$path" 2>/dev/null || true)"
         [[ -n "$resolved" && "$resolved" == /* && -f "$resolved" && -r "$resolved" ]] || {
-            printf 'lockscreen custom image could not be resolved
-' >&2
+            printf 'lockscreen custom image could not be resolved\n' >&2
             exit 2
         }
         normalized="$(jq -c --argjson index "$index" --arg path "$resolved" '.[$index].path = $path' <<<"$normalized")"
@@ -634,8 +638,7 @@ save_lockscreen_editor() {
     local blur_style="${19:-smooth}"
     local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
-        printf 'invalid lockscreen layout
-' >&2
+        printf 'invalid lockscreen layout\n' >&2
         exit 2
     fi
     custom_images="$(normalize_lockscreen_custom_images_json "$custom_images_input")"
@@ -668,8 +671,7 @@ save_lockscreen_editor() {
     wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
     wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
     if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
-        printf 'wallpaper background requires a selected local image
-' >&2
+        printf 'wallpaper background requires a selected local image\n' >&2
         exit 2
     fi
     new_tmp
@@ -734,6 +736,7 @@ reset_lockscreen_presentation() {
         | .lockscreen_show_date = false
         | .lockscreen_show_username = false
         | .lockscreen_show_weather = false
+        | .lockscreen_hide_quickshell_before_capture = false
         | .lockscreen_background = "black"
         | .lockscreen_background_color = "#000000"
         | .lockscreen_wallpaper_path = ""
@@ -1595,6 +1598,10 @@ case "$cmd" in
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_option lockscreen_show_weather "$2" 'lockscreen show weather'
         ;;
+    set-lockscreen-hide-quickshell-before-capture)
+        [[ -n ${2:-} ]] || exit 2
+        set_lockscreen_option lockscreen_hide_quickshell_before_capture "$2" 'lockscreen hide Quick Settings before capture'
+        ;;
     set-lockscreen-background)
         [[ -n ${2:-} ]] || exit 2
         set_lockscreen_background "$2"
@@ -1766,7 +1773,7 @@ case "$cmd" in
         reset_defaults
         ;;
     *)
-        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-lockscreen-logo-physics-hz <30|60|90>|set-lockscreen-visualizer-enabled <true|false>|set-lockscreen-background-opacity <0-100>|set-lockscreen-audio-reactive <true|false>|set-lockscreen-mouse-interactive <true|false>|set-lockscreen-show-logo <true|false>|set-lockscreen-show-time <true|false>|set-lockscreen-show-date <true|false>|set-lockscreen-show-username <true|false>|set-lockscreen-show-weather <true|false>|set-lockscreen-background <black|wallpaper|color>|set-lockscreen-background-color <#RRGGBB>|set-lockscreen-wallpaper <absolute_path>|set-lockscreen-weather-location <location>|save-lockscreen-layout <json>|save-lockscreen-editor <layout_json> <visibility_json> <background> <background_color> <wallpaper_path>|reset-lockscreen-presentation|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
+        printf 'usage: %s {set-cursor-theme <ice|classic>|set-lockscreen-animation <random|swarm|edges|center|split|off>|set-lockscreen-entry-transition <fade|pixel|edges|wipe>|set-lockscreen-logo-physics-hz <30|60|90>|set-lockscreen-visualizer-enabled <true|false>|set-lockscreen-background-opacity <0-100>|set-lockscreen-audio-reactive <true|false>|set-lockscreen-mouse-interactive <true|false>|set-lockscreen-show-logo <true|false>|set-lockscreen-show-time <true|false>|set-lockscreen-show-date <true|false>|set-lockscreen-show-username <true|false>|set-lockscreen-show-weather <true|false>|set-lockscreen-hide-quickshell-before-capture <true|false>|set-lockscreen-background <black|wallpaper|color>|set-lockscreen-background-color <#RRGGBB>|set-lockscreen-wallpaper <absolute_path>|set-lockscreen-weather-location <location>|save-lockscreen-layout <json>|save-lockscreen-editor <layout_json> <visibility_json> <background> <background_color> <wallpaper_path>|reset-lockscreen-presentation|set-workspace-numbers <true|false>|set-bar-workspace-visible <1-10> <true|false>|set-workspace-icon-style <style>|set-workspace-style <legacy-style>|set-workspace-custom-label <label>|clear-workspace-custom-label|set-workspace-override <1-10> <label>|clear-workspace-override <1-10>|clear-workspace-overrides|set-launcher-icon <label>|reset-launcher-icon|reset-workspace-icons|reset-bar-icons|save-view <MON> <width> <height> <text_percent> <icon_percent> <centered> [capture_allowed]|save-flyout <TYPE> <MON> <width> <height> <text_percent> <icon_percent> <capture_allowed> [popup_limit]|set-update-notifications <true|false>|set-clock-date <MON> <true|false>|set-notification-popup-limit <1-20>|set-notification-popup-position <MON> <automatic|top-left|top-center|top-right|bottom-left|bottom-center|bottom-right>|copy-flyout <TYPE> <width> <height> <text_percent> <icon_percent> <MON>...|reset-flyout <TYPE> <MON>|set-capture <TYPE> <true|false>|save-quick-settings-layout <MON> <order_json> <hidden_json>|copy-quick-settings-layout <order_json> <hidden_json> <MON>...|reset-quick-settings-layout <MON>|lock-size <MON> <width> <height>|unlock-size <MON>|set-scales <MON> <text_percent> <icon_percent>|set-centered <MON> <true|false>|copy-view <width> <height> <text_percent> <icon_percent> <MON>...|reset-monitor <MON>|reset-all|reset-locks|set <field> <value>|set-size <width> <height>|set-all <width> <height> <text_size> <icon_size>|reset}\n' "${0##*/}" >&2
         exit 2
         ;;
 esac
