@@ -557,7 +557,7 @@ normalize_lockscreen_custom_images_json() {
                 and ((.rotation // 0) | type) == "number"
                 and (.rotation // 0) >= -180 and (.rotation // 0) <= 180
                 and ((.spawn_animation // "none") | type) == "string"
-                and ($spawns | index(.spawn_animation // "none") != null)
+                and ((.spawn_animation // "none") as $spawn | ($spawns | index($spawn) != null))
                 and (.visible | type) == "boolean"))
         then [$candidate[] | . + {
             rotation: (.rotation // 0),
