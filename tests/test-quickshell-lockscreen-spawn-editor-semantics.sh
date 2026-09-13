@@ -43,11 +43,11 @@ contains "$EDITOR" 'function replaySelectedImageSpawn()' \
     'editor cannot replay only the selected custom image'
 contains "$EDITOR" 'spawn_timing: "during-logo"' \
     'new custom images do not default to during-logo timing'
-contains "$EDITOR" 'text: "Play Spawn"' \
+contains "$EDITOR" 'label: "Play Spawn"' \
     'selected image has no individual Play Spawn action'
-contains "$EDITOR" 'text: "During logo"' \
+contains "$EDITOR" 'label: "During logo"' \
     'editor does not expose during-logo image timing'
-contains "$EDITOR" 'text: "After logo"' \
+contains "$EDITOR" 'label: "After logo"' \
     'editor does not expose after-logo image timing'
 
 contains "$PRESENTATION_STATE" 'function normalizeSpawnTiming(value)' \
