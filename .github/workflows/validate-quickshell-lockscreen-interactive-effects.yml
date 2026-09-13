@@ -59,6 +59,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-weather-units.sh
           bash -n tests/test-quickshell-lockscreen-runtime-services.sh
           bash -n tests/test-quickshell-lockscreen-interaction-polish.sh
+          bash -n tests/test-quickshell-lockscreen-presentation-sequencing.sh
           if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
             bash -n config/hypr/scripts/quickshell_lockscreen_audio.sh
           fi
@@ -111,6 +112,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-weather-units.sh
           shellcheck tests/test-quickshell-lockscreen-runtime-services.sh
           shellcheck tests/test-quickshell-lockscreen-interaction-polish.sh
+          shellcheck tests/test-quickshell-lockscreen-presentation-sequencing.sh
           if [[ -f config/hypr/scripts/quickshell_lockscreen_audio.sh ]]; then
             shellcheck config/hypr/scripts/quickshell_lockscreen_audio.sh
           fi
@@ -186,5 +188,6 @@ jobs:
           bash tests/test-quickshell-lockscreen-rotation-reset.sh
           bash tests/test-quickshell-lockscreen-visualizer-transparency.sh
           bash tests/test-quickshell-lockscreen-visualizer-editing.sh
+          bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
       - name: Managed history contracts
         run: bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
