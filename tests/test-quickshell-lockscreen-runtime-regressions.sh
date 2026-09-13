@@ -167,8 +167,10 @@ require_text "$SCENE_QML" 'readonly property int formationDuration: 1700' \
     'lockscreen wordmark does not use the approved faster formation duration'
 require_text "$SCENE_QML" '+ Math.floor(Math.random() * 351)' \
     'lockscreen wordmark does not use the approved faster duration variance'
-require_text "$SCENE_QML" 'SequentialAnimation on formationProgress' \
-    'lockscreen wordmark has no per-particle formation animation'
+require_text "$SCENE_QML" 'id: formationAnimation' \
+    'lockscreen wordmark has no restartable per-particle formation animation'
+require_text "$SCENE_QML" 'property: "formationProgress"' \
+    'lockscreen wordmark formation animation no longer targets formationProgress'
 require_text "$SCENE_QML" 'PauseAnimation {' \
     'lockscreen wordmark particles do not use randomized start delays'
 require_text "$SCENE_QML" 'wordmarkCell.formationProgress <= 0 ? 0' \
