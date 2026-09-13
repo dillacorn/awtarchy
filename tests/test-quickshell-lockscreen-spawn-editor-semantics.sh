@@ -6,9 +6,9 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 EDITOR="$ROOT/config/quickshell/awtarchy/LockscreenEditor.qml"
-BARSTATE="$ROOT/config/quickshell/awtarchy/BarState.qml"
 LOCK_SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
-APP_STATE="$ROOT/config/hypr/scripts/quickshell_application_state.sh"
+SAVE="$ROOT/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
+PRESENTATION_STATE="$ROOT/config/quickshell/LockscreenPresentationState.js"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -50,11 +50,15 @@ contains "$EDITOR" 'text: "During logo"' \
 contains "$EDITOR" 'text: "After logo"' \
     'editor does not expose after-logo image timing'
 
-contains "$BARSTATE" 'spawn_timing' \
-    'desktop state normalization drops image spawn timing'
-contains "$LOCK_SHELL" 'spawn_timing' \
-    'secure state normalization drops image spawn timing'
-contains "$APP_STATE" 'spawn_timing' \
-    'persistent state backend drops image spawn timing'
+contains "$PRESENTATION_STATE" 'function normalizeSpawnTiming(value)' \
+    'shared presentation normalizer has no image spawn timing contract'
+contains "$PRESENTATION_STATE" 'normalized.spawn_timing = normalizeSpawnTiming(raw.spawn_timing);' \
+    'shared presentation normalizer drops image spawn timing'
+contains "$SAVE" 'backend_custom_images=' \
+    'save wrapper does not project extended custom-image state through the legacy validator'
+contains "$SAVE" 'spawn_timing:' \
+    'save wrapper does not merge image spawn timing after validation'
+contains "$LOCK_SHELL" 'LockscreenPresentationState.js' \
+    'secure state loader is not wired to the shared presentation normalizer'
 
 printf 'PASS: custom-image settled editor preview, individual replay, and spawn timing contracts\n'
