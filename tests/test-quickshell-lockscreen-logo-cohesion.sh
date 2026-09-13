@@ -35,8 +35,8 @@ require_text "$SCENE" 'id: logoPhysicsTimer' \
     'logo has no shared physics timer'
 require_text "$SCENE" 'running: root.logoSimulationActive' \
     'logo physics does not stop while idle'
-require_text "$SCENE" 'function logoHoverTarget(row, column)' \
-    'coherent hover field was not restored'
+require_text "$SCENE" 'function logoHoverTarget(row, column, localPointer)' \
+    'coherent hover field does not consume the cached pointer coordinate'
 require_text "$SCENE" 'readonly property var explosionOffset:' \
     'wordmark blocks do not read active explosion offsets'
 require_text "$SCENE" '+ explosionOffset.x' \
