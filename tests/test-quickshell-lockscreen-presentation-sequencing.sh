@@ -11,19 +11,20 @@ EDITOR_SAVE="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
 SECURE_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
 WORKFLOW="${ROOT}/.github/workflows/validate-quickshell-lockscreen-interactive-effects.yml"
 
+fail() {
+    printf 'FAIL: %s\n' "$*" >&2
+    return 1
+}
+
 require_text() {
     local file="$1" text="$2" message="$3"
-    grep -Fq -- "$text" "$file" || {
-        printf 'FAIL: %s\n' "$message" >&2
-        return 1
-    }
+    grep -Fq -- "$text" "$file" || fail "$message"
 }
 
 require_absent() {
     local file="$1" text="$2" message="$3"
     if grep -Fq -- "$text" "$file"; then
-        printf 'FAIL: %s\n' "$message" >&2
-        return 1
+        fail "$message"
     fi
 }
 
@@ -52,10 +53,8 @@ require_text "$SCENE" 'id: customImageEntryPhaseTimer' \
 
 # Preview and secure scene are intentionally kept byte-identical so editor
 # Preview exercises the same presentation ordering as the real lock scene.
-cmp -s "$SCENE" "$PREVIEW_SCENE" || {
-    printf 'FAIL: secure and preview lock scenes diverged\n' >&2
-    return 1
-}
+cmp -s "$SCENE" "$PREVIEW_SCENE" \
+    || fail 'secure and preview lock scenes diverged'
 
 # Logo spawn uses the existing lockscreen_animation setting; the editor must
 # draft and preview it instead of creating a second runtime animation system.
@@ -142,10 +141,8 @@ jq -e '
     and .lockscreen_clock_format == "12h"
     and (has("password") | not)
     and (has("lockscreen_password") | not)
-' "$state_file" >/dev/null || {
-    printf 'FAIL: lockscreen presentation settings were not normalized/persisted safely\n' >&2
-    return 1
-}
+' "$state_file" >/dev/null \
+    || fail 'lockscreen presentation settings were not normalized/persisted safely'
 
 # Force only the wrapper's second-stage jq invocation to fail. The established
 # state backend remains functional, and the wrapper must remove its staged file.
@@ -153,6 +150,7 @@ real_jq="$(command -v jq)"
 mkdir -p "$work/bin"
 cat >"$work/bin/jq" <<EOF
 #!/usr/bin/env bash
+set -euo pipefail
 for arg in "\$@"; do
     if [[ "\$arg" == "logo_animation" ]]; then
         false
@@ -163,13 +161,11 @@ EOF
 chmod +x "$work/bin/jq"
 
 if PATH="$work/bin:$PATH" save_editor >/dev/null 2>&1; then
-    printf 'FAIL: forced wrapper-stage jq failure unexpectedly succeeded\n' >&2
-    return 1
+    fail 'forced wrapper-stage jq failure unexpectedly succeeded'
 fi
 
 if compgen -G "$state_file.tmp.*" >/dev/null; then
-    printf 'FAIL: editor save wrapper leaked a temporary state file after failure\n' >&2
-    return 1
+    fail 'editor save wrapper leaked a temporary state file after failure'
 fi
 
 printf 'quickshell lockscreen presentation sequencing contracts passed\n'
