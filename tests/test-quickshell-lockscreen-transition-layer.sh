@@ -64,19 +64,19 @@ require_text "$SURFACE" 'captureDirectory' \
     'secure surface does not receive the validated pre-lock capture directory'
 require_text "$SURFACE" 'screen.name' \
     'secure surface does not select the capture for its actual Wayland output'
-require_text "$SURFACE" 'externallyManagedEntryTransition: true' \
-    'secure LockScene still owns the rejected black-cover transition'
+forbid_text "$SURFACE" 'externallyManagedEntryTransition' \
+    'secure surface still configures the retired internal scene transition renderer'
 require_text "$SURFACE" 'externalEntryTransitionRunning:' \
     'secure LockScene logo/password gating is not tied to the shared transition'
 require_text "$SURFACE" 'transitionLayer.running' \
     'secure surface does not gate entry presentation on transition completion'
 
-require_text "$SCENE" 'property bool externallyManagedEntryTransition' \
-    'LockScene cannot defer secure transition timing to LockSurface'
 require_text "$SCENE" 'property bool externalEntryTransitionRunning' \
     'LockScene cannot delay logo formation for the external secure transition'
-require_text "$SCENE" '!root.externallyManagedEntryTransition' \
-    'legacy black-cover transition remains active in secure runtime'
+forbid_text "$SCENE" 'id: entryTransitionCover' \
+    'legacy black-cover transition remains instantiated in the shared scene'
+forbid_text "$SCENE" 'id: entryTransitionAnimation' \
+    'shared scene still owns an obsolete internal transition animation'
 
 require_text "$SHELL" 'AWTARCHY_LOCK_CAPTURE_DIR' \
     'secure shell does not consume the scoped capture directory'

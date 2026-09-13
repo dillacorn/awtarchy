@@ -203,9 +203,9 @@ reject_text "$SURFACE_QML" 'index % 4' \
     'password blocks still vary in opacity by index'
 
 # The secure session lock remains held while visible content transitions in.
-# Entry-transition presentation is derived by LockScene; PAM/input ownership
-# remains in LockSurface. Only after the short unlock fade may the shell release
-# WlSessionLock.
+# Entry-transition presentation is owned by LockTransitionLayer; LockScene uses
+# its running state only to gate presentation, while PAM/input ownership remains
+# in LockSurface. Only after the short unlock fade may the shell release WlSessionLock.
 require_text "$SURFACE_QML" 'required property bool unlocking' \
     'lock surface does not receive the shared unlock-fade state'
 require_text "$SURFACE_QML" 'property bool entered: false' \
@@ -218,8 +218,8 @@ require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
     'secure password TextInput lost sensitive-data input hints'
 require_text "$SCENE_QML" 'const minimum = name === "password" ? 20 : 0;' \
     'password presentation opacity is not bounded to the approved visible minimum'
-require_text "$SCENE_QML" 'root.entryTransitionMode() === "fade" ? root.entryTransitionProgress' \
-    'shared presentation content does not use the selected entry transition while preserving unlock fade behavior'
+require_text "$SCENE_QML" 'readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning' \
+    'shared presentation content is not gated by the external transition layer'
 require_text "$SURFACE_QML" 'Behavior on opacity' \
     'secure password content has no opacity transition animation'
 require_text "$SCENE_QML" 'Behavior on opacity' \

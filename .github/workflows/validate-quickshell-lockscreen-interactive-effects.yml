@@ -26,6 +26,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq shellcheck
       - name: Syntax validation
         run: |
+          node --check tests/test-quickshell-lockscreen-efficiency.mjs
           bash -n tests/test-quickshell-lockscreen-interactive-effects.sh
           bash -n tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
           bash -n tests/test-quickshell-lockscreen-logo-cohesion.sh
@@ -167,6 +168,7 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-runtime-services.sh
       - name: Interactive effects contracts
         run: |
+          node tests/test-quickshell-lockscreen-efficiency.mjs
           bash tests/test-quickshell-lockscreen-interactive-effects.sh
           bash tests/test-quickshell-lockscreen-interactive-physics-regressions.sh
           bash tests/test-quickshell-lockscreen-interaction-polish.sh

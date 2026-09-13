@@ -40,12 +40,17 @@ Item {
     }
 
     function parseFrame(data) {
-        const fields = String(data || "").trim().split(";");
+        const frame = String(data || "").trim();
         const result = [];
-        for (let i = 0; i < fields.length && result.length < maximumBands; ++i) {
-            if (fields[i].length === 0)
-                continue;
-            result.push(threshold(Number(fields[i]) / 1000));
+        let start = 0;
+        while (start <= frame.length && result.length < maximumBands) {
+            const delimiter = frame.indexOf(";", start);
+            const end = delimiter >= 0 ? delimiter : frame.length;
+            if (end > start)
+                result.push(threshold(Number(frame.slice(start, end)) / 1000));
+            if (delimiter < 0)
+                break;
+            start = delimiter + 1;
         }
         if (result.length === 0)
             return;

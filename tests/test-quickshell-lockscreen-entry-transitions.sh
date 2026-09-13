@@ -149,8 +149,8 @@ contains "$EDITOR" 'endSource: previewScene' \
     'editor Replay does not transition into the actual preview scene'
 contains "$EDITOR" 'replayToken: root.entryTransitionReplayToken' \
     'editor Replay action does not restart the shared transition renderer'
-contains "$EDITOR" 'externallyManagedEntryTransition: true' \
-    'editor preview still uses the rejected legacy black-cover transition'
+rejects "$EDITOR" 'externallyManagedEntryTransition' \
+    'editor preview still configures the retired internal scene transition renderer'
 contains "$EDITOR" 'externalEntryTransitionRunning: editorTransitionLayer.running' \
     'editor preview logo formation is not gated by the shared transition'
 rejects "$EDITOR" 'entryTransitionReplayToken: root.entryTransitionReplayToken' \
@@ -182,8 +182,10 @@ rejects "$AUTH" 'entryTransition' \
     'authentication owner must not consume entry transition state'
 rejects "$AUTH" 'lockscreen_entry_transition' \
     'authentication owner must not consume persisted transition state'
-contains "$SCENE" 'property bool externallyManagedEntryTransition' \
-    'presentation scene cannot defer entry timing to the shared renderer'
+rejects "$SCENE" 'id: entryTransitionCover' \
+    'presentation scene still instantiates the retired internal transition renderer'
+contains "$SCENE" 'property bool externalEntryTransitionRunning' \
+    'presentation scene cannot receive entry timing from the shared renderer'
 contains "$SCENE" 'effectiveEntryTransitionRunning' \
     'logo entry gating is not coordinated with the shared renderer'
 

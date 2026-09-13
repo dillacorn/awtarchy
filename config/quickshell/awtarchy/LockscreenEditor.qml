@@ -1399,8 +1399,8 @@ Singleton {
             }
 
             LockPreviewScene {
-                id: previewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference(); entryTransition: root.draftEntryTransition; entryTransitionDuration: root.draftEntryTransitionDuration
-                externallyManagedEntryTransition: true; externalEntryTransitionRunning: editorTransitionLayer.running; externalEntryTransitionProgress: editorTransitionLayer.progress; presentationReplayToken: root.entryTransitionReplayToken
+                id: previewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()
+                externalEntryTransitionRunning: editorTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
                 randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: BarState.lockscreenMouseInteractiveEnabled()
                 showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
@@ -1722,8 +1722,8 @@ Singleton {
                 Rectangle { anchors.fill: parent; color: "#000000" }
                 Image { anchors.fill: parent; source: root.previewCaptureSourceForScreen(modelData); fillMode: Image.Stretch; asynchronous: false; cache: false }
             }
-            LockPreviewScene { id: secondaryPreviewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference(); entryTransition: root.draftEntryTransition; entryTransitionDuration: root.draftEntryTransitionDuration
-                externallyManagedEntryTransition: true; externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; externalEntryTransitionProgress: secondaryPreviewTransitionLayer.progress; presentationReplayToken: root.entryTransitionReplayToken
+            LockPreviewScene { id: secondaryPreviewScene; anchors.fill: parent; theme: Theme; animationPreference: BarState.lockscreenAnimationPreference()
+                externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
                 randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false; showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
                 overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: false

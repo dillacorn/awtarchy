@@ -50,7 +50,6 @@ Item {
         watchChanges: false
         blockLoading: true
         printErrors: false
-        onLoaded: root.refresh()
     }
 
     Component.onCompleted: root.refresh()

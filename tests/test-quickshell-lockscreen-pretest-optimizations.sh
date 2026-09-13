@@ -35,8 +35,12 @@ lacks "$SCENE" 'const local = wordmarkItem.mapFromItem(root, lastPointerX, lastP
 # CAVA frame parsing should publish one result array without a second normalization pass.
 has "$ANALYZER" 'const result = [];' \
     'audio analyzer does not build one parsed-frame result'
-has "$ANALYZER" 'for (let i = 0; i < fields.length && result.length < maximumBands; ++i)' \
+has "$ANALYZER" 'while (start <= frame.length && result.length < maximumBands)' \
     'audio analyzer parser does not fill the result directly'
+has "$ANALYZER" 'const delimiter = frame.indexOf(";", start);' \
+    'audio analyzer parser does not scan the CAVA frame directly'
+lacks "$ANALYZER" '.split(";")' \
+    'audio analyzer still allocates a temporary CAVA fields array'
 has "$ANALYZER" 'bands = result;' \
     'audio analyzer does not publish the parsed-frame result directly'
 lacks "$ANALYZER" 'function normalizedSpectrum' \

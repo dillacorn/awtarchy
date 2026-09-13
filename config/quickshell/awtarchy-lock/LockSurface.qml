@@ -119,8 +119,6 @@ WlSessionLockSurface {
             theme: root.theme
             unlocking: root.unlocking
             animationPreference: root.animationPreference
-            entryTransition: root.entryTransition
-            entryTransitionDuration: root.entryTransitionDuration
             randomFormationMode: root.randomFormationMode
             logoPhysicsHz: root.logoPhysicsHz
             mouseInteractive: root.mouseInteractive && root.transitionComplete
@@ -148,7 +146,6 @@ WlSessionLockSurface {
             backgroundOpacity: root.backgroundOpacity
             desktopBackingSource: desktopBacking
             previewMode: false
-            externallyManagedEntryTransition: true
             externalEntryTransitionRunning: transitionLayer.running
         }
     }

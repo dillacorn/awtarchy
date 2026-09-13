@@ -11,6 +11,7 @@ Item {
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string themePath: configHome + "/quickshell/awtarchy/theme.json"
+    readonly property var parsedTheme: themeData()
 
     FileView {
         id: themeFile
@@ -34,7 +35,7 @@ Item {
     }
 
     function value(name, fallback) {
-        const theme = themeData();
+        const theme = root.parsedTheme;
         return theme[name] || fallback;
     }
 

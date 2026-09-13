@@ -419,7 +419,6 @@ ShellRoot {
         path: root.statePath
         blockLoading: true
         printErrors: false
-        onLoaded: root.loadPreferences()
     }
 
     LockTheme {

@@ -8,8 +8,6 @@ Item {
 
     required property var theme
     required property string animationPreference
-    required property string entryTransition
-    required property int entryTransitionDuration
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -44,18 +42,10 @@ Item {
     property real editorHoldScale: 1.0
     property bool unlocking: false
     property bool entered: false
-    property int entryTransitionReplayToken: 0
-    property real entryTransitionProgress: 0
-    property bool entryTransitionRunning: true
-    property bool externallyManagedEntryTransition: false
     property bool externalEntryTransitionRunning: false
-    property real externalEntryTransitionProgress: 1
     property int presentationReplayToken: 0
     property int customImageSpawnEpoch: 0
-    readonly property bool effectiveEntryTransitionRunning:
-        externallyManagedEntryTransition ? externalEntryTransitionRunning : entryTransitionRunning
-    readonly property real effectiveEntryTransitionProgress:
-        externallyManagedEntryTransition ? externalEntryTransitionProgress : entryTransitionProgress
+    readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning
 
     onEffectiveEntryTransitionRunningChanged: {
         if (!effectiveEntryTransitionRunning && entered
@@ -63,8 +53,6 @@ Item {
             customImageSpawnEpoch++;
     }
 
-    readonly property int entryTileColumns: 24
-    readonly property int entryTileRows: 14
     readonly property bool logoHoverActive: mouseInteractive && pointerActive && showLogo
         && logoContainsPoint(lastPointerX, lastPointerY) && !logoExplosionActive
     readonly property bool logoSimulationActive: logoExplosionActive || logoHoverDirty || logoReturnPending
@@ -141,36 +129,6 @@ Item {
     }
     property string timeText: ""
     property string dateText: "";
-
-    function entryTransitionMode() {
-        const key = String(root.entryTransition || "fade");
-        return ["fade", "pixel", "edges", "wipe"].indexOf(key) >= 0
-            ? key : "fade";
-    }
-
-    function effectiveEntryTransitionDuration() {
-        const value = Math.round(Number(root.entryTransitionDuration));
-        return Number.isFinite(value) ? Math.max(800, Math.min(6000, value)) : 1800;
-    }
-
-    function replayEntryTransition() {
-        entryTransitionAnimation.stop();
-        if (externallyManagedEntryTransition) {
-            entryTransitionProgress = 1;
-            entryTransitionRunning = false;
-            return;
-        }
-        entryTransitionProgress = 0;
-        entryTransitionRunning = true;
-        if (!entered || unlocking)
-            return;
-        entryTransitionAnimation.restart();
-    }
-
-    onEntryTransitionReplayTokenChanged: {
-        if (entered && !unlocking)
-            replayEntryTransition();
-    }
 
     function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
@@ -555,7 +513,7 @@ Item {
             const bucketX = Math.floor(centerX / logoExplosionBucketSize);
             const bucketY = Math.floor(centerY / logoExplosionBucketSize);
             const bucketKey = String(bucketX) + ":" + String(bucketY);
-            const members = buckets[bucketKey] ? buckets[bucketKey].slice() : [];
+            const members = buckets[bucketKey] || [];
             members.push(key);
             buckets[bucketKey] = members;
         }
@@ -866,10 +824,7 @@ Item {
     Item {
         id: visualLayer
         anchors.fill: parent
-        opacity: root.unlocking ? 0
-            : root.externallyManagedEntryTransition ? (root.entered ? 1 : 0)
-            : root.entryTransitionMode() === "fade" ? root.entryTransitionProgress
-            : root.entered ? 1 : 0
+        opacity: root.unlocking ? 0 : root.entered ? 1 : 0
 
         Behavior on opacity {
             NumberAnimation {
@@ -1350,96 +1305,6 @@ Item {
             }
         }
     }
-    Rectangle {
-        id: entryFadeBacking
-        anchors.fill: parent
-        z: 499
-        visible: !root.externallyManagedEntryTransition
-            && !root.unlocking && root.entryTransitionRunning
-            && root.entryTransitionMode() === "fade"
-        color: "#000000"
-        opacity: 1 - root.entryTransitionProgress
-    }
-
-    Item {
-        id: entryTransitionCover
-        anchors.fill: parent
-        z: 500
-        visible: !root.externallyManagedEntryTransition
-            && !root.unlocking && root.entryTransitionRunning
-            && root.entryTransitionMode() !== "fade"
-
-        Repeater {
-            model: entryTransitionCover.visible
-                && root.entryTransitionMode() === "pixel"
-                ? root.entryTileColumns * root.entryTileRows : 0
-
-            Rectangle {
-                readonly property int tileColumn: index % root.entryTileColumns
-                readonly property int tileRow: Math.floor(index / root.entryTileColumns)
-                readonly property real pixelThreshold: 0.08
-                    + (((index * 73 + 19) % 337) / 336) * 0.84
-                x: tileColumn * entryTransitionCover.width / root.entryTileColumns
-                y: tileRow * entryTransitionCover.height / root.entryTileRows
-                width: Math.ceil(entryTransitionCover.width / root.entryTileColumns) + 1
-                height: Math.ceil(entryTransitionCover.height / root.entryTileRows) + 1
-                color: "#000000"
-                visible: root.entryTransitionProgress < pixelThreshold
-            }
-        }
-
-        Rectangle {
-            visible: root.entryTransitionMode() === "edges"
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: parent.width * 0.5 * (1 - root.entryTransitionProgress)
-            color: "#000000"
-        }
-        Rectangle {
-            visible: root.entryTransitionMode() === "edges"
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.bottom: parent.bottom
-            width: parent.width * 0.5 * (1 - root.entryTransitionProgress)
-            color: "#000000"
-        }
-
-        Rectangle {
-            visible: root.entryTransitionMode() === "wipe"
-            x: parent.width * root.entryTransitionProgress
-            y: 0
-            width: Math.max(0, parent.width * (1 - root.entryTransitionProgress))
-            height: parent.height
-            color: "#000000"
-        }
-        Rectangle {
-            visible: root.entryTransitionMode() === "wipe"
-                && root.entryTransitionProgress > 0
-                && root.entryTransitionProgress < 1
-            x: Math.max(0, parent.width * root.entryTransitionProgress - width)
-            y: 0
-            width: Math.max(2, Math.round(6 * root.uiScale))
-            height: parent.height
-            color: root.theme.lockAccent
-            opacity: 0.65
-        }
-    }
-
-    NumberAnimation {
-        id: entryTransitionAnimation
-        target: root
-        property: "entryTransitionProgress"
-        from: 0
-        to: 1
-        duration: root.effectiveEntryTransitionDuration()
-        easing.type: Easing.InOutCubic
-        onFinished: {
-            root.entryTransitionProgress = 1;
-            root.entryTransitionRunning = false;
-        }
-    }
-
     Timer {
         id: cursorFadeDelay
         interval: root.cursorFadeDelayMs
@@ -1476,6 +1341,5 @@ Item {
     Component.onCompleted: {
         root.updateClockText();
         root.entered = true;
-        root.replayEntryTransition();
     }
 }
