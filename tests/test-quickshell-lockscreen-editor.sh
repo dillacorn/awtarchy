@@ -95,6 +95,7 @@ require_text "$EDITOR_QML" 'editorSaveBackend: configHome + "/hypr/scripts/quick
     'LockscreenEditor does not use the dedicated presentation save wrapper'
 require_text "$EDITOR_QML" 'saveProcess.exec(["bash", editorSaveBackend,' \
     'LockscreenEditor Save path does not invoke the dedicated save wrapper'
+# shellcheck disable=SC2016
 require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${@:1:19}"' \
     'editor save wrapper no longer delegates the original atomic layout/visibility save'
 require_text "$EDITOR_QML" 'label: "Save"' \
