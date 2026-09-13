@@ -120,7 +120,8 @@ PY
 
 # Random mode is chosen once by the lock shell so every monitor receives the
 # same family for that lock. LockScene maps explicit preferences and randomizes
-# paths within the selected family. Off skips only entrance formation.
+# paths within the selected family. Off skips entrance formation. Editor entry
+# also starts fully formed until Replay explicitly requests presentation motion.
 require_text "$SHELL_QML" 'property int randomFormationMode: Math.floor(Math.random() * 4)' \
     'lock shell does not choose one randomized formation family per lock'
 require_text "$SHELL_QML" 'randomFormationMode: root.randomFormationMode' \
@@ -137,8 +138,10 @@ for mode in 0 1 2 3; do
     require_text "$SCENE_QML" "root.formationMode === ${mode}" \
         "shared lock scene is missing formation family ${mode}"
 done
-require_text "$SCENE_QML" 'root.animationPreference === "off" ? 1 : 0' \
-    'lockscreen off preference does not skip particle formation'
+require_text "$SCENE_QML" 'root.animationPreference === "off"' \
+    'lockscreen off preference no longer participates in completed formation state'
+require_text "$SCENE_QML" '|| (root.previewMode && root.presentationReplayToken === 0) ? 1 : 0' \
+    'quiet editor entry no longer starts logo formation fully settled'
 require_text "$SCENE_QML" 'root.animationPreference !== "off"' \
     'lockscreen particle animation still runs when disabled'
 require_text "$SCENE_QML" 'Math.random()' \
