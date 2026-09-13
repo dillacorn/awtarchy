@@ -30,33 +30,16 @@ cmp -s "$LAYER" "$PREVIEW_LAYER" || {
     failures=$((failures + 1))
 }
 
-# Iris Reveal's mask must be texture-only staging. It must never remain as a
-# visible scene item beneath Pixel/Fade/Edges/Wipe during partial alpha blends.
-check_text "$LAYER" 'id: irisMaskShape' 'Iris Reveal mask shape is missing'
-check_text "$LAYER" 'maskSource: irisMaskTexture' 'Iris Reveal effect is not driven by the mask texture'
-python3 - "$LAYER" <<'PY' || failures=$((failures + 1))
-from pathlib import Path
-import sys
-
-text = Path(sys.argv[1]).read_text()
-try:
-    shape_start = text.index("id: irisMaskShape")
-    texture_start = text.index("id: irisMaskTexture", shape_start)
-except ValueError as exc:
-    raise SystemExit(f"FAIL: Iris Reveal mask staging block is incomplete: {exc}")
-shape = text[shape_start:texture_start]
-for needle, message in (
-    ("x: root.width + 64", "Iris Reveal mask shape is not staged off-screen"),
-    ("y: 0", "Iris Reveal mask shape lacks an explicit staging origin"),
-    ("width: root.width", "Iris Reveal mask shape does not preserve transition width"),
-    ("height: root.height", "Iris Reveal mask shape does not preserve transition height"),
-    ('visible: root.running && root.normalizedMode === "iris"', "Iris Reveal mask shape is not mode-gated"),
-):
-    if needle not in shape:
-        raise SystemExit(f"FAIL: {message}")
-if "anchors.fill: parent" in shape:
-    raise SystemExit("FAIL: Iris Reveal mask shape is still a visible in-scene full-frame item")
-PY
+# Iris Reveal is retired. Secure/editor parity must contain no Iris staging or
+# mask path, while the approved Pixel/Resolution Collapse timing remains exact.
+reject_text "$LAYER" 'irisMaskShape' 'retired Iris mask shape remains'
+reject_text "$LAYER" 'irisMaskTexture' 'retired Iris mask texture remains'
+reject_text "$LAYER" 'normalizedMode === "iris"' 'retired Iris mode remains in transition renderer'
+reject_text "$LAYER" 'maskSource: iris' 'retired Iris mask source remains in transition renderer'
+check_text "$LAYER" 'Math.min(1, (root.progress - 0.45) / 0.10)' \
+    'approved Pixel reveal timing changed'
+check_text "$LAYER" '+ 47 * Math.pow(Math.max(0, root.collapseAmount), 1.35)' \
+    'approved Pixel collapse curve changed'
 
 # Editor preview must use a real per-output desktop snapshot captured after
 # Quick Settings closes and while every editor preview window is hidden.
@@ -114,10 +97,10 @@ if [[ -f "$PREVIEW_CAPTURE" ]]; then
 #!/usr/bin/env bash
 if [[ "${1:-}" == "monitors" && "${2:-}" == "-j" ]]; then
     printf '%s\n' '[{"name":"DP-1"},{"name":"HDMI-A-1"}]'
-    return 0 2>/dev/null || true
+    exit 0
 fi
 printf '%s\n' 'unexpected hyprctl invocation' >&2
-return 64 2>/dev/null || true
+exit 64
 EOF
     cat > "$fake_bin/grim" <<'EOF'
 #!/usr/bin/env bash
@@ -180,4 +163,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-printf '%s\n' 'PASS: real desktop editor preview, isolated Iris mask, and Alt-drag settings bar contracts'
+printf '%s\n' 'PASS: real desktop editor preview, retired Iris renderer, Pixel parity, and Alt-drag settings bar contracts'
