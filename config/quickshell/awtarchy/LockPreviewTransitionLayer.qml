@@ -9,9 +9,10 @@ Item {
     property string mode: "fade"
     property int duration: 1800
     property int replayToken: 0
+    property bool autoStart: true
 
-    property real transitionProgress: 0
-    property bool transitionActive: true
+    property real transitionProgress: autoStart ? 0 : 1
+    property bool transitionActive: autoStart
 
     readonly property real progress: transitionProgress
     readonly property bool running: transitionActive
@@ -154,5 +155,12 @@ Item {
         }
     }
 
-    Component.onCompleted: root.restart()
+    Component.onCompleted: {
+        if (root.autoStart) {
+            root.restart();
+        } else {
+            root.transitionProgress = 1;
+            root.transitionActive = false;
+        }
+    }
 }
