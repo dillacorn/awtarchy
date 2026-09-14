@@ -39,6 +39,12 @@ rejects "$SURFACE" '* (root.transitionComplete ? 1 : 0)' \
     'password opacity is still gated on transition completion'
 rejects "$SURFACE" 'if (root.transitionComplete)' \
     'password focus is still gated on transition completion'
+rejects "$SURFACE" 'if (!root.transitionComplete || root.unlocking)' \
+    'password focus is still blocked while the decorative transition runs'
+rejects "$SCENE" 'root.entered && !root.effectiveEntryTransitionRunning ? 1 : 0' \
+    'password presentation is still hidden while the decorative transition runs'
+contains "$SCENE" 'root.entered ? 1 : 0' \
+    'password presentation does not become visible independently of transition completion'
 contains "$SURFACE" 'password.forceActiveFocus()' \
     'secure password input has no immediate focus path'
 contains "$SURFACE" 'auth.submit(response)' \
