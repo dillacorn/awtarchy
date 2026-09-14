@@ -1,10 +1,10 @@
 from pathlib import Path
 
 
-def one(s, old, new, label):
-    if s.count(old) != 1:
-        raise RuntimeError(f'{label}: expected one match, got {s.count(old)}')
-    return s.replace(old, new, 1)
+def one(s, old, new, label, expected=1):
+    if s.count(old) != expected:
+        raise RuntimeError(f'{label}: expected {expected} match(es), got {s.count(old)}')
+    return s.replace(old, new, expected)
 
 
 root = Path('.')
@@ -43,7 +43,7 @@ e = one(e, '        statusMessage = "Image spawn animation updated. Use Preview 
 anchor = '''    function beginRotateElement(name, sceneX, sceneY) {'''
 insert = '''    function setDraftCustomImageSpawnTiming(name, value) {\n        const index = customImageIndex(name); if (index < 0) return;\n        const timing = normalizedCustomImageSpawnTiming(value); if (draftCustomImages[index].spawn_timing === timing) return;\n        recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next[index].spawn_timing = timing; draftCustomImages = next;\n        selectElement(name, false); statusMessage = "Image spawn timing updated. Use Play Spawn to preview.";\n    }\n\n    function replaySelectedImageSpawn() {\n        if (!isCustomImage(selectedElement)) return;\n        previewIndividualImageReplayId = selectedElement;\n        previewIndividualImageReplayEpoch = previewIndividualImageReplayEpoch >= 2147483646 ? 1 : previewIndividualImageReplayEpoch + 1;\n        statusMessage = "Replaying selected image spawn";\n    }\n\n''' + anchor
 e = one(e, anchor, insert, 'editor timing/replay functions')
-e = one(e, 'opacity: 100, rotation: 0, spawn_animation: "none", visible: true', 'opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true', 'image defaults')
+e = one(e, 'opacity: 100, rotation: 0, spawn_animation: "none", visible: true', 'opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true', 'image defaults', 2)
 e = one(e, '                spawn_animation: normalizedCustomImageSpawn(raw.spawn_animation),\n                visible: typeof raw.visible === "boolean" ? raw.visible : true', '                spawn_animation: normalizedCustomImageSpawn(raw.spawn_animation),\n                spawn_timing: normalizedCustomImageSpawnTiming(raw.spawn_timing),\n                visible: typeof raw.visible === "boolean" ? raw.visible : true', 'clone timing')
 old = '''                        SettingsButton { label: "Preview Entry"; textSize: 9; onClicked: root.replayEntryTransition() }\n                        Item { Layout.fillWidth: true }\n                        Text { text: "Animated images enter after the logo; No Spawn Animation remains immediate."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }'''
 new = '''                        SettingsButton { label: "During logo"; active: root.elementPoint(root.selectedElement).spawn_timing !== "after-logo"; textSize: 9; onClicked: root.setDraftCustomImageSpawnTiming(root.selectedElement, "during-logo") }\n                        SettingsButton { label: "After logo"; active: root.elementPoint(root.selectedElement).spawn_timing === "after-logo"; textSize: 9; onClicked: root.setDraftCustomImageSpawnTiming(root.selectedElement, "after-logo") }\n                        SettingsButton { label: "Play Spawn"; textSize: 9; onClicked: root.replaySelectedImageSpawn() }\n                        SettingsButton { label: "Preview Entry"; textSize: 9; onClicked: root.replayEntryTransition() }\n                        Item { Layout.fillWidth: true }\n                        Text { text: "During logo is the default; After logo waits for logo entry to finish."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }'''
