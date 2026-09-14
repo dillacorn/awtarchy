@@ -59,8 +59,10 @@ rejects "$SURFACE" 'opacity: password.text.length > 0 ? 0.09 : 0' \
     'password background panel remains visible'
 contains "$SURFACE" 'externalEntryTransitionRunning: transitionLayer.running' \
     'shared scene no longer receives the secure transition running state'
-contains "$SCENE" 'LockSceneBase' \
-    'shared scene wrapper no longer preserves the established renderer base'
+contains "$SCENE" '&& root.presentationPhase !== "transition"' \
+    'logo presentation is no longer gated by the explicit transition phase'
+contains "$SCENE" 'function beginLogoEntry()' \
+    'logo entry no longer has an explicit post-transition phase'
 rejects "$AUTH" 'entryTransition' \
     'LockAuth must remain independent of transition presentation'
 
@@ -87,28 +89,26 @@ rejects "$SURFACE" 'id: desktopCapturePixelatedBlur' \
     'desktop still has an independent pixelated blur path'
 rejects "$SURFACE" 'layer.enabled: root.transitionComplete' \
     'desktop still has an independent smooth blur path'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'property Item desktopBackingSource: null' \
-    'scene base has no optional frozen desktop composition input'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'id: backgroundCompositionContent' \
-    'scene base has no final background composition item'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'sourceItem: root.desktopBackingSource' \
+contains "$SCENE" 'property Item desktopBackingSource: null' \
+    'scene has no optional frozen desktop composition input'
+contains "$SCENE" 'id: backgroundCompositionContent' \
+    'scene has no final background composition item'
+contains "$SCENE" 'sourceItem: root.desktopBackingSource' \
     'final composition does not consume frozen desktop backing'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' \
+contains "$SCENE" 'opacity: Math.max(0, Math.min(100, root.backgroundOpacity)) / 100' \
     'configured background opacity is not inside final composition'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'layer.enabled: root.wallpaperBlur > 0' \
+contains "$SCENE" 'layer.enabled: root.wallpaperBlur > 0' \
     'final composition has no smooth blur gate'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'layer.effect: MultiEffect' \
+contains "$SCENE" 'layer.effect: MultiEffect' \
     'final composition has no smooth MultiEffect path'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'id: backgroundCompositionPixelatedBlur' \
+contains "$SCENE" 'id: backgroundCompositionPixelatedBlur' \
     'final composition has no pixelated blur path'
-contains "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'sourceItem: backgroundCompositionContent' \
+contains "$SCENE" 'sourceItem: backgroundCompositionContent' \
     'pixelated blur does not consume final composition'
-rejects "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" 'id: wallpaperPixelatedBlur' \
+rejects "$SCENE" 'id: wallpaperPixelatedBlur' \
     'wallpaper still has an independent pixelated blur path'
 cmp -s "$SCENE" "$PREVIEW_SCENE" \
-    || fail 'secure/editor scene wrappers diverged'
-cmp -s "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" "$ROOT/config/quickshell/awtarchy/LockSceneBase.qml" \
-    || fail 'secure/editor scene renderer bases diverged'
+    || fail 'secure/editor scene copies diverged'
 
 # Opaque is a reversible toggle using the same persisted background-opacity
 # state path plus last-nonopaque metadata, not an independent render value.

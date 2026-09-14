@@ -233,8 +233,10 @@ require_text "$SURFACE_QML" 'required property bool unlocking' \
     'lock surface does not receive the shared unlock-fade state'
 require_text "$SURFACE_QML" 'property bool entered: false' \
     'lock surface has no secure entry state'
-require_text "$SURFACE_QML" 'opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")' \
-    'secure password presentation does not combine entry-transition state with saved presentation opacity'
+require_text "$SURFACE_QML" 'opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")' \
+    'secure password presentation is not immediately visible after secure entry'
+reject_text "$SURFACE_QML" 'scene.securePasswordEntryOpacity' \
+    'secure password presentation is still coupled to decorative transition timing'
 require_text "$SURFACE_QML" 'color: "transparent"' \
     'secure password TextInput content is visually exposed'
 require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
