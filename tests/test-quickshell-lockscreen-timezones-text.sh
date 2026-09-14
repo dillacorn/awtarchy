@@ -63,6 +63,8 @@ contains "$SCENE" 'property int textReplayEpoch:' \
     'shared scene cannot hold a stable random-text choice per presentation epoch'
 contains "$SCENE" 'import "../LockscreenPresentationState.js" as LockscreenPresentationState' \
     'shared scene does not import deterministic presentation text selection'
+# Keep selection stable across model reassignments: helper use and epoch key are asserted separately
+# so normal QML line wrapping cannot weaken or accidentally break the behavioral contract.
 contains "$SCENE" 'LockscreenPresentationState.textForPresentation(' \
     'randomized custom text does not use deterministic presentation selection'
 contains "$SCENE" 'item, root.textReplayEpoch);' \
