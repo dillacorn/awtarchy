@@ -1,0 +1,139 @@
+name: Finalize Lockscreen Candidate
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout feature branch
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+
+      - name: Restore direct scene architecture and apply focused fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          git checkout d7c74a265f5f8e0859af5d23a2f1c127a270a7dc -- \
+            config/quickshell/awtarchy-lock/LockScene.qml \
+            config/quickshell/awtarchy/LockPreviewScene.qml
+          rm -f -- \
+            config/quickshell/awtarchy-lock/LockSceneBase.qml \
+            config/quickshell/awtarchy/LockSceneBase.qml
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          secure = Path('config/quickshell/awtarchy-lock/LockScene.qml')
+          preview = Path('config/quickshell/awtarchy/LockPreviewScene.qml')
+          text = secure.read_text()
+
+          old_import = 'import Quickshell\n'
+          new_import = 'import Quickshell\nimport "../LockscreenPresentationState.js" as LockscreenPresentationState\n'
+          if new_import not in text:
+              if old_import not in text:
+                  raise SystemExit('missing LockScene Quickshell import anchor')
+              text = text.replace(old_import, new_import, 1)
+
+          old_epoch = '    property int textReplayEpoch: 0\n'
+          new_epoch = '    property int textReplayEpoch: Math.floor(Math.random() * 2147483647)\n'
+          if old_epoch in text:
+              text = text.replace(old_epoch, new_epoch, 1)
+          elif new_epoch not in text:
+              raise SystemExit('missing text replay epoch anchor')
+
+          old_selection = '''    function refreshCustomTextSelections() {
+              const next = ({});
+              if (Array.isArray(root.customTexts)) {
+                  for (const item of root.customTexts) {
+                      if (!item) continue;
+                      const variants = Array.isArray(item.variants) ? item.variants.map(value => String(value)) : [];
+                      if (item.randomize === true && variants.length > 0)
+                          next[String(item.id)] = variants[Math.floor(Math.random() * variants.length)];
+                      else next[String(item.id)] = String(item.text === undefined ? "Custom Text" : item.text);
+                  }
+              }
+              root.customTextSelections = next;
+          }
+          '''
+          new_selection = '''    function refreshCustomTextSelections() {
+              const next = ({});
+              if (Array.isArray(root.customTexts)) {
+                  for (const item of root.customTexts) {
+                      if (!item) continue;
+                      next[String(item.id)] = LockscreenPresentationState.textForPresentation(
+                          item, root.textReplayEpoch);
+                  }
+              }
+              root.customTextSelections = next;
+          }
+          '''
+          if old_selection in text:
+              text = text.replace(old_selection, new_selection, 1)
+          elif new_selection not in text:
+              raise SystemExit('missing randomized custom-text selection anchor')
+
+          secure.write_text(text)
+          preview.write_text(text)
+
+          test = Path('tests/test-quickshell-lockscreen-third-runtime-pass.sh')
+          t = test.read_text()
+          wrapper_check = '''contains "$SCENE" 'LockSceneBase' \\
+              'shared scene wrapper no longer preserves the established renderer base'\n'''
+          direct_check = '''contains "$SCENE" '&& root.presentationPhase !== "transition"' \\
+              'logo presentation is no longer gated by the explicit transition phase'\ncontains "$SCENE" 'function beginLogoEntry()' \\
+              'logo entry no longer has an explicit post-transition phase'\n'''
+          if wrapper_check in t:
+              t = t.replace(wrapper_check, direct_check, 1)
+
+          t = t.replace('"$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml"', '"$SCENE"')
+          base_cmp = '''cmp -s "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" "$ROOT/config/quickshell/awtarchy/LockSceneBase.qml" \\
+              || fail 'secure/editor scene renderer bases diverged'\n'''
+          t = t.replace(base_cmp, '')
+          t = t.replace("secure/editor scene wrappers diverged", "secure/editor scene copies diverged")
+          t = t.replace("scene base has no optional frozen desktop composition input", "scene has no optional frozen desktop composition input")
+          t = t.replace("scene base has no final background composition item", "scene has no final background composition item")
+          test.write_text(t)
+          PY
+
+          rm -f -- .github/workflows/temp-lockscreen-finalize.yml
+
+      - name: Validate focused contracts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash -n tests/test-quickshell-lockscreen-timezones-text.sh
+          shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          shellcheck tests/test-quickshell-lockscreen-timezones-text.sh
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-timezones-text.sh
+          bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
+          bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
+          bash tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
+          bash tests/test-quickshell-lockscreen-rotation-reset.sh
+          git diff --check
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+
+      - name: Commit finalized candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if git diff --cached --quiet; then
+            printf '%s\n' 'No finalization changes required.'
+          else
+            git commit -m 'fix(lockscreen): harden auth and stable text'
+            git push origin HEAD:feature/lockscreen-interactive-effects
+          fi
