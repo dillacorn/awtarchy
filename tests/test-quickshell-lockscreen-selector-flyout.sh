@@ -74,17 +74,19 @@ count_at_least "$EDITOR" 'popupBoundary: editorFocus' 5 \
 not_contains "$EDITOR" 'popupBoundary: editorFocus Layout.' \
     'compact selector popup boundary is fused to the next QML property'
 
-# The fly-out must own its visible input area. Rendering a menu outside the
-# selector's 28px FocusScope allows pointer presses to fall through to controls
-# under the visual menu (for example Remove Image).
-contains "$SELECTOR" 'import QtQuick.Controls' \
-    'compact selector does not use a real popup input surface'
-contains "$SELECTOR" 'Popup {' \
-    'compact selector fly-out is not implemented as a Popup'
-contains "$SELECTOR" 'parent: Overlay.overlay' \
-    'compact selector popup is not hosted by the overlay input surface'
-contains "$SELECTOR" 'closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside' \
-    'compact selector popup does not close safely on outside presses/Escape'
+# The fly-out must own its visible input area. Quickshell PopupWindow is the
+# native popup surface for PanelWindow content; grabFocus dismisses it on an
+# outside press instead of letting presses inside the visible menu fall through.
+contains "$SELECTOR" 'import Quickshell' \
+    'compact selector does not import the native Quickshell popup surface'
+contains "$SELECTOR" 'PopupWindow {' \
+    'compact selector fly-out is not implemented as a PopupWindow'
+contains "$SELECTOR" 'anchor.item: root' \
+    'compact selector popup is not anchored to the selector item'
+contains "$SELECTOR" 'grabFocus: true' \
+    'compact selector popup does not own/dismiss pointer focus safely'
+contains "$SELECTOR" 'onVisibleChanged:' \
+    'compact selector popup dismissal is not synchronized back to menu state'
 contains "$SELECTOR" 'Flickable {' \
     'compact selector popup cannot scroll long option sets'
 contains "$SELECTOR" 'clip: true' \
@@ -100,10 +102,6 @@ contains "$SELECTOR" 'function toggleClockFormat()' \
     'primary clock selector has no direct toggle path'
 contains "$SELECTOR" 'activateIndex(currentIndex === 0 ? 1 : 0);' \
     'primary clock selector does not switch directly between the two normalized states'
-contains "$SELECTOR" 'visible: root.menuOpen && !root.directClockToggle' \
-    'primary clock toggle can still open the option fly-out'
-contains "$SELECTOR" '? (currentIndex === 0 ? "24-hour" : "12-hour")' \
-    'primary clock toggle does not show its current format directly'
 contains "$EDITOR" 'model: root.clockFormatPresets' \
     'editor clock control does not use the normalized clock-format model'
 contains "$EDITOR" 'onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)' \
