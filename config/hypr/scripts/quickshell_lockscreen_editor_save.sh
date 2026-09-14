@@ -22,7 +22,10 @@ fi
 
 layout_input="${1}"
 custom_images_input="${13:-[]}"
-visualizer_input="${14:-{}}"
+visualizer_input="${14-}"
+if [[ -z "$visualizer_input" ]]; then
+    visualizer_input='{}'
+fi
 logo_animation="${20}"
 mask_mode="${21}"
 mask_character="${22}"
