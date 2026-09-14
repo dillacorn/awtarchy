@@ -6,6 +6,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "../LockscreenPresentationState.js" as LockscreenPresentationState
 
 ShellRoot {
     id: root
@@ -327,6 +328,7 @@ ShellRoot {
             const opacity = Number(image.opacity);
             const rotation = Number(image.rotation === undefined ? 0 : image.rotation);
             const spawnAnimation = normalizedCustomImageSpawn(image.spawn_animation);
+            const spawnTiming = LockscreenPresentationState.normalizeSpawnTiming(image.spawn_timing);
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || path.length === 0
                     || !Number.isFinite(x) || x < 0.05 || x > 0.95
                     || !Number.isFinite(y) || y < 0.08 || y > 0.92
@@ -341,7 +343,7 @@ ShellRoot {
             result.push(({
                 id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY, opacity: opacity,
-                rotation: rotation, spawn_animation: spawnAnimation,
+                rotation: rotation, spawn_animation: spawnAnimation, spawn_timing: spawnTiming,
                 visible: image.visible
             }));
         }

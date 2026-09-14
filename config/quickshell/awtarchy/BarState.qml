@@ -953,6 +953,7 @@ Singleton {
             const opacity = Number(raw.opacity);
             const rotation = Number(raw.rotation === undefined ? 0 : raw.rotation);
             const spawnAnimation = lockscreenCustomImageSpawnMode(raw.spawn_animation);
+            const spawnTiming = String(raw.spawn_timing || "") === "after-logo" ? "after-logo" : "during-logo";
             if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
                     || !path.startsWith("/") || path.indexOf("://") >= 0
                     || /[\u0000-\u001f\u007f-\u009f]/.test(path)
@@ -969,7 +970,7 @@ Singleton {
             result.push(({ id: id, path: path, x: x, y: y, scale: scale,
                 stretch_x: stretchX, stretch_y: stretchY,
                 opacity: opacity, rotation: rotation,
-                spawn_animation: spawnAnimation, visible: raw.visible }));
+                spawn_animation: spawnAnimation, spawn_timing: spawnTiming, visible: raw.visible }));
         }
         return result;
     }

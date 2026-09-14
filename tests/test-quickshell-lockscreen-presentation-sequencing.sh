@@ -38,8 +38,16 @@ require_text "$SCENE" 'readonly property bool customImageEntryStarted:' \
     'lock scene does not explicitly gate animated custom-image presentation'
 require_text "$SCENE" 'property real spawnProgress: spawnMode === "none" ? 1 : 0' \
     'animated custom images still initialize at their settled presentation'
-require_text "$SCENE" 'spawnMode === "none" || root.customImageEntryStarted' \
-    'animated custom images are not hidden until their entry phase'
+require_text "$SCENE" 'function customImageSpawnTiming(image)' \
+    'custom-image timing is not normalized in the shared scene'
+require_text "$SCENE" 'readonly property bool customImageAnimationActive:' \
+    'custom-image playback is not explicitly gated by active animation'
+require_text "$SCENE" 'root.editorMode && !customImageAnimationActive' \
+    'idle editor images are not forced to their settled presentation'
+require_text "$SCENE" 'function onLogoEntryEpochChanged()' \
+    'during-logo custom images do not start with logo entry'
+require_text "$SCENE" 'function onCustomImageSpawnEpochChanged()' \
+    'after-logo custom images do not start at the post-logo boundary'
 require_text "$SCENE" 'function beginLogoEntry()' \
     'desktop transition completion is not explicitly sequenced into logo entry'
 require_text "$SCENE" 'function beginCustomImageEntry()' \

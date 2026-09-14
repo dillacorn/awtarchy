@@ -68,6 +68,8 @@ Singleton {
     property string draftPasswordMaskCharacter: "•"
     property string draftClockFormat: "24h"
     property int entryTransitionReplayToken: 0
+    property string previewIndividualImageReplayId: ""
+    property int previewIndividualImageReplayEpoch: 0
     property real editorEntranceOpacity: 1.0
     property var draftVisibility: defaultVisibility()
     property string draftBackgroundMode: "black"
@@ -581,6 +583,8 @@ Singleton {
         return 0;
     }
 
+    function normalizedCustomImageSpawnTiming(value) { return String(value || "") === "after-logo" ? "after-logo" : "during-logo"; }
+
     function normalizedLogoSpawn(value) {
         const key = String(value === undefined ? "split" : value);
         for (const preset of logoSpawnPresets) {
@@ -709,7 +713,21 @@ Singleton {
         next[index].spawn_animation = key;
         draftCustomImages = next;
         selectElement(name, false);
-        statusMessage = "Image spawn animation updated. Use Preview Entry to preview.";
+        statusMessage = "Image spawn animation updated. Use Play Spawn to preview.";
+    }
+
+    function setDraftCustomImageSpawnTiming(name, value) {
+        const index = customImageIndex(name); if (index < 0) return;
+        const timing = normalizedCustomImageSpawnTiming(value); if (draftCustomImages[index].spawn_timing === timing) return;
+        recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next[index].spawn_timing = timing; draftCustomImages = next;
+        selectElement(name, false); statusMessage = "Image spawn timing updated. Use Play Spawn to preview.";
+    }
+
+    function replaySelectedImageSpawn() {
+        if (!isCustomImage(selectedElement)) return;
+        previewIndividualImageReplayId = selectedElement;
+        previewIndividualImageReplayEpoch = previewIndividualImageReplayEpoch >= 2147483646 ? 1 : previewIndividualImageReplayEpoch + 1;
+        statusMessage = "Replaying selected image spawn";
     }
 
     function beginRotateElement(name, sceneX, sceneY) {
@@ -1048,7 +1066,7 @@ Singleton {
             next[index] = ({
                 id: current.id, path: current.path, x: 0.5, y: 0.5,
                 scale: 1.0, stretch_x: 1.0, stretch_y: 1.0,
-                opacity: 100, rotation: 0, spawn_animation: "none", visible: true
+                opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true
             });
             draftCustomImages = next;
         } else {
@@ -1293,6 +1311,7 @@ Singleton {
                 opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0),
                 spawn_animation: normalizedCustomImageSpawn(raw.spawn_animation),
+                spawn_timing: normalizedCustomImageSpawnTiming(raw.spawn_timing),
                 visible: typeof raw.visible === "boolean" ? raw.visible : true }));
         }
         return result;
@@ -1401,7 +1420,7 @@ Singleton {
         const value = String(imagePath || "").trim(); if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Custom image must be a local absolute path"; return; }
         if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; }
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); const id = nextCustomImageId();
-        next.push(({ id: id, path: value, x: 0.5, y: 0.5, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, spawn_animation: "none", visible: true }));
+        next.push(({ id: id, path: value, x: 0.5, y: 0.5, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true }));
         draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Image added. Save to apply.";
     }
     function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Image removed. Save to apply."; }
@@ -1539,6 +1558,7 @@ Singleton {
             LockPreviewScene {
                 id: previewScene; anchors.fill: parent; theme: Theme; animationPreference: root.draftLogoSpawnAnimation
                 externalEntryTransitionRunning: editorTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
+                individualImageReplayId: root.previewIndividualImageReplayId; individualImageReplayEpoch: root.previewIndividualImageReplayEpoch
                 randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: BarState.lockscreenMouseInteractiveEnabled()
                 showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
@@ -1681,9 +1701,12 @@ Singleton {
                                         root.customImageSpawnPresets[index].key);
                             }
                         }
+                        SettingsButton { label: "During logo"; active: root.elementPoint(root.selectedElement).spawn_timing !== "after-logo"; textSize: 9; onClicked: root.setDraftCustomImageSpawnTiming(root.selectedElement, "during-logo") }
+                        SettingsButton { label: "After logo"; active: root.elementPoint(root.selectedElement).spawn_timing === "after-logo"; textSize: 9; onClicked: root.setDraftCustomImageSpawnTiming(root.selectedElement, "after-logo") }
+                        SettingsButton { label: "Play Spawn"; textSize: 9; onClicked: root.replaySelectedImageSpawn() }
                         SettingsButton { label: "Preview Entry"; textSize: 9; onClicked: root.replayEntryTransition() }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Animated images enter after the logo; No Spawn Animation remains immediate."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { text: "During logo is the default; After logo waits for logo entry to finish."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout {
@@ -1913,10 +1936,11 @@ Singleton {
             }
             LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: root.draftLogoSpawnAnimation
                 externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
+                individualImageReplayId: root.previewIndividualImageReplayId; individualImageReplayEpoch: root.previewIndividualImageReplayEpoch
                 randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false; showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
                 overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: false
+                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility
             }
             LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
         }

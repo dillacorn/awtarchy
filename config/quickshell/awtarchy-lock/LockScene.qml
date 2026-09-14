@@ -50,9 +50,13 @@ Item {
     property string presentationPhase: "transition"
     property int logoEntryEpoch: 0
     property int customImageSpawnEpoch: 0
+    property string individualImageReplayId: ""
+    property int individualImageReplayEpoch: 0
     readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning
     readonly property bool customImageEntryStarted:
         presentationPhase === "custom-images" || presentationPhase === "settled"
+    readonly property bool fullPresentationPlaybackActive:
+        effectiveEntryTransitionRunning || presentationPhase !== "settled"
     readonly property string effectivePasswordMaskMode:
         ["squares", "dots", "custom"].indexOf(String(passwordMaskMode)) >= 0
             ? String(passwordMaskMode) : "squares"
@@ -160,12 +164,12 @@ Item {
         logoEntryPhaseTimer.restart();
     }
 
-    function customImageEntryDurationMs() {
+    function customImageEntryDurationMs(timing) {
         if (!Array.isArray(customImages))
             return 0;
         let duration = 0;
         for (const image of customImages) {
-            if (!image || image.visible === false)
+            if (!image || image.visible === false || customImageSpawnTiming(image) !== timing)
                 continue;
             const mode = customImageSpawnMode(image);
             if (mode === "pixel-warp")
@@ -181,7 +185,7 @@ Item {
         customImageEntryPhaseTimer.stop();
         customImageSpawnEpoch++;
         presentationPhase = "custom-images";
-        const duration = customImageEntryDurationMs();
+        const duration = customImageEntryDurationMs("after-logo");
         if (duration <= 0) {
             presentationPhase = "settled";
             return;
@@ -243,6 +247,11 @@ Item {
             ? image.spawn_animation : "none");
         return ["none", "pixel-warp", "closest-edge", "top", "bottom", "left", "right"].indexOf(value) >= 0
             ? value : "none";
+    }
+
+    function customImageSpawnTiming(image) {
+        return String(image && image.spawn_timing !== undefined ? image.spawn_timing : "during-logo")
+            === "after-logo" ? "after-logo" : "during-logo";
     }
 
     function customImageSpawnOffset(image, itemWidth, itemHeight) {
@@ -891,18 +900,26 @@ Item {
                 required property var modelData
                 readonly property string elementName: String(modelData.id || "")
                 readonly property string spawnMode: root.customImageSpawnMode(modelData)
+                readonly property string spawnTiming: root.customImageSpawnTiming(modelData)
                 readonly property real finalX: root.normalizedX(elementName, 0.50) * parent.width - width / 2
                 readonly property real finalY: root.normalizedY(elementName, 0.50) * parent.height - height / 2
                 readonly property point spawnOffset: root.customImageSpawnOffset(modelData, width, height)
                 property real spawnProgress: spawnMode === "none" ? 1 : 0
+                readonly property bool customImageAnimationActive: spawnAnimation.running
+                readonly property bool fullEntryStarted: spawnTiming === "during-logo"
+                    ? root.presentationPhase === "logo" || root.presentationPhase === "custom-images" || root.presentationPhase === "settled"
+                    : root.presentationPhase === "custom-images" || root.presentationPhase === "settled"
+                readonly property bool editorSettledPresentation:
+                    root.editorMode && !customImageAnimationActive && !root.fullPresentationPlaybackActive
+                readonly property real effectiveSpawnProgress: editorSettledPresentation ? 1 : spawnProgress
 
                 visible: (modelData.visible !== false || root.editorMode)
-                    && (spawnMode === "none" || root.customImageEntryStarted)
+                    && (spawnMode === "none" || editorSettledPresentation || fullEntryStarted || customImageAnimationActive)
                 width: Math.round(180 * root.uiScale)
                 height: Math.round(180 * root.uiScale)
-                x: finalX + spawnOffset.x * (1 - spawnProgress)
-                y: finalY + spawnOffset.y * (1 - spawnProgress)
-                scale: root.elementScale(elementName) * (spawnMode === "pixel-warp" ? 0.82 + 0.18 * spawnProgress : 1)
+                x: finalX + spawnOffset.x * (1 - effectiveSpawnProgress)
+                y: finalY + spawnOffset.y * (1 - effectiveSpawnProgress)
+                scale: root.elementScale(elementName) * (spawnMode === "pixel-warp" ? 0.82 + 0.18 * effectiveSpawnProgress : 1)
                 rotation: root.elementRotation(elementName)
                 transformOrigin: Item.Center
                 transform: Scale {
@@ -913,7 +930,7 @@ Item {
                 }
                 opacity: root.elementOpacity(elementName)
                     * (modelData.visible !== false ? 1.0 : root.editorMode ? 0.30 : 0.0)
-                    * (spawnMode === "pixel-warp" ? spawnProgress : 1)
+                    * (spawnMode === "pixel-warp" ? effectiveSpawnProgress : 1)
                 z: 4
 
                 function restartSpawnAnimation() {
@@ -931,7 +948,7 @@ Item {
                     asynchronous: true
                     cache: true
                     fillMode: Image.PreserveAspectFit
-                    smooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.spawnProgress >= 0.999
+                    smooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.effectiveSpawnProgress >= 0.999
                 }
 
                 ShaderEffectSource {
@@ -942,9 +959,9 @@ Item {
                     live: true
                     recursive: false
                     smooth: false
-                    readonly property real pixelFactor: 1 + 31 * Math.pow(Math.max(0, 1 - customImageDelegate.spawnProgress), 1.25)
+                    readonly property real pixelFactor: 1 + 31 * Math.pow(Math.max(0, 1 - customImageDelegate.effectiveSpawnProgress), 1.25)
                     textureSize: Qt.size(Math.max(1, Math.round(width / pixelFactor)), Math.max(1, Math.round(height / pixelFactor)))
-                    visible: customImageDelegate.spawnMode === "pixel-warp" && customImageDelegate.spawnProgress < 0.999
+                    visible: customImageDelegate.spawnMode === "pixel-warp" && customImageDelegate.effectiveSpawnProgress < 0.999
                 }
 
                 NumberAnimation {
@@ -960,13 +977,14 @@ Item {
                 Connections {
                     target: root
                     function onPresentationPhaseChanged() {
-                        if (customImageDelegate.spawnMode !== "none"
-                                && !root.customImageEntryStarted) {
-                            spawnAnimation.stop();
-                            customImageDelegate.spawnProgress = 0;
-                        }
+                        if (customImageDelegate.spawnMode === "none") { customImageDelegate.spawnProgress = 1; return; }
+                        if (root.presentationPhase === "transition") { spawnAnimation.stop(); customImageDelegate.spawnProgress = 0; }
                     }
-                    function onCustomImageSpawnEpochChanged() { customImageDelegate.restartSpawnAnimation(); }
+                    function onLogoEntryEpochChanged() { if (customImageDelegate.spawnTiming === "during-logo") customImageDelegate.restartSpawnAnimation(); }
+                    function onCustomImageSpawnEpochChanged() { if (customImageDelegate.spawnTiming === "after-logo") customImageDelegate.restartSpawnAnimation(); }
+                    function onIndividualImageReplayEpochChanged() {
+                        if (root.editorMode && root.individualImageReplayId === customImageDelegate.elementName) customImageDelegate.restartSpawnAnimation();
+                    }
                 }
             }
         }
