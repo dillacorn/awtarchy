@@ -63,8 +63,10 @@ contains "$SCENE" 'property int textReplayEpoch:' \
     'shared scene cannot hold a stable random-text choice per presentation epoch'
 contains "$SCENE" 'import "../LockscreenPresentationState.js" as LockscreenPresentationState' \
     'shared scene does not import deterministic presentation text selection'
-contains "$SCENE" 'LockscreenPresentationState.textForPresentation(item, root.textReplayEpoch)' \
-    'randomized custom text is not selected from the stable presentation epoch'
+contains "$SCENE" 'LockscreenPresentationState.textForPresentation(' \
+    'randomized custom text does not use deterministic presentation selection'
+contains "$SCENE" 'item, root.textReplayEpoch);' \
+    'randomized custom text is not keyed to the stable presentation epoch'
 rejects "$SCENE" 'Math.floor(Math.random() * variants.length)' \
     'randomized custom text can change when editor state is reassigned during manipulation'
 cmp -s "$SCENE" "$PREVIEW" || fail 'secure and preview scene diverged'
