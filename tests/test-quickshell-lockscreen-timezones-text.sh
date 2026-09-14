@@ -20,6 +20,10 @@ contains() {
     grep -Fq -- "$2" "$1" || fail "$3"
 }
 
+rejects() {
+    ! grep -Fq -- "$2" "$1" || fail "$3"
+}
+
 contains "$EDITOR" 'property var draftTimezoneClocks: []' \
     'editor has no timezone-clock draft state'
 contains "$EDITOR" 'property var draftCustomTexts: []' \
@@ -57,6 +61,12 @@ contains "$SCENE" 'required property var customTexts' \
     'shared scene has no arbitrary-text input'
 contains "$SCENE" 'property int textReplayEpoch:' \
     'shared scene cannot hold a stable random-text choice per presentation epoch'
+contains "$SCENE" 'import "../LockscreenPresentationState.js" as LockscreenPresentationState' \
+    'shared scene does not import deterministic presentation text selection'
+contains "$SCENE" 'LockscreenPresentationState.textForPresentation(item, root.textReplayEpoch)' \
+    'randomized custom text is not selected from the stable presentation epoch'
+rejects "$SCENE" 'Math.floor(Math.random() * variants.length)' \
+    'randomized custom text can change when editor state is reassigned during manipulation'
 cmp -s "$SCENE" "$PREVIEW" || fail 'secure and preview scene diverged'
 
 contains "$SHELL_QML" 'property var lockTimezoneClocks: []' \
