@@ -61,7 +61,7 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           ref: feature/lockscreen-interactive-effects
-          fetch-depth: 2
+          fetch-depth: 0
       - name: Verify exact bridge
         run: |
           test "$(git log -1 --format=%s)" = 'chore(lockscreen): stage task3 apply bridge'
@@ -76,18 +76,18 @@ jobs:
           git diff --check
       - name: Remove bridge and restore validator
         run: |
-          git show HEAD^:.github/workflows/validate-quickshell-lockscreen-editor-elements.yml > .github/workflows/validate-quickshell-lockscreen-editor-elements.yml
+          git show 10801bac114e4d64033faee1dbcad151d8e7232d:.github/workflows/validate-quickshell-lockscreen-editor-elements.yml > .github/workflows/validate-quickshell-lockscreen-editor-elements.yml
           rm -f -- .github/task3_apply.py
+          test ! -e .github/task3_apply.py
+          test "$(git hash-object .github/workflows/validate-quickshell-lockscreen-editor-elements.yml)" = 'ff6828f03f2f764b921ce3a0bb9829f644d3998e'
           git diff --check
       - name: Commit verified Task 3 implementation
         run: |
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
           git add -A
-          if git diff --cached --name-only | grep -Eq '^\.github/(task3_apply\.py|workflows/validate-quickshell-lockscreen-editor-elements\.yml)$'; then
-            printf '%s\n' 'bridge cleanup did not restore canonical workflow state' >&2
-            false
-          fi
+          test ! -e .github/task3_apply.py
+          test "$(git hash-object .github/workflows/validate-quickshell-lockscreen-editor-elements.yml)" = 'ff6828f03f2f764b921ce3a0bb9829f644d3998e'
           git diff --cached --check
           git commit -m 'feat(lockscreen): separate image spawn playback from editing'
           git push origin HEAD:refs/heads/feature/lockscreen-interactive-effects
