@@ -76,7 +76,7 @@ normalize_timezone_clocks() {
                 or ((.timezone // "UTC") | type) != "string"
                 or ((.timezone // "UTC") | startswith("/") or contains("..") or test("[\\u0000-\\u001f\\u007f-\\u009f]"))
                 or ((.color // "auto") | type) != "string"
-                or (((.color // "auto") == "auto" or ((.color // "") | test("^#[0-9A-Fa-f]{6}$"))) | not))
+                or (((.color // "auto") == "auto" or ((.color // "") | test("^#[0-9A-Fa-f]{6}$"))) | not)
             )
         then error("invalid timezone clocks")
         else
@@ -119,7 +119,7 @@ normalize_custom_texts() {
                 or any((.variants // [])[]; type != "string" or length > 4096)
                 or ((.alignment // "center") as $alignment | (["left", "center", "right"] | index($alignment)) == null)
                 or ((.color // "auto") | type) != "string"
-                or (((.color // "auto") == "auto" or ((.color // "") | test("^#[0-9A-Fa-f]{6}$"))) | not))
+                or (((.color // "auto") == "auto" or ((.color // "") | test("^#[0-9A-Fa-f]{6}$"))) | not)
             )
         then error("invalid custom text")
         else
