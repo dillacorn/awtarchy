@@ -2,7 +2,6 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-workflow='.github/workflows/validate-quickshell-lockscreen-editor-elements.yml'
 history='local/share/awtarchy/quickshell-managed-history.sha256'
 
 python3 - <<'PY'
@@ -87,7 +86,6 @@ if (( ${#missing[@]} > 0 )); then
   } >>"$history"
 fi
 
-git show HEAD^^^:"$workflow" >"$workflow"
 rm -f -- .github/lockscreen_ci_cleanup.sh
 
 bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
