@@ -95,6 +95,17 @@ jobs:
           t = t.replace('scene base has no final background composition item', 'scene has no final background composition item')
           test.write_text(t)
 
+          runtime_test = Path('tests/test-quickshell-lockscreen-runtime-regressions.sh')
+          rt = runtime_test.read_text()
+          old_auth = '''require_text "$SURFACE_QML" 'opacity: scene.securePasswordEntryOpacity * scene.elementOpacity("password")' \\
+              'secure password presentation does not combine entry-transition state with saved presentation opacity'\n'''
+          new_auth = '''require_text "$SURFACE_QML" 'opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")' \\
+              'secure password presentation is not immediately visible after secure entry'\nreject_text "$SURFACE_QML" 'scene.securePasswordEntryOpacity' \\
+              'secure password presentation is still coupled to decorative transition timing'\n'''
+          if old_auth not in rt:
+              raise SystemExit('missing stale password transition regression anchor')
+          runtime_test.write_text(rt.replace(old_auth, new_auth, 1))
+
           history = Path('local/share/awtarchy/quickshell-managed-history.sha256')
           history_text = history.read_text()
           managed = (
@@ -120,8 +131,10 @@ jobs:
           set -euo pipefail
           bash -n tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash -n tests/test-quickshell-lockscreen-timezones-text.sh
+          bash -n tests/test-quickshell-lockscreen-runtime-regressions.sh
           shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
           shellcheck tests/test-quickshell-lockscreen-timezones-text.sh
+          shellcheck tests/test-quickshell-lockscreen-runtime-regressions.sh
           bash tests/test-quickshell-lockscreen-logo-cohesion.sh
           bash tests/test-quickshell-lockscreen-runtime-regressions.sh
           bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
