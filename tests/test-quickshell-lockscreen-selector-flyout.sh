@@ -90,8 +90,12 @@ contains "$EDITOR" 'onActivated: index => root.setDraftClockFormat(root.clockFor
 
 contains "$EDITOR" 'function selectElementForEditing(name, additive) {' \
     'direct element selection does not expose the selected element settings automatically'
-contains "$EDITOR" 'root.selectElementForEditing(parent.elementName, additive);' \
-    'preview element pointer selection does not route through the editor-settings selection path'
+contains "$EDITOR" 'if (additive) root.selectElementForEditing(parent.elementName, true);' \
+    'additive preview selection does not expose Element settings through the selection path'
+contains "$EDITOR" 'else if (!root.selectedContains(parent.elementName)) root.selectElementForEditing(parent.elementName, false);' \
+    'new single-element preview selection does not expose Element settings through the selection path'
+contains "$EDITOR" 'else root.activeDrawer = "element";' \
+    'pressing an already-selected group member does not expose Element settings while preserving the group'
 contains "$EDITOR" 'activeDrawer = "element";' \
     'element selection does not activate the Element settings drawer'
 
