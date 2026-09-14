@@ -14,11 +14,19 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
 has() { grep -Fq -- "$2" "$1" || fail "$3"; }
 lacks() { ! grep -Fq -- "$2" "$1" || fail "$3"; }
 
-# Password presentation and input focus must remain behind the secure transition.
-has "$SCENE" 'root.entered && !root.effectiveEntryTransitionRunning ? 1 : 0' \
-    'password presentation can become visible before the entry transition completes'
-has "$SURFACE" 'if (!root.transitionComplete || root.unlocking)' \
-    'password focus is not gated on transition completion'
+# Password presentation and input focus must remain independent of decorative transition timing.
+has "$SURFACE" 'opacity: (root.unlocking ? 0 : root.entered ? 1 : 0) * scene.elementOpacity("password")' \
+    'password presentation is not available independently of the decorative transition'
+has "$SURFACE" 'Component.onCompleted: {' \
+    'secure surface does not initialize password availability immediately'
+has "$SURFACE" 'root.entered = true;' \
+    'secure surface does not enter password-ready state immediately'
+has "$SURFACE" 'root.focusPasswordWhenReady();' \
+    'secure surface does not request password focus immediately'
+lacks "$SURFACE" 'if (!root.transitionComplete || root.unlocking)' \
+    'password focus is still gated on transition completion'
+lacks "$SURFACE" 'scene.securePasswordEntryOpacity' \
+    'password presentation is still coupled to scene transition opacity'
 lacks "$AUTH" 'transitionComplete' \
     'transition presentation state leaked into LockAuth'
 
