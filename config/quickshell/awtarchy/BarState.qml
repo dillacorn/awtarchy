@@ -981,6 +981,58 @@ Singleton {
         return result;
     }
 
+    function lockscreenTimezoneClocks() {
+        const value = data().lockscreen_timezone_clocks;
+        if (!Array.isArray(value) || value.length > 12) return [];
+        const result = []; const ids = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+            const id = String(raw.id || ""); const timezone = String(raw.timezone || "UTC");
+            const format = String(raw.format || "24h") === "12h" ? "12h" : "24h";
+            const x = Number(raw.x), y = Number(raw.y), scale = Number(raw.scale);
+            const sx = Number(raw.stretch_x), sy = Number(raw.stretch_y), opacity = Number(raw.opacity), rotation = Number(raw.rotation);
+            const color = String(raw.color || "auto").toLowerCase();
+            if (!/^timezone-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
+                    || timezone.startsWith("/") || timezone.indexOf("..") >= 0 || /[\u0000-\u001f\u007f-\u009f]/.test(timezone)
+                    || !Number.isFinite(x) || x < 0.05 || x > 0.95 || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                    || !Number.isFinite(scale) || scale < 0.5 || scale > 100 || !Number.isFinite(sx) || sx < 0.25 || sx > 4
+                    || !Number.isFinite(sy) || sy < 0.25 || sy > 4 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                    || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
+                    || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color)) || typeof raw.visible !== "boolean") return [];
+            ids[id] = true;
+            result.push(({ id: id, timezone: timezone, format: format, x: x, y: y, scale: scale,
+                stretch_x: sx, stretch_y: sy, opacity: opacity, rotation: rotation, color: color, visible: raw.visible }));
+        }
+        return result;
+    }
+
+    function lockscreenCustomTexts() {
+        const value = data().lockscreen_custom_texts;
+        if (!Array.isArray(value) || value.length > 12) return [];
+        const result = []; const ids = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+            const id = String(raw.id || ""); const text = String(raw.text === undefined ? "Custom Text" : raw.text);
+            const variants = Array.isArray(raw.variants) ? raw.variants.map(value => String(value)) : [];
+            const alignment = ["left", "center", "right"].indexOf(String(raw.alignment)) >= 0 ? String(raw.alignment) : "center";
+            const x = Number(raw.x), y = Number(raw.y), scale = Number(raw.scale);
+            const sx = Number(raw.stretch_x), sy = Number(raw.stretch_y), opacity = Number(raw.opacity), rotation = Number(raw.rotation);
+            const color = String(raw.color || "auto").toLowerCase();
+            if (!/^text-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || text.length > 4096 || variants.length > 32
+                    || variants.some(value => value.length > 4096)
+                    || !Number.isFinite(x) || x < 0.05 || x > 0.95 || !Number.isFinite(y) || y < 0.08 || y > 0.92
+                    || !Number.isFinite(scale) || scale < 0.5 || scale > 100 || !Number.isFinite(sx) || sx < 0.25 || sx > 4
+                    || !Number.isFinite(sy) || sy < 0.25 || sy > 4 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                    || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
+                    || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color)) || typeof raw.visible !== "boolean") return [];
+            ids[id] = true;
+            result.push(({ id: id, text: text, variants: variants, randomize: raw.randomize === true,
+                alignment: alignment, x: x, y: y, scale: scale, stretch_x: sx, stretch_y: sy,
+                opacity: opacity, rotation: rotation, color: color, visible: raw.visible }));
+        }
+        return result;
+    }
+
     function updateNotificationsEnabled() {
         return data().update_notifications_enabled !== false;
     }

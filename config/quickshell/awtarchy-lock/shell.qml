@@ -17,6 +17,8 @@ ShellRoot {
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
     readonly property string captureHelper: configHome
         + "/hypr/scripts/quickshell_lockscreen_capture.sh"
+    readonly property string timezoneHelper: configHome
+        + "/hypr/scripts/quickshell_lockscreen_timezones.sh"
     readonly property string captureDirectory: normalizedCaptureDirectory(
         Quickshell.env("AWTARCHY_LOCK_CAPTURE_DIR") || "")
     property bool captureCleanupRequested: false
@@ -55,6 +57,9 @@ ShellRoot {
     readonly property string blurStyle: normalizedBlurStyle(lockBlurStyle)
     property var lockLayout: defaultLockLayout()
     property var lockCustomImages: []
+    property var lockTimezoneClocks: []
+    property var lockTimezoneValues: ({})
+    property var lockCustomTexts: []
     property var lockVisualizer: defaultLockVisualizer()
     property int lockBackgroundOpacity: 100
     property int randomFormationMode: Math.floor(Math.random() * 4)
@@ -357,6 +362,68 @@ ShellRoot {
         return result;
     }
 
+    function normalizedTimezoneClocks(value) {
+        if (!Array.isArray(value) || value.length > 12) return [];
+        const result = []; const ids = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+            const id = String(raw.id || ""), timezone = String(raw.timezone || "UTC");
+            const format = String(raw.format || "24h") === "12h" ? "12h" : "24h";
+            const x = Number(raw.x), y = Number(raw.y), scale = Number(raw.scale), sx = Number(raw.stretch_x), sy = Number(raw.stretch_y);
+            const opacity = Number(raw.opacity), rotation = Number(raw.rotation), color = String(raw.color || "auto").toLowerCase();
+            if (!/^timezone-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || timezone.startsWith("/") || timezone.indexOf("..") >= 0
+                    || /[\u0000-\u001f\u007f-\u009f]/.test(timezone) || !Number.isFinite(x) || x < 0.05 || x > 0.95
+                    || !Number.isFinite(y) || y < 0.08 || y > 0.92 || !Number.isFinite(scale) || scale < 0.5 || scale > 100
+                    || !Number.isFinite(sx) || sx < 0.25 || sx > 4 || !Number.isFinite(sy) || sy < 0.25 || sy > 4
+                    || !Number.isFinite(opacity) || opacity < 0 || opacity > 100 || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
+                    || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color)) || typeof raw.visible !== "boolean") return [];
+            ids[id] = true;
+            result.push(({ id:id, timezone:timezone, format:format, x:x, y:y, scale:scale, stretch_x:sx, stretch_y:sy,
+                opacity:opacity, rotation:rotation, color:color, visible:raw.visible }));
+        }
+        return result;
+    }
+
+    function normalizedCustomTexts(value) {
+        if (!Array.isArray(value) || value.length > 12) return [];
+        const result = []; const ids = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw)) return [];
+            const id = String(raw.id || ""), text = String(raw.text === undefined ? "Custom Text" : raw.text);
+            const variants = Array.isArray(raw.variants) ? raw.variants.map(value => String(value)) : [];
+            const alignment = ["left","center","right"].indexOf(String(raw.alignment)) >= 0 ? String(raw.alignment) : "center";
+            const x = Number(raw.x), y = Number(raw.y), scale = Number(raw.scale), sx = Number(raw.stretch_x), sy = Number(raw.stretch_y);
+            const opacity = Number(raw.opacity), rotation = Number(raw.rotation), color = String(raw.color || "auto").toLowerCase();
+            if (!/^text-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id] || text.length > 4096 || variants.length > 32
+                    || variants.some(value => value.length > 4096) || !Number.isFinite(x) || x < 0.05 || x > 0.95
+                    || !Number.isFinite(y) || y < 0.08 || y > 0.92 || !Number.isFinite(scale) || scale < 0.5 || scale > 100
+                    || !Number.isFinite(sx) || sx < 0.25 || sx > 4 || !Number.isFinite(sy) || sy < 0.25 || sy > 4
+                    || !Number.isFinite(opacity) || opacity < 0 || opacity > 100 || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
+                    || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color)) || typeof raw.visible !== "boolean") return [];
+            ids[id] = true;
+            result.push(({ id:id, text:text, variants:variants, randomize:raw.randomize === true, alignment:alignment,
+                x:x, y:y, scale:scale, stretch_x:sx, stretch_y:sy, opacity:opacity, rotation:rotation, color:color, visible:raw.visible }));
+        }
+        return result;
+    }
+
+    function timezoneHelperArgs() {
+        const args = ["bash", root.timezoneHelper, "--batch"];
+        for (const clock of root.lockTimezoneClocks)
+            args.push(String(clock.id), String(clock.timezone), String(clock.format));
+        return args;
+    }
+
+    function refreshTimezoneValues() {
+        if (root.lockTimezoneClocks.length === 0) { root.lockTimezoneValues = ({}); return; }
+        if (!timezoneProcess.running) timezoneProcess.exec(root.timezoneHelperArgs());
+    }
+
+    function applyTimezoneValues(line) {
+        try { const value = JSON.parse(String(line || "")); if (value && typeof value === "object" && !Array.isArray(value)) root.lockTimezoneValues = value; }
+        catch (error) { }
+    }
+
     function normalizedWeatherLocation(value) {
         if (typeof value !== "string")
             return "";
@@ -393,6 +460,9 @@ ShellRoot {
         lockWeatherLocation = "";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
+        lockTimezoneClocks = [];
+        lockTimezoneValues = ({});
+        lockCustomTexts = [];
         lockVisualizer = defaultLockVisualizer();
         lockBackgroundOpacity = 100;
     }
@@ -438,6 +508,8 @@ ShellRoot {
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
+            lockTimezoneClocks = normalizedTimezoneClocks(parsed.lockscreen_timezone_clocks);
+            lockCustomTexts = normalizedCustomTexts(parsed.lockscreen_custom_texts);
             lockVisualizer = normalizedVisualizer(parsed.lockscreen_visualizer);
             lockBackgroundOpacity = normalizedBackgroundOpacity(parsed.lockscreen_background_opacity);
         } catch (error) {
@@ -448,7 +520,14 @@ ShellRoot {
     Component.onCompleted: {
         Quickshell.watchFiles = false;
         root.loadPreferences();
+        Qt.callLater(root.refreshTimezoneValues);
     }
+
+    Process {
+        id: timezoneProcess
+        stdout: SplitParser { onRead: line => root.applyTimezoneValues(line) }
+    }
+    Timer { interval: 15000; repeat: true; running: root.lockTimezoneClocks.length > 0; triggeredOnStart: true; onTriggered: root.refreshTimezoneValues() }
 
     FileView {
         id: stateFile
@@ -527,6 +606,9 @@ ShellRoot {
                 autoAccents: lockContrastCache.colors
                 layout: root.lockLayout
                 customImages: root.lockCustomImages
+                timezoneClocks: root.lockTimezoneClocks
+                timezoneValues: root.lockTimezoneValues
+                customTexts: root.lockCustomTexts
                 visualizer: root.lockVisualizer
                 audioBands: lockAudioAnalyzer.bands
                 backgroundOpacity: root.lockBackgroundOpacity

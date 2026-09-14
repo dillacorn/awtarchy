@@ -30,6 +30,9 @@ Item {
     required property var autoAccents
     required property var layout
     required property var customImages
+    required property var timezoneClocks
+    required property var timezoneValues
+    required property var customTexts
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
@@ -50,6 +53,8 @@ Item {
     property string presentationPhase: "transition"
     property int logoEntryEpoch: 0
     property int customImageSpawnEpoch: 0
+    property int textReplayEpoch: 0
+    property var customTextSelections: ({})
     property string individualImageReplayId: ""
     property int individualImageReplayEpoch: 0
     readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning
@@ -276,11 +281,64 @@ Item {
         return Qt.point(0, root.height - centerY + itemHeight / 2 + margin);
     }
 
+    function timezoneClockForName(name) {
+        if (!String(name || "").startsWith("timezone:") || !Array.isArray(root.timezoneClocks)) return null;
+        const id = String(name).slice(9);
+        for (const clock of root.timezoneClocks) if (clock && String(clock.id || "") === id) return clock;
+        return null;
+    }
+
+    function customTextForName(name) {
+        if (!String(name || "").startsWith("text:") || !Array.isArray(root.customTexts)) return null;
+        const id = String(name).slice(5);
+        for (const item of root.customTexts) if (item && String(item.id || "") === id) return item;
+        return null;
+    }
+
     function presentationPoint(name) {
         if (name === "visualizer" && root.visualizer
                 && typeof root.visualizer === "object" && !Array.isArray(root.visualizer))
             return root.visualizer;
-        return normalizedPoint(name) || customImageForName(name);
+        return normalizedPoint(name) || customImageForName(name) || timezoneClockForName(name) || customTextForName(name);
+    }
+
+    function timezoneLabel(zone) {
+        const parts = String(zone || "UTC").split("/");
+        return String(parts[parts.length - 1] || "UTC").replace(/_/g, " ");
+    }
+
+    function timezoneDisplay(clock) {
+        if (!clock) return "--:--";
+        const value = String(root.timezoneValues && root.timezoneValues[clock.id] !== undefined ? root.timezoneValues[clock.id] : "--:--");
+        return value + "\n" + timezoneLabel(clock.timezone);
+    }
+
+    function refreshCustomTextSelections() {
+        const next = ({});
+        if (Array.isArray(root.customTexts)) {
+            for (const item of root.customTexts) {
+                if (!item) continue;
+                const variants = Array.isArray(item.variants) ? item.variants.map(value => String(value)) : [];
+                if (item.randomize === true && variants.length > 0)
+                    next[String(item.id)] = variants[Math.floor(Math.random() * variants.length)];
+                else next[String(item.id)] = String(item.text === undefined ? "Custom Text" : item.text);
+            }
+        }
+        root.customTextSelections = next;
+    }
+
+    function customTextDisplay(item) {
+        if (!item) return "";
+        const id = String(item.id || "");
+        return String(root.customTextSelections[id] !== undefined ? root.customTextSelections[id] : item.text || "Custom Text");
+    }
+
+    onCustomTextsChanged: refreshCustomTextSelections()
+    onPresentationReplayTokenChanged: {
+        if (root.previewMode && root.presentationReplayToken > 0) {
+            root.textReplayEpoch++;
+            root.refreshCustomTextSelections();
+        }
     }
 
     function normalizedX(name, fallback) {
@@ -427,6 +485,10 @@ Item {
             return visualizerBaseWidth() * root.elementScale(name) * root.elementStretchX(name);
         if (customImageForName(name))
             return 180 * root.uiScale * root.elementScale(name) * root.elementStretchX(name);
+        if (timezoneClockForName(name))
+            return 220 * root.uiScale * root.elementScale(name) * root.elementStretchX(name);
+        if (customTextForName(name))
+            return Math.min(root.width * 0.70, 640 * root.uiScale) * root.elementScale(name) * root.elementStretchX(name);
         if (name === "logo") return root.wordmarkWidth * root.elementScale("logo") * root.elementStretchX("logo");
         if (name === "time") return timeItem.implicitWidth * root.elementScale("time") * root.elementStretchX("time");
         if (name === "date") return dateItem.implicitWidth * root.elementScale("date") * root.elementStretchX("date");
@@ -441,6 +503,10 @@ Item {
             return visualizerBaseHeight() * root.elementScale(name) * root.elementStretchY(name);
         if (customImageForName(name))
             return 180 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);
+        if (timezoneClockForName(name))
+            return 66 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);
+        if (customTextForName(name))
+            return 72 * root.uiScale * root.elementScale(name) * root.elementStretchY(name);
         if (name === "logo") return root.wordmarkHeight * root.elementScale("logo") * root.elementStretchY("logo");
         if (name === "time") return timeItem.implicitHeight * root.elementScale("time") * root.elementStretchY("time");
         if (name === "date") return dateItem.implicitHeight * root.elementScale("date") * root.elementStretchY("date");
@@ -1327,6 +1393,54 @@ Item {
             font.pixelSize: Math.round(18 * root.uiScale)
         }
 
+        Repeater {
+            model: Array.isArray(root.timezoneClocks) ? root.timezoneClocks : []
+            Text {
+                required property var modelData
+                readonly property string elementName: "timezone:" + String(modelData.id || "")
+                visible: root.presentationVisible(elementName, modelData.visible !== false)
+                opacity: root.presentationOpacity(elementName) * root.elementOpacity(elementName)
+                scale: root.elementScale(elementName)
+                rotation: root.elementRotation(elementName)
+                transformOrigin: Item.Center
+                transform: Scale { origin.x: parent.width / 2; origin.y: parent.height / 2; xScale: root.elementStretchX(parent.elementName); yScale: root.elementStretchY(parent.elementName) }
+                z: 10
+                width: 220 * root.uiScale
+                x: root.normalizedX(elementName, 0.50) * root.width - width / 2
+                y: root.normalizedY(elementName, 0.60) * root.height - height / 2
+                text: root.timezoneDisplay(modelData)
+                horizontalAlignment: Text.AlignHCenter
+                color: root.elementColor(elementName)
+                font.family: root.theme.fontFamily
+                font.pixelSize: Math.round(24 * root.uiScale)
+                lineHeight: 0.86
+            }
+        }
+
+        Repeater {
+            model: Array.isArray(root.customTexts) ? root.customTexts : []
+            Text {
+                required property var modelData
+                readonly property string elementName: "text:" + String(modelData.id || "")
+                visible: root.presentationVisible(elementName, modelData.visible !== false)
+                opacity: root.presentationOpacity(elementName) * root.elementOpacity(elementName)
+                scale: root.elementScale(elementName)
+                rotation: root.elementRotation(elementName)
+                transformOrigin: Item.Center
+                transform: Scale { origin.x: parent.width / 2; origin.y: parent.height / 2; xScale: root.elementStretchX(parent.elementName); yScale: root.elementStretchY(parent.elementName) }
+                z: 10
+                width: Math.min(root.width * 0.70, 640 * root.uiScale)
+                x: root.normalizedX(elementName, 0.50) * root.width - width / 2
+                y: root.normalizedY(elementName, 0.55) * root.height - height / 2
+                text: root.customTextDisplay(modelData)
+                wrapMode: Text.Wrap
+                horizontalAlignment: modelData.alignment === "left" ? Text.AlignLeft : modelData.alignment === "right" ? Text.AlignRight : Text.AlignHCenter
+                color: root.elementColor(elementName)
+                font.family: root.theme.fontFamily
+                font.pixelSize: Math.round(22 * root.uiScale)
+            }
+        }
+
         Item {
             visible: root.previewMode
             rotation: root.elementRotation("password")
@@ -1463,6 +1577,7 @@ Item {
 
     Component.onCompleted: {
         root.updateClockText();
+        root.refreshCustomTextSelections();
         root.entered = true;
         if (root.previewMode && root.presentationReplayToken === 0)
             root.presentationPhase = "settled";

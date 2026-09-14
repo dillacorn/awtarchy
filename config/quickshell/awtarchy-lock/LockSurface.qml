@@ -33,6 +33,9 @@ WlSessionLockSurface {
     required property var autoAccents
     required property var layout
     required property var customImages
+    required property var timezoneClocks
+    required property var timezoneValues
+    required property var customTexts
     required property var visualizer
     required property var audioBands
     required property int backgroundOpacity
@@ -144,6 +147,9 @@ WlSessionLockSurface {
             autoAccents: root.autoAccents
             layout: root.layout
             customImages: root.customImages
+            timezoneClocks: root.timezoneClocks
+            timezoneValues: root.timezoneValues
+            customTexts: root.customTexts
             visualizer: root.visualizer
             audioBands: root.audioBands
             backgroundOpacity: root.backgroundOpacity

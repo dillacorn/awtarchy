@@ -19,6 +19,7 @@ Singleton {
     readonly property string contrastBackend: configHome + "/hypr/scripts/quickshell_lockscreen_contrast.sh"
     readonly property string wallpaperPickerBackend: configHome + "/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh"
     readonly property string previewCaptureBackend: configHome + "/hypr/scripts/quickshell_lockscreen_preview_capture.sh"
+    readonly property string timezoneBackend: configHome + "/hypr/scripts/quickshell_lockscreen_timezones.sh"
     property string previewCaptureDirectory: ""
     property string previewCapturePendingDirectory: ""
     property bool editingActive: false
@@ -27,6 +28,16 @@ Singleton {
     property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
     readonly property int customImageMaximum: 12
+    readonly property int timezoneClockMaximum: 12
+    readonly property int customTextMaximum: 12
+    readonly property var timezonePresets: [
+        { key: "UTC", label: "UTC" },
+        { key: "America/New_York", label: "New York" },
+        { key: "America/Los_Angeles", label: "Los Angeles" },
+        { key: "Europe/London", label: "London" },
+        { key: "Asia/Tokyo", label: "Tokyo" },
+        { key: "Australia/Sydney", label: "Sydney" }
+    ]
     readonly property real elementScaleMaximum: 100.0
     readonly property int editorEntranceFadeDuration: 140
     readonly property var customImageSpawnPresets: [
@@ -60,6 +71,7 @@ Singleton {
     property var draftCustomImages: []
     property var draftTimezoneClocks: []
     property var draftCustomTexts: []
+    property var previewTimezoneValues: ({})
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
     property int draftLastBackgroundOpacity: 100
@@ -339,6 +351,8 @@ Singleton {
         return ({
             layout: cloneLayout(draftLayout),
             customImages: cloneCustomImages(draftCustomImages),
+            timezoneClocks: cloneTimezoneClocks(draftTimezoneClocks),
+            customTexts: cloneCustomTexts(draftCustomTexts),
             visualizer: cloneSnapshot(draftVisualizer),
             visibility: cloneVisibility(draftVisibility),
             backgroundMode: draftBackgroundMode,
@@ -389,7 +403,10 @@ Singleton {
             return;
         draftLayout = cloneLayout(snapshot.layout);
         draftCustomImages = cloneCustomImages(snapshot.customImages);
+        draftTimezoneClocks = cloneTimezoneClocks(snapshot.timezoneClocks);
+        draftCustomTexts = cloneCustomTexts(snapshot.customTexts);
         draftVisualizer = cloneVisualizer(snapshot.visualizer);
+        refreshPreviewTimezoneValues();
         draftVisibility = cloneVisibility(snapshot.visibility);
         const validSelection = selectedElements.filter(name => elementExists(name));
         if (!elementExists(selectedElement))
@@ -548,11 +565,11 @@ Singleton {
             next.scale = value;
             draftVisualizer = next;
         } else if (isCustomImage(name)) {
-            const next = cloneCustomImages(draftCustomImages);
-            const index = customImageIndex(name);
-            if (index < 0) return;
-            next[index].scale = value;
-            draftCustomImages = next;
+            const next = cloneCustomImages(draftCustomImages); const index = customImageIndex(name); if (index < 0) return; next[index].scale = value; draftCustomImages = next;
+        } else if (isTimezoneClock(name)) {
+            const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].scale=value;draftTimezoneClocks=next;
+        } else if (isCustomText(name)) {
+            const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].scale=value;draftCustomTexts=next;
         } else {
             const next = cloneLayout(draftLayout);
             next[name].scale = value;
@@ -838,6 +855,8 @@ Singleton {
             const scale=Math.max(0.50,Math.min(elementScaleMaximum,Number(item.scale)*factor));
             if (item.name === "visualizer") { nv.x=x; nv.y=y; nv.scale=scale; }
             else if (isCustomImage(item.name)) { const i=ni.findIndex(image=>image.id===item.name); if(i>=0){ni[i].x=x;ni[i].y=y;ni[i].scale=scale;} }
+            else if (isTimezoneClock(item.name)) { const i=timezoneClockIndex(item.name); const next=cloneTimezoneClocks(draftTimezoneClocks); if(i>=0){next[i].x=x;next[i].y=y;next[i].scale=scale;draftTimezoneClocks=next;} }
+            else if (isCustomText(item.name)) { const i=customTextIndex(item.name); const next=cloneCustomTexts(draftCustomTexts); if(i>=0){next[i].x=x;next[i].y=y;next[i].scale=scale;draftCustomTexts=next;} }
             else if (elementNames.indexOf(item.name)>=0) { nl[item.name].x=x; nl[item.name].y=y; nl[item.name].scale=scale; }
         }
         draftLayout=nl; draftCustomImages=ni; draftVisualizer=nv; scheduleContrastRefresh();
@@ -952,10 +971,11 @@ Singleton {
                 nextVisualizer.x = Number(nextVisualizer.x) + delta.x;
                 nextVisualizer.y = Number(nextVisualizer.y) + delta.y;
             } else if (isCustomImage(name)) {
-                const index = nextImages.findIndex(image => image.id === name);
-                if (index < 0) continue;
-                nextImages[index].x = Number(nextImages[index].x) + delta.x;
-                nextImages[index].y = Number(nextImages[index].y) + delta.y;
+                const index = nextImages.findIndex(image => image.id === name); if (index < 0) continue; nextImages[index].x = Number(nextImages[index].x) + delta.x; nextImages[index].y = Number(nextImages[index].y) + delta.y;
+            } else if (isTimezoneClock(name)) {
+                const next=cloneTimezoneClocks(draftTimezoneClocks);const i=timezoneClockIndex(name);if(i>=0){next[i].x=Number(next[i].x)+delta.x;next[i].y=Number(next[i].y)+delta.y;draftTimezoneClocks=next;}
+            } else if (isCustomText(name)) {
+                const next=cloneCustomTexts(draftCustomTexts);const i=customTextIndex(name);if(i>=0){next[i].x=Number(next[i].x)+delta.x;next[i].y=Number(next[i].y)+delta.y;draftCustomTexts=next;}
             } else if (elementNames.indexOf(name) >= 0) {
                 nextLayout[name].x = Number(nextLayout[name].x) + delta.x;
                 nextLayout[name].y = Number(nextLayout[name].y) + delta.y;
@@ -1343,11 +1363,67 @@ Singleton {
         return result;
     }
 
+    function cloneTimezoneClocks(value) {
+        if (!Array.isArray(value)) return [];
+        const result = []; const ids = ({});
+        for (let i = 0; i < value.length && result.length < timezoneClockMaximum; ++i) {
+            const raw = value[i]; if (!raw || typeof raw !== "object" || Array.isArray(raw)) continue;
+            const id = String(raw.id || ""); const timezone = String(raw.timezone || "UTC"); if (!/^timezone-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]) continue;
+            const x=Number(raw.x),y=Number(raw.y),scale=Number(raw.scale),sx=Number(raw.stretch_x),sy=Number(raw.stretch_y),opacity=Number(raw.opacity),rotation=Number(raw.rotation);
+            const color=String(raw.color||"auto").toLowerCase(); ids[id]=true;
+            result.push(({id:id, timezone:timezone, format:normalizedClockFormat(raw.format), x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),
+                y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.6)), scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),
+                stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)), stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),
+                opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
+                color:color==="auto"||validHex(color)?color:"auto", visible:typeof raw.visible==="boolean"?raw.visible:true}));
+        }
+        return result;
+    }
+
+    function cloneCustomTexts(value) {
+        if (!Array.isArray(value)) return [];
+        const result=[]; const ids=({});
+        for (let i=0;i<value.length&&result.length<customTextMaximum;++i) {
+            const raw=value[i]; if(!raw||typeof raw!=="object"||Array.isArray(raw)) continue;
+            const id=String(raw.id||""); if(!/^text-[A-Za-z0-9_-]{1,64}$/.test(id)||ids[id]) continue;
+            const x=Number(raw.x),y=Number(raw.y),scale=Number(raw.scale),sx=Number(raw.stretch_x),sy=Number(raw.stretch_y),opacity=Number(raw.opacity),rotation=Number(raw.rotation);
+            const color=String(raw.color||"auto").toLowerCase(); const variants=Array.isArray(raw.variants)?raw.variants.slice(0,32).map(v=>String(v).slice(0,4096)):[]; ids[id]=true;
+            result.push(({id:id,text:String(raw.text===undefined?"Custom Text":raw.text).slice(0,4096),variants:variants,randomize:raw.randomize===true,
+                alignment:["left","center","right"].indexOf(String(raw.alignment))>=0?String(raw.alignment):"center",
+                x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.55)),
+                scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)),
+                stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)),
+                rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),color:color==="auto"||validHex(color)?color:"auto",visible:typeof raw.visible==="boolean"?raw.visible:true}));
+        }
+        return result;
+    }
+
     function customImageIndex(name) { const key = String(name || ""); for (let i = 0; i < draftCustomImages.length; ++i) if (String(draftCustomImages[i].id || "") === key) return i; return -1; }
     function isCustomImage(name) { return customImageIndex(name) >= 0; }
-    function editableElementNames() { const names = elementNames.slice(); names.push("visualizer"); for (const image of draftCustomImages) names.push(String(image.id)); return names; }
-    function elementExists(name) { return name === "visualizer" || elementNames.indexOf(name) >= 0 || isCustomImage(name); }
-    function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
+    function timezoneClockIndex(name) { return dynamicRotationIndex(String(name||""), "timezone:", draftTimezoneClocks); }
+    function customTextIndex(name) { return dynamicRotationIndex(String(name||""), "text:", draftCustomTexts); }
+    function isTimezoneClock(name) { return timezoneClockIndex(name) >= 0; }
+    function isCustomText(name) { return customTextIndex(name) >= 0; }
+    function editableElementNames() { const names = elementNames.slice(); names.push("visualizer"); for (const image of draftCustomImages) names.push(String(image.id)); for(const clock of draftTimezoneClocks) names.push("timezone:"+String(clock.id)); for(const item of draftCustomTexts) names.push("text:"+String(item.id)); return names; }
+    function elementExists(name) { return name === "visualizer" || elementNames.indexOf(name) >= 0 || isCustomImage(name) || isTimezoneClock(name) || isCustomText(name); }
+    function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
+
+    function nextDynamicId(prefix, values) { const stem=prefix+Date.now().toString(36); let n=0,candidate=stem; while(values.some(item=>String(item.id||"")===candidate)){n++;candidate=stem+"_"+n;} return candidate; }
+    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
+    function removeTimezoneClock(name) { const i=timezoneClockIndex(name); if(i<0)return; recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); next.splice(i,1); draftTimezoneClocks=next; selectedElement="logo";selectedElements=["logo"];refreshPreviewTimezoneValues();statusMessage="Timezone clock removed."; }
+    function addCustomText() { if(draftCustomTexts.length>=customTextMaximum){statusMessage="Custom text limit reached";return;} recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);const id=nextDynamicId("text-",next);next.push(({id:id,text:"Custom Text",variants:[],randomize:false,alignment:"center",x:0.5,y:0.55,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true}));draftCustomTexts=next;selectedElement="text:"+id;selectedElements=[selectedElement];activeDrawer="element";statusMessage="Custom text added. Save to apply."; }
+    function removeCustomText(name) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next.splice(i,1);draftCustomTexts=next;selectedElement="logo";selectedElements=["logo"];statusMessage="Custom text removed."; }
+    function timezonePresetIndex(zone) { for(let i=0;i<timezonePresets.length;++i)if(timezonePresets[i].key===String(zone))return i;return 0; }
+    function setTimezoneClockZone(name, zone) { const i=timezoneClockIndex(name);if(i<0||timezonePresets.every(item=>item.key!==String(zone)))return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].timezone=String(zone);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
+    function setTimezoneClockFormat(name, format) { const i=timezoneClockIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].format=normalizedClockFormat(format);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
+    function setCustomTextContent(name, value) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].text=String(value).slice(0,4096);draftCustomTexts=next; }
+    function setCustomTextChoices(name, value) { const i=customTextIndex(name);if(i<0)return;const lines=String(value).split("\n").filter(line=>line.length>0).slice(0,32);recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].variants=lines;draftCustomTexts=next; }
+    function setCustomTextRandomize(name, value) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].randomize=!!value;draftCustomTexts=next; }
+    function setCustomTextAlignment(name, value) { const i=customTextIndex(name);if(i<0||["left","center","right"].indexOf(String(value))<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].alignment=String(value);draftCustomTexts=next; }
+    function timezoneHelperArgs() { const args=["bash",timezoneBackend,"--batch"];for(const clock of draftTimezoneClocks)args.push(String(clock.id),String(clock.timezone),String(clock.format));return args; }
+    function refreshPreviewTimezoneValues() { if(draftTimezoneClocks.length===0){previewTimezoneValues=({});return;}if(!timezonePreviewProcess.running)timezonePreviewProcess.exec(timezoneHelperArgs()); }
+    function applyPreviewTimezoneValues(line) { try{const value=JSON.parse(String(line||""));if(value&&typeof value==="object"&&!Array.isArray(value))previewTimezoneValues=value;}catch(error){} }
+
 
     function cloneLayout(value) {
         const cloned = cloneObject(value, defaultLayout); const defaults = defaultLayout(); const result = ({});
@@ -1381,6 +1457,8 @@ Singleton {
         if (!elementExists(name)) return; if (selectPrimary) recordUndoBeforeChange(); const point = clampPoint(name, Number(x), Number(y));
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.x = point.x; next.y = point.y; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].x = point.x; next[index].y = point.y; draftCustomImages = next; }
+        else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);const i=timezoneClockIndex(name);next[i].x=point.x;next[i].y=point.y;draftTimezoneClocks=next;}
+        else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);const i=customTextIndex(name);next[i].x=point.x;next[i].y=point.y;draftCustomTexts=next;}
         else { const next = cloneLayout(draftLayout); next[name].x = point.x; next[name].y = point.y; draftLayout = next; }
         if (selectPrimary) selectElement(name, false); scheduleContrastRefresh();
     }
@@ -1399,9 +1477,9 @@ Singleton {
     function elementColor(name) { if (isCustomImage(name)) return "auto"; const point = elementPoint(name); const value = point ? String(point.color === undefined ? "auto" : point.color) : "auto"; return value === "auto" || /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "auto"; }
 
     function setDraftColor(name, colorValue) {
-        if (name !== "visualizer" && elementNames.indexOf(name) < 0) return;
+        if (name !== "visualizer" && elementNames.indexOf(name) < 0 && !isTimezoneClock(name) && !isCustomText(name)) return;
         const value = String(colorValue || "").trim().toLowerCase(); if (value !== "auto" && !/^#[0-9a-f]{6}$/.test(value)) { statusMessage = "Color must be Auto or #RRGGBB"; return; }
-        recordUndoBeforeChange(); if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.color = value; draftVisualizer = next; } else { const next = cloneLayout(draftLayout); next[name].color = value; draftLayout = next; }
+        recordUndoBeforeChange(); if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.color = value; draftVisualizer = next; } else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].color=value;draftTimezoneClocks=next;} else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].color=value;draftCustomTexts=next;} else { const next = cloneLayout(draftLayout); next[name].color = value; draftLayout = next; }
         selectElement(name, false); statusMessage = "";
     }
 
@@ -1412,6 +1490,8 @@ Singleton {
         const minimum = name === "password" ? 20 : 0; const value = Math.round(Math.max(minimum, Math.min(100, numeric))); recordUndoBeforeChange();
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.opacity = value; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].opacity = value; draftCustomImages = next; }
+        else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].opacity=value;draftTimezoneClocks=next;}
+        else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].opacity=value;draftCustomTexts=next;}
         else { const next = cloneLayout(draftLayout); next[name].opacity = value; draftLayout = next; }
         selectElement(name, false);
     }
@@ -1421,6 +1501,8 @@ Singleton {
         const x = Math.round(Math.max(0.25, Math.min(4.00, rawX)) * 100) / 100; const y = Math.round(Math.max(0.25, Math.min(4.00, rawY)) * 100) / 100; recordUndoBeforeChange();
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.stretch_x = x; next.stretch_y = y; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].stretch_x = x; next[index].stretch_y = y; draftCustomImages = next; }
+        else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].stretch_x=x;next[timezoneClockIndex(name)].stretch_y=y;draftTimezoneClocks=next;}
+        else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].stretch_x=x;next[customTextIndex(name)].stretch_y=y;draftCustomTexts=next;}
         else { const next = cloneLayout(draftLayout); next[name].stretch_x = x; next[name].stretch_y = y; draftLayout = next; }
         selectElement(name, false);
     }
@@ -1430,6 +1512,8 @@ Singleton {
         if (!elementCanHide(name)) return; recordUndoBeforeChange();
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.enabled = !!visible; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].visible = !!visible; draftCustomImages = next; }
+        else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].visible=!!visible;draftTimezoneClocks=next;}
+        else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].visible=!!visible;draftCustomTexts=next;}
         else { const next = cloneVisibility(draftVisibility); next[name] = !!visible; draftVisibility = next; }
         selectElement(name, false);
     }
@@ -1440,7 +1524,7 @@ Singleton {
         for (const name of names) { if (name === "visualizer") vz.enabled=!!visible; else if (isCustomImage(name)) { const i=ni.findIndex(image=>image.id===name); if(i>=0) ni[i].visible=!!visible; } else if (elementNames.indexOf(name)>=0) nv[name]=!!visible; }
         nv.password=true; draftVisibility=nv; draftCustomImages=ni; draftVisualizer=vz; statusMessage=visible?"Selected elements visible":"Selected elements hidden"; scheduleContrastRefresh();
     }
-    function elementEnabled(name) { if (name === "visualizer") return draftVisualizer.enabled === true; if (isCustomImage(name)) { const point = elementPoint(name); return point ? point.visible !== false : false; } return draftVisibility[name] !== false; }
+    function elementEnabled(name) { if (name === "visualizer") return draftVisualizer.enabled === true; if (isCustomImage(name) || isTimezoneClock(name) || isCustomText(name)) { const point = elementPoint(name); return point ? point.visible !== false : false; } return draftVisibility[name] !== false; }
 
     function nextCustomImageId() { const prefix = "image-" + Date.now().toString(36); let suffix = 0; let candidate = prefix; while (customImageIndex(candidate) >= 0) { suffix += 1; candidate = prefix + "_" + suffix; } return candidate; }
     function addCustomImage(imagePath) {
@@ -1463,7 +1547,7 @@ Singleton {
     function replayEntryTransition() { entryTransitionReplayToken = entryTransitionReplayToken >= 2147483646 ? 1 : entryTransitionReplayToken + 1; statusMessage = "Replaying full lockscreen entry"; }
 
     function resetDraft() {
-        recordUndoBeforeChange(); draftLayout = defaultLayout(); draftCustomImages = []; draftVisualizer = defaultVisualizer(); draftBackgroundOpacity = 100; draftLastBackgroundOpacity = 100;
+        recordUndoBeforeChange(); draftLayout = defaultLayout(); draftCustomImages = []; draftTimezoneClocks=[]; draftCustomTexts=[]; previewTimezoneValues=({}); draftVisualizer = defaultVisualizer(); draftBackgroundOpacity = 100; draftLastBackgroundOpacity = 100;
         draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordMaskMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
         draftVisibility = defaultVisibility(); draftBackgroundMode = "black"; draftBackgroundColor = "#000000"; draftWallpaperPath = "";
         draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 0; draftBlurStyle = "smooth"; draftWallpaperBlurExplicit = false;
@@ -1472,7 +1556,7 @@ Singleton {
 
     function loadPersistedDraft() {
         const state = BarState.data();
-        draftLayout = cloneLayout(BarState.lockscreenLayout()); draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages()); draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer());
+        draftLayout = cloneLayout(BarState.lockscreenLayout()); draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages()); draftTimezoneClocks=cloneTimezoneClocks(BarState.lockscreenTimezoneClocks()); draftCustomTexts=cloneCustomTexts(BarState.lockscreenCustomTexts()); draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer()); refreshPreviewTimezoneValues();
         draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity(); draftLastBackgroundOpacity = BarState.lockscreenPreviousBackgroundOpacity(); draftEntryTransition = BarState.lockscreenEntryTransition(); draftEntryTransitionDuration = BarState.lockscreenEntryTransitionDuration();
         draftLogoSpawnAnimation = normalizedLogoSpawn(BarState.lockscreenAnimationPreference()); draftPasswordMaskMode = normalizedPasswordMaskMode(state.lockscreen_password_mask_mode); draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(state.lockscreen_password_mask_character); draftClockFormat = normalizedClockFormat(state.lockscreen_clock_format);
         draftVisibility = cloneVisibility(({ logo: BarState.lockscreenShowLogo(), time: BarState.lockscreenShowTime(), date: BarState.lockscreenShowDate(), username: BarState.lockscreenShowUsername(), weather: BarState.lockscreenShowWeather(), password: true }));
@@ -1516,10 +1600,10 @@ Singleton {
         statusMessage = "Saving…";
         saveProcess.exec(["bash", editorSaveBackend, JSON.stringify(draftLayout), JSON.stringify(draftVisibility), draftBackgroundMode, draftBackgroundColor, draftWallpaperPath, draftWallpaperFit,
             String(draftWallpaperFocalX), String(draftWallpaperFocalY), draftOverlayMode, String(draftOverlayStrength), String(draftWallpaperBlur), draftWeatherUnits, JSON.stringify(draftCustomImages), JSON.stringify(draftVisualizer), String(draftBackgroundOpacity), String(draftEntryTransition), String(draftEntryTransitionDuration), String(draftLastBackgroundOpacity), String(draftBlurStyle),
-            String(draftLogoSpawnAnimation), String(draftPasswordMaskMode), String(draftPasswordMaskCharacter), String(draftClockFormat)]);
+            String(draftLogoSpawnAnimation), String(draftPasswordMaskMode), String(draftPasswordMaskCharacter), String(draftClockFormat), JSON.stringify(draftTimezoneClocks), JSON.stringify(draftCustomTexts)]);
     }
 
-    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1); return name; }
+    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
 
     Process { id: saveProcess; onExited: (exitCode, exitStatus) => { if (exitCode === 0) { BarState.refresh(); root.statusMessage = "Refreshing Auto contrast…"; contrastPersistProcess.exec(["bash", root.contrastBackend]); } else root.statusMessage = "Could not save lockscreen presentation"; } }
     Process { id: contrastPersistProcess; onExited: (exitCode, exitStatus) => { root.statusMessage = exitCode === 0 ? "Saved" : "Saved; Auto contrast cache could not refresh"; } }
@@ -1539,6 +1623,8 @@ Singleton {
             else { root.previewCaptureDirectory = ""; root.presentEditorAfterPreviewCapture("Desktop preview capture unavailable; using black fallback."); } }
     }
     Timer { id: contrastRefreshDelay; interval: 120; repeat: false; onTriggered: root.refreshPreviewContrast() }
+    Process { id: timezonePreviewProcess; stdout: SplitParser { onRead: line => root.applyPreviewTimezoneValues(line) } }
+    Timer { interval: 15000; repeat: true; running: root.open && root.draftTimezoneClocks.length > 0; triggeredOnStart: true; onTriggered: root.refreshPreviewTimezoneValues() }
     Process {
         id: previewContrastProcess
         stdout: SplitParser { onRead: line => root.applyPreviewContrastLine(line) }
@@ -1575,7 +1661,9 @@ Singleton {
             Keys.onPressed: event => { const step = event.modifiers & Qt.ShiftModifier ? root.keyboardNudgeLarge : root.keyboardNudge;
                 if (event.key === Qt.Key_Left) { root.nudgeSelection(-step, 0); event.accepted = true; } else if (event.key === Qt.Key_Right) { root.nudgeSelection(step, 0); event.accepted = true; }
                 else if (event.key === Qt.Key_Up) { root.nudgeSelection(0, -step); event.accepted = true; } else if (event.key === Qt.Key_Down) { root.nudgeSelection(0, step); event.accepted = true; }
-                else if (event.key === Qt.Key_Delete && root.isCustomImage(root.selectedElement)) { root.removeCustomImage(root.selectedElement); event.accepted = true; } }
+                else if (event.key === Qt.Key_Delete && root.isCustomImage(root.selectedElement)) { root.removeCustomImage(root.selectedElement); event.accepted = true; }
+                else if (event.key === Qt.Key_Delete && root.isTimezoneClock(root.selectedElement)) { root.removeTimezoneClock(root.selectedElement); event.accepted = true; }
+                else if (event.key === Qt.Key_Delete && root.isCustomText(root.selectedElement)) { root.removeCustomText(root.selectedElement); event.accepted = true; } }
 
             Item { id: editorTransitionStart; x: editorFocus.width + 64; y: 0; width: editorFocus.width; height: editorFocus.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
@@ -1590,7 +1678,7 @@ Singleton {
                 showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
                 wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY; overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
-                blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
+                blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; timezoneClocks: root.draftTimezoneClocks; timezoneValues: root.previewTimezoneValues; customTexts: root.draftCustomTexts; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
                 passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat
                 desktopBackingSource: editorTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility; editorHeldElement: root.heldElement; editorHoldScale: root.heldScaleBoost
             }
@@ -1692,7 +1780,11 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
                         SettingsButton { label: "Add Image"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
+                        SettingsButton { label: "Add timezone clock"; textSize: 9; available: root.draftTimezoneClocks.length < root.timezoneClockMaximum; onClicked: root.addTimezoneClock() }
+                        SettingsButton { label: "Add custom text"; textSize: 9; available: root.draftCustomTexts.length < root.customTextMaximum; onClicked: root.addCustomText() }
                         SettingsButton { label: "Remove Image"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
+                        SettingsButton { label: "Remove clock"; textSize: 9; visible: root.isTimezoneClock(root.selectedElement); available: visible; onClicked: root.removeTimezoneClock(root.selectedElement) }
+                        SettingsButton { label: "Remove text"; textSize: 9; visible: root.isCustomText(root.selectedElement); available: visible; onClicked: root.removeCustomText(root.selectedElement) }
                         Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0); onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
                         TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }
@@ -1800,6 +1892,38 @@ Singleton {
                             currentIndex: root.clockFormatIndex(root.draftClockFormat)
                             onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)
                         }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement)
+                        Text { text: "Timezone"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        LockscreenCompactSelector { Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
+                        SettingsButton { label: root.elementPoint(root.selectedElement).format === "12h" ? "12-hour" : "24-hour"; active: root.elementPoint(root.selectedElement).format === "12h"; textSize: 9; onClicked: root.setTimezoneClockFormat(root.selectedElement, root.elementPoint(root.selectedElement).format === "12h" ? "24h" : "12h") }
+                        Item { Layout.fillWidth: true }
+                        Text { text: "Each extra clock has independent timezone, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isCustomText(root.selectedElement)
+                        Text { text: "Text"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Rectangle { Layout.preferredWidth: 240; Layout.preferredHeight: 58; color: Theme.background; border.width: 1; border.color: Theme.muted
+                            TextEdit { id: customTextEditor; anchors.fill: parent; anchors.margins: 5; text: root.isCustomText(root.selectedElement) ? root.elementPoint(root.selectedElement).text : ""; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; wrapMode: TextEdit.Wrap; selectByMouse: true
+                                Keys.onReturnPressed: event => { if (event.modifiers & Qt.ShiftModifier) { insert(cursorPosition, "\n"); event.accepted = true; } else event.accepted = false; }
+                                onActiveFocusChanged: { if (!activeFocus && root.isCustomText(root.selectedElement)) root.setCustomTextContent(root.selectedElement, text); }
+                            }
+                        }
+                        Text { text: "Random choices (one per line)"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Rectangle { Layout.preferredWidth: 210; Layout.preferredHeight: 58; color: Theme.background; border.width: 1; border.color: Theme.muted
+                            TextEdit { anchors.fill: parent; anchors.margins: 5; text: root.isCustomText(root.selectedElement) ? root.elementPoint(root.selectedElement).variants.join("\n") : ""; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; wrapMode: TextEdit.Wrap; selectByMouse: true
+                                Keys.onReturnPressed: event => { if (event.modifiers & Qt.ShiftModifier) { insert(cursorPosition, "\n"); event.accepted = true; } else event.accepted = false; }
+                                onActiveFocusChanged: { if (!activeFocus && root.isCustomText(root.selectedElement)) root.setCustomTextChoices(root.selectedElement, text); }
+                            }
+                        }
+                        SettingsButton { label: "Randomize"; active: root.elementPoint(root.selectedElement).randomize === true; textSize: 9; onClicked: root.setCustomTextRandomize(root.selectedElement, !root.elementPoint(root.selectedElement).randomize) }
+                        SettingsButton { label: "Left"; active: root.elementPoint(root.selectedElement).alignment === "left"; textSize: 9; onClicked: root.setCustomTextAlignment(root.selectedElement, "left") }
+                        SettingsButton { label: "Center"; active: root.elementPoint(root.selectedElement).alignment === "center"; textSize: 9; onClicked: root.setCustomTextAlignment(root.selectedElement, "center") }
+                        SettingsButton { label: "Right"; active: root.elementPoint(root.selectedElement).alignment === "right"; textSize: 9; onClicked: root.setCustomTextAlignment(root.selectedElement, "right") }
                         Item { Layout.fillWidth: true }
                     }
 
