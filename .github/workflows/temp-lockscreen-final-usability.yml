@@ -52,44 +52,42 @@ jobs:
               raise SystemExit(f'unexpected compact selector count: {editor.count(selector_anchor)}')
           editor = editor.replace(selector_anchor, 'LockscreenCompactSelector {\n                            popupBoundary: editorFocus')
 
-          old_settings = '''            Rectangle {
-                      id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
-                      ColumnLayout {'''
-          new_settings = '''            Rectangle {
-                      id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
-                      MouseArea {
-                          id: settingsBarDragArea
-                          anchors.fill: parent
-                          acceptedButtons: Qt.LeftButton
-                          hoverEnabled: true
-                          cursorShape: Qt.SizeVerCursor
-                          preventStealing: true
-                          property real pressSceneY: 0
-                          property real pressOffsetY: 0
-                          onPressed: mouse => {
-                              const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
-                              pressSceneY = point.y;
-                              pressOffsetY = root.settingsBarOffsetY;
-                          }
-                          onPositionChanged: mouse => {
-                              if (!pressed)
-                                  return;
-                              const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
-                              const limit = Math.max(0, editorFocus.height - settingsBar.height);
-                              root.settingsBarOffsetY = Math.max(0, Math.min(limit,
-                                  pressOffsetY - (point.y - pressSceneY)));
-                          }
+          settings_anchor = '''                id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
+                  ColumnLayout {'''
+          settings_replacement = '''                id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
+                  MouseArea {
+                      id: settingsBarDragArea
+                      anchors.fill: parent
+                      acceptedButtons: Qt.LeftButton
+                      hoverEnabled: true
+                      cursorShape: Qt.SizeVerCursor
+                      preventStealing: true
+                      property real pressSceneY: 0
+                      property real pressOffsetY: 0
+                      onPressed: mouse => {
+                          const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                          pressSceneY = point.y;
+                          pressOffsetY = root.settingsBarOffsetY;
                       }
-                      ColumnLayout {'''
-          if editor.count(old_settings) != 1:
+                      onPositionChanged: mouse => {
+                          if (!pressed)
+                              return;
+                          const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                          const limit = Math.max(0, editorFocus.height - settingsBar.height);
+                          root.settingsBarOffsetY = Math.max(0, Math.min(limit,
+                              pressOffsetY - (point.y - pressSceneY)));
+                      }
+                  }
+                  ColumnLayout {'''
+          if editor.count(settings_anchor) != 1:
               raise SystemExit('settings bar anchor mismatch')
-          editor = editor.replace(old_settings, new_settings, 1)
+          editor = editor.replace(settings_anchor, settings_replacement, 1)
 
           old_alt_drag = '''
-                      DragHandler {
-                          id: settingsBarAltDrag; target: null; acceptedButtons: Qt.LeftButton; acceptedModifiers: Qt.AltModifier; grabPermissions: PointerHandler.CanTakeOverFromAnything; dragThreshold: 0; xAxis.enabled: false; yAxis.enabled: true
-                          yAxis.onActiveValueChanged: (delta) => { const limit = Math.max(0, editorFocus.height - settingsBar.height); root.settingsBarOffsetY = Math.max(0, Math.min(limit, root.settingsBarOffsetY - delta)); }
-                      }
+                  DragHandler {
+                      id: settingsBarAltDrag; target: null; acceptedButtons: Qt.LeftButton; acceptedModifiers: Qt.AltModifier; grabPermissions: PointerHandler.CanTakeOverFromAnything; dragThreshold: 0; xAxis.enabled: false; yAxis.enabled: true
+                      yAxis.onActiveValueChanged: (delta) => { const limit = Math.max(0, editorFocus.height - settingsBar.height); root.settingsBarOffsetY = Math.max(0, Math.min(limit, root.settingsBarOffsetY - delta)); }
+                  }
           '''
           if editor.count(old_alt_drag) != 1:
               raise SystemExit('legacy Alt drag anchor mismatch')
