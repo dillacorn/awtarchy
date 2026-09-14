@@ -43,6 +43,8 @@ Singleton {
     property bool awtarchyEditMode: false
     property bool cursorSectionExpanded: false
     property bool lockscreenSectionExpanded: false
+    readonly property bool cursorSectionOpen: cursorSectionExpanded
+    readonly property bool lockscreenSectionOpen: lockscreenSectionExpanded
     property string lockscreenWeatherLocationDraft: ""
     property string lockscreenWeatherLocationError: ""
     property var layoutOrderDraft: []
@@ -66,6 +68,7 @@ Singleton {
     property bool openPreparing: false
     property bool panelPresented: false
     readonly property int panelFadeDuration: 140
+    readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
@@ -2167,11 +2170,18 @@ Singleton {
                                         font.pixelSize: root.scaledText(9)
                                         font.bold: true
                                     }
-                                    SettingsButton {
-                                        label: root.cursorSectionExpanded ? "Collapse" : "Expand"
-                                        active: root.cursorSectionExpanded
-                                        textSize: root.scaledText(9)
-                                        onClicked: root.cursorSectionExpanded = !root.cursorSectionExpanded
+                                    ColumnLayout {
+                                        id: cursorSectionActions
+                                        Layout.preferredWidth: root.sectionActionColumnWidth
+                                        Layout.alignment: Qt.AlignRight
+                                        spacing: 5
+                                        SettingsButton {
+                                            Layout.fillWidth: true
+                                            label: root.cursorSectionOpen ? "Collapse Cursor" : "Expand Cursor"
+                                            active: root.cursorSectionOpen
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.cursorSectionExpanded = !root.cursorSectionExpanded
+                                        }
                                     }
                                 }
 
@@ -2204,16 +2214,19 @@ Singleton {
                                         font.pixelSize: root.scaledText(8)
                                     }
                                     ColumnLayout {
-                                        id: lockscreenHeaderActions
+                                        id: lockscreenSectionActions
+                                        Layout.preferredWidth: root.sectionActionColumnWidth
+                                        Layout.alignment: Qt.AlignRight
                                         spacing: 5
-                                        Layout.alignment: Qt.AlignTop
                                         SettingsButton {
-                                            label: root.lockscreenSectionExpanded ? "Collapse" : "Expand"
-                                            active: root.lockscreenSectionExpanded
+                                            Layout.fillWidth: true
+                                            label: root.lockscreenSectionOpen ? "Collapse Lockscreen" : "Expand Lockscreen"
+                                            active: root.lockscreenSectionOpen
                                             textSize: root.scaledText(9)
                                             onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
                                         }
                                         SettingsButton {
+                                            Layout.fillWidth: true
                                             label: "Edit Layout"
                                             active: true
                                             textSize: root.scaledText(9)
@@ -2300,7 +2313,6 @@ Singleton {
                                             spacing: 5
                                             SettingsButton { label: "Fade"; active: BarState.lockscreenEntryTransition() === "fade"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "fade"]) }
                                             SettingsButton { label: "Pixel"; active: BarState.lockscreenEntryTransition() === "pixel"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "pixel"]) }
-                                            SettingsButton { label: "Reverse Iris"; active: BarState.lockscreenEntryTransition() === "iris"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "iris"]) }
                                             SettingsButton { label: "Edges"; active: BarState.lockscreenEntryTransition() === "edges"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "edges"]) }
                                             SettingsButton { label: "Wipe"; active: BarState.lockscreenEntryTransition() === "wipe"; textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-entry-transition", "wipe"]) }
                                         }
