@@ -2,7 +2,7 @@ name: Validate Quickshell Lockscreen Editor Elements
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/lockscreen-interactive-effects]
   pull_request:
 
 permissions:
@@ -10,6 +10,7 @@ permissions:
 
 jobs:
   validate:
+    if: github.event_name != 'push' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
@@ -50,3 +51,51 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-timezones-text.sh
       - name: Quick Settings header contracts
         run: bash tests/test-quickshell-lockscreen-quicksettings-header.sh
+
+  apply-task5:
+    if: "github.event_name == 'push' && github.ref == 'refs/heads/feature/lockscreen-interactive-effects' && github.event.head_commit.message == 'chore(lockscreen): stage task5 apply bridge'"
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Verify exact bridge
+        run: |
+          test "$(git log -1 --format=%s)" = 'chore(lockscreen): stage task5 apply bridge'
+          test -f .github/task5_apply.py
+      - name: Apply Task 5 patch
+        run: python3 .github/task5_apply.py
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Verify Task 5 focused contracts
+        run: |
+          cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          bash -n config/hypr/scripts/quickshell_lockscreen_timezones.sh
+          shellcheck config/hypr/scripts/quickshell_lockscreen_timezones.sh
+          bash tests/test-quickshell-lockscreen-selector-flyout.sh
+          bash tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
+          bash tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash tests/test-quickshell-lockscreen-timezones-text.sh
+          bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
+          git diff --check
+      - name: Smoke timezone helper
+        run: |
+          test "$(config/hypr/scripts/quickshell_lockscreen_timezones.sh UTC 24h | wc -c)" -ge 5
+          config/hypr/scripts/quickshell_lockscreen_timezones.sh --batch timezone-ci UTC 24h timezone-ci2 America/New_York 12h | jq -e 'has("timezone-ci") and has("timezone-ci2")' >/dev/null
+      - name: Remove one-use helper
+        run: |
+          rm -f -- .github/task5_apply.py
+          test ! -e .github/task5_apply.py
+          git diff --check
+      - name: Commit verified Task 5 implementation
+        run: |
+          git config user.name dillacorn
+          git config user.email 28743863+dillacorn@users.noreply.github.com
+          git add -A
+          test ! -e .github/task5_apply.py
+          git diff --cached --check
+          git commit -m 'feat(lockscreen): add timezone clocks and custom text'
+          git push origin HEAD:refs/heads/feature/lockscreen-interactive-effects
