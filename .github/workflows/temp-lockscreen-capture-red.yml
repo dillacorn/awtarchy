@@ -1,0 +1,19 @@
+name: Temporary Lockscreen Capture RED
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+    paths:
+      - .github/workflows/temp-lockscreen-capture-red.yml
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - name: Run lockscreen capture/width regression
+        run: bash tests/test-quickshell-lockscreen-quicksettings-header.sh
