@@ -7,11 +7,22 @@ FocusScope {
     property int currentIndex: 0
     property bool menuOpen: false
     property int highlightedIndex: Math.max(0, currentIndex)
+    property Item popupBoundary: null
     readonly property bool directClockToggle: Array.isArray(model)
         && model.length === 2
         && model[0] && model[1]
         && String(model[0].key || "") === "24h"
         && String(model[1].key || "") === "12h"
+    readonly property bool flyoutOpensUpward: {
+        if (!root.popupBoundary || !root.menuOpen || root.directClockToggle)
+            return false;
+        const origin = root.mapToItem(root.popupBoundary, 0, 0);
+        const availableBelow = root.popupBoundary.height - (origin.y + root.height) - 4;
+        const availableAbove = origin.y - 4;
+        if (availableBelow >= flyout.height)
+            return false;
+        return availableAbove > availableBelow;
+    }
     property string selectedLabel: {
         if (!Array.isArray(model) || currentIndex < 0 || currentIndex >= model.length)
             return "";
@@ -152,9 +163,8 @@ FocusScope {
     Rectangle {
         id: flyout
         visible: root.menuOpen && !root.directClockToggle
-        anchors.top: parent.bottom
-        anchors.topMargin: 4
         anchors.left: parent.left
+        y: root.flyoutOpensUpward ? -height - 4 : root.height + 4
         width: parent.width
         height: optionColumn.implicitHeight + 8
         radius: 6
