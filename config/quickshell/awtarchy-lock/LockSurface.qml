@@ -76,10 +76,10 @@ WlSessionLockSurface {
     }
 
     function focusPasswordWhenReady() {
-        if (!root.transitionComplete || root.unlocking)
+        if (root.unlocking)
             return;
         Qt.callLater(() => {
-            if (root.transitionComplete && !root.unlocking)
+            if (!root.unlocking)
                 password.forceActiveFocus();
         });
     }
