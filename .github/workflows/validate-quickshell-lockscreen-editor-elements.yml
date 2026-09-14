@@ -66,6 +66,17 @@ jobs:
         run: |
           test "$(git log -1 --format=%s)" = 'chore(lockscreen): stage task5 apply bridge'
           test -f .github/task5_apply.py
+      - name: Repair helper shell error paths
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('.github/task5_apply.py')
+          text = path.read_text()
+          old = 'return 2 2>/dev/null || false'
+          if text.count(old) != 3:
+              raise SystemExit(f'expected 3 helper error paths, got {text.count(old)}')
+          path.write_text(text.replace(old, 'false'))
+          PY
       - name: Apply Task 5 patch
         run: python3 .github/task5_apply.py
       - name: Install validation tools
