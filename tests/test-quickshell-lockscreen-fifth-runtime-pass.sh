@@ -66,10 +66,19 @@ rejects "$EDITOR" 'closeAfterSave' \
 contains "$EDITOR" 'root.statusMessage = exitCode === 0 ? "Saved"' \
     'Save no longer reports successful persistence while staying in editor'
 
-# The settings bar must be able to take an Alt+Mouse1 grab away from child
-# controls. This is structural coverage only; Hyprland runtime remains decisive.
-contains "$EDITOR" 'grabPermissions: PointerHandler.CanTakeOverFromAnything' \
-    'settings-bar Alt drag cannot take over pointer grabs from child controls'
+# The settings bar now moves with plain Mouse1 only on its unused background.
+# Child controls remain on top of the background MouseArea, and horizontal bar
+# movement is intentionally absent. Hyprland runtime remains decisive.
+contains "$EDITOR" 'id: settingsBarDragArea' \
+    'settings bar has no blank-area Mouse1 drag surface'
+contains "$EDITOR" 'cursorShape: Qt.SizeVerCursor' \
+    'settings bar drag does not expose vertical-only movement'
+contains "$EDITOR" 'root.settingsBarOffsetY = Math.max(0, Math.min(limit,' \
+    'settings bar drag does not clamp its vertical offset to the editor viewport'
+rejects "$EDITOR" 'id: settingsBarAltDrag' \
+    'legacy Alt settings-bar drag still exists'
+rejects "$EDITOR" 'acceptedModifiers: Qt.AltModifier' \
+    'settings-bar movement still requires Alt'
 
 # Interrupted logo hover owns an explicit return-to-rest state. Pointer exit
 # must request that return without sharing the click/explosion trigger path.
