@@ -25,17 +25,10 @@ jobs:
 
           path = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
           text = path.read_text()
-          old = '''                        LockscreenCompactSelector {
-                            popupBoundary: editorFocus Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }'''
-          new = '''                        LockscreenCompactSelector {
-                            popupBoundary: editorFocus
-                            Layout.preferredWidth: 180
-                            model: root.timezonePresets
-                            currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone)
-                            onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key)
-                        }'''
+          old = 'popupBoundary: editorFocus Layout.preferredWidth: 180;'
+          new = 'popupBoundary: editorFocus\n                            Layout.preferredWidth: 180;'
           if text.count(old) != 1:
-              raise SystemExit('timezone selector malformed anchor mismatch')
+              raise SystemExit(f'timezone selector malformed token count: {text.count(old)}')
           path.write_text(text.replace(old, new, 1))
           PY
 
