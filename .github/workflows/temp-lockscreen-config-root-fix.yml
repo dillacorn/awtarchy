@@ -55,6 +55,14 @@ jobs:
                   raise SystemExit(f"unexpected presentation helper import count in {target}: {text.count(old_import)}")
               target.write_text(text.replace(old_import, new_import, 1))
 
+          text_test = root / "tests/test-quickshell-lockscreen-timezones-text.sh"
+          text = text_test.read_text()
+          old_assertion = "contains \"$SCENE\" 'import \"../LockscreenPresentationState.js\" as LockscreenPresentationState' \\\n    'shared scene does not import deterministic presentation text selection'"
+          new_assertion = "contains \"$SCENE\" 'import \"LockscreenPresentationState.js\" as LockscreenPresentationState' \\\n    'shared scene does not import deterministic presentation text selection from its config root'\nrejects \"$SCENE\" 'import \"../LockscreenPresentationState.js\"' \\\n    'shared scene still imports presentation state from outside its config root'"
+          if text.count(old_assertion) != 1:
+              raise SystemExit("timezone/text import assertion changed unexpectedly")
+          text_test.write_text(text.replace(old_assertion, new_assertion, 1))
+
           managed_test = root / "tests/test-quickshell-lockscreen-interactive-managed-history.sh"
           text = managed_test.read_text()
           desktop_anchor = "    'config/quickshell/awtarchy/shell.qml:.config/quickshell/awtarchy/shell.qml'\n"
