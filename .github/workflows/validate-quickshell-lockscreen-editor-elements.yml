@@ -1,37 +1,52 @@
-name: Temporary Lockscreen CI Cleanup Bridge
+name: Validate Quickshell Lockscreen Editor Elements
 
 on:
   push:
-    branches:
-      - feature/lockscreen-interactive-effects
+    branches: [main]
+  pull_request:
 
 permissions:
   contents: read
 
 jobs:
-  apply-ci-cleanup:
-    permissions:
-      contents: write
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
-          ref: feature/lockscreen-interactive-effects
-          fetch-depth: 4
-
-      - name: Verify exact bridge
+          fetch-depth: 0
+      - name: Diff whitespace validation
         run: |
-          test "$(git log -1 --format=%s)" = 'chore(lockscreen): stage ci cleanup bridge'
-          test -f .github/lockscreen_ci_cleanup.sh
-
-      - name: Apply and verify cleanup
-        run: bash .github/lockscreen_ci_cleanup.sh
-
-      - name: Commit verified CI cleanup
+          if [[ -n "${GITHUB_BASE_REF:-}" ]]; then
+            git diff --check "origin/${GITHUB_BASE_REF}...HEAD"
+          else
+            git diff --check HEAD^
+          fi
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck
+      - name: Syntax and ShellCheck
         run: |
-          git config user.name dillacorn
-          git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add -A
-          git diff --cached --check
-          git commit -m 'test(lockscreen): align current editor contracts'
-          git push origin HEAD:refs/heads/feature/lockscreen-interactive-effects
+          bash -n tests/test-quickshell-lockscreen-selector-flyout.sh
+          bash -n tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
+          bash -n tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash -n tests/test-quickshell-lockscreen-timezones-text.sh
+          bash -n tests/test-quickshell-lockscreen-quicksettings-header.sh
+          shellcheck tests/test-quickshell-lockscreen-selector-flyout.sh
+          shellcheck tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
+          shellcheck tests/test-quickshell-lockscreen-rotation-reset.sh
+          shellcheck tests/test-quickshell-lockscreen-timezones-text.sh
+          shellcheck tests/test-quickshell-lockscreen-quicksettings-header.sh
+          if [[ -f config/hypr/scripts/quickshell_lockscreen_timezones.sh ]]; then
+            bash -n config/hypr/scripts/quickshell_lockscreen_timezones.sh
+            shellcheck config/hypr/scripts/quickshell_lockscreen_timezones.sh
+          fi
+      - name: Selector and clock contracts
+        run: bash tests/test-quickshell-lockscreen-selector-flyout.sh
+      - name: Image spawn editor contracts
+        run: bash tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
+      - name: Generic rotation contracts
+        run: bash tests/test-quickshell-lockscreen-rotation-reset.sh
+      - name: Timezone and text contracts
+        run: bash tests/test-quickshell-lockscreen-timezones-text.sh
+      - name: Quick Settings header contracts
+        run: bash tests/test-quickshell-lockscreen-quicksettings-header.sh
