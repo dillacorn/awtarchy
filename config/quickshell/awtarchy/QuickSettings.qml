@@ -70,6 +70,10 @@ Singleton {
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
+    property int lockscreenHideQuickshellBeforeCaptureOverride: -1
+    readonly property bool lockscreenHideQuickshellBeforeCapture: lockscreenHideQuickshellBeforeCaptureOverride >= 0
+        ? lockscreenHideQuickshellBeforeCaptureOverride === 1
+        : BarState.lockscreenHideQuickshellBeforeCapture()
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string backend: configHome + "/hypr/scripts/hypr_quicksettings.sh"
@@ -807,6 +811,17 @@ Singleton {
 
     function openFocused() { openForScreen(focusedScreen()); }
 
+    function prepareLockCapture(): bool {
+        if (!QuickSettings.lockscreenHideQuickshellBeforeCapture)
+            return false;
+        QuickSettings.close();
+        return true;
+    }
+
+    function lockCaptureHidden(): bool {
+        return !quickSettingsWindow.backingWindowVisible;
+    }
+
     function close() {
         openPreparing = false;
         if (prepareProcess.running)
@@ -870,6 +885,8 @@ Singleton {
         function open(): void { root.openFocused(); }
         function close(): void { root.close(); }
         function refresh(): void { root.refreshStatus(); }
+        function prepareLockCapture(): bool { return root.prepareLockCapture(); }
+        function lockCaptureHidden(): bool { return root.lockCaptureHidden(); }
     }
 
     Timer {
@@ -2298,7 +2315,16 @@ Singleton {
                                         Text { Layout.fillWidth: true; text: "Mouse Interaction"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }
                                         Text { Layout.fillWidth: true; text: "Hide Quick Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
-                                        SettingsButton { label: BarState.lockscreenHideQuickshellBeforeCapture() ? "On" : "Off"; active: BarState.lockscreenHideQuickshellBeforeCapture(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", BarState.lockscreenHideQuickshellBeforeCapture() ? "false" : "true"]) }
+                                        SettingsButton {
+                                            label: QuickSettings.lockscreenHideQuickshellBeforeCapture ? "On" : "Off"
+                                            active: QuickSettings.lockscreenHideQuickshellBeforeCapture
+                                            textSize: root.scaledText(9)
+                                            onClicked: {
+                                                const next = !QuickSettings.lockscreenHideQuickshellBeforeCapture;
+                                                root.lockscreenHideQuickshellBeforeCaptureOverride = next ? 1 : 0;
+                                                root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", next ? "true" : "false"]);
+                                            }
+                                        }
                                         Text { Layout.fillWidth: true; text: "Logo Physics"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         RowLayout {
                                             spacing: 5

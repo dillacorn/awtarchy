@@ -33,10 +33,41 @@ Singleton {
     readonly property var timezonePresets: [
         { key: "UTC", label: "UTC" },
         { key: "America/New_York", label: "New York" },
+        { key: "America/Chicago", label: "Chicago" },
+        { key: "America/Denver", label: "Denver" },
+        { key: "America/Phoenix", label: "Phoenix" },
         { key: "America/Los_Angeles", label: "Los Angeles" },
+        { key: "America/Anchorage", label: "Anchorage" },
+        { key: "Pacific/Honolulu", label: "Honolulu" },
+        { key: "America/Toronto", label: "Toronto" },
+        { key: "America/Vancouver", label: "Vancouver" },
+        { key: "America/Mexico_City", label: "Mexico City" },
+        { key: "America/Sao_Paulo", label: "São Paulo" },
+        { key: "America/Argentina/Buenos_Aires", label: "Buenos Aires" },
         { key: "Europe/London", label: "London" },
+        { key: "Europe/Paris", label: "Paris" },
+        { key: "Europe/Berlin", label: "Berlin" },
+        { key: "Europe/Madrid", label: "Madrid" },
+        { key: "Europe/Rome", label: "Rome" },
+        { key: "Europe/Amsterdam", label: "Amsterdam" },
+        { key: "Europe/Stockholm", label: "Stockholm" },
+        { key: "Europe/Moscow", label: "Moscow" },
+        { key: "Africa/Cairo", label: "Cairo" },
+        { key: "Africa/Johannesburg", label: "Johannesburg" },
+        { key: "Asia/Jerusalem", label: "Jerusalem" },
+        { key: "Asia/Dubai", label: "Dubai" },
+        { key: "Asia/Kolkata", label: "Kolkata" },
+        { key: "Asia/Bangkok", label: "Bangkok" },
+        { key: "Asia/Singapore", label: "Singapore" },
+        { key: "Asia/Shanghai", label: "Shanghai" },
+        { key: "Asia/Hong_Kong", label: "Hong Kong" },
         { key: "Asia/Tokyo", label: "Tokyo" },
-        { key: "Australia/Sydney", label: "Sydney" }
+        { key: "Asia/Seoul", label: "Seoul" },
+        { key: "Australia/Perth", label: "Perth" },
+        { key: "Australia/Adelaide", label: "Adelaide" },
+        { key: "Australia/Brisbane", label: "Brisbane" },
+        { key: "Australia/Sydney", label: "Sydney" },
+        { key: "Pacific/Auckland", label: "Auckland" }
     ]
     readonly property real elementScaleMaximum: 100.0
     readonly property int editorEntranceFadeDuration: 140
@@ -1436,7 +1467,7 @@ Singleton {
             const id = String(raw.id || ""); const timezone = String(raw.timezone || "UTC"); if (!/^timezone-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]) continue;
             const x=Number(raw.x),y=Number(raw.y),scale=Number(raw.scale),sx=Number(raw.stretch_x),sy=Number(raw.stretch_y),opacity=Number(raw.opacity),rotation=Number(raw.rotation);
             const color=String(raw.color||"auto").toLowerCase(); ids[id]=true;
-            result.push(({id:id, timezone:timezone, format:normalizedClockFormat(raw.format), x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),
+            result.push(({id:id, timezone:timezone, format:normalizedClockFormat(raw.format), show_label: raw.show_label !== false, x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),
                 y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.6)), scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),
                 stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)), stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),
                 opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
@@ -1474,13 +1505,14 @@ Singleton {
     function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
 
     function nextDynamicId(prefix, values) { const stem=prefix+Date.now().toString(36); let n=0,candidate=stem; while(values.some(item=>String(item.id||"")===candidate)){n++;candidate=stem+"_"+n;} return candidate; }
-    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
+    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",show_label: true,x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
     function removeTimezoneClock(name) { const i=timezoneClockIndex(name); if(i<0)return; recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); next.splice(i,1); draftTimezoneClocks=next; selectedElement="logo";selectedElements=["logo"];refreshPreviewTimezoneValues();statusMessage="Timezone clock removed."; }
     function addCustomText() { if(draftCustomTexts.length>=customTextMaximum){statusMessage="Custom text limit reached";return;} recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);const id=nextDynamicId("text-",next);next.push(({id:id,text:"Custom Text",variants:[],randomize:false,alignment:"center",x:0.5,y:0.55,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true}));draftCustomTexts=next;selectedElement="text:"+id;selectedElements=[selectedElement];activeDrawer="element";statusMessage="Custom text added. Save to apply."; }
     function removeCustomText(name) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next.splice(i,1);draftCustomTexts=next;selectedElement="logo";selectedElements=["logo"];statusMessage="Custom text removed."; }
     function timezonePresetIndex(zone) { for(let i=0;i<timezonePresets.length;++i)if(timezonePresets[i].key===String(zone))return i;return 0; }
     function setTimezoneClockZone(name, zone) { const i=timezoneClockIndex(name);if(i<0||timezonePresets.every(item=>item.key!==String(zone)))return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].timezone=String(zone);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
     function setTimezoneClockFormat(name, format) { const i=timezoneClockIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].format=normalizedClockFormat(format);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
+    function setTimezoneClockShowLabel(name, visible) { const i=timezoneClockIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].show_label=!!visible;draftTimezoneClocks=next; }
     function setCustomTextContent(name, value) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].text=String(value).slice(0,4096);draftCustomTexts=next; }
     function setCustomTextChoices(name, value) { const i=customTextIndex(name);if(i<0)return;const lines=String(value).split("\n").filter(line=>line.length>0).slice(0,32);recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].variants=lines;draftCustomTexts=next; }
     function setCustomTextRandomize(name, value) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].randomize=!!value;draftCustomTexts=next; }
@@ -1550,15 +1582,29 @@ Singleton {
 
     function setDraftScale(name, scale) { if (!elementExists(name)) return; const value = Number(scale); if (!Number.isFinite(value)) return; recordUndoBeforeChange(); setDraftScaleSilently(name, Math.round(Math.max(0.50, Math.min(elementScaleMaximum, value)) * 100) / 100); selectElement(name, false); }
 
-    function setDraftOpacity(name, opacity) {
+    function setDraftOpacitySilently(name, opacity) {
         if (!elementExists(name)) return; const numeric = Number(opacity); if (!Number.isFinite(numeric)) return;
-        const minimum = name === "password" ? 20 : 0; const value = Math.round(Math.max(minimum, Math.min(100, numeric))); recordUndoBeforeChange();
+        const minimum = name === "password" ? 20 : 0; const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.opacity = value; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].opacity = value; draftCustomImages = next; }
         else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].opacity=value;draftTimezoneClocks=next;}
         else if(isCustomText(name)){const next=cloneCustomTexts(draftCustomTexts);next[customTextIndex(name)].opacity=value;draftCustomTexts=next;}
         else { const next = cloneLayout(draftLayout); next[name].opacity = value; draftLayout = next; }
+    }
+
+    function setDraftOpacity(name, opacity) {
+        if (!elementExists(name)) return; const numeric = Number(opacity); if (!Number.isFinite(numeric)) return;
+        recordUndoBeforeChange();
+        setDraftOpacitySilently(name, numeric);
         selectElement(name, false);
+    }
+
+    function setElementOpacityFromPointer(name, pointerX, trackWidth) {
+        const width = Number(trackWidth); if (!elementExists(name) || !Number.isFinite(width) || width <= 0) return;
+        const minimum = name === "password" ? 20 : 0;
+        const ratio = Math.max(0, Math.min(1, Number(pointerX) / width));
+        const value = minimum + ratio * (100 - minimum);
+        root.setDraftOpacitySilently(name, value);
     }
 
     function setDraftStretch(name, stretchX, stretchY) {
@@ -1769,7 +1815,7 @@ Singleton {
                 Rectangle { required property string modelData; readonly property string elementName: modelData; readonly property bool enabledElement: root.elementEnabled(elementName); readonly property var point: root.elementPoint(elementName)
                     width: Math.max(30, previewScene.elementVisualWidth(elementName) + 14); height: Math.max(26, previewScene.elementVisualHeight(elementName) + 12)
                     x: Math.max(0, Math.min(parent.width - width, Number(point.x) * parent.width - width / 2)); y: Math.max(0, Math.min(parent.height - height, Number(point.y) * parent.height - height / 2))
-                    color: "transparent"; border.width: root.selectedContains(elementName) ? 2 : 1; border.color: root.selectedContains(elementName) ? Theme.focus : Theme.muted; opacity: 0.92; z: 200
+                    color: "transparent"; border.width: root.selectedContains(elementName) ? 2 : 1; border.color: root.selectedContains(elementName) ? Theme.focus : Theme.muted; opacity: 0.92; z: root.selectedElement === elementName ? 230 : 200
                     property real lastSampleTime: 0; property real lastSampleX: 0; property real lastSampleY: 0; property real flickVelocityX: 0; property real flickVelocityY: 0; property bool inertiaActive: false
 
                     MouseArea { id: dragArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.SizeAllCursor; preventStealing: true; property real pressOffsetX: 0; property real pressOffsetY: 0
@@ -1798,7 +1844,7 @@ Singleton {
                 }
             }
 
-            Rectangle { id: rotationHandle; visible: root.elementExists(root.selectedElement); width: 20; height: 20; radius: 10; x: Math.round(root.primaryPoint().x * parent.width - width / 2); y: Math.round(root.primaryPoint().y * parent.height - Math.max(54, 100 * root.elementScale(root.selectedElement)) - height / 2); color: Theme.background; border.width: 2; border.color: Theme.focus; z: 40
+            Rectangle { id: rotationHandle; visible: root.elementExists(root.selectedElement); width: 20; height: 20; radius: 10; x: Math.round(root.primaryPoint().x * parent.width - width / 2); y: Math.round(root.primaryPoint().y * parent.height - Math.max(54, 100 * root.elementScale(root.selectedElement)) - height / 2); color: Theme.background; border.width: 2; border.color: Theme.focus; z: 240
                 Text { anchors.centerIn: parent; text: "↻"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 11 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.SizeAllCursor; preventStealing: true; onPressed: mouse => { const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.beginRotateElement(root.selectedElement, point.x, point.y); mouse.accepted = true; }; onPositionChanged: mouse => { if (!pressed) return; const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.updateRotateElement(point.x, point.y); }; onReleased: root.endRotateElement(); onCanceled: root.endRotateElement() }
             }
@@ -1891,6 +1937,36 @@ Singleton {
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
                         Item { Layout.fillWidth: true }
                         Text { text: root.isCustomImage(root.selectedElement) ? "Custom images are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isCustomImage(root.selectedElement)
+                        Text { text: "Image Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Rectangle {
+                            id: imageOpacityTrack
+                            visible: root.isCustomImage(root.selectedElement)
+                            Layout.fillWidth: true
+                            Layout.preferredHeight: 14
+                            color: Theme.surface
+                            border.width: 1
+                            border.color: Theme.muted
+                            radius: 3
+                            Rectangle {
+                                anchors.left: parent.left; anchors.top: parent.top; anchors.bottom: parent.bottom
+                                width: parent.width * root.elementOpacity(root.selectedElement) / 100
+                                color: Theme.focus; opacity: 0.45; radius: 3
+                            }
+                            MouseArea {
+                                anchors.fill: parent
+                                cursorShape: Qt.PointingHandCursor
+                                preventStealing: true
+                                onPressed: mouse => { root.beginHistoryTransaction(); root.setElementOpacityFromPointer(root.selectedElement, mouse.x, width); }
+                                onPositionChanged: mouse => { if (pressed) root.setElementOpacityFromPointer(root.selectedElement, mouse.x, width); }
+                                onReleased: root.commitHistoryTransaction()
+                                onCanceled: root.commitHistoryTransaction()
+                            }
+                        }
+                        Text { text: Number(root.elementOpacity(root.selectedElement)).toFixed(0) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
                     }
 
                     RowLayout {
@@ -1995,8 +2071,9 @@ Singleton {
                             popupBoundary: editorFocus
                             Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
                         SettingsButton { label: root.elementPoint(root.selectedElement).format === "12h" ? "12-hour" : "24-hour"; active: root.elementPoint(root.selectedElement).format === "12h"; textSize: 9; onClicked: root.setTimezoneClockFormat(root.selectedElement, root.elementPoint(root.selectedElement).format === "12h" ? "24h" : "12h") }
+                        SettingsButton { label: root.elementPoint(root.selectedElement).show_label === false ? "Label Off" : "Label On"; active: root.elementPoint(root.selectedElement).show_label !== false; textSize: 9; onClicked: root.setTimezoneClockShowLabel(root.selectedElement, root.elementPoint(root.selectedElement).show_label === false) }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Each extra clock has independent timezone, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { text: "Each extra clock has independent timezone, label, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout {

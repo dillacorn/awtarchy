@@ -84,6 +84,7 @@ normalize_timezone_clocks() {
                 id: .id,
                 timezone: (.timezone // "UTC"),
                 format: (if ((.format // "24h") | ascii_downcase) == "12h" then "12h" else "24h" end),
+                show_label: (if (.show_label | type) == "boolean" then .show_label else true end),
                 x: clamp(.x; 0.5; 0.05; 0.95),
                 y: clamp(.y; 0.6; 0.08; 0.92),
                 scale: clamp(.scale; 1; 0.5; 100),

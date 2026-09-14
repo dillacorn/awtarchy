@@ -311,6 +311,8 @@ Item {
     function timezoneDisplay(clock) {
         if (!clock) return "--:--";
         const value = String(root.timezoneValues && root.timezoneValues[clock.id] !== undefined ? root.timezoneValues[clock.id] : "--:--");
+        if (clock.show_label === false)
+            return value;
         return value + "\n" + timezoneLabel(clock.timezone);
     }
 

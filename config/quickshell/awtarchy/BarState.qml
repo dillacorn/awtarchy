@@ -1000,7 +1000,7 @@ Singleton {
                     || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
                     || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color)) || typeof raw.visible !== "boolean") return [];
             ids[id] = true;
-            result.push(({ id: id, timezone: timezone, format: format, x: x, y: y, scale: scale,
+            result.push(({ id: id, timezone: timezone, format: format, show_label: raw.show_label !== false, x: x, y: y, scale: scale,
                 stretch_x: sx, stretch_y: sy, opacity: opacity, rotation: rotation, color: color, visible: raw.visible }));
         }
         return result;

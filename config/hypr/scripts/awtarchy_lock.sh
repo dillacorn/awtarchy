@@ -86,12 +86,38 @@ hide_quick_settings_before_capture_enabled() {
 }
 
 hide_quick_settings_before_capture() {
-    hide_quick_settings_before_capture_enabled || return 0
+    local live_response="" live_available=false hidden_response=""
 
-    # This is an opt-in presentation fallback only. The secure backing remains
-    # a frozen pre-lock capture and the lock still fails closed if capture fails.
-    "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close \
-        >>"$LOG_FILE" 2>&1 || true
+    # Consult the in-memory QML preference first so a just-clicked toggle does
+    # not race its asynchronous state-file write.
+    if live_response="$(
+        "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings prepareLockCapture 2>>"$LOG_FILE" |
+            tail -n1
+    )"; then
+        live_available=true
+    fi
+
+    if [[ "$live_available" == true ]]; then
+        [[ "$live_response" == true ]] || return 0
+    else
+        # Fallback: get lockscreen_hide_quickshell_before_capture from persisted cache.
+        hide_quick_settings_before_capture_enabled || return 0
+        "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close \
+            >>"$LOG_FILE" 2>&1 || true
+    fi
+
+    # Wait on the real QsWindow backing surface instead of assuming a fixed
+    # compositor delay was sufficient. Keep the bounded sleep fallback for an
+    # older/unreachable desktop shell so locking itself is never blocked here.
+    for _ in {1..25}; do
+        if hidden_response="$(
+            "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings lockCaptureHidden 2>>"$LOG_FILE" |
+                tail -n1
+        )" && [[ "$hidden_response" == true ]]; then
+            return 0
+        fi
+        sleep 0.02
+    done
 
     case "$CAPTURE_HIDE_DELAY" in
         0|0.[0-9]|0.[0-9][0-9]|0.[0-9][0-9][0-9]|1|1.0|1.00|1.000)
@@ -104,7 +130,7 @@ hide_quick_settings_before_capture() {
 }
 
 start_lock() {
-    local state capture_dir=""
+    local state capture_dir="" capture_helper="$CAPTURE_HELPER"
 
     need_qs || return $?
 
@@ -118,8 +144,8 @@ start_lock() {
     mkdir -p -- "$LOG_DIR"
     hide_quick_settings_before_capture
 
-    if [[ -f "$CAPTURE_HELPER" ]]; then
-        capture_dir="$(bash "$CAPTURE_HELPER" prepare 2>>"$LOG_FILE")" || capture_dir=""
+    if [[ -f "$capture_helper" ]]; then
+        capture_dir="$(bash "$capture_helper" prepare 2>>"$LOG_FILE")" || capture_dir=""
     fi
 
     if [[ -n "$capture_dir" ]]; then
