@@ -327,10 +327,8 @@ Item {
     }
 
     function elementRotation(name) {
-        const image = customImageForName(name);
-        if (!image)
-            return 0;
-        const value = Number(image.rotation === undefined ? 0 : image.rotation);
+        const point = presentationPoint(name);
+        const value = Number(point && point.rotation !== undefined ? point.rotation : 0);
         return Number.isFinite(value) ? Math.max(-180, Math.min(180, value)) : 0;
     }
 
@@ -1008,6 +1006,7 @@ Item {
             x: root.normalizedX("visualizer", 0.50) * parent.width - width / 2
             y: root.normalizedY("visualizer", 0.80) * parent.height - height / 2
             scale: root.elementScale("visualizer")
+            rotation: root.elementRotation("visualizer")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: visualizerItem.width / 2
@@ -1073,6 +1072,7 @@ Item {
             width: root.wordmarkWidth
             height: root.wordmarkHeight
             scale: root.elementScale("logo")
+            rotation: root.elementRotation("logo")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: wordmarkItem.width / 2
@@ -1243,6 +1243,7 @@ Item {
             visible: root.presentationVisible("time", root.showTime)
             opacity: root.presentationOpacity("time") * root.elementOpacity("time")
             scale: root.elementScale("time")
+            rotation: root.elementRotation("time")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: timeItem.width / 2
@@ -1265,6 +1266,7 @@ Item {
             visible: root.presentationVisible("date", root.showDate)
             opacity: 0.78 * root.presentationOpacity("date") * root.elementOpacity("date")
             scale: root.elementScale("date")
+            rotation: root.elementRotation("date")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: dateItem.width / 2
@@ -1286,6 +1288,7 @@ Item {
             visible: root.presentationVisible("username", root.showUsername)
             opacity: 0.72 * root.presentationOpacity("username") * root.elementOpacity("username")
             scale: root.elementScale("username")
+            rotation: root.elementRotation("username")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: usernameItem.width / 2
@@ -1307,6 +1310,7 @@ Item {
             visible: root.presentationVisible("weather", root.showWeather) && root.weatherText.length > 0
             opacity: 0.76 * root.presentationOpacity("weather") * root.elementOpacity("weather")
             scale: root.elementScale("weather")
+            rotation: root.elementRotation("weather")
             transformOrigin: Item.Center
             transform: Scale {
                 origin.x: weatherItem.width / 2
@@ -1325,6 +1329,8 @@ Item {
 
         Item {
             visible: root.previewMode
+            rotation: root.elementRotation("password")
+            transformOrigin: Item.Center
             x: root.passwordCenterX - width / 2
             y: root.passwordCenterY - height / 2
             width: root.passwordWidth

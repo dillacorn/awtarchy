@@ -89,6 +89,7 @@ ShellRoot {
             stretch_x: 1.0,
             stretch_y: 1.0,
             opacity: 100,
+            rotation: 0,
             color: "auto",
             bands: 16,
             gap: 4,
@@ -111,6 +112,7 @@ ShellRoot {
         const stretchX = Number(value.stretch_x === undefined ? defaults.stretch_x : value.stretch_x);
         const stretchY = Number(value.stretch_y === undefined ? defaults.stretch_y : value.stretch_y);
         const opacity = Number(value.opacity === undefined ? defaults.opacity : value.opacity);
+        const rotation = Number(value.rotation === undefined ? defaults.rotation : value.rotation);
         const color = String(value.color === undefined ? defaults.color : value.color).toLowerCase();
         const bands = Number(value.bands === undefined ? defaults.bands : value.bands);
         const gap = Number(value.gap === undefined ? defaults.gap : value.gap);
@@ -125,6 +127,7 @@ ShellRoot {
                 || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4.00
                 || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4.00
                 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
                 || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color))
                 || !Number.isInteger(bands) || bands < 4 || bands > 64
                 || !Number.isInteger(gap) || gap < 0 || gap > 24
@@ -142,6 +145,7 @@ ShellRoot {
             stretch_x: stretchX,
             stretch_y: stretchY,
             opacity: opacity,
+            rotation: rotation,
             color: color,
             bands: bands,
             gap: gap,
@@ -163,12 +167,12 @@ ShellRoot {
 
     function defaultLockLayout() {
         return ({
-            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
+            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" })
         });
     }
 
@@ -262,14 +266,16 @@ ShellRoot {
     function layoutPoint(value, fallback, password) {
         const fallbackColor = String(fallback.color || "auto");
         const fallbackOpacity = Number(fallback.opacity === undefined ? 100 : fallback.opacity);
+        const fallbackRotation = Number(fallback.rotation === undefined ? 0 : fallback.rotation);
         if (!value || typeof value !== "object" || Array.isArray(value))
-            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, color: fallbackColor });
+            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, rotation: fallbackRotation, color: fallbackColor });
         const x = Number(value.x);
         const y = Number(value.y);
         const scale = Number(value.scale === undefined ? 1 : value.scale);
         const stretchX = Number(value.stretch_x === undefined ? 1 : value.stretch_x);
         const stretchY = Number(value.stretch_y === undefined ? 1 : value.stretch_y);
         const opacity = Number(value.opacity === undefined ? 100 : value.opacity);
+        const rotation = Number(value.rotation === undefined ? 0 : value.rotation);
         const rawColor = String(value.color === undefined ? "auto" : value.color);
         const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)
             ? rawColor.toLowerCase() : fallbackColor;
@@ -280,14 +286,15 @@ ShellRoot {
         const minOpacity = password ? 20 : 0;
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)
                 || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
-                || !Number.isFinite(opacity)
+                || !Number.isFinite(opacity) || !Number.isFinite(rotation)
                 || x < minX || x > maxX || y < minY || y > maxY
                 || scale < 0.50 || scale > 100.00
                 || stretchX < 0.25 || stretchX > 4.00
                 || stretchY < 0.25 || stretchY > 4.00
-                || opacity < minOpacity || opacity > 100)
-            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, color: fallbackColor });
-        return ({ x: x, y: y, scale: scale, stretch_x: stretchX, stretch_y: stretchY, opacity: opacity, color: color });
+                || opacity < minOpacity || opacity > 100
+                || rotation < -180 || rotation > 180)
+            return ({ x: fallback.x, y: fallback.y, scale: fallback.scale, stretch_x: 1.0, stretch_y: 1.0, opacity: fallbackOpacity, rotation: fallbackRotation, color: fallbackColor });
+        return ({ x: x, y: y, scale: scale, stretch_x: stretchX, stretch_y: stretchY, opacity: opacity, rotation: rotation, color: color });
     }
     function normalizedLayout(value) {
         const defaults = defaultLockLayout();

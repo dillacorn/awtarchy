@@ -163,6 +163,7 @@ Singleton {
         stretch_x: 1.0,
         stretch_y: 1.0,
         opacity: 100,
+        rotation: 0,
         color: "auto",
         bands: 16,
         gap: 4,
@@ -173,12 +174,12 @@ Singleton {
         performance: "balanced"
     })
     readonly property var defaultLockscreenLayout: ({
-        logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-        password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
+        logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+        time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+        date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+        username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+        weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+        password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" })
     })
     readonly property var workspaceLegacyStyleAliases: ({
         "filled-dot": "workflow",
@@ -710,6 +711,7 @@ Singleton {
         const stretchX = Number(value.stretch_x ?? defaults.stretch_x);
         const stretchY = Number(value.stretch_y ?? defaults.stretch_y);
         const opacity = Number(value.opacity ?? defaults.opacity);
+        const rotation = Number(value.rotation ?? defaults.rotation);
         const color = String(value.color ?? defaults.color).toLowerCase();
         const bands = Number(value.bands ?? defaults.bands);
         const gap = Number(value.gap ?? defaults.gap);
@@ -725,6 +727,7 @@ Singleton {
                 || !Number.isFinite(stretchX) || stretchX < 0.25 || stretchX > 4
                 || !Number.isFinite(stretchY) || stretchY < 0.25 || stretchY > 4
                 || !Number.isFinite(opacity) || opacity < 0 || opacity > 100
+                || !Number.isFinite(rotation) || rotation < -180 || rotation > 180
                 || (color !== "auto" && !/^#[0-9a-f]{6}$/.test(color))
                 || !Number.isInteger(bands) || bands < 4 || bands > 64
                 || !Number.isInteger(gap) || gap < 0 || gap > 24
@@ -743,6 +746,7 @@ Singleton {
             stretch_x: stretchX,
             stretch_y: stretchY,
             opacity: Math.round(opacity),
+            rotation: rotation,
             color: color,
             bands: bands,
             gap: gap,
@@ -880,7 +884,7 @@ Singleton {
         const fallbackPoint = ({
             x: fallback.x, y: fallback.y, scale: fallback.scale,
             stretch_x: fallback.stretch_x, stretch_y: fallback.stretch_y,
-            opacity: fallback.opacity, color: fallbackColor
+            opacity: fallback.opacity, rotation: fallback.rotation || 0, color: fallbackColor
         });
         if (!value || typeof value !== "object" || Array.isArray(value))
             return fallbackPoint;
@@ -890,6 +894,7 @@ Singleton {
         const stretchX = Number(value.stretch_x === undefined ? 1 : value.stretch_x);
         const stretchY = Number(value.stretch_y === undefined ? 1 : value.stretch_y);
         const opacity = Number(value.opacity === undefined ? 100 : value.opacity);
+        const rotation = Number(value.rotation === undefined ? 0 : value.rotation);
         const rawColor = String(value.color === undefined ? "auto" : value.color);
         const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor)
             ? rawColor.toLowerCase() : fallbackColor;
@@ -900,15 +905,16 @@ Singleton {
         const minOpacity = password ? 20 : 0;
         if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(scale)
                 || !Number.isFinite(stretchX) || !Number.isFinite(stretchY)
-                || !Number.isFinite(opacity)
+                || !Number.isFinite(opacity) || !Number.isFinite(rotation)
                 || x < minX || x > maxX || y < minY || y > maxY
                 || scale < 0.50 || scale > 100.00
                 || stretchX < 0.25 || stretchX > 4.00
                 || stretchY < 0.25 || stretchY > 4.00
-                || opacity < minOpacity || opacity > 100)
+                || opacity < minOpacity || opacity > 100
+                || rotation < -180 || rotation > 180)
             return fallbackPoint;
         return ({ x: x, y: y, scale: scale, stretch_x: stretchX,
-            stretch_y: stretchY, opacity: opacity, color: color });
+            stretch_y: stretchY, opacity: opacity, rotation: rotation, color: color });
     }
     function lockscreenLayout() {
         const defaults = root.defaultLockscreenLayout;

@@ -58,6 +58,8 @@ Singleton {
 
     property var draftLayout: defaultLayout()
     property var draftCustomImages: []
+    property var draftTimezoneClocks: []
+    property var draftCustomTexts: []
     property var draftVisualizer: defaultVisualizer()
     property int draftBackgroundOpacity: 100
     property int draftLastBackgroundOpacity: 100
@@ -143,6 +145,7 @@ Singleton {
             stretch_x: 1.0,
             stretch_y: 1.0,
             opacity: 100,
+            rotation: 0,
             color: "auto",
             bands: 16,
             gap: 4,
@@ -165,6 +168,7 @@ Singleton {
         const stretchX = Number(raw.stretch_x === undefined ? defaults.stretch_x : raw.stretch_x);
         const stretchY = Number(raw.stretch_y === undefined ? defaults.stretch_y : raw.stretch_y);
         const opacity = Number(raw.opacity === undefined ? defaults.opacity : raw.opacity);
+        const rotation = Number(raw.rotation === undefined ? defaults.rotation : raw.rotation);
         const rawColor = String(raw.color === undefined ? defaults.color : raw.color).toLowerCase();
         const color = rawColor === "auto" || validHex(rawColor) ? rawColor : defaults.color;
         const bands = Number(raw.bands === undefined ? defaults.bands : raw.bands);
@@ -182,6 +186,7 @@ Singleton {
             stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : defaults.stretch_x)),
             stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : defaults.stretch_y)),
             opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
+            rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : defaults.rotation),
             color: color,
             bands: Number.isInteger(bands) ? Math.max(4, Math.min(64, bands)) : defaults.bands,
             gap: Number.isInteger(gap) ? Math.max(0, Math.min(24, gap)) : defaults.gap,
@@ -196,12 +201,12 @@ Singleton {
 
     function defaultLayout() {
         return ({
-            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" }),
-            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, color: "auto" })
+            logo: ({ x: 0.50, y: 0.34, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            time: ({ x: 0.50, y: 0.51, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            date: ({ x: 0.50, y: 0.555, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            username: ({ x: 0.50, y: 0.595, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            weather: ({ x: 0.50, y: 0.635, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" }),
+            password: ({ x: 0.50, y: 0.70, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto" })
         });
     }
 
@@ -292,6 +297,7 @@ Singleton {
                 stretch_x: current.stretch_x,
                 stretch_y: current.stretch_y,
                 opacity: current.opacity,
+                rotation: current.rotation,
                 color: current.color
             });
         }
@@ -671,34 +677,54 @@ Singleton {
     }
 
     function elementRotation(name) {
-        const index = customImageIndex(name);
-        if (index < 0)
-            return 0;
-        return normalizedRotation(draftCustomImages[index].rotation === undefined
-            ? 0 : draftCustomImages[index].rotation);
+        const point = elementPoint(name);
+        return normalizedRotation(point && point.rotation !== undefined ? point.rotation : 0);
+    }
+
+    function dynamicRotationIndex(name, prefix, values) {
+        if (!name.startsWith(prefix) || !Array.isArray(values)) return -1;
+        const id = name.slice(prefix.length);
+        for (let i = 0; i < values.length; ++i) {
+            if (String(values[i].id || "") === id) return i;
+        }
+        return -1;
     }
 
     function setDraftRotationSilently(name, rotation) {
-        const index = customImageIndex(name);
-        if (index < 0)
-            return;
-        const next = cloneCustomImages(draftCustomImages);
-        next[index].rotation = normalizedRotation(rotation);
-        draftCustomImages = next;
+        const value = normalizedRotation(rotation);
+        if (name === "visualizer") {
+            const next = cloneVisualizer(draftVisualizer); next.rotation = value; draftVisualizer = next; return;
+        }
+        if (isCustomImage(name)) {
+            const next = cloneCustomImages(draftCustomImages); const index = customImageIndex(name);
+            if (index < 0) return; next[index].rotation = value; draftCustomImages = next; return;
+        }
+        if (name.startsWith("timezone:")) {
+            const index = dynamicRotationIndex(name, "timezone:", draftTimezoneClocks);
+            if (index < 0) return; const next = cloneSnapshot(draftTimezoneClocks); next[index].rotation = value; draftTimezoneClocks = next; return;
+        }
+        if (name.startsWith("text:")) {
+            const index = dynamicRotationIndex(name, "text:", draftCustomTexts);
+            if (index < 0) return; const next = cloneSnapshot(draftCustomTexts); next[index].rotation = value; draftCustomTexts = next; return;
+        }
+        if (elementNames.indexOf(name) >= 0) {
+            const next = cloneLayout(draftLayout); next[name].rotation = value; draftLayout = next;
+        }
     }
 
-    function setDraftRotation(name, rotation) {
-        if (!isCustomImage(name))
-            return;
-        const numeric = Number(rotation);
-        if (!Number.isFinite(numeric)) {
-            statusMessage = "Rotation must be a number";
-            return;
-        }
+    function setElementRotation(name, value) {
+        if (!elementExists(name)) return;
+        const numeric = Number(value);
+        if (!Number.isFinite(numeric)) { statusMessage = "Rotation must be a number"; return; }
         recordUndoBeforeChange();
         setDraftRotationSilently(name, numeric);
         selectElement(name, false);
-        statusMessage = "Image rotation updated";
+        statusMessage = elementLabel(name) + " rotation updated";
+        scheduleContrastRefresh();
+    }
+
+    function setDraftRotation(name, rotation) {
+        setElementRotation(name, rotation);
     }
 
     function setDraftCustomImageSpawn(name, value) {
@@ -731,7 +757,7 @@ Singleton {
     }
 
     function beginRotateElement(name, sceneX, sceneY) {
-        if (!isCustomImage(name) || editorFocus.width <= 0 || editorFocus.height <= 0)
+        if (!elementExists(name) || editorFocus.width <= 0 || editorFocus.height <= 0)
             return;
         selectElement(name, false);
         const point = elementPoint(name);
@@ -1329,7 +1355,7 @@ Singleton {
             const raw = cloned[name] || defaults[name]; const password = name === "password";
             const x = Number(raw.x); const y = Number(raw.y); const scale = Number(raw.scale === undefined ? 1 : raw.scale);
             const stretchX = Number(raw.stretch_x === undefined ? 1 : raw.stretch_x); const stretchY = Number(raw.stretch_y === undefined ? 1 : raw.stretch_y);
-            const opacity = Number(raw.opacity === undefined ? 100 : raw.opacity); const rawColor = String(raw.color === undefined ? "auto" : raw.color);
+            const opacity = Number(raw.opacity === undefined ? 100 : raw.opacity); const rotation = Number(raw.rotation === undefined ? 0 : raw.rotation); const rawColor = String(raw.color === undefined ? "auto" : raw.color);
             const color = rawColor === "auto" || /^#[0-9a-fA-F]{6}$/.test(rawColor) ? rawColor.toLowerCase() : "auto";
             result[name] = ({
                 x: Math.max(password ? 0.15 : 0.05, Math.min(password ? 0.85 : 0.95, Number.isFinite(x) ? x : defaults[name].x)),
@@ -1337,7 +1363,8 @@ Singleton {
                 scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
-                opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)), color: color });
+                opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0), color: color });
         }
         return result;
     }
@@ -1617,7 +1644,7 @@ Singleton {
                 }
             }
 
-            Rectangle { id: rotationHandle; visible: root.isCustomImage(root.selectedElement); width: 20; height: 20; radius: 10; x: Math.round(root.primaryPoint().x * parent.width - width / 2); y: Math.round(root.primaryPoint().y * parent.height - Math.max(54, 100 * root.elementScale(root.selectedElement)) - height / 2); color: Theme.background; border.width: 2; border.color: Theme.focus; z: 40
+            Rectangle { id: rotationHandle; visible: root.elementExists(root.selectedElement); width: 20; height: 20; radius: 10; x: Math.round(root.primaryPoint().x * parent.width - width / 2); y: Math.round(root.primaryPoint().y * parent.height - Math.max(54, 100 * root.elementScale(root.selectedElement)) - height / 2); color: Theme.background; border.width: 2; border.color: Theme.focus; z: 40
                 Text { anchors.centerIn: parent; text: "↻"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 11 }
                 MouseArea { anchors.fill: parent; cursorShape: Qt.SizeAllCursor; preventStealing: true; onPressed: mouse => { const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.beginRotateElement(root.selectedElement, point.x, point.y); mouse.accepted = true; }; onPositionChanged: mouse => { if (!pressed) return; const point = parent.mapToItem(editorFocus, mouse.x, mouse.y); root.updateRotateElement(point.x, point.y); }; onReleased: root.endRotateElement(); onCanceled: root.endRotateElement() }
             }
@@ -1643,12 +1670,12 @@ Singleton {
                         Text { text: "Y"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField { id: positionYField; Layout.preferredWidth: 54; text: Number(root.primaryPoint().y * 100).toFixed(1); validator: DoubleValidator { bottom: 0; top: 100; decimals: 1 }
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setSelectedCoordinate("y", text) }
-                        Text { text: "Rotation"; visible: root.isCustomImage(root.selectedElement); color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: rotationField; Layout.preferredWidth: 68; visible: root.isCustomImage(root.selectedElement); text: Number(root.elementRotation(root.selectedElement)).toFixed(1); selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftRotation(root.selectedElement, text) }
-                        SettingsButton { label: "0°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 0) }
-                        SettingsButton { label: "90°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 90) }
-                        SettingsButton { label: "180°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 180) }
-                        SettingsButton { label: "270°"; visible: root.isCustomImage(root.selectedElement); textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 270) }
+                        Text { text: "Rotation"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField { id: rotationField; Layout.preferredWidth: 68; text: Number(root.elementRotation(root.selectedElement)).toFixed(1); selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftRotation(root.selectedElement, text) }
+                        SettingsButton { label: "0°"; textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 0) }
+                        SettingsButton { label: "90°"; textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 90) }
+                        SettingsButton { label: "180°"; textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 180) }
+                        SettingsButton { label: "270°"; textSize: 9; onClicked: root.setDraftRotation(root.selectedElement, 270) }
                         SettingsButton { id: selectedElementColorButton; visible: !root.isCustomImage(root.selectedElement); label: root.elementColor(root.selectedElement) === "auto" ? "Color: Auto" : "Color: " + root.elementColor(root.selectedElement); textSize: 9; onClicked: { if (root.activeDrawer !== "element") root.toggleDrawer("element"); root.elementPaletteOpen = true; } }
                         SettingsButton { label: "Undo"; textSize: 9; available: root.undoStack.length > 0; onClicked: root.undo() }
                         SettingsButton { label: "Redo"; textSize: 9; available: root.redoStack.length > 0; onClicked: root.redo() }
