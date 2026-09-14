@@ -40,6 +40,14 @@ contains "$EDITOR" 'name.startsWith("timezone:")' \
     'editor does not dispatch stable timezone element identities'
 contains "$EDITOR" 'name.startsWith("text:")' \
     'editor does not dispatch stable arbitrary-text element identities'
+contains "$EDITOR" 'function resetDynamicElementPosition(name)' \
+    'timezone/text elements cannot safely reset their position'
+contains "$EDITOR" 'function resetDynamicElementToDefault(name)' \
+    'timezone/text elements cannot safely restore their own defaults'
+contains "$EDITOR" 'function applyDynamicSelectionVisibility(names, visible)' \
+    'multi-select visibility does not include timezone/text elements'
+contains "$EDITOR" 'function applyDynamicColorToAll(value)' \
+    'global element color changes do not include timezone/text elements'
 
 contains "$SCENE" 'required property var timezoneClocks' \
     'shared scene has no timezone-clock input'
