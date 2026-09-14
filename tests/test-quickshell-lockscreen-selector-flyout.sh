@@ -88,16 +88,16 @@ contains "$EDITOR" 'model: root.clockFormatPresets' \
 contains "$EDITOR" 'onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)' \
     'primary clock toggle does not commit through the shared normalized state path'
 
-contains "$EDITOR" 'function selectElementForEditing(name, additive) {' \
-    'direct element selection does not expose the selected element settings automatically'
-contains "$EDITOR" 'if (additive) root.selectElementForEditing(parent.elementName, true);' \
-    'additive preview selection does not expose Element settings through the selection path'
-contains "$EDITOR" 'else if (!root.selectedContains(parent.elementName)) root.selectElementForEditing(parent.elementName, false);' \
-    'new single-element preview selection does not expose Element settings through the selection path'
-contains "$EDITOR" 'else root.activeDrawer = "element";' \
-    'pressing an already-selected group member does not expose Element settings while preserving the group'
+contains "$EDITOR" 'function selectElement(name, additive) {' \
+    'editor has no shared element selection path'
 contains "$EDITOR" 'activeDrawer = "element";' \
     'element selection does not activate the Element settings drawer'
+contains "$EDITOR" 'if (additive) root.selectElement(parent.elementName, true);' \
+    'additive preview selection does not use the shared element selection path'
+contains "$EDITOR" 'else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false);' \
+    'new single-element preview selection does not use the shared element selection path'
+contains "$EDITOR" 'else root.activeDrawer = "element";' \
+    'pressing an already-selected group member does not expose Element settings while preserving the group'
 
 contains "$EDITOR" 'id: settingsBarDragArea' \
     'settings bar has no plain-left-button blank-area drag surface'
