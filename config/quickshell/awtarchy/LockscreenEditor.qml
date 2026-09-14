@@ -1053,6 +1053,65 @@ Singleton {
             translateSelectedElements(0, target - Number(point.y), true);
     }
 
+    function applyDynamicColorToAll(value) {
+        const clocks = cloneTimezoneClocks(draftTimezoneClocks);
+        const texts = cloneCustomTexts(draftCustomTexts);
+        for (const clock of clocks) clock.color = value;
+        for (const item of texts) item.color = value;
+        draftTimezoneClocks = clocks;
+        draftCustomTexts = texts;
+    }
+
+    function resetDynamicElementPosition(name) {
+        if (isTimezoneClock(name)) {
+            const next = cloneTimezoneClocks(draftTimezoneClocks);
+            const index = timezoneClockIndex(name);
+            if (index < 0) return false;
+            next[index].x = 0.5; next[index].y = 0.60; draftTimezoneClocks = next; return true;
+        }
+        if (isCustomText(name)) {
+            const next = cloneCustomTexts(draftCustomTexts);
+            const index = customTextIndex(name);
+            if (index < 0) return false;
+            next[index].x = 0.5; next[index].y = 0.55; draftCustomTexts = next; return true;
+        }
+        return false;
+    }
+
+    function resetDynamicElementToDefault(name) {
+        if (isTimezoneClock(name)) {
+            const next = cloneTimezoneClocks(draftTimezoneClocks);
+            const index = timezoneClockIndex(name);
+            if (index < 0) return false;
+            const id = next[index].id;
+            next[index] = ({ id: id, timezone: "UTC", format: "24h", x: 0.5, y: 0.60,
+                scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto", visible: true });
+            draftTimezoneClocks = next; refreshPreviewTimezoneValues(); return true;
+        }
+        if (isCustomText(name)) {
+            const next = cloneCustomTexts(draftCustomTexts);
+            const index = customTextIndex(name);
+            if (index < 0) return false;
+            const id = next[index].id;
+            next[index] = ({ id: id, text: "Custom Text", variants: [], randomize: false, alignment: "center",
+                x: 0.5, y: 0.55, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, color: "auto", visible: true });
+            draftCustomTexts = next; return true;
+        }
+        return false;
+    }
+
+    function applyDynamicSelectionVisibility(names, visible) {
+        const clocks = cloneTimezoneClocks(draftTimezoneClocks);
+        const texts = cloneCustomTexts(draftCustomTexts);
+        let clocksChanged = false; let textsChanged = false;
+        for (const name of names) {
+            if (isTimezoneClock(name)) { const index = timezoneClockIndex(name); if (index >= 0) { clocks[index].visible = !!visible; clocksChanged = true; } }
+            else if (isCustomText(name)) { const index = customTextIndex(name); if (index >= 0) { texts[index].visible = !!visible; textsChanged = true; } }
+        }
+        if (clocksChanged) draftTimezoneClocks = clocks;
+        if (textsChanged) draftCustomTexts = texts;
+    }
+
     function setAllDraftColors(colorValue) {
         const value = String(colorValue || "").trim().toLowerCase();
         if (value !== "auto" && !validHex(value))
@@ -1065,6 +1124,7 @@ Singleton {
         const nextVisualizer = cloneVisualizer(draftVisualizer);
         nextVisualizer.color = value;
         draftVisualizer = nextVisualizer;
+        applyDynamicColorToAll(value);
         statusMessage = value === "auto" ? "All elements use Auto contrast"
             : "All element colors updated";
     }
@@ -1086,6 +1146,8 @@ Singleton {
             next[index].x = 0.5;
             next[index].y = 0.5;
             draftCustomImages = next;
+        } else if (resetDynamicElementPosition(name)) {
+            // Dynamic repeated elements own their reset coordinates.
         } else {
             const defaults = defaultLayout();
             const next = cloneLayout(draftLayout);
@@ -1115,6 +1177,8 @@ Singleton {
                 opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true
             });
             draftCustomImages = next;
+        } else if (resetDynamicElementToDefault(name)) {
+            // Dynamic repeated elements preserve identity while restoring defaults.
         } else {
             const defaults = defaultLayout();
             const visibility = defaultVisibility();
@@ -1522,6 +1586,7 @@ Singleton {
         const names=selectedElements.filter(name => name !== "password" && elementCanHide(name)); if (names.length===0) return; recordUndoBeforeChange();
         const nv=cloneVisibility(draftVisibility), ni=cloneCustomImages(draftCustomImages), vz=cloneVisualizer(draftVisualizer);
         for (const name of names) { if (name === "visualizer") vz.enabled=!!visible; else if (isCustomImage(name)) { const i=ni.findIndex(image=>image.id===name); if(i>=0) ni[i].visible=!!visible; } else if (elementNames.indexOf(name)>=0) nv[name]=!!visible; }
+        applyDynamicSelectionVisibility(names, visible);
         nv.password=true; draftVisibility=nv; draftCustomImages=ni; draftVisualizer=vz; statusMessage=visible?"Selected elements visible":"Selected elements hidden"; scheduleContrastRefresh();
     }
     function elementEnabled(name) { if (name === "visualizer") return draftVisualizer.enabled === true; if (isCustomImage(name) || isTimezoneClock(name) || isCustomText(name)) { const point = elementPoint(name); return point ? point.visible !== false : false; } return draftVisibility[name] !== false; }
