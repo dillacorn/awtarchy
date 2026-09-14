@@ -32,7 +32,9 @@ jobs:
             config/quickshell/awtarchy/LockSceneBase.qml
 
           python3 - <<'PY'
+          from hashlib import sha256
           from pathlib import Path
+          import re
 
           secure = Path('config/quickshell/awtarchy-lock/LockScene.qml')
           preview = Path('config/quickshell/awtarchy/LockPreviewScene.qml')
@@ -52,20 +54,6 @@ jobs:
           elif new_epoch not in text:
               raise SystemExit('missing text replay epoch anchor')
 
-          old_selection = '''    function refreshCustomTextSelections() {
-              const next = ({});
-              if (Array.isArray(root.customTexts)) {
-                  for (const item of root.customTexts) {
-                      if (!item) continue;
-                      const variants = Array.isArray(item.variants) ? item.variants.map(value => String(value)) : [];
-                      if (item.randomize === true && variants.length > 0)
-                          next[String(item.id)] = variants[Math.floor(Math.random() * variants.length)];
-                      else next[String(item.id)] = String(item.text === undefined ? "Custom Text" : item.text);
-                  }
-              }
-              root.customTextSelections = next;
-          }
-          '''
           new_selection = '''    function refreshCustomTextSelections() {
               const next = ({});
               if (Array.isArray(root.customTexts)) {
@@ -76,12 +64,14 @@ jobs:
                   }
               }
               root.customTextSelections = next;
-          }
-          '''
-          if old_selection in text:
-              text = text.replace(old_selection, new_selection, 1)
-          elif new_selection not in text:
-              raise SystemExit('missing randomized custom-text selection anchor')
+          }'''
+          selection_pattern = re.compile(
+              r'    function refreshCustomTextSelections\(\) \{\n.*?\n    \}\n\n(?=    function customTextDisplay\()',
+              re.DOTALL,
+          )
+          text, replacements = selection_pattern.subn(new_selection + '\n\n', text, count=1)
+          if replacements != 1:
+              raise SystemExit(f'expected one randomized custom-text selection block, replaced {replacements}')
 
           secure.write_text(text)
           preview.write_text(text)
@@ -100,10 +90,26 @@ jobs:
           base_cmp = '''cmp -s "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" "$ROOT/config/quickshell/awtarchy/LockSceneBase.qml" \\
               || fail 'secure/editor scene renderer bases diverged'\n'''
           t = t.replace(base_cmp, '')
-          t = t.replace("secure/editor scene wrappers diverged", "secure/editor scene copies diverged")
-          t = t.replace("scene base has no optional frozen desktop composition input", "scene has no optional frozen desktop composition input")
-          t = t.replace("scene base has no final background composition item", "scene has no final background composition item")
+          t = t.replace('secure/editor scene wrappers diverged', 'secure/editor scene copies diverged')
+          t = t.replace('scene base has no optional frozen desktop composition input', 'scene has no optional frozen desktop composition input')
+          t = t.replace('scene base has no final background composition item', 'scene has no final background composition item')
           test.write_text(t)
+
+          history = Path('local/share/awtarchy/quickshell-managed-history.sha256')
+          history_text = history.read_text()
+          managed = (
+              (preview, '.config/quickshell/awtarchy/LockPreviewScene.qml'),
+              (Path('config/quickshell/awtarchy-lock/LockSurface.qml'), '.config/quickshell/awtarchy-lock/LockSurface.qml'),
+              (secure, '.config/quickshell/awtarchy-lock/LockScene.qml'),
+          )
+          additions = []
+          for source, installed in managed:
+              digest = sha256(source.read_bytes()).hexdigest()
+              entry = f'{digest}\t{installed}'
+              if entry not in history_text.splitlines():
+                  additions.append(entry)
+          if additions:
+              history.write_text(history_text.rstrip('\n') + '\n' + '\n'.join(additions) + '\n')
           PY
 
           rm -f -- .github/workflows/temp-lockscreen-finalize.yml
@@ -116,12 +122,15 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-timezones-text.sh
           shellcheck tests/test-quickshell-lockscreen-third-runtime-pass.sh
           shellcheck tests/test-quickshell-lockscreen-timezones-text.sh
+          bash tests/test-quickshell-lockscreen-logo-cohesion.sh
+          bash tests/test-quickshell-lockscreen-runtime-regressions.sh
           bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash tests/test-quickshell-lockscreen-timezones-text.sh
           bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
           bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
           bash tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
           bash tests/test-quickshell-lockscreen-rotation-reset.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
           cmp -s config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
 
