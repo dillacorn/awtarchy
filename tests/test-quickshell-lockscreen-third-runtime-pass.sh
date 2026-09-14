@@ -82,6 +82,12 @@ contains "$SURFACE" '#ff4d4d' \
     'wrong-password password squares have no visible red failure color'
 rejects "$SURFACE" 'opacity: password.text.length > 0 ? 0.09 : 0' \
     'password background panel remains visible'
+contains "$SURFACE" 'cursorDelegate: Item {' \
+    'secure password input does not replace the focus-controlled standard caret'
+contains "$SURFACE" 'visible: false' \
+    'secure password cursor delegate is still visible'
+rejects "$SURFACE" 'cursorVisible: false' \
+    'secure password still relies on cursorVisible false, which Qt overwrites on focus'
 contains "$SURFACE" 'externalEntryTransitionRunning: transitionLayer.running' \
     'shared scene no longer receives the secure transition running state'
 contains "$SCENE" '&& root.presentationPhase !== "transition"' \
