@@ -61,6 +61,7 @@ contains "$SCENE" 'required property var customTexts' \
     'shared scene has no arbitrary-text input'
 contains "$SCENE" 'property int textReplayEpoch:' \
     'shared scene cannot hold a stable random-text choice per presentation epoch'
+# Quickshell named configs must keep imported presentation helpers inside their own config roots.
 contains "$SCENE" 'import "LockscreenPresentationState.js" as LockscreenPresentationState' \
     'shared scene does not import deterministic presentation text selection from its config root'
 rejects "$SCENE" 'import "../LockscreenPresentationState.js"' \
