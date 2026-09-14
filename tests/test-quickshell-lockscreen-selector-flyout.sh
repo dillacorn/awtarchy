@@ -68,6 +68,8 @@ contains "$SELECTOR" 'y: root.flyoutOpensUpward ? -height - 4 : root.height + 4'
     'compact selector does not place its menu above or below according to available space'
 count_at_least "$EDITOR" 'popupBoundary: editorFocus' 5 \
     'editor compact selectors are not all bounded to the preview viewport'
+not_contains "$EDITOR" 'popupBoundary: editorFocus Layout.' \
+    'compact selector popup boundary is fused to the next QML property'
 
 contains "$SELECTOR" 'readonly property bool directClockToggle:' \
     'compact selector does not recognize the primary 24h/12h clock model'
