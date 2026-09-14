@@ -1,0 +1,46 @@
+name: Temporary Lockscreen Selector History
+
+on:
+  pull_request:
+    types: [synchronize]
+
+permissions:
+  contents: write
+
+jobs:
+  finalize:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Refresh selector managed history
+        shell: bash
+        run: |
+          set -euo pipefail
+          HISTORY='local/share/awtarchy/quickshell-managed-history.sha256'
+          SRC='config/quickshell/awtarchy/LockscreenCompactSelector.qml'
+          DST='.config/quickshell/awtarchy/LockscreenCompactSelector.qml'
+          digest="$(sha256sum "$SRC" | awk '{print $1}')"
+          line="${digest}"$'\t'"${DST}"
+          grep -Fqx -- "$line" "$HISTORY" || printf '%s\n' "$line" >> "$HISTORY"
+          grep -Fqx -- "$line" "$HISTORY"
+          bash tests/test-quickshell-lockscreen-selector-flyout.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          git diff --check
+
+      - name: Commit clean result
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm .github/workflows/temp-lockscreen-selector-history.yml
+          git add \
+            local/share/awtarchy/quickshell-managed-history.sha256 \
+            .github/workflows/temp-lockscreen-selector-history.yml
+          git diff --cached --check
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git commit -m 'fix(lockscreen): track selector managed hash'
+          git push origin HEAD:feature/lockscreen-interactive-effects
