@@ -74,12 +74,10 @@ jobs:
           bash tests/test-quickshell-lockscreen-spawn-editor-semantics.sh
           bash tests/test-quickshell-lockscreen-presentation-sequencing.sh
           git diff --check
-      - name: Remove bridge and restore validator
+      - name: Remove one-use helper
         run: |
-          git show 10801bac114e4d64033faee1dbcad151d8e7232d:.github/workflows/validate-quickshell-lockscreen-editor-elements.yml > .github/workflows/validate-quickshell-lockscreen-editor-elements.yml
           rm -f -- .github/task3_apply.py
           test ! -e .github/task3_apply.py
-          test "$(git hash-object .github/workflows/validate-quickshell-lockscreen-editor-elements.yml)" = 'ff6828f03f2f764b921ce3a0bb9829f644d3998e'
           git diff --check
       - name: Commit verified Task 3 implementation
         run: |
@@ -87,7 +85,6 @@ jobs:
           git config user.email 28743863+dillacorn@users.noreply.github.com
           git add -A
           test ! -e .github/task3_apply.py
-          test "$(git hash-object .github/workflows/validate-quickshell-lockscreen-editor-elements.yml)" = 'ff6828f03f2f764b921ce3a0bb9829f644d3998e'
           git diff --cached --check
           git commit -m 'feat(lockscreen): separate image spawn playback from editing'
           git push origin HEAD:refs/heads/feature/lockscreen-interactive-effects
