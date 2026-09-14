@@ -267,7 +267,11 @@ WlSessionLockSurface {
             color: "transparent"
             selectionColor: "transparent"
             selectedTextColor: "transparent"
-            cursorVisible: false
+            cursorDelegate: Item {
+        width: 0
+        height: 0
+        visible: false
+    }
             font.family: root.theme.fontFamily
             font.pixelSize: Math.round(18 * root.uiScale * root.passwordScale)
             horizontalAlignment: TextInput.AlignHCenter

@@ -523,6 +523,7 @@ Singleton {
     function selectElement(name, additive) {
         if (!elementExists(name))
             return;
+        activeDrawer = "element";
         if (!additive) {
             selectedElement = name;
             selectedElements = [name];
@@ -1773,7 +1774,7 @@ Singleton {
 
                     MouseArea { id: dragArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.SizeAllCursor; preventStealing: true; property real pressOffsetX: 0; property real pressOffsetY: 0
                         onPressed: mouse => { if (root.inertiaOwner.length > 0) { root.inertiaOwner = ""; root.commitHistoryTransaction(); } parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0;
-                            const additive = !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)); if (additive) root.selectElement(parent.elementName, true); else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false); if (!root.selectedContains(parent.elementName)) return;
+                            const additive = !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)); if (additive) root.selectElement(parent.elementName, true); else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false); else root.activeDrawer = "element"; if (!root.selectedContains(parent.elementName)) return;
                             root.beginHistoryTransaction(); pressOffsetX = mouse.x; pressOffsetY = mouse.y; const point = root.elementPoint(parent.elementName); parent.lastSampleX = Number(point.x); parent.lastSampleY = Number(point.y); parent.lastSampleTime = Date.now(); root.beginEditorHold(parent.elementName); }
                         onPositionChanged: mouse => { if (!pressed || !root.selectedContains(parent.elementName) || editorFocus.width <= 0 || editorFocus.height <= 0) return; const scenePoint = parent.mapToItem(editorFocus, mouse.x - pressOffsetX + parent.width / 2, mouse.y - pressOffsetY + parent.height / 2); const bypassSnap = !!(mouse.modifiers & Qt.AltModifier); const snapped = root.snapPoint(parent.elementName, scenePoint.x / editorFocus.width, scenePoint.y / editorFocus.height, bypassSnap); const current = root.elementPoint(parent.elementName); root.translateSelectedElements(snapped.x - Number(current.x), snapped.y - Number(current.y), true); const moved = root.elementPoint(parent.elementName); const now = Date.now(); if (parent.lastSampleTime > 0 && now > parent.lastSampleTime) { const dt = Math.max(8, now - parent.lastSampleTime) / 1000; const sampleVX = (Number(moved.x) - parent.lastSampleX) / dt; const sampleVY = (Number(moved.y) - parent.lastSampleY) / dt; parent.flickVelocityX = parent.flickVelocityX * 0.30 + sampleVX * 0.70; parent.flickVelocityY = parent.flickVelocityY * 0.30 + sampleVY * 0.70; } parent.lastSampleX = Number(moved.x); parent.lastSampleY = Number(moved.y); parent.lastSampleTime = now; }
                         onReleased: mouse => { root.endEditorHold(parent.elementName); root.clearGuides(); if (Date.now() - parent.lastSampleTime > root.flickReleaseFreshnessMs) { parent.flickVelocityX = 0; parent.flickVelocityY = 0; } parent.flickVelocityX = root.cappedFlickVelocity(parent.flickVelocityX); parent.flickVelocityY = root.cappedFlickVelocity(parent.flickVelocityY); if (root.shouldStartFlick(parent.flickVelocityX, parent.flickVelocityY)) { parent.inertiaActive = true; root.inertiaOwner = parent.elementName; } else { parent.flickVelocityX = 0; parent.flickVelocityY = 0; parent.inertiaActive = false; root.commitHistoryTransaction(); } }
@@ -1806,6 +1807,29 @@ Singleton {
 
             Rectangle {
                 id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
+                MouseArea {
+            id: settingsBarDragArea
+            anchors.fill: parent
+            acceptedButtons: Qt.LeftButton
+            hoverEnabled: true
+            cursorShape: Qt.SizeVerCursor
+            preventStealing: true
+            property real pressSceneY: 0
+            property real pressOffsetY: 0
+            onPressed: mouse => {
+                const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                pressSceneY = point.y;
+                pressOffsetY = root.settingsBarOffsetY;
+            }
+            onPositionChanged: mouse => {
+                if (!pressed)
+                    return;
+                const point = settingsBar.mapToItem(editorFocus, mouse.x, mouse.y);
+                const limit = Math.max(0, editorFocus.height - settingsBar.height);
+                root.settingsBarOffsetY = Math.max(0, Math.min(limit,
+                    pressOffsetY - (point.y - pressSceneY)));
+            }
+        }
                 ColumnLayout {
                     id: editorDockContent; anchors.fill: parent; anchors.margins: 9; spacing: 6
                     RowLayout {
@@ -1875,6 +1899,7 @@ Singleton {
                         SettingsButton { label: "Reset to Default"; textSize: 9; onClicked: root.resetElementToDefault(root.selectedElement) }
                         Text { text: "Spawn"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
+                            popupBoundary: editorFocus
                             Layout.preferredWidth: 220
                             model: root.customImageSpawnPresets
                             currentIndex: root.isCustomImage(root.selectedElement)
@@ -1914,6 +1939,7 @@ Singleton {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.selectedElement === "logo"
                         Text { text: "Logo Spawn"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
+                            popupBoundary: editorFocus
                             Layout.preferredWidth: 210
                             model: root.logoSpawnPresets
                             currentIndex: root.logoSpawnIndex(root.draftLogoSpawnAnimation)
@@ -1928,6 +1954,7 @@ Singleton {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.selectedElement === "password"
                         Text { text: "Password Mask"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
+                            popupBoundary: editorFocus
                             Layout.preferredWidth: 190
                             model: root.passwordMaskPresets
                             currentIndex: root.passwordMaskIndex(root.draftPasswordMaskMode)
@@ -1952,6 +1979,7 @@ Singleton {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.selectedElement === "time"
                         Text { text: "Clock Format"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
+                            popupBoundary: editorFocus
                             Layout.preferredWidth: 210
                             model: root.clockFormatPresets
                             currentIndex: root.clockFormatIndex(root.draftClockFormat)
@@ -1963,7 +1991,8 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement)
                         Text { text: "Timezone"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        LockscreenCompactSelector { Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
+                        LockscreenCompactSelector {
+                            popupBoundary: editorFocus Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
                         SettingsButton { label: root.elementPoint(root.selectedElement).format === "12h" ? "12-hour" : "24-hour"; active: root.elementPoint(root.selectedElement).format === "12h"; textSize: 9; onClicked: root.setTimezoneClockFormat(root.selectedElement, root.elementPoint(root.selectedElement).format === "12h" ? "24h" : "12h") }
                         Item { Layout.fillWidth: true }
                         Text { text: "Each extra clock has independent timezone, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
@@ -2130,11 +2159,6 @@ Singleton {
                         InlineColorPicker { id: backgroundColorPicker; visible: root.activeDrawer === "background" && root.backgroundPaletteOpen; Layout.preferredWidth: 320; Layout.preferredHeight: visible ? 142 : 0; colorValue: root.draftBackgroundColor; onColorEdited: hex => root.setDraftBackgroundColor(hex) }
                         Item { Layout.fillWidth: true }
                     }
-                }
-
-                DragHandler {
-                    id: settingsBarAltDrag; target: null; acceptedButtons: Qt.LeftButton; acceptedModifiers: Qt.AltModifier; grabPermissions: PointerHandler.CanTakeOverFromAnything; dragThreshold: 0; xAxis.enabled: false; yAxis.enabled: true
-                    yAxis.onActiveValueChanged: (delta) => { const limit = Math.max(0, editorFocus.height - settingsBar.height); root.settingsBarOffsetY = Math.max(0, Math.min(limit, root.settingsBarOffsetY - delta)); }
                 }
             }
         }
