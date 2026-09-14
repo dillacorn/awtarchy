@@ -1,3 +1,4 @@
+# One-use branch finalizer. It deletes itself in the commit it produces.
 name: Finalize Lockscreen Candidate
 
 on:
