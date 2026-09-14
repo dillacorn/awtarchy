@@ -1992,7 +1992,8 @@ Singleton {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement)
                         Text { text: "Timezone"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
-                            popupBoundary: editorFocus Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
+                            popupBoundary: editorFocus
+                            Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
                         SettingsButton { label: root.elementPoint(root.selectedElement).format === "12h" ? "12-hour" : "24-hour"; active: root.elementPoint(root.selectedElement).format === "12h"; textSize: 9; onClicked: root.setTimezoneClockFormat(root.selectedElement, root.elementPoint(root.selectedElement).format === "12h" ? "24h" : "12h") }
                         Item { Layout.fillWidth: true }
                         Text { text: "Each extra clock has independent timezone, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
