@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Effects
 import Quickshell
-import "../LockscreenPresentationState.js" as LockscreenPresentationState
+import "LockscreenPresentationState.js" as LockscreenPresentationState
 
 Item {
     id: root
