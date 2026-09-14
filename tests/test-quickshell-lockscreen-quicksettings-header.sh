@@ -25,6 +25,11 @@ contains "$QUICK" 'label: root.cursorSectionOpen ? "Collapse Cursor" : "Expand C
 contains "$QUICK" 'label: root.lockscreenSectionOpen ? "Collapse Lockscreen" : "Expand Lockscreen"' \
     'Lockscreen expand action is still ambiguous'
 
+if grep -Fq -- 'label: "Reverse Iris"' "$QUICK" \
+        || grep -Fq -- '"set-lockscreen-entry-transition", "iris"' "$QUICK"; then
+    fail 'retired Iris transition is still exposed in Quick Settings'
+fi
+
 python3 - "$QUICK" <<'PY' || fail 'Cursor and Lockscreen action columns do not share the same alignment contract'
 from pathlib import Path
 import sys
@@ -41,4 +46,4 @@ for marker in ('id: cursorSectionActions', 'id: lockscreenSectionActions'):
             raise SystemExit(1)
 PY
 
-printf 'PASS: Cursor and Lockscreen Quick Settings headers are aligned and explicit\n'
+printf 'PASS: Cursor and Lockscreen Quick Settings headers are aligned, explicit, and Iris-free\n'
