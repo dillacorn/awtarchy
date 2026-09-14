@@ -5,6 +5,11 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SELECTOR="$ROOT/config/quickshell/awtarchy/LockscreenCompactSelector.qml"
 EDITOR="$ROOT/config/quickshell/awtarchy/LockscreenEditor.qml"
+SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
+PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
+LOCK_SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
+BARSTATE="$ROOT/config/quickshell/awtarchy/BarState.qml"
+SAVE="$ROOT/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -64,12 +69,26 @@ contains "$SELECTOR" 'if (availableBelow >= flyout.height)' \
     'compact selector does not prefer downward expansion when the full menu fits'
 contains "$SELECTOR" 'return availableAbove > availableBelow;' \
     'compact selector does not fall back toward the roomier upward side'
-contains "$SELECTOR" 'y: root.flyoutOpensUpward ? -height - 4 : root.height + 4' \
-    'compact selector does not place its menu above or below according to available space'
 count_at_least "$EDITOR" 'popupBoundary: editorFocus' 5 \
     'editor compact selectors are not all bounded to the preview viewport'
 not_contains "$EDITOR" 'popupBoundary: editorFocus Layout.' \
     'compact selector popup boundary is fused to the next QML property'
+
+# The fly-out must own its visible input area. Rendering a menu outside the
+# selector's 28px FocusScope allows pointer presses to fall through to controls
+# under the visual menu (for example Remove Image).
+contains "$SELECTOR" 'import QtQuick.Controls' \
+    'compact selector does not use a real popup input surface'
+contains "$SELECTOR" 'Popup {' \
+    'compact selector fly-out is not implemented as a Popup'
+contains "$SELECTOR" 'parent: Overlay.overlay' \
+    'compact selector popup is not hosted by the overlay input surface'
+contains "$SELECTOR" 'closePolicy: Popup.CloseOnEscape | Popup.CloseOnPressOutside' \
+    'compact selector popup does not close safely on outside presses/Escape'
+contains "$SELECTOR" 'Flickable {' \
+    'compact selector popup cannot scroll long option sets'
+contains "$SELECTOR" 'clip: true' \
+    'compact selector popup does not clip its scrollable option viewport'
 
 contains "$SELECTOR" 'readonly property bool directClockToggle:' \
     'compact selector does not recognize the primary 24h/12h clock model'
@@ -90,6 +109,53 @@ contains "$EDITOR" 'model: root.clockFormatPresets' \
 contains "$EDITOR" 'onActivated: index => root.setDraftClockFormat(root.clockFormatPresets[index].key)' \
     'primary clock toggle does not commit through the shared normalized state path'
 
+# Extra clocks should expose a useful global timezone set rather than the old
+# six-entry UI whitelist. The backend already validates arbitrary installed
+# IANA zoneinfo entries.
+python3 - "$EDITOR" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text()
+match = re.search(r'readonly property var timezonePresets:\s*\[(.*?)\n\s*\]', text, re.S)
+if not match:
+    raise SystemExit('FAIL: timezone preset model is missing')
+block = match.group(1)
+zones = re.findall(r'key:\s*"([^"]+)"', block)
+if len(zones) < 30:
+    raise SystemExit(f'FAIL: timezone picker still exposes only {len(zones)} presets; expected at least 30')
+required = {
+    'America/Chicago', 'America/Denver', 'America/Phoenix',
+    'Europe/Paris', 'Europe/Berlin', 'Asia/Kolkata',
+    'Asia/Singapore', 'Asia/Shanghai', 'Pacific/Auckland'
+}
+missing = sorted(required.difference(zones))
+if missing:
+    raise SystemExit('FAIL: timezone picker is missing representative zones: ' + ', '.join(missing))
+PY
+
+# A timezone clock's city/zone label is optional and must survive editor,
+# persistence, preview, and secure normalization with old configs defaulting on.
+contains "$EDITOR" 'show_label: raw.show_label !== false' \
+    'editor does not preserve the optional timezone label state'
+contains "$EDITOR" 'show_label: true' \
+    'new timezone clocks do not show their zone label by default'
+contains "$EDITOR" 'function setTimezoneClockShowLabel(name, visible)' \
+    'editor cannot toggle the timezone label independently'
+contains "$EDITOR" 'root.setTimezoneClockShowLabel(' \
+    'timezone element controls do not expose the label toggle'
+contains "$SCENE" 'clock.show_label === false' \
+    'shared renderer cannot hide UTC/Tokyo-style timezone labels'
+contains "$LOCK_SHELL" 'show_label:' \
+    'secure timezone normalization drops the optional label state'
+contains "$BARSTATE" 'show_label:' \
+    'desktop timezone normalization drops the optional label state'
+contains "$SAVE" 'show_label:' \
+    'timezone label state is not persisted by the editor save wrapper'
+cmp -s "$SCENE" "$PREVIEW_SCENE" \
+    || fail 'secure/editor scene copies diverged after timezone-label support'
+
 contains "$EDITOR" 'function selectElement(name, additive) {' \
     'editor has no shared element selection path'
 contains "$EDITOR" 'activeDrawer = "element";' \
@@ -100,6 +166,15 @@ contains "$EDITOR" 'else if (!root.selectedContains(parent.elementName)) root.se
     'new single-element preview selection does not use the shared element selection path'
 contains "$EDITOR" 'else root.activeDrawer = "element";' \
     'pressing an already-selected group member does not expose Element settings while preserving the group'
+
+# Selected-element transform handles must sit above overlapping element hitboxes
+# so grabbing rotate/resize never selects a different element underneath.
+contains "$EDITOR" 'z: root.selectedElement === elementName ? 230 : 200' \
+    'selected element hitbox is not raised above overlapping sibling elements'
+contains "$EDITOR" 'id: rotationHandle' \
+    'rotation handle is missing'
+contains "$EDITOR" 'z: 240' \
+    'rotation handle is not above all editable element hitboxes'
 
 contains "$EDITOR" 'id: settingsBarDragArea' \
     'settings bar has no plain-left-button blank-area drag surface'
@@ -129,6 +204,20 @@ contains "$EDITOR" 'else if(isCustomText(name)){const next=cloneCustomTexts(draf
 contains "$EDITOR" 'else { const next = cloneLayout(draftLayout); next[name].opacity = value; draftLayout = next; }' \
     'built-in element opacity is not handled by the shared element opacity path'
 
+# Custom image opacity should use the same direct slider interaction language as
+# Background Opacity while retaining numeric precision and one undo transaction.
+contains "$EDITOR" 'function setElementOpacityFromPointer(name, pointerX, trackWidth)' \
+    'editor has no shared pointer-to-element-opacity path'
+contains "$EDITOR" 'id: imageOpacityTrack' \
+    'custom image opacity has no slider track'
+contains "$EDITOR" 'visible: root.isCustomImage(root.selectedElement)' \
+    'custom image opacity slider is not scoped to images'
+contains "$EDITOR" 'root.setElementOpacityFromPointer(root.selectedElement, mouse.x, width)' \
+    'custom image opacity slider does not update the selected image'
+contains "$EDITOR" 'root.setDraftOpacitySilently(name, value)' \
+    'image opacity drag does not reuse a silent shared state path inside one undo transaction'
+
 # Keep the final editor usability contracts together so runtime candidates
-# cannot regress selector direction, direct selection, opacity, or bar drag.
-printf 'PASS: lockscreen adaptive selectors, element settings, opacity, and settings-bar drag contracts\n'
+# cannot regress selector input ownership, timezone controls, transform priority,
+# image opacity, direct selection, or bar drag.
+printf 'PASS: lockscreen selector input ownership, timezone, transforms, opacity, and settings-bar contracts\n'
