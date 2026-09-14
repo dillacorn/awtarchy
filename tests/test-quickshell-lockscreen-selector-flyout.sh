@@ -129,6 +129,6 @@ contains "$EDITOR" 'else if(isCustomText(name)){const next=cloneCustomTexts(draf
 contains "$EDITOR" 'else { const next = cloneLayout(draftLayout); next[name].opacity = value; draftLayout = next; }' \
     'built-in element opacity is not handled by the shared element opacity path'
 
-# Keep the final usability contracts together so a runtime candidate cannot
-# silently regress selector direction, direct selection, opacity, or bar drag.
+# Keep the final editor usability contracts together so runtime candidates
+# cannot regress selector direction, direct selection, opacity, or bar drag.
 printf 'PASS: lockscreen adaptive selectors, element settings, opacity, and settings-bar drag contracts\n'
