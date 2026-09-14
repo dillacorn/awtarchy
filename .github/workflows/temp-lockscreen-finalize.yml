@@ -87,9 +87,9 @@ jobs:
               t = t.replace(wrapper_check, direct_check, 1)
 
           t = t.replace('"$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml"', '"$SCENE"')
-          base_cmp = '''cmp -s "$ROOT/config/quickshell/awtarchy-lock/LockSceneBase.qml" "$ROOT/config/quickshell/awtarchy/LockSceneBase.qml" \\
+          stale_base_cmp = '''cmp -s "$SCENE" "$ROOT/config/quickshell/awtarchy/LockSceneBase.qml" \\
               || fail 'secure/editor scene renderer bases diverged'\n'''
-          t = t.replace(base_cmp, '')
+          t = t.replace(stale_base_cmp, '')
           t = t.replace('secure/editor scene wrappers diverged', 'secure/editor scene copies diverged')
           t = t.replace('scene base has no optional frozen desktop composition input', 'scene has no optional frozen desktop composition input')
           t = t.replace('scene base has no final background composition item', 'scene has no final background composition item')
