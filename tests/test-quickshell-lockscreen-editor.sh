@@ -96,8 +96,11 @@ require_text "$EDITOR_QML" 'editorSaveBackend: configHome + "/hypr/scripts/quick
 require_text "$EDITOR_QML" 'saveProcess.exec(["bash", editorSaveBackend,' \
     'LockscreenEditor Save path does not invoke the dedicated save wrapper'
 # shellcheck disable=SC2016
-require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${@:1:19}"' \
-    'editor save wrapper no longer delegates the original atomic layout/visibility save'
+require_text "$EDITOR_SAVE" 'backend_args=("${@:1:19}")' \
+    'editor save wrapper no longer preserves the original 19-field backend save boundary'
+# shellcheck disable=SC2016
+require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${backend_args[@]}"' \
+    'editor save wrapper no longer delegates the normalized atomic layout/visibility save'
 require_text "$EDITOR_QML" 'label: "Save"' \
     'LockscreenEditor has no Save control'
 require_text "$EDITOR_QML" 'label: "Cancel"' \

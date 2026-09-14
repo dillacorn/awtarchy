@@ -125,21 +125,21 @@ reject_text "$TMP/hypr.log" 'class:^(awtarchy-lock-wallpaper)$' \
 
 # Edit Layout is a persistent right-side action directly beneath the Lockscreen
 # Expand/Collapse action, rather than being buried inside expanded precision UI.
-require_text "$QUICK_SETTINGS" 'id: lockscreenHeaderActions' \
+require_text "$QUICK_SETTINGS" 'id: lockscreenSectionActions' \
     'Lockscreen header has no right-side action column'
 python3 - "$QUICK_SETTINGS" <<'PY'
 from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-anchor = text.find("id: lockscreenHeaderActions")
+anchor = text.find("id: lockscreenSectionActions")
 if anchor < 0:
-    raise SystemExit("missing lockscreenHeaderActions")
+    raise SystemExit("missing lockscreenSectionActions")
 end = text.find("\n                                }", anchor)
 if end < 0:
-    raise SystemExit("could not bound lockscreenHeaderActions")
+    raise SystemExit("could not bound lockscreenSectionActions")
 block = text[anchor:end]
-collapse = block.find('label: root.lockscreenSectionExpanded ? "Collapse" : "Expand"')
+collapse = block.find('label: root.lockscreenSectionOpen ? "Collapse Lockscreen" : "Expand Lockscreen"')
 edit = block.find('label: "Edit Layout"')
 if collapse < 0 or edit < 0 or edit <= collapse:
     raise SystemExit("Edit Layout is not directly below Expand/Collapse in the right-side action column")
