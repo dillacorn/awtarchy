@@ -146,14 +146,16 @@ EOF
     rm -rf -- "$tmp_root"
 fi
 
-# Alt+Mouse1 bar dragging should use a modifier-filtered Pointer Handler so it
-# can reliably coexist with the bar's child buttons and text fields.
-check_text "$EDITOR" 'id: settingsBarAltDrag' 'settings bar Alt-drag handler is missing'
-check_text "$EDITOR" 'DragHandler {' 'settings bar Alt-drag does not use DragHandler'
-check_text "$EDITOR" 'acceptedModifiers: Qt.AltModifier' 'settings bar drag is not explicitly Alt-filtered'
-check_text "$EDITOR" 'yAxis.onActiveValueChanged:' 'settings bar drag does not apply live vertical deltas'
-reject_text "$EDITOR" 'property real dragStartSceneY: 0' 'legacy MouseArea settings-bar drag state still exists'
-reject_text "$EDITOR" 'property real dragStartOffsetY: 0' 'legacy MouseArea settings-bar drag offset still exists'
+# Plain Mouse1 on unused settings-bar background moves the bar vertically only.
+# Interactive child controls remain above this background MouseArea.
+check_text "$EDITOR" 'id: settingsBarDragArea' 'settings bar blank-area drag surface is missing'
+check_text "$EDITOR" 'acceptedButtons: Qt.LeftButton' 'settings bar drag does not accept plain Mouse1'
+check_text "$EDITOR" 'cursorShape: Qt.SizeVerCursor' 'settings bar drag does not advertise vertical-only movement'
+check_text "$EDITOR" 'settingsBar.mapToItem(editorFocus, mouse.x, mouse.y)' 'settings bar drag does not track pointer position in preview coordinates'
+check_text "$EDITOR" 'root.settingsBarOffsetY = Math.max(0, Math.min(limit,' 'settings bar drag does not apply clamped vertical movement'
+reject_text "$EDITOR" 'id: settingsBarAltDrag' 'legacy settings-bar Alt DragHandler still exists'
+reject_text "$EDITOR" 'acceptedModifiers: Qt.AltModifier' 'settings bar drag still requires Alt'
+reject_text "$EDITOR" 'xAxis.onActiveValueChanged:' 'settings bar unexpectedly supports horizontal movement'
 
 # Secure capture remains separate and untouched by the editor-preview capture.
 check_text "$SECURE_CAPTURE" 'awtarchy-lock-transition' 'secure lock capture root changed unexpectedly'
@@ -163,4 +165,4 @@ if (( failures > 0 )); then
     exit 1
 fi
 
-printf '%s\n' 'PASS: real desktop editor preview, retired Iris renderer, Pixel parity, and Alt-drag settings bar contracts'
+printf '%s\n' 'PASS: real desktop editor preview, retired Iris renderer, Pixel parity, and vertical settings bar contracts'
