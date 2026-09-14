@@ -7,6 +7,9 @@ LAYER="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
 PREVIEW_LAYER="$ROOT/config/quickshell/awtarchy/LockPreviewTransitionLayer.qml"
 SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
+LOCK_SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
+LOCK_PRESENTATION_STATE="$ROOT/config/quickshell/awtarchy-lock/LockscreenPresentationState.js"
+PREVIEW_PRESENTATION_STATE="$ROOT/config/quickshell/awtarchy/LockscreenPresentationState.js"
 EDITOR="$ROOT/config/quickshell/awtarchy/LockscreenEditor.qml"
 STATE="$ROOT/config/hypr/scripts/quickshell_application_state.sh"
 AUTH="$ROOT/config/quickshell/awtarchy-lock/LockAuth.qml"
@@ -30,6 +33,28 @@ rejects_regex() {
     local file="$1" pattern="$2" message="$3"
     ! grep -Eq -- "$pattern" "$file" || fail "$message"
 }
+
+# Quickshell 0.2+ does not allow a named shell config to reference files outside
+# its config root through relative paths. Keep the shared presentation helper
+# inside both awtarchy shell roots, byte-identical, and import it locally.
+[[ -f "$LOCK_PRESENTATION_STATE" ]] \
+    || fail 'secure lock config is missing its in-root presentation helper'
+[[ -f "$PREVIEW_PRESENTATION_STATE" ]] \
+    || fail 'desktop shell config is missing its in-root presentation helper'
+cmp -s "$LOCK_PRESENTATION_STATE" "$PREVIEW_PRESENTATION_STATE" \
+    || fail 'secure/editor presentation helpers diverged'
+contains "$SCENE" 'import "LockscreenPresentationState.js" as LockscreenPresentationState' \
+    'secure scene does not import presentation state from inside its config root'
+contains "$PREVIEW_SCENE" 'import "LockscreenPresentationState.js" as LockscreenPresentationState' \
+    'preview scene does not import presentation state from inside its config root'
+contains "$LOCK_SHELL" 'import "LockscreenPresentationState.js" as LockscreenPresentationState' \
+    'secure shell does not import presentation state from inside its config root'
+rejects "$SCENE" 'import "../LockscreenPresentationState.js"' \
+    'secure scene still imports presentation state from outside its config root'
+rejects "$PREVIEW_SCENE" 'import "../LockscreenPresentationState.js"' \
+    'preview scene still imports presentation state from outside its config root'
+rejects "$LOCK_SHELL" 'import "../LockscreenPresentationState.js"' \
+    'secure shell still imports presentation state from outside its config root'
 
 # Pass A: secure password presentation is immediately usable above the running
 # transition, but authentication ownership and logo sequencing do not move.
