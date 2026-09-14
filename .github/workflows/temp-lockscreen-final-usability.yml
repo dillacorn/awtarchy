@@ -22,6 +22,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           from pathlib import Path
+          import re
 
           editor_path = Path('config/quickshell/awtarchy/LockscreenEditor.qml')
           surface_path = Path('config/quickshell/awtarchy-lock/LockSurface.qml')
@@ -52,10 +53,8 @@ jobs:
               raise SystemExit(f'unexpected compact selector count: {editor.count(selector_anchor)}')
           editor = editor.replace(selector_anchor, 'LockscreenCompactSelector {\n                            popupBoundary: editorFocus')
 
-          settings_anchor = '''                id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
-                  ColumnLayout {'''
-          settings_replacement = '''                id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300
-                  MouseArea {
+          settings_line = '                id: settingsBar; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.bottomMargin: root.settingsBarOffsetY; height: editorDockContent.implicitHeight + 18; color: Theme.popupBackground; border.width: 1; border.color: Theme.muted; z: 300\n'
+          settings_drag = '''                MouseArea {
                       id: settingsBarDragArea
                       anchors.fill: parent
                       acceptedButtons: Qt.LeftButton
@@ -78,32 +77,33 @@ jobs:
                               pressOffsetY - (point.y - pressSceneY)));
                       }
                   }
-                  ColumnLayout {'''
-          if editor.count(settings_anchor) != 1:
-              raise SystemExit('settings bar anchor mismatch')
-          editor = editor.replace(settings_anchor, settings_replacement, 1)
-
-          old_alt_drag = '''
-                  DragHandler {
-                      id: settingsBarAltDrag; target: null; acceptedButtons: Qt.LeftButton; acceptedModifiers: Qt.AltModifier; grabPermissions: PointerHandler.CanTakeOverFromAnything; dragThreshold: 0; xAxis.enabled: false; yAxis.enabled: true
-                      yAxis.onActiveValueChanged: (delta) => { const limit = Math.max(0, editorFocus.height - settingsBar.height); root.settingsBarOffsetY = Math.max(0, Math.min(limit, root.settingsBarOffsetY - delta)); }
-                  }
           '''
-          if editor.count(old_alt_drag) != 1:
-              raise SystemExit('legacy Alt drag anchor mismatch')
-          editor = editor.replace(old_alt_drag, '\n', 1)
+          if editor.count(settings_line) != 1:
+              raise SystemExit('settings bar line mismatch')
+          editor = editor.replace(settings_line, settings_line + settings_drag, 1)
 
-          old_cursor = '''            cursorVisible: false
-                      font.family: root.theme.fontFamily'''
-          new_cursor = '''            cursorDelegate: Item {
-                          width: 0
-                          height: 0
-                          visible: false
-                      }
-                      font.family: root.theme.fontFamily'''
-          if surface.count(old_cursor) != 1:
+          alt_pattern = re.compile(
+              r'\n\s*DragHandler \{\n'
+              r'\s*id: settingsBarAltDrag;[^\n]*\n'
+              r'\s*yAxis\.onActiveValueChanged:[^\n]*\n'
+              r'\s*\}\n'
+          )
+          editor, alt_count = alt_pattern.subn('\n', editor, count=1)
+          if alt_count != 1:
+              raise SystemExit('legacy Alt drag anchor mismatch')
+
+          if surface.count('            cursorVisible: false\n') != 1:
               raise SystemExit('password cursor anchor mismatch')
-          surface = surface.replace(old_cursor, new_cursor, 1)
+          surface = surface.replace(
+              '            cursorVisible: false\n',
+              '''            cursorDelegate: Item {
+                  width: 0
+                  height: 0
+                  visible: false
+              }
+          ''',
+              1,
+          )
 
           editor_path.write_text(editor)
           surface_path.write_text(surface)
