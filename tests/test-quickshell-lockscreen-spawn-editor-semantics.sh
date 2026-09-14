@@ -8,7 +8,8 @@ PREVIEW="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 EDITOR="$ROOT/config/quickshell/awtarchy/LockscreenEditor.qml"
 LOCK_SHELL="$ROOT/config/quickshell/awtarchy-lock/shell.qml"
 SAVE="$ROOT/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
-PRESENTATION_STATE="$ROOT/config/quickshell/LockscreenPresentationState.js"
+PRESENTATION_STATE="$ROOT/config/quickshell/awtarchy-lock/LockscreenPresentationState.js"
+PREVIEW_PRESENTATION_STATE="$ROOT/config/quickshell/awtarchy/LockscreenPresentationState.js"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -50,6 +51,8 @@ contains "$EDITOR" 'label: "During logo"' \
 contains "$EDITOR" 'label: "After logo"' \
     'editor does not expose after-logo image timing'
 
+cmp -s "$PRESENTATION_STATE" "$PREVIEW_PRESENTATION_STATE" || \
+    fail 'secure/editor presentation helper parity drifted'
 contains "$PRESENTATION_STATE" 'function normalizeSpawnTiming(value)' \
     'shared presentation normalizer has no image spawn timing contract'
 contains "$PRESENTATION_STATE" 'normalized.spawn_timing = normalizeSpawnTiming(raw.spawn_timing);' \
