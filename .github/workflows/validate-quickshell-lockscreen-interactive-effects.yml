@@ -37,6 +37,7 @@ jobs:
           bash -n tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
           bash -n tests/test-quickshell-lockscreen-picker-targeting.sh
           bash -n tests/test-quickshell-lockscreen-capture.sh
+          bash -n tests/test-quickshell-lockscreen-superp-latency.sh
           bash -n tests/test-quickshell-lockscreen-transition-layer.sh
           bash -n tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
           bash -n tests/test-quickshell-lockscreen-composition-blur-rendering.sh
@@ -91,6 +92,7 @@ jobs:
           shellcheck tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
           shellcheck tests/test-quickshell-lockscreen-picker-targeting.sh
           shellcheck tests/test-quickshell-lockscreen-capture.sh
+          shellcheck tests/test-quickshell-lockscreen-superp-latency.sh
           shellcheck tests/test-quickshell-lockscreen-transition-layer.sh
           shellcheck tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
           shellcheck tests/test-quickshell-lockscreen-composition-blur-rendering.sh
@@ -155,7 +157,9 @@ jobs:
           bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash tests/test-quickshell-lockscreen-fifth-runtime-pass.sh
       - name: Secure transition capture contract
-        run: bash tests/test-quickshell-lockscreen-capture.sh
+        run: |
+          bash tests/test-quickshell-lockscreen-capture.sh
+          bash tests/test-quickshell-lockscreen-superp-latency.sh
       - name: Desktop transition layer contract
         run: bash tests/test-quickshell-lockscreen-transition-layer.sh
       - name: Background composition contracts
