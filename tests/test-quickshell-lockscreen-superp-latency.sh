@@ -135,7 +135,7 @@ PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
 
 cp -- "$HELPER" "$TMP/config/hypr/scripts/quickshell_lockscreen_capture.sh"
 chmod +x "$TMP/config/hypr/scripts/quickshell_lockscreen_capture.sh"
-printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'return 0 2>/dev/null || true' \
+printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail' 'exit 0' \
     >"$TMP/config/hypr/scripts/quickshell.sh"
 chmod +x "$TMP/config/hypr/scripts/quickshell.sh"
 
