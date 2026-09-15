@@ -127,16 +127,34 @@ new_capture_dir() {
 capture_outputs() {
     local capture_dir="$1"
     local suffix="$2"
-    local output output_file
+    local output output_file i
+    local failed=0
+    local -a pids=()
+    local -a files=()
+    local -a names=()
 
+    # Each output is independent. Launch all grim workers first so a
+    # multi-monitor capture costs roughly one screenshot latency instead of N.
     for output in "${OUTPUTS[@]}"; do
         output_file="${capture_dir}/${output}${suffix}"
-        if ! grim -l 1 -o "$output" "$output_file"; then
-            fail "failed to capture output: $output"
-            return 1
+        grim -l 1 -o "$output" "$output_file" &
+        pids+=("$!")
+        files+=("$output_file")
+        names+=("$output")
+    done
+
+    for i in "${!pids[@]}"; do
+        if ! wait "${pids[$i]}"; then
+            printf 'quickshell_lockscreen_capture.sh: failed to capture output: %s\n' \
+                "${names[$i]}" >&2
+            failed=1
         fi
-        chmod 600 -- "$output_file"
-        validate_capture_file "$output_file" || return 1
+    done
+    (( failed == 0 )) || return 1
+
+    for i in "${!files[@]}"; do
+        chmod 600 -- "${files[$i]}"
+        validate_capture_file "${files[$i]}" || return 1
     done
 }
 
@@ -154,15 +172,14 @@ prepare_capture() {
         return 1
     fi
 
-    # Direct lock triggers have one real pre-lock frame. Mirror it into the
-    # transition-source slot so the secure surface can use one composition path
-    # for both direct and staged Power Menu locking.
+    # Direct lock triggers have one real pre-lock frame. Hard-link it into the
+    # transition slot so direct locks avoid copying full-resolution frame data.
     for output in "${OUTPUTS[@]}"; do
         source="${capture_dir}/${output}.png"
         transition_file="${capture_dir}/${output}.transition.png"
-        if ! cp -- "$source" "$transition_file"; then
+        if ! ln -- "$source" "$transition_file"; then
             rm -rf -- "$capture_dir"
-            fail "failed to stage transition copy for output: $output"
+            fail "failed to stage transition link for output: $output"
             return 1
         fi
         chmod 600 -- "$transition_file"
@@ -200,6 +217,48 @@ publish_prepared_capture() {
     printf '%s\n' "$capture_dir" >"$pointer_tmp"
     chmod 600 -- "$pointer_tmp"
     mv -f -- "$pointer_tmp" "$PREPARED_POINTER"
+}
+
+stage_promote_clean() {
+    local capture_dir="$1"
+    local output transition_file clean_file
+
+    validate_capture_dir "$capture_dir" || return 1
+    refresh_outputs || {
+        rm -rf -- "$capture_dir"
+        return 1
+    }
+
+    for output in "${OUTPUTS[@]}"; do
+        transition_file="${capture_dir}/${output}.transition.png"
+        if ! validate_capture_file "$transition_file"; then
+            rm -rf -- "$capture_dir"
+            return 1
+        fi
+    done
+
+    # If no editor backing window was mapped when stage-begin ran, that first
+    # frame is already the clean frozen desktop. Link it into the clean slot
+    # instead of paying for a second full-screen capture pass.
+    for output in "${OUTPUTS[@]}"; do
+        transition_file="${capture_dir}/${output}.transition.png"
+        clean_file="${capture_dir}/${output}.png"
+        if ! ln -- "$transition_file" "$clean_file"; then
+            rm -rf -- "$capture_dir"
+            fail "failed to promote clean capture for output: $output"
+            return 1
+        fi
+        chmod 600 -- "$clean_file"
+        if ! validate_capture_file "$clean_file"; then
+            rm -rf -- "$capture_dir"
+            return 1
+        fi
+    done
+
+    if ! publish_prepared_capture "$capture_dir"; then
+        rm -rf -- "$capture_dir"
+        return 1
+    fi
 }
 
 stage_complete() {
@@ -249,8 +308,8 @@ consume_prepared_capture() {
 
     # Consumption is intentionally independent of a second Hyprland monitor
     # query. The complete private bundle was already validated against the live
-    # output set at stage-complete; a hotplug after that point safely falls back
-    # to the lock surface's black backing for any newly added output.
+    # output set before publication; a hotplug after that point safely falls
+    # back to the lock surface's black backing for any newly added output.
     shopt -s nullglob
     for clean_file in "$capture_dir"/*.png; do
         [[ "$clean_file" == *.transition.png ]] && continue
@@ -302,12 +361,13 @@ usage() {
 Usage: quickshell_lockscreen_capture.sh <command> [argument]
 
 Commands:
-  prepare                       Capture every active output for a direct lock.
-  stage-begin                   Capture the visible pre-Power-Menu transition frame.
-  stage-complete <capture-dir>  Add the clean desktop frame and publish the bundle.
-  consume-prepared              Return and consume the completed Power Menu bundle.
-  discard-prepared              Remove a completed but unused Power Menu bundle.
-  cleanup <capture-dir>         Remove one validated capture directory.
+  prepare                             Capture every active output for a direct lock.
+  stage-begin                         Capture the visible pre-Power-Menu transition frame.
+  stage-promote-clean <capture-dir>   Reuse an already-clean first frame and publish the bundle.
+  stage-complete <capture-dir>        Add a separate clean desktop frame and publish the bundle.
+  consume-prepared                    Return and consume the completed Power Menu bundle.
+  discard-prepared                    Remove a completed but unused Power Menu bundle.
+  cleanup <capture-dir>               Remove one validated capture directory.
 EOF
 }
 
@@ -319,6 +379,10 @@ case "${1:-}" in
     stage-begin)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         stage_begin
+        ;;
+    stage-promote-clean)
+        [[ $# -eq 2 ]] || { usage >&2; exit 2; }
+        stage_promote_clean "$2"
         ;;
     stage-complete)
         [[ $# -eq 2 ]] || { usage >&2; exit 2; }
