@@ -1,0 +1,58 @@
+name: Lockscreen Immediate Input History Patcher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch-history:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Record current managed lockscreen hashes
+        shell: bash
+        run: |
+          set -euo pipefail
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+
+          append_current_hash() {
+            local source="$1"
+            local target="$2"
+            local sum entry
+            sum="$(sha256sum "$source" | awk '{print $1}')"
+            entry="${sum}"$'\t'"${target}"
+            if ! grep -Fxq -- "$entry" "$history"; then
+              printf '%s\n' "$entry" >>"$history"
+            fi
+          }
+
+          printf '\n%s\n' '# Lockscreen immediate Power Menu input and capture optimization.' >>"$history"
+          append_current_hash \
+            'config/hypr/scripts/quickshell_lockscreen_capture.sh' \
+            '.config/hypr/scripts/quickshell_lockscreen_capture.sh'
+          append_current_hash \
+            'config/hypr/scripts/quickshell_power_menu.sh' \
+            '.config/hypr/scripts/quickshell_power_menu.sh'
+          append_current_hash \
+            'config/quickshell/awtarchy/PowerMenu.qml' \
+            '.config/quickshell/awtarchy/PowerMenu.qml'
+
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          git diff --check
+      - name: Commit history and remove helper workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f .github/workflows/lockscreen-input-history-patcher.yml
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add local/share/awtarchy/quickshell-managed-history.sha256 \
+                  .github/workflows/lockscreen-input-history-patcher.yml
+          git commit -m 'chore(lockscreen): record immediate input hashes'
+          git push origin HEAD:feature/lockscreen-interactive-effects
