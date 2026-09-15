@@ -26,6 +26,8 @@ Singleton {
     property var elementOpacityBeforeOpaque: ({})
     readonly property bool open: editingActive
     property bool pickerSuspended: false
+    property bool lockCaptureSuppressed: false
+    property bool lockCaptureRestoreEditor: false
     property string activeDrawer: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
     readonly property int customImageMaximum: 12
@@ -1723,12 +1725,50 @@ Singleton {
     }
     function openFocused() { openForScreen(focusedScreen()); }
 
+    function suppressForLockCapture() {
+        if (lockCaptureSuppressed)
+            return true;
+        lockCaptureRestoreEditor = root.open && !root.pickerSuspended && editorWindow.visible;
+        lockCaptureSuppressed = true;
+        if (lockCaptureRestoreEditor) {
+            FlyoutManager.releaseOverlay("lockscreen-editor");
+            editorWindow.visible = false;
+        }
+        return true;
+    }
+
+    function lockCaptureBackingHidden() {
+        if (editorWindow.backingWindowVisible)
+            return false;
+        for (let i = 0; i < editorPreviewVariants.instances.length; ++i) {
+            const previewWindow = editorPreviewVariants.instances[i];
+            if (previewWindow && previewWindow.backingWindowVisible)
+                return false;
+        }
+        return true;
+    }
+
+    function restoreAfterLockCapture() {
+        const shouldRestore = lockCaptureRestoreEditor && root.open && !root.pickerSuspended;
+        lockCaptureRestoreEditor = false;
+        lockCaptureSuppressed = false;
+        if (shouldRestore) {
+            editorWindow.visible = true;
+            editorEntranceOpacity = 1;
+            FlyoutManager.claimOverlay("lockscreen-editor");
+            scheduleContrastRefresh();
+            Qt.callLater(() => editorFocus.forceActiveFocus());
+        }
+        return true;
+    }
+
     function suspendForWallpaperPicker() { if (!open || pickerSuspended || wallpaperPickerProcess.running || customImagePickerProcess.running) return; if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening lockscreen wallpaper picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom image picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function resumeAfterWallpaperPicker() { if (!open || !pickerSuspended) return; pickerSuspended = false; editorWindow.visible = true; editorEntranceOpacity = 1; FlyoutManager.claimOverlay("lockscreen-editor"); scheduleContrastRefresh(); Qt.callLater(() => editorFocus.forceActiveFocus()); }
 
     function close() {
         elementOpacityBeforeOpaque = ({});
+        lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
         const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview); loadPersistedDraft();
     }

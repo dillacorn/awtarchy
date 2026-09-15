@@ -52,6 +52,10 @@ WlSessionLockSurface {
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
         ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".png"
         : ""
+    readonly property string transitionCaptureSource: root.captureDirectory.length > 0
+        && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
+        ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".transition.png"
+        : ""
     readonly property bool transitionComplete: !transitionLayer.running
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
@@ -90,6 +94,31 @@ WlSessionLockSurface {
 
     WheelHandler {
         target: null
+    }
+
+    // Keep the dirty/current-screen transition source outside the visible
+    // secure composition. ShaderEffectSource can sample it, but background
+    // transparency in LockScene can only reveal the clean desktop backing.
+    Item {
+        id: transitionBacking
+        x: root.width + 64
+        y: 0
+        width: root.width
+        height: root.height
+
+        Rectangle {
+            anchors.fill: parent
+            color: "#000000"
+        }
+
+        Image {
+            anchors.fill: parent
+            source: root.transitionCaptureSource
+            asynchronous: false
+            cache: false
+            fillMode: Image.Stretch
+            visible: status === Image.Ready
+        }
     }
 
     Item {
@@ -166,7 +195,7 @@ WlSessionLockSurface {
         id: transitionLayer
         anchors.fill: parent
         z: 1000
-        startSource: desktopBacking
+        startSource: transitionBacking
         endSource: securePresentation
         mode: root.entryTransition
         duration: root.entryTransitionDuration

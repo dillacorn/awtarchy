@@ -10,6 +10,10 @@ import Quickshell.Io
 Singleton {
     id: root
 
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")
+    readonly property string lockCaptureHelper: configHome + "/hypr/scripts/quickshell_lockscreen_capture.sh"
+
     // Preserve the existing wlogout layout order and keybinds.
     readonly property var actions: [
         { label: "", text: "Lock (L)", key: "l", command: "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true },
@@ -38,10 +42,14 @@ Singleton {
     }
 
     function openFocused() { openForScreen(focusedScreen()); }
+    function discardPreparedCapture() {
+        Quickshell.execDetached(["bash", lockCaptureHelper, "discard-prepared"]);
+    }
     function close() {
         if (actionPending)
             return;
         powerWindow.visible = false;
+        discardPreparedCapture();
     }
     function finishHandoffClose() {
         actionPending = false;
@@ -61,6 +69,8 @@ Singleton {
 
         actionPending = true;
         closeAfterActionSuccess = action.closeAfterSuccess === true;
+        if (action.key !== "l")
+            discardPreparedCapture();
         actionProcess.command = ["sh", "-lc", action.command];
         actionProcess.running = true;
     }

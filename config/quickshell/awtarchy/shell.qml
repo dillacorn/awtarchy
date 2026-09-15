@@ -564,4 +564,11 @@ ShellRoot {
         function flyoutHeight(surface: string): int { return root.flyoutHeight(surface); }
         function recentBarMonitor(): string { return FlyoutManager.recentBarMonitor(); }
     }
+
+    IpcHandler {
+        target: "lockcapture"
+        function suppressEditor(): bool { return LockscreenEditor.suppressForLockCapture(); }
+        function editorHidden(): bool { return LockscreenEditor.lockCaptureBackingHidden(); }
+        function restoreEditor(): bool { return LockscreenEditor.restoreAfterLockCapture(); }
+    }
 }
