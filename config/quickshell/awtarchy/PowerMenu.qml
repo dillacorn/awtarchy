@@ -14,6 +14,9 @@ Singleton {
         || (Quickshell.env("HOME") + "/.config")
     readonly property string lockCaptureHelper: configHome + "/hypr/scripts/quickshell_lockscreen_capture.sh"
     readonly property string freshLockCommand: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5"
+    readonly property int visualFadeDuration: 120
+    readonly property int lockHandoffPollInterval: 10
+    readonly property int lockHandoffMaxAttempts: 200
 
     // Preserve the existing wlogout layout order and keybinds.
     readonly property var actions: [
@@ -29,9 +32,13 @@ Singleton {
     property bool actionPending: false
     property bool closeAfterActionSuccess: false
     property bool visualReady: false
+    property real visualOpacity: 0.0
     property bool capturePreparing: false
     property bool captureReady: false
     property var queuedAction: null
+    property var deferredLockAction: null
+    property int lockHandoffAttempts: 0
+    property bool lockEditorSuppressed: false
 
     function focusedScreen() {
         const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
@@ -44,34 +51,53 @@ Singleton {
         Qt.callLater(() => keyCatcher.forceActiveFocus());
     }
 
+    function fadeVisualsIn() {
+        visualOpacity = 0.0;
+        visualReady = true;
+        Qt.callLater(() => {
+            if (powerWindow.visible && visualReady)
+                visualOpacity = 1.0;
+        });
+    }
+
     function openForScreen(targetScreen) {
         if (targetScreen)
             powerWindow.screen = targetScreen;
         capturePreparing = false;
         captureReady = false;
         queuedAction = null;
-        visualReady = true;
+        deferredLockAction = null;
+        lockHandoffAttempts = 0;
+        lockHandoffTimer.stop();
+        actionPending = false;
+        closeAfterActionSuccess = false;
         powerWindow.visible = true;
+        fadeVisualsIn();
         focusInputSoon();
     }
 
+    // Kept for IPC/backward compatibility with older callers. The normal
+    // SUPER+P path no longer arms capture before presenting the menu.
     function armForScreen(targetScreen) {
         if (targetScreen)
             powerWindow.screen = targetScreen;
         capturePreparing = true;
         captureReady = false;
         queuedAction = null;
+        visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = true;
         focusInputSoon();
     }
 
     function beginFocused() {
+        if (actionPending)
+            return false;
         if (powerWindow.visible) {
             close();
             return false;
         }
-        armForScreen(focusedScreen());
+        openForScreen(focusedScreen());
         return true;
     }
 
@@ -79,27 +105,43 @@ Singleton {
     function discardPreparedCapture() {
         Quickshell.execDetached(["bash", lockCaptureHelper, "discard-prepared"]);
     }
+    function restoreSuppressedEditor() {
+        if (!lockEditorSuppressed)
+            return;
+        lockEditorSuppressed = false;
+        LockscreenEditor.restoreAfterLockCapture();
+    }
     function close() {
         if (actionPending)
             return;
+        lockHandoffTimer.stop();
+        restoreSuppressedEditor();
         capturePreparing = false;
         captureReady = false;
         queuedAction = null;
+        deferredLockAction = null;
+        lockHandoffAttempts = 0;
+        visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = false;
         discardPreparedCapture();
     }
     function finishHandoffClose() {
+        lockHandoffTimer.stop();
+        restoreSuppressedEditor();
         actionPending = false;
         closeAfterActionSuccess = false;
         capturePreparing = false;
         captureReady = false;
         queuedAction = null;
+        deferredLockAction = null;
+        lockHandoffAttempts = 0;
+        visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = false;
     }
     function toggleForScreen(targetScreen) {
-        if (!FlyoutManager.acceptToggle("power"))
+        if (actionPending || !FlyoutManager.acceptToggle("power"))
             return;
         powerWindow.visible ? close() : openForScreen(targetScreen);
     }
@@ -115,7 +157,7 @@ Singleton {
             return true;
         }
 
-        if (actionPending || queuedAction !== null)
+        if (actionPending || queuedAction !== null || deferredLockAction !== null)
             return true;
 
         for (let i = 0; i < actions.length; ++i) {
@@ -161,7 +203,51 @@ Singleton {
     function reveal() {
         if (!powerWindow.visible || actionPending || queuedAction !== null)
             return;
-        visualReady = true;
+        fadeVisualsIn();
+    }
+
+    function powerMenuBackingHidden() {
+        if (powerWindow.backingWindowVisible)
+            return false;
+        for (let i = 0; i < secondaryShadeVariants.instances.length; ++i) {
+            const shadeWindow = secondaryShadeVariants.instances[i];
+            if (shadeWindow && shadeWindow.backingWindowVisible)
+                return false;
+        }
+        return true;
+    }
+
+    function beginLockAction(action) {
+        if (actionPending || deferredLockAction !== null)
+            return;
+
+        actionPending = true;
+        closeAfterActionSuccess = true;
+        capturePreparing = false;
+        captureReady = false;
+        queuedAction = null;
+        deferredLockAction = action;
+        lockHandoffAttempts = 0;
+        lockEditorSuppressed = LockscreenEditor.suppressForLockCapture();
+
+        // Remove every Power Menu surface before the frozen desktop capture.
+        // The timer below waits for the real QsWindow backing objects to unmap;
+        // hiding a QML item alone is not sufficient for a secure clean frame.
+        visualOpacity = 0.0;
+        visualReady = false;
+        powerWindow.visible = false;
+        lockHandoffTimer.restart();
+    }
+
+    function abortLockHandoff() {
+        const targetScreen = powerWindow.screen || focusedScreen();
+        lockHandoffTimer.stop();
+        deferredLockAction = null;
+        lockHandoffAttempts = 0;
+        actionPending = false;
+        closeAfterActionSuccess = false;
+        restoreSuppressedEditor();
+        openForScreen(targetScreen);
     }
 
     function startAction(action, commandOverride) {
@@ -177,8 +263,13 @@ Singleton {
     }
 
     function runAction(action) {
-        if (actionPending || queuedAction !== null)
+        if (actionPending || queuedAction !== null || deferredLockAction !== null)
             return;
+
+        if (action.key === "l") {
+            beginLockAction(action);
+            return;
+        }
 
         if (capturePreparing) {
             queuedAction = action;
@@ -188,15 +279,41 @@ Singleton {
         startAction(action, "");
     }
 
+    Timer {
+        id: lockHandoffTimer
+        interval: root.lockHandoffPollInterval
+        repeat: true
+        onTriggered: {
+            if (root.deferredLockAction === null) {
+                stop();
+                return;
+            }
+
+            if (root.powerMenuBackingHidden()
+                    && LockscreenEditor.lockCaptureBackingHidden()) {
+                const action = root.deferredLockAction;
+                root.deferredLockAction = null;
+                stop();
+                root.startAction(action, root.freshLockCommand);
+                return;
+            }
+
+            root.lockHandoffAttempts += 1;
+            if (root.lockHandoffAttempts >= root.lockHandoffMaxAttempts)
+                root.abortLockHandoff();
+        }
+    }
+
     Process {
         id: actionProcess
 
         onExited: exitCode => {
             if (exitCode !== 0) {
+                const targetScreen = powerWindow.screen || root.focusedScreen();
                 root.actionPending = false;
                 root.closeAfterActionSuccess = false;
-                root.visualReady = true;
-                root.focusInputSoon();
+                root.restoreSuppressedEditor();
+                root.openForScreen(targetScreen);
                 return;
             }
 
@@ -239,8 +356,13 @@ Singleton {
         Rectangle {
             anchors.fill: parent
             visible: root.visualReady
+            opacity: root.visualOpacity
             color: root.shadeColor
             border.width: 0
+
+            Behavior on opacity {
+                NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
+            }
         }
 
         Item {
@@ -271,9 +393,14 @@ Singleton {
         GridLayout {
             anchors.centerIn: parent
             visible: root.visualReady
+            opacity: root.visualOpacity
             columns: 3
             rowSpacing: 34
             columnSpacing: 16
+
+            Behavior on opacity {
+                NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
+            }
 
             Repeater {
                 model: root.actions
@@ -355,8 +482,13 @@ Singleton {
 
             Rectangle {
                 anchors.fill: parent
+                opacity: root.visualOpacity
                 color: root.shadeColor
                 border.width: 0
+
+                Behavior on opacity {
+                    NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
+                }
             }
         }
     }
