@@ -1336,3 +1336,8 @@ ab6b05a8d6b0017ccddf51ad4a9592167678f3e360ff8a5ade30a90d0e7dfbc5	.config/quicksh
 
 # Lockscreen interaction response and secure capture latency optimization.
 f003ed9f8d2f0bfb2481c2569a6ad3b8309c067166219d13a282c832e569b58d	.config/quickshell/awtarchy-lock/LockSurface.qml
+
+# Lockscreen immediate Power Menu input and capture optimization.
+df834593fbbb7bd6c81d1ac64fedfc8850459c15bb4d609fd8af7ce0bf331da8	.config/hypr/scripts/quickshell_lockscreen_capture.sh
+0dfe088861ffdced997295c70075b91d1c520af01a95387d4eb48d3d7c7c9e30	.config/hypr/scripts/quickshell_power_menu.sh
+02ba3a459d78a838fae96a79b880b83fcee362e8560b595030c54667884078c2	.config/quickshell/awtarchy/PowerMenu.qml
