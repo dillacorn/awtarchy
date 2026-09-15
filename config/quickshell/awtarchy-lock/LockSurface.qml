@@ -191,6 +191,27 @@ WlSessionLockSurface {
         }
     }
 
+    // Double the active interaction cadence without adding any idle polling.
+    // The scene still owns all particle physics and its normal settle condition.
+    Timer {
+        id: logoInteractionBoost
+        interval: scene.logoPhysicsIntervalMs
+        repeat: true
+        running: scene.logoSimulationActive
+        onTriggered: scene.stepLogoExplosion()
+    }
+
+    Connections {
+        target: scene
+
+        function onLogoExplosionActiveChanged() {
+            if (!scene.logoExplosionActive && Object.keys(scene.logoParticles).length > 0) {
+                scene.logoReturnPending = true;
+                scene.logoHoverDirty = true;
+            }
+        }
+    }
+
     LockTransitionLayer {
         id: transitionLayer
         anchors.fill: parent
