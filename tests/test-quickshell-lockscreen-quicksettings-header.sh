@@ -40,7 +40,9 @@ for marker in ('id: cursorSectionActions', 'id: lockscreenSectionActions'):
     start = text.index(marker)
     block = text[start:text.index('\n                    }', start) + 22]
     for needle in (
+        'Layout.minimumWidth: root.sectionActionColumnWidth',
         'Layout.preferredWidth: root.sectionActionColumnWidth',
+        'Layout.maximumWidth: root.sectionActionColumnWidth',
         'Layout.alignment: Qt.AlignRight',
     ):
         if needle not in block:
@@ -57,7 +59,7 @@ import sys
 text = Path(sys.argv[1]).read_text()
 match = re.search(
     r'SettingsButton\s*\{\s*'
-    r'label:\s*QuickSettings\.lockscreenHideQuickshellBeforeCapture\s*\?\s*"On"\s*:\s*"Off"'
+    r'label:\s*QuickSettings\.lockscreenHideLockSettingsBeforeCapture\s*\?\s*"On"\s*:\s*"Off"'
     r'.*?\n\s*\}',
     text,
     re.S,
@@ -70,30 +72,36 @@ PY
 
 # Lock capture must consult the live QML preference before falling back to the
 # asynchronously persisted state. When hiding is requested, capture must also
-# wait until the actual Quick Settings backing window is gone rather than
+# wait until the actual lock-editor backing window is gone rather than
 # assuming a fixed sleep was enough for the compositor to unmap it.
 contains "$QUICK" 'function prepareLockCapture(): bool' \
     'Quick Settings exposes no live pre-lock capture preparation IPC'
-contains "$QUICK" 'if (!QuickSettings.lockscreenHideQuickshellBeforeCapture)' \
+contains "$QUICK" 'if (!QuickSettings.lockscreenHideLockSettingsBeforeCapture)' \
     'live pre-lock capture preparation ignores the in-memory hide preference'
-contains "$QUICK" 'QuickSettings.close();' \
+contains "$QUICK" 'return LockscreenEditor.prepareLockCapture();' \
     'live pre-lock capture preparation does not close Quick Settings'
 contains "$QUICK" 'function lockCaptureHidden(): bool' \
     'Quick Settings exposes no backing-window readiness check for lock capture'
-contains "$QUICK" 'return !quickSettingsWindow.backingWindowVisible;' \
+contains "$QUICK" 'return LockscreenEditor.lockCaptureHidden();' \
     'lock capture readiness does not verify the actual backing window is hidden'
 contains "$LOCK" 'ipc call quicksettings prepareLockCapture' \
     'lock helper never consults live Quick Settings state before capture'
 contains "$LOCK" 'ipc call quicksettings lockCaptureHidden' \
     'lock helper never verifies Quick Settings has actually unmapped before capture'
+contains "$LOCK" 'ipc call quicksettings restoreLockCapture' \
+    'lock helper never restores the lock editor after the frozen capture'
+contains "$QUICK" 'function restoreLockCapture(): void' \
+    'Quick Settings IPC has no lock-editor restore hook'
+contains "$QUICK" 'LockscreenEditor.restoreAfterLockCapture();' \
+    'Quick Settings IPC does not restore the lock editor without closing it'
 
-python3 - "$LOCK" <<'PY' || fail 'live Quick Settings preparation/readiness is not ordered before secure desktop capture'
+python3 - "$LOCK" <<'PY' || fail 'live lock-editor preparation/readiness is not ordered before secure desktop capture'
 from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text()
 prepare = text.index('ipc call quicksettings prepareLockCapture')
-persisted = text.index('get lockscreen_hide_quickshell_before_capture')
+persisted = text.index('hide_lock_settings_before_capture_enabled || return 0')
 ready = text.index('ipc call quicksettings lockCaptureHidden')
 capture = text.index('"$capture_helper" prepare')
 if not (prepare < persisted < ready < capture):

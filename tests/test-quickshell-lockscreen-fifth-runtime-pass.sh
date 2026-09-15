@@ -93,16 +93,24 @@ rejects "$SURFACE" 'onExited: scene.handlePointerClick' \
 cmp -s "$SCENE" "$PREVIEW_SCENE" \
     || fail 'secure/editor scene copies diverged'
 
-# Real lock capture may optionally hide Quick Settings before full-output grim
+# Real lock capture may optionally hide Quickshell lock settings before full-output grim
 # capture. The setting is opt-in; capture remains frozen and fail-closed.
-contains "$STATE" 'lockscreen_hide_quickshell_before_capture' \
+contains "$STATE" 'lockscreen_hide_lock_settings_before_capture' \
     'capture-hide preference is not persisted in the shared state backend'
-contains "$BAR_STATE" 'lockscreenHideQuickshellBeforeCapture' \
+contains "$BAR_STATE" 'lockscreenHideLockSettingsBeforeCapture' \
     'BarState does not expose the capture-hide preference'
-contains "$QUICK_SETTINGS" 'Hide Quick Settings Before Lock Capture' \
+contains "$QUICK_SETTINGS" 'Hide Quickshell Lock Settings Before Lock Capture' \
     'Quick Settings has no user-facing capture-hide fallback control'
-contains "$LOCK_MANAGER" 'ipc call quicksettings close' \
-    'real lock path does not hide Quick Settings before capture when requested'
+contains "$QUICK_SETTINGS" 'LockscreenEditor.prepareLockCapture()' \
+    'Quick Settings does not delegate capture suppression to the lock editor'
+contains "$LOCK_MANAGER" 'ipc call quicksettings prepareLockCapture' \
+    'real lock path does not request lock-editor suppression before capture'
+contains "$LOCK_MANAGER" 'ipc call quicksettings lockCaptureHidden' \
+    'real lock path does not wait for the lock editor to unmap before capture'
+contains "$LOCK_MANAGER" 'ipc call quicksettings restoreLockCapture' \
+    'real lock path does not restore the editor after the frozen capture'
+rejects "$LOCK_MANAGER" 'ipc call quicksettings close' \
+    'real lock path still closes unrelated Quick Settings before capture'
 contains "$LOCK_MANAGER" 'quickshell_lockscreen_capture.sh' \
     'real lock path no longer uses the secure frozen capture helper'
 
