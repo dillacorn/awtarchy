@@ -1,0 +1,192 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path('config/hypr/hyprland.lua')
+text = path.read_text()
+
+old = 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh"'
+new = '''local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"
+local power_menu_noalt = "~/.config/hypr/scripts/quickshell_power_menu.sh noalt"
+local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"'''
+assert text.count(old) == 1, text.count(old)
+text = text.replace(old, new, 1)
+
+marker = '''-- ───────────────────────────────────────────────────────────────────────────────
+-- DEFAULT MODE (ALT is modifier; SUPER is app/meta)
+-- ───────────────────────────────────────────────────────────────────────────────
+'''
+assert text.count(marker) == 1, text.count(marker)
+premapped = '''local function power_menu_fast_dispatch(action, return_submap)
+    return function()
+        hl.dispatch(hl.dsp.submap(return_submap))
+        hl.dispatch(hl.dsp.exec_cmd(power_menu_key .. " " .. action))
+    end
+end
+
+local function bind_power_menu_fast_actions(return_submap)
+    for _, action in ipairs({ "l", "h", "r", "s", "o", "z" }) do
+        hl.bind(action, power_menu_fast_dispatch(action, return_submap), { ignore_mods = true })
+    end
+    hl.bind("escape", power_menu_fast_dispatch("escape", return_submap), { ignore_mods = true })
+    hl.bind("p", power_menu_fast_dispatch("escape", return_submap), { ignore_mods = true })
+end
+
+hl.define_submap("power-menu-fast", function()
+    bind_power_menu_fast_actions("reset")
+end)
+
+hl.define_submap("power-menu-fast-noalt", function()
+    bind_power_menu_fast_actions("noalt")
+end)
+
+'''
+text = text.replace(marker, premapped + marker, 1)
+
+old_bind = 'hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})'
+assert text.count(old_bind) == 2, text.count(old_bind)
+default_bind = '''hl.bind("SUPER + P", function()
+    hl.dispatch(hl.dsp.submap("power-menu-fast"))
+    hl.dispatch(hl.dsp.exec_cmd(power_menu))
+end, {})'''
+noalt_bind = '''hl.bind("SUPER + P", function()
+        hl.dispatch(hl.dsp.submap("power-menu-fast-noalt"))
+        hl.dispatch(hl.dsp.exec_cmd(power_menu_noalt))
+    end, {})'''
+text = text.replace(old_bind, default_bind, 1)
+text = text.replace(old_bind, noalt_bind, 1)
+path.write_text(text)
+
+path = Path('config/quickshell/awtarchy/PowerMenu.qml')
+text = path.read_text()
+marker = '''    function captureWanted() {
+        return powerWindow.visible && capturePreparing;
+    }
+'''
+assert text.count(marker) == 1, text.count(marker)
+fast_key = '''    function fastKey(key: string): bool {
+        if (!powerWindow.visible)
+            return false;
+
+        const normalized = String(key || "").toLowerCase();
+        if (normalized === "escape") {
+            close();
+            return true;
+        }
+
+        if (actionPending || queuedAction !== null)
+            return true;
+
+        for (let i = 0; i < actions.length; ++i) {
+            if (normalized === actions[i].key) {
+                runAction(actions[i]);
+                return true;
+            }
+        }
+        return false;
+    }
+
+'''
+text = text.replace(marker, fast_key + marker, 1)
+old = '''        function begin(): bool { return root.beginFocused(); }
+        function captureWanted(): bool { return root.captureWanted(); }
+'''
+new = '''        function begin(): bool { return root.beginFocused(); }
+        function fastKey(key: string): bool { return root.fastKey(key); }
+        function captureWanted(): bool { return root.captureWanted(); }
+'''
+assert text.count(old) == 1, text.count(old)
+text = text.replace(old, new, 1)
+path.write_text(text)
+
+path = Path('config/hypr/scripts/quickshell_power_menu.sh')
+text = path.read_text()
+old = '''POLL_INTERVAL="${AWTARCHY_LOCK_CAPTURE_POLL_INTERVAL:-0.05}"
+
+capture_dir=""
+'''
+new = '''POLL_INTERVAL="${AWTARCHY_LOCK_CAPTURE_POLL_INTERVAL:-0.05}"
+RETURN_SUBMAP="${1:-reset}"
+case "$RETURN_SUBMAP" in
+    reset|noalt) ;;
+    *) RETURN_SUBMAP="reset" ;;
+esac
+
+capture_dir=""
+'''
+assert text.count(old) == 1, text.count(old)
+text = text.replace(old, new, 1)
+old = '''wanted=""
+
+cleanup_incomplete_capture() {
+'''
+new = '''wanted=""
+submap_restored=0
+
+restore_input_submap() {
+    if (( submap_restored )); then
+        return 0
+    fi
+    submap_restored=1
+    hyprctl dispatch "hl.dsp.submap(\\\"${RETURN_SUBMAP}\\\")" >/dev/null 2>&1 || true
+}
+
+trap restore_input_submap EXIT
+
+cleanup_incomplete_capture() {
+'''
+assert text.count(old) == 1, text.count(old)
+text = text.replace(old, new, 1)
+old = '''    "$QS_BIN" -c awtarchy ipc call powermenu reveal >/dev/null 2>&1 || true
+}
+'''
+new = '''    "$QS_BIN" -c awtarchy ipc call powermenu reveal >/dev/null 2>&1 || true
+    restore_input_submap
+}
+'''
+assert text.count(old) == 1, text.count(old)
+text = text.replace(old, new, 1)
+path.write_text(text)
+PY
+
+cat > config/hypr/scripts/quickshell_power_menu_key.sh <<'SH'
+#!/usr/bin/env bash
+# Deliver a Power Menu action captured synchronously by Hyprland's temporary
+# pre-map submap. Retry until the QML Power Menu has armed its input surface.
+
+set -euo pipefail
+
+QS_BIN="${QS_BIN:-qs}"
+RETRY_DELAY="${AWTARCHY_POWER_MENU_KEY_RETRY_DELAY:-0.01}"
+RETRY_COUNT="${AWTARCHY_POWER_MENU_KEY_RETRY_COUNT:-300}"
+
+main() {
+    local action="${1:-}"
+    local accepted=""
+    local attempt
+
+    case "$action" in
+        l|h|r|s|o|z|escape) ;;
+        *)
+            printf 'quickshell_power_menu_key.sh: invalid action: %s\n' "$action" >&2
+            return 2
+            ;;
+    esac
+
+    for ((attempt = 0; attempt < RETRY_COUNT; ++attempt)); do
+        accepted="$("$QS_BIN" -c awtarchy ipc call powermenu fastKey "$action" 2>/dev/null | tail -n1 || true)"
+        if [[ "$accepted" == true ]]; then
+            return 0
+        fi
+        sleep "$RETRY_DELAY"
+    done
+
+    printf 'quickshell_power_menu_key.sh: Power Menu did not accept action: %s\n' "$action" >&2
+    return 1
+}
+
+main "$@"
+SH
+chmod 0755 config/hypr/scripts/quickshell_power_menu_key.sh
