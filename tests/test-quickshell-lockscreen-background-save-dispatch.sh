@@ -123,6 +123,25 @@ jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
 jq -e '.lockscreen_timezone_clocks == []' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
     || fail 'stale timezone clock was not removed during Save'
 
+# Self-healing is limited to stale optional resources. Malformed/unsafe input
+# must still reach the authoritative validators and fail instead of being hidden.
+if XDG_CONFIG_HOME="$TMP/config" XDG_CACHE_HOME="$TMP/cache" HOME="$TMP/home" HYPR_QUICKSHELL_SCRIPT=/bin/false \
+    bash "$TMP/config/hypr/scripts/quickshell_lockscreen_editor_save.sh" \
+    "$editor_layout" "$visibility" wallpaper '#000000' 'relative-wallpaper.png' cover 0.5 0.5 none 0 10 auto \
+    "$custom_images" "$visualizer" 90 pixel 1800 90 pixelated split squares '•' 24h \
+    "$timezone_clocks" "$custom_texts" >/dev/null 2>&1; then
+    fail 'malformed relative wallpaper path was silently self-healed'
+fi
+
+malformed_stale_images="$(jq -cn --arg path "$TMP/missing-invalid.png" '[{id:"bad-id",path:$path,x:0.5,y:0.5,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,spawn_animation:"none",spawn_timing:"during-logo",visible:true}]')"
+if XDG_CONFIG_HOME="$TMP/config" XDG_CACHE_HOME="$TMP/cache" HOME="$TMP/home" HYPR_QUICKSHELL_SCRIPT=/bin/false \
+    bash "$TMP/config/hypr/scripts/quickshell_lockscreen_editor_save.sh" \
+    "$editor_layout" "$visibility" black '#000000' '' cover 0.5 0.5 none 0 10 auto \
+    "$malformed_stale_images" "$visualizer" 90 pixel 1800 90 pixelated split squares '•' 24h \
+    "$timezone_clocks" "$custom_texts" >/dev/null 2>&1; then
+    fail 'malformed stale custom-image entry was silently discarded'
+fi
+
 # A genuinely invalid presentation must still fail, but the editor must surface
 # the backend reason instead of collapsing every failure into a generic message.
 grep -Fq 'property string saveErrorMessage: ""' "$EDITOR_QML" \
