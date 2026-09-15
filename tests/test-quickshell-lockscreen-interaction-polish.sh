@@ -11,6 +11,7 @@ SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 LOCK_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
+POWER_MENU_QML="${ROOT}/config/quickshell/awtarchy/PowerMenu.qml"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -88,6 +89,46 @@ require_text "$EDITOR" 'root.toggleDrawer("element")' 'selected color affordance
 
 require_text "$PICKER" 'window.startup_mode=Fullscreen' 'Alacritty lockscreen wallpaper picker is not fullscreen'
 require_text "$PICKER" "basename -- \"\$TERMINAL_CMD\"" 'wallpaper picker does not distinguish the standard Alacritty launch path'
+
+# Pressing L must hard-hide every Power Menu surface without running its normal
+# opacity animation. Capture may only start after the real backing windows are
+# gone and a short compositor-settle interval has elapsed.
+require_text "$POWER_MENU_QML" 'property bool lockHardHide: false' \
+    'Power Menu lock path has no explicit animation-free hard-hide state'
+require_text "$POWER_MENU_QML" 'readonly property int lockCaptureSettleDuration: 50' \
+    'Power Menu lock path has no compositor-settle interval before capture'
+require_text "$POWER_MENU_QML" 'enabled: !root.lockHardHide' \
+    'Power Menu opacity animation is not disabled during the lock hard hide'
+require_text "$POWER_MENU_QML" 'id: lockCaptureSettleTimer' \
+    'Power Menu lock path has no post-unmap settle timer'
+require_text "$POWER_MENU_QML" 'interval: root.lockCaptureSettleDuration' \
+    'Power Menu settle timer does not use the configured compositor-settle interval'
+require_text "$POWER_MENU_QML" 'lockCaptureSettleTimer.restart();' \
+    'Power Menu starts lock capture immediately when backing windows first report hidden'
+
+python3 - "$POWER_MENU_QML" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+try:
+    begin_body = text.split("function beginLockAction(action)", 1)[1].split("function abortLockHandoff", 1)[0]
+    handoff_body = text.split("id: lockHandoffTimer", 1)[1].split("id: lockCaptureSettleTimer", 1)[0]
+    settle_body = text.split("id: lockCaptureSettleTimer", 1)[1].split("Process {", 1)[0]
+except IndexError as exc:
+    raise SystemExit(f"FAIL: unable to locate Power Menu hard-hide sequencing block: {exc}")
+
+hard_hide_index = begin_body.find("lockHardHide = true")
+hide_index = begin_body.find("powerWindow.visible = false")
+if hard_hide_index < 0 or hide_index < 0 or hard_hide_index > hide_index:
+    raise SystemExit("FAIL: Power Menu does not disable animation before hiding the lock surface")
+if "freshLockCommand" in handoff_body:
+    raise SystemExit("FAIL: fresh screenshot capture can still begin immediately on first backing-window unmap")
+if "powerMenuBackingHidden()" not in settle_body or "LockscreenEditor.lockCaptureBackingHidden()" not in settle_body:
+    raise SystemExit("FAIL: post-unmap settle stage does not revalidate every hidden backing window")
+if "root.startAction(action, root.freshLockCommand);" not in settle_body:
+    raise SystemExit("FAIL: fresh screenshot capture is not deferred until the compositor-settle stage")
+PY
 
 bash "$ROOT/tests/test-quickshell-lockscreen-pretest-optimizations.sh"
 cmp -s "$SCENE" "$PREVIEW" || fail 'secure lock scene and desktop preview scene diverge'
