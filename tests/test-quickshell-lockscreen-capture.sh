@@ -4,6 +4,10 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_capture.sh"
 LOCK_MANAGER="${ROOT}/config/hypr/scripts/awtarchy_lock.sh"
+POWER_MENU="${ROOT}/config/hypr/scripts/quickshell_power_menu.sh"
+MAIN_SHELL="${ROOT}/config/quickshell/awtarchy/shell.qml"
+EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
+SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -15,6 +19,22 @@ fail() {
 require_text() {
     local file="$1" text="$2" message="$3"
     grep -Fq -- "$text" "$file" || fail "$message"
+}
+
+forbid_text() {
+    local file="$1" text="$2" message="$3"
+    if grep -Fq -- "$text" "$file"; then
+        fail "$message"
+    fi
+}
+
+require_order() {
+    local file="$1" first="$2" second="$3" message="$4"
+    local first_line second_line
+    first_line="$(grep -nF -- "$first" "$file" | head -n1 | cut -d: -f1 || true)"
+    second_line="$(grep -nF -- "$second" "$file" | head -n1 | cut -d: -f1 || true)"
+    [[ -n "$first_line" && -n "$second_line" && "$first_line" -lt "$second_line" ]] \
+        || fail "$message"
 }
 
 mode_of() {
@@ -71,6 +91,13 @@ run_prepare() {
         bash "$HELPER" prepare
 }
 
+run_stage_begin() {
+    PATH="$TMP/bin:$PATH" \
+    XDG_RUNTIME_DIR="$TMP/runtime" \
+    FAKE_MONITORS="$TMP/monitors.json" \
+        bash "$HELPER" stage-begin
+}
+
 capture_dir="$(run_prepare)" || fail 'capture helper failed with two valid outputs'
 case "$capture_dir" in
     "$TMP/runtime/awtarchy-lock-transition"/capture.*) ;;
@@ -83,12 +110,17 @@ esac
     || fail 'capture directory is not mode 0700'
 for output in DP-1 HDMI-A-1; do
     file="$capture_dir/$output.png"
+    transition_file="$capture_dir/$output.transition.png"
     [[ -f "$file" && ! -L "$file" && -O "$file" && -s "$file" ]] \
         || fail "capture for $output is not a valid owned regular file"
     [[ "$(mode_of "$file")" == 600 ]] \
         || fail "capture for $output is not mode 0600"
     grep -Fqx -- "PNG:$output" "$file" \
         || fail "capture for $output did not come from the requested output"
+    [[ -f "$transition_file" && ! -L "$transition_file" && -O "$transition_file" && -s "$transition_file" ]] \
+        || fail "direct lock capture does not provide a compatible transition frame for $output"
+    [[ "$(mode_of "$transition_file")" == 600 ]] \
+        || fail "transition capture for $output is not mode 0600"
 done
 
 PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
@@ -134,6 +166,47 @@ if PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
 fi
 [[ -f "$outside/sentinel" ]] || fail 'cleanup removed data outside the dedicated capture root'
 
+# SUPER+P must stage two distinct snapshots in one private bundle. The first
+# snapshot is the visible lock-settings/editor view. The clean desktop capture
+# is added only after those editor windows have actually unmapped, and only then
+# may the prepared pointer become consumable by Power Menu Lock.
+printf '%s\n' '[{"name":"DP-1"},{"name":"HDMI-A-1"}]' >"$TMP/monitors.json"
+stage_dir="$(run_stage_begin)" || fail 'two-snapshot staging did not capture the transition source'
+[[ ! -e "$root/prepared" ]] || fail 'transition-only staging published an incomplete prepared bundle'
+for output in DP-1 HDMI-A-1; do
+    [[ -s "$stage_dir/$output.transition.png" ]] \
+        || fail "transition source for $output is missing after stage-begin"
+    [[ ! -e "$stage_dir/$output.png" ]] \
+        || fail "clean desktop frame for $output was captured before editor suppression"
+done
+
+PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" FAKE_MONITORS="$TMP/monitors.json" \
+    bash "$HELPER" stage-complete "$stage_dir" \
+    || fail 'two-snapshot staging did not capture the clean desktop phase'
+[[ -f "$root/prepared" && ! -L "$root/prepared" && -O "$root/prepared" ]] \
+    || fail 'complete two-snapshot bundle was not published atomically'
+for output in DP-1 HDMI-A-1; do
+    [[ -s "$stage_dir/$output.png" ]] \
+        || fail "clean desktop frame for $output is missing after stage-complete"
+done
+consumed="$(PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
+    bash "$HELPER" consume-prepared)" \
+    || fail 'complete two-snapshot bundle could not be consumed'
+[[ "$consumed" == "$stage_dir" ]] || fail 'consume-prepared returned the wrong two-snapshot bundle'
+[[ ! -e "$root/prepared" ]] || fail 'consume-prepared did not consume the prepared pointer'
+PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
+    bash "$HELPER" cleanup "$stage_dir"
+
+# Failure in the clean phase must never publish or retain a partially usable set.
+stage_dir="$(run_stage_begin)" || fail 'second two-snapshot staging setup failed'
+if PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" FAKE_MONITORS="$TMP/monitors.json" \
+    FAIL_GRIM_OUTPUT='HDMI-A-1' bash "$HELPER" stage-complete "$stage_dir" \
+    >"$TMP/stage-complete.out" 2>"$TMP/stage-complete.err"; then
+    fail 'partial clean desktop phase unexpectedly succeeded'
+fi
+[[ ! -e "$root/prepared" ]] || fail 'failed clean phase published a prepared pointer'
+[[ ! -e "$stage_dir" ]] || fail 'failed clean phase retained an incomplete capture bundle'
+
 # The lock manager must capture before spawn, scope the path to the lock process,
 # and explicitly remove any inherited stale capture variable on fail-closed fallback.
 require_text "$LOCK_MANAGER" 'quickshell_lockscreen_capture.sh' \
@@ -142,5 +215,66 @@ require_text "$LOCK_MANAGER" 'AWTARCHY_LOCK_CAPTURE_DIR=' \
     'lock manager does not scope the validated capture directory to Quickshell'
 require_text "$LOCK_MANAGER" 'env -u AWTARCHY_LOCK_CAPTURE_DIR' \
     'lock manager does not fail closed when capture preparation fails'
+require_text "$LOCK_MANAGER" 'consume-prepared' \
+    'Power Menu lock path does not consume the already prepared capture bundle'
 
-printf 'PASS: secure lockscreen pre-lock capture contract\n'
+# SUPER+P preparation order is security-sensitive: source capture first, hide only
+# editor surfaces, prove their backing windows are gone, capture the clean desktop,
+# restore the editor, then show Power Menu. Power Menu Lock must not recapture.
+require_text "$POWER_MENU" 'stage-begin' \
+    'SUPER+P does not capture the visible editor/settings transition source first'
+require_text "$POWER_MENU" 'suppressEditor' \
+    'SUPER+P does not request temporary editor suppression before the clean capture'
+require_text "$POWER_MENU" 'editorHidden' \
+    'SUPER+P does not wait for verified editor backing-window removal'
+require_text "$POWER_MENU" 'stage-complete' \
+    'SUPER+P does not complete the clean desktop half of the prepared bundle'
+require_text "$POWER_MENU" 'restoreEditor' \
+    'SUPER+P does not restore the editor after clean capture'
+require_order "$POWER_MENU" 'stage-begin' 'suppressEditor' \
+    'SUPER+P hides the editor before taking the transition source snapshot'
+require_order "$POWER_MENU" 'suppressEditor' 'editorHidden' \
+    'SUPER+P checks readiness before requesting editor suppression'
+require_order "$POWER_MENU" 'editorHidden' 'stage-complete' \
+    'SUPER+P captures the clean desktop before editor backing windows are verified hidden'
+require_order "$POWER_MENU" 'stage-complete' 'restoreEditor' \
+    'SUPER+P restores the editor before the clean desktop snapshot is complete'
+require_order "$POWER_MENU" 'restoreEditor' 'powermenu toggle' \
+    'SUPER+P opens Power Menu before restoring the editor'
+
+# Readiness must be based on real QsWindow backing state for both the primary
+# editor and secondary-monitor preview windows, not a QML visibility guess.
+require_text "$EDITOR" 'function suppressForLockCapture' \
+    'lockscreen editor does not expose temporary capture suppression'
+require_text "$EDITOR" 'function lockCaptureBackingHidden' \
+    'lockscreen editor does not expose backing-window readiness'
+require_text "$EDITOR" 'backingWindowVisible' \
+    'lockscreen editor readiness does not inspect real backing-window state'
+require_text "$EDITOR" 'editorPreviewVariants.instances' \
+    'lockscreen editor readiness ignores secondary-monitor preview windows'
+require_text "$EDITOR" 'function restoreAfterLockCapture' \
+    'lockscreen editor does not restore its pre-capture visibility'
+require_text "$MAIN_SHELL" 'target: "lockcapture"' \
+    'main Quickshell session does not expose the lock-capture coordination IPC'
+require_text "$MAIN_SHELL" 'suppressEditor' \
+    'lock-capture IPC does not expose editor suppression'
+require_text "$MAIN_SHELL" 'editorHidden' \
+    'lock-capture IPC does not expose backing-window readiness'
+require_text "$MAIN_SHELL" 'restoreEditor' \
+    'lock-capture IPC does not expose editor restoration'
+
+# The secure compositor-owned surface keeps the clean frame as its only desktop
+# backdrop, while the separate editor/settings frame is used only as transition
+# source. This prevents background transparency from revealing the dirty source.
+require_text "$SURFACE" 'transitionCaptureSource' \
+    'secure surface does not load the staged editor/settings transition frame separately'
+require_text "$SURFACE" 'id: transitionBacking' \
+    'secure surface does not isolate the transition source in its own backing item'
+require_text "$SURFACE" 'startSource: transitionBacking' \
+    'lock transition does not begin from the staged editor/settings screenshot'
+require_text "$SURFACE" 'desktopBackingSource: desktopBacking' \
+    'secure lockscreen composition no longer uses the clean frozen desktop backdrop'
+forbid_text "$SURFACE" 'startSource: desktopBacking' \
+    'lock transition still starts from the clean desktop instead of the visible editor/settings snapshot'
+
+printf 'PASS: secure lockscreen two-snapshot capture contract\n'
