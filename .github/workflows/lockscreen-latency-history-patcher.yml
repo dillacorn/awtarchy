@@ -8,7 +8,7 @@ permissions:
 
 jobs:
   patch-history:
-    if: github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects' && github.event.pull_request.head.sha == 'bf53e70c89071ced1f379de047ab03c8c62f9cf0'
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
