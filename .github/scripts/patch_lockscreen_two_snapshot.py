@@ -223,10 +223,12 @@ replace_once(
         actionProcess.command = ["sh", "-lc", action.command];''',
 )
 
-# Append exact current stock hashes for every managed file changed by this pass.
+# Append exact current stock hashes for every managed file changed by this pass,
+# plus the current application-state hash exposed by the full updater validator.
 history_path = ROOT / "local/share/awtarchy/quickshell-managed-history.sha256"
 history = history_path.read_text()
 managed = {
+    "config/hypr/scripts/quickshell_application_state.sh": ".config/hypr/scripts/quickshell_application_state.sh",
     "config/hypr/scripts/quickshell_lockscreen_capture.sh": ".config/hypr/scripts/quickshell_lockscreen_capture.sh",
     "config/hypr/scripts/quickshell_power_menu.sh": ".config/hypr/scripts/quickshell_power_menu.sh",
     "config/quickshell/awtarchy/shell.qml": ".config/quickshell/awtarchy/shell.qml",
