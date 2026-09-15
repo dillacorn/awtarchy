@@ -70,10 +70,10 @@ Singleton {
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
-    property int lockscreenHideQuickshellBeforeCaptureOverride: -1
-    readonly property bool lockscreenHideQuickshellBeforeCapture: lockscreenHideQuickshellBeforeCaptureOverride >= 0
-        ? lockscreenHideQuickshellBeforeCaptureOverride === 1
-        : BarState.lockscreenHideQuickshellBeforeCapture()
+    property int lockscreenHideLockSettingsBeforeCaptureOverride: -1
+    readonly property bool lockscreenHideLockSettingsBeforeCapture: lockscreenHideLockSettingsBeforeCaptureOverride >= 0
+        ? lockscreenHideLockSettingsBeforeCaptureOverride === 1
+        : BarState.lockscreenHideLockSettingsBeforeCapture()
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string backend: configHome + "/hypr/scripts/hypr_quicksettings.sh"
@@ -812,14 +812,17 @@ Singleton {
     function openFocused() { openForScreen(focusedScreen()); }
 
     function prepareLockCapture(): bool {
-        if (!QuickSettings.lockscreenHideQuickshellBeforeCapture)
+        if (!QuickSettings.lockscreenHideLockSettingsBeforeCapture)
             return false;
-        QuickSettings.close();
-        return true;
+        return LockscreenEditor.prepareLockCapture();
     }
 
     function lockCaptureHidden(): bool {
-        return !quickSettingsWindow.backingWindowVisible;
+        return LockscreenEditor.lockCaptureHidden();
+    }
+
+    function restoreLockCapture(): void {
+        LockscreenEditor.restoreAfterLockCapture();
     }
 
     function close() {
@@ -887,6 +890,7 @@ Singleton {
         function refresh(): void { root.refreshStatus(); }
         function prepareLockCapture(): bool { return root.prepareLockCapture(); }
         function lockCaptureHidden(): bool { return root.lockCaptureHidden(); }
+        function restoreLockCapture(): void { root.restoreLockCapture(); }
     }
 
     Timer {
@@ -2189,7 +2193,9 @@ Singleton {
                                     }
                                     ColumnLayout {
                                         id: cursorSectionActions
+                                        Layout.minimumWidth: root.sectionActionColumnWidth
                                         Layout.preferredWidth: root.sectionActionColumnWidth
+                                        Layout.maximumWidth: root.sectionActionColumnWidth
                                         Layout.alignment: Qt.AlignRight
                                         spacing: 5
                                         SettingsButton {
@@ -2232,7 +2238,9 @@ Singleton {
                                     }
                                     ColumnLayout {
                                         id: lockscreenSectionActions
+                                        Layout.minimumWidth: root.sectionActionColumnWidth
                                         Layout.preferredWidth: root.sectionActionColumnWidth
+                                        Layout.maximumWidth: root.sectionActionColumnWidth
                                         Layout.alignment: Qt.AlignRight
                                         spacing: 5
                                         SettingsButton {
@@ -2314,15 +2322,15 @@ Singleton {
 
                                         Text { Layout.fillWidth: true; text: "Mouse Interaction"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         SettingsButton { label: BarState.lockscreenMouseInteractiveEnabled() ? "On" : "Off"; active: BarState.lockscreenMouseInteractiveEnabled(); textSize: root.scaledText(9); onClicked: root.queueStateCommand(["set-lockscreen-mouse-interactive", BarState.lockscreenMouseInteractiveEnabled() ? "false" : "true"]) }
-                                        Text { Layout.fillWidth: true; text: "Hide Quick Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
+                                        Text { Layout.fillWidth: true; text: "Hide Quickshell Lock Settings Before Lock Capture"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }
                                         SettingsButton {
-                                            label: QuickSettings.lockscreenHideQuickshellBeforeCapture ? "On" : "Off"
-                                            active: QuickSettings.lockscreenHideQuickshellBeforeCapture
+                                            label: QuickSettings.lockscreenHideLockSettingsBeforeCapture ? "On" : "Off"
+                                            active: QuickSettings.lockscreenHideLockSettingsBeforeCapture
                                             textSize: root.scaledText(9)
                                             onClicked: {
-                                                const next = !QuickSettings.lockscreenHideQuickshellBeforeCapture;
-                                                root.lockscreenHideQuickshellBeforeCaptureOverride = next ? 1 : 0;
-                                                root.queueStateCommand(["set-lockscreen-hide-quickshell-before-capture", next ? "true" : "false"]);
+                                                const next = !QuickSettings.lockscreenHideLockSettingsBeforeCapture;
+                                                root.lockscreenHideLockSettingsBeforeCaptureOverride = next ? 1 : 0;
+                                                root.queueStateCommand(["set-lockscreen-hide-lock-settings-before-capture", next ? "true" : "false"]);
                                             }
                                         }
                                         Text { Layout.fillWidth: true; text: "Logo Physics"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: root.scaledText(9) }

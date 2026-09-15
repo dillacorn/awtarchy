@@ -5,6 +5,8 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
 BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
+EDITOR_QML="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
+LOCK_SCRIPT="${ROOT}/config/hypr/scripts/awtarchy_lock.sh"
 SHELL_QML="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
 SURFACE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 SCENE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
@@ -41,6 +43,7 @@ check_bool_setting set-lockscreen-show-time lockscreen_show_time
 check_bool_setting set-lockscreen-show-date lockscreen_show_date
 check_bool_setting set-lockscreen-show-username lockscreen_show_username
 check_bool_setting set-lockscreen-show-weather lockscreen_show_weather
+check_bool_setting set-lockscreen-hide-lock-settings-before-capture lockscreen_hide_lock_settings_before_capture
 
 require_text "$BAR_STATE" 'lockscreen_logo_physics_hz: 30' \
     'BarState stock logo physics rate is not 30 Hz'
@@ -118,5 +121,44 @@ for token in logoPhysicsHz LockAudioAnalyzer LockWeatherCache weatherText mouseI
     reject_text "${ROOT}/config/quickshell/awtarchy-lock/LockAuth.qml" "$token" \
         "authentication owner was coupled to optional lockscreen state: $token"
 done
+
+
+# Final maintainer polish contracts.
+[[ "$(grep -Fc -- 'Layout.minimumWidth: root.sectionActionColumnWidth' "$QUICK_SETTINGS")" -eq 2 ]] \
+    || fail 'Cursor/Lockscreen action columns do not share a hard minimum width'
+[[ "$(grep -Fc -- 'Layout.maximumWidth: root.sectionActionColumnWidth' "$QUICK_SETTINGS")" -eq 2 ]] \
+    || fail 'Cursor/Lockscreen action columns do not share a hard maximum width'
+require_text "$QUICK_SETTINGS" 'text: "Hide Quickshell Lock Settings Before Lock Capture"' \
+    'Quick Settings still exposes the wrong lock-capture option label'
+reject_text "$QUICK_SETTINGS" 'Hide Quick Settings Before Lock Capture' \
+    'retired Quick Settings hide-before-capture wording remains'
+require_text "$QUICK_SETTINGS" 'LockscreenEditor.prepareLockCapture()' \
+    'lock capture does not delegate temporary editor suppression to LockscreenEditor'
+require_text "$QUICK_SETTINGS" 'function restoreLockCapture(): void' \
+    'Quick Settings IPC has no editor restore hook after capture'
+require_text "$EDITOR_QML" 'property bool lockCaptureSuppressed: false' \
+    'lockscreen editor does not track temporary capture suppression'
+require_text "$EDITOR_QML" 'function prepareLockCapture()' \
+    'lockscreen editor has no temporary hide path for secure capture'
+require_text "$EDITOR_QML" 'function restoreAfterLockCapture()' \
+    'lockscreen editor has no state-preserving restore path after capture'
+require_text "$EDITOR_QML" 'return !editorWindow.backingWindowVisible;' \
+    'lockscreen editor does not wait for its real backing window to unmap'
+require_text "$LOCK_SCRIPT" 'hide_lock_settings_before_capture()' \
+    'lock launcher still owns the old Quick Settings capture-hide path'
+require_text "$LOCK_SCRIPT" 'restore_lock_settings_after_capture()' \
+    'lock launcher does not restore editor surfaces after the frozen capture'
+reject_text "$LOCK_SCRIPT" 'lockscreen_hide_quickshell_before_capture' \
+    'retired Quick Settings capture-hide state remains in the lock launcher'
+require_text "$EDITOR_QML" 'id: imageOpacityField' \
+    'Image Opacity is missing the Background Opacity-style numeric field'
+require_text "$EDITOR_QML" 'function resetSelectedElementOpacity()' \
+    'Image Opacity has no Reset behavior'
+require_text "$EDITOR_QML" 'function toggleSelectedElementOpaque()' \
+    'Image Opacity has no Opaque toggle behavior'
+require_text "$EDITOR_QML" 'SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }' \
+    'Image Opacity has no Reset button matching Background Opacity'
+require_text "$EDITOR_QML" 'SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }' \
+    'Image Opacity has no Opaque button matching Background Opacity'
 
 printf '%s\n' 'PASS: lockscreen coherent pointer and interactive effects contracts'

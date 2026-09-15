@@ -23,6 +23,9 @@ Singleton {
     property string previewCaptureDirectory: ""
     property string previewCapturePendingDirectory: ""
     property bool editingActive: false
+    property bool lockCaptureSuppressed: false
+    property bool lockCaptureRestoreVisible: false
+    property var elementOpacityBeforeOpaque: ({})
     readonly property bool open: editingActive
     property bool pickerSuspended: false
     property string activeDrawer: ""
@@ -1599,6 +1602,29 @@ Singleton {
         selectElement(name, false);
     }
 
+    function resetSelectedElementOpacity() {
+        const name = root.selectedElement;
+        if (!elementExists(name)) return;
+        root.setDraftOpacity(name, 100);
+    }
+
+    function toggleSelectedElementOpaque() {
+        const name = root.selectedElement;
+        if (!elementExists(name)) return;
+        const current = root.elementOpacity(name);
+        if (current < 100) {
+            const restore = Object.assign({}, root.elementOpacityBeforeOpaque);
+            restore[name] = current;
+            root.elementOpacityBeforeOpaque = restore;
+            root.setDraftOpacity(name, 100);
+            return;
+        }
+        const previous = Number(root.elementOpacityBeforeOpaque[name]);
+        const minimum = name === "password" ? 20 : 0;
+        if (Number.isFinite(previous) && previous >= minimum && previous < 100)
+            root.setDraftOpacity(name, previous);
+    }
+
     function setElementOpacityFromPointer(name, pointerX, trackWidth) {
         const width = Number(trackWidth); if (!elementExists(name) || !Number.isFinite(width) || width <= 0) return;
         const minimum = name === "password" ? 20 : 0;
@@ -1693,16 +1719,49 @@ Singleton {
     function toggleDrawer(name) { const allowed = ["element", "layout", "background", "weather"]; if (allowed.indexOf(String(name || "")) < 0) return; activeDrawer = activeDrawer === name ? "" : name; if (activeDrawer !== "element") elementPaletteOpen = false; if (activeDrawer !== "background") backgroundPaletteOpen = false; }
 
     function openForScreen(target) {
+        lockCaptureSuppressed = false; lockCaptureRestoreVisible = false; elementOpacityBeforeOpaque = ({});
         if (target) editorWindow.screen = target; loadPersistedDraft(); settingsBarOffsetY = 0; undoStack = []; redoStack = []; historyTransactionActive = false; historyTransactionSnapshot = null; inertiaOwner = ""; activeDrawer = ""; pickerSuspended = false;
         editingActive = true; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 0; editorWindow.visible = false; statusMessage = "Capturing current desktop preview…"; previewCaptureDelay.restart();
     }
     function openFocused() { openForScreen(focusedScreen()); }
+
+    function prepareLockCapture() {
+        if (!root.open) {
+            lockCaptureSuppressed = false;
+            lockCaptureRestoreVisible = false;
+            return false;
+        }
+        lockCaptureRestoreVisible = editorWindow.visible && !root.pickerSuspended;
+        lockCaptureSuppressed = true;
+        if (editorWindow.visible) {
+            FlyoutManager.releaseOverlay("lockscreen-editor");
+            editorWindow.visible = false;
+        }
+        return true;
+    }
+
+    function lockCaptureHidden() {
+        return !editorWindow.backingWindowVisible;
+    }
+
+    function restoreAfterLockCapture() {
+        const restoreVisible = lockCaptureSuppressed && lockCaptureRestoreVisible && root.open && !root.pickerSuspended;
+        lockCaptureSuppressed = false;
+        lockCaptureRestoreVisible = false;
+        if (!restoreVisible)
+            return;
+        editorWindow.visible = true;
+        FlyoutManager.claimOverlay("lockscreen-editor");
+        scheduleContrastRefresh();
+        Qt.callLater(() => editorFocus.forceActiveFocus());
+    }
 
     function suspendForWallpaperPicker() { if (!open || pickerSuspended || wallpaperPickerProcess.running || customImagePickerProcess.running) return; if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening lockscreen wallpaper picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom image picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function resumeAfterWallpaperPicker() { if (!open || !pickerSuspended) return; pickerSuspended = false; editorWindow.visible = true; editorEntranceOpacity = 1; FlyoutManager.claimOverlay("lockscreen-editor"); scheduleContrastRefresh(); Qt.callLater(() => editorFocus.forceActiveFocus()); }
 
     function close() {
+        lockCaptureSuppressed = false; lockCaptureRestoreVisible = false; elementOpacityBeforeOpaque = ({});
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
         const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview); loadPersistedDraft();
     }
@@ -1966,7 +2025,10 @@ Singleton {
                                 onCanceled: root.commitHistoryTransaction()
                             }
                         }
-                        Text { text: Number(root.elementOpacity(root.selectedElement)).toFixed(0) + "%"; color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 0; top: 100 }
+                            selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
+                        SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }
+                        SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }
                     }
 
                     RowLayout {

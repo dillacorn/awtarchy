@@ -78,14 +78,14 @@ cleanup_capture() {
     bash "$CAPTURE_HELPER" cleanup "$capture_dir" >>"$LOG_FILE" 2>&1 || true
 }
 
-hide_quick_settings_before_capture_enabled() {
+hide_lock_settings_before_capture_enabled() {
     command -v jq >/dev/null 2>&1 || return 1
     [[ -s "$STATE_FILE" ]] || return 1
-    jq -e '.lockscreen_hide_quickshell_before_capture == true' \
+    jq -e '.lockscreen_hide_lock_settings_before_capture == true' \
         "$STATE_FILE" >/dev/null 2>&1
 }
 
-hide_quick_settings_before_capture() {
+hide_lock_settings_before_capture() {
     local live_response="" live_available=false hidden_response=""
 
     # Consult the in-memory QML preference first so a just-clicked toggle does
@@ -100,13 +100,13 @@ hide_quick_settings_before_capture() {
     if [[ "$live_available" == true ]]; then
         [[ "$live_response" == true ]] || return 0
     else
-        # Fallback: get lockscreen_hide_quickshell_before_capture from persisted cache.
-        hide_quick_settings_before_capture_enabled || return 0
-        "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings close \
-            >>"$LOG_FILE" 2>&1 || true
+        # Persisted fallback confirms the opt-in. Without desktop-shell IPC there
+        # is no safe surface-control channel, so do not block the actual lock.
+        hide_lock_settings_before_capture_enabled || return 0
+        return 0
     fi
 
-    # Wait on the real QsWindow backing surface instead of assuming a fixed
+    # Wait on the real lock-editor QsWindow backing surface instead of assuming a fixed
     # compositor delay was sufficient. Keep the bounded sleep fallback for an
     # older/unreachable desktop shell so locking itself is never blocked here.
     for _ in {1..25}; do
@@ -129,6 +129,11 @@ hide_quick_settings_before_capture() {
     esac
 }
 
+restore_lock_settings_after_capture() {
+    "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings restoreLockCapture \
+        >>"$LOG_FILE" 2>&1 || true
+}
+
 start_lock() {
     local state capture_dir="" capture_helper="$CAPTURE_HELPER"
 
@@ -142,11 +147,12 @@ start_lock() {
     esac
 
     mkdir -p -- "$LOG_DIR"
-    hide_quick_settings_before_capture
+    hide_lock_settings_before_capture
 
     if [[ -f "$capture_helper" ]]; then
         capture_dir="$(bash "$capture_helper" prepare 2>>"$LOG_FILE")" || capture_dir=""
     fi
+    restore_lock_settings_after_capture
 
     if [[ -n "$capture_dir" ]]; then
         AWTARCHY_LOCK_CAPTURE_DIR="$capture_dir" \
