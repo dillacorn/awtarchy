@@ -125,8 +125,12 @@ contains "$LAYER" 'textureSize:' \
     'shared pixel transition does not perform resolution collapse'
 contains "$SURFACE" 'LockTransitionLayer {' \
     'secure surface does not use the shared transition renderer'
-contains "$SURFACE" 'startSource: desktopBacking' \
-    'secure transition does not begin from the frozen desktop'
+contains "$SURFACE" '.transition.png' \
+    'secure surface does not expose the dirty transition snapshot'
+contains "$SURFACE" 'startSource: transitionBacking' \
+    'secure transition does not begin from the staged current-screen snapshot'
+contains "$SURFACE" 'desktopBackingSource: desktopBacking' \
+    'secure scene does not retain the clean desktop snapshot for transparency'
 contains "$SURFACE" 'endSource: securePresentation' \
     'secure transition does not end at the actual lockscreen presentation'
 
