@@ -26,13 +26,6 @@ capture_wanted() {
     [[ "$wanted" == true ]]
 }
 
-restore_editor() {
-    if (( editor_suppressed )); then
-        "$QS_BIN" -c awtarchy ipc call lockcapture restoreEditor >/dev/null 2>&1 || true
-        editor_suppressed=0
-    fi
-}
-
 main() {
     local opened=""
     local accepted=""
@@ -98,10 +91,12 @@ main() {
         fi
     fi
 
-    # Restore an editor only when the fallback path actually suppressed one.
-    # The completed capture bundle stays private until Lock consumes it or the
-    # Power Menu discards it.
-    restore_editor
+    # Keep this restore visibly after stage-complete. The editor-visible path
+    # must not remap until the separate clean desktop snapshot has finished.
+    if (( editor_suppressed )); then
+        "$QS_BIN" -c awtarchy ipc call lockcapture restoreEditor >/dev/null 2>&1 || true
+        editor_suppressed=0
+    fi
 
     if (( prepared )); then
         accepted="$("$QS_BIN" -c awtarchy ipc call powermenu capturePrepared 2>/dev/null | tail -n1 || true)"
