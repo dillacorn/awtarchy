@@ -4,7 +4,9 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_capture.sh"
 POWER_MENU="${ROOT}/config/hypr/scripts/quickshell_power_menu.sh"
+POWER_MENU_KEY="${ROOT}/config/hypr/scripts/quickshell_power_menu_key.sh"
 POWER_MENU_QML="${ROOT}/config/quickshell/awtarchy/PowerMenu.qml"
+HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -15,6 +17,12 @@ fail() {
 
 require_text() {
     grep -Fq -- "$2" "$1" || fail "$3"
+}
+
+forbid_text() {
+    if grep -Fq -- "$2" "$1"; then
+        fail "$3"
+    fi
 }
 
 forbid_log_text() {
@@ -33,7 +41,9 @@ last_line_number() {
 
 [[ -f "$HELPER" ]] || fail 'lockscreen capture helper is missing'
 [[ -f "$POWER_MENU" ]] || fail 'Quickshell Power Menu helper is missing'
+[[ -f "$POWER_MENU_KEY" ]] || fail 'pre-map Power Menu key bridge is missing'
 [[ -f "$POWER_MENU_QML" ]] || fail 'Quickshell Power Menu QML is missing'
+[[ -f "$HYPR_CONFIG" ]] || fail 'Hyprland config is missing'
 
 require_text "$HELPER" 'stage-promote-clean' \
     'capture helper has no one-snapshot clean-desktop promotion path'
@@ -49,10 +59,42 @@ require_text "$POWER_MENU_QML" 'function begin(): bool' \
     'Power Menu IPC has no immediate input-arm entrypoint'
 require_text "$POWER_MENU_QML" 'function capturePrepared(): bool' \
     'Power Menu IPC cannot release a queued action when capture becomes ready'
+require_text "$POWER_MENU_QML" 'function fastKey(key: string): bool' \
+    'Power Menu IPC cannot accept a Hyprland-captured key before the window is mapped'
 require_text "$POWER_MENU_QML" 'if (capturePreparing) {' \
     'Power Menu does not queue immediate action keys while secure capture is preparing'
 require_text "$POWER_MENU_QML" 'queuedAction = action;' \
     'Power Menu drops an action pressed before the visible menu appears'
+
+# The compositor must own the follow-up action key before any shell/QML work can
+# start. A normal exec-only SUPER+P bind leaves a race where a very fast L/H/etc.
+# is delivered to the previously focused application and can never be recovered.
+forbid_text "$HYPR_CONFIG" 'hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})' \
+    'SUPER+P still launches Power Menu without first installing compositor key ownership'
+require_text "$HYPR_CONFIG" 'hl.define_submap("power-menu-fast"' \
+    'default Power Menu path has no compositor-owned pre-map key submap'
+require_text "$HYPR_CONFIG" 'hl.define_submap("power-menu-fast-noalt"' \
+    'noalt Power Menu path has no compositor-owned pre-map key submap'
+require_text "$HYPR_CONFIG" 'hl.dispatch(hl.dsp.submap("power-menu-fast"))' \
+    'SUPER+P does not enter the pre-map key submap synchronously'
+require_text "$HYPR_CONFIG" 'hl.dispatch(hl.dsp.submap("power-menu-fast-noalt"))' \
+    'noalt SUPER+P does not enter its pre-map key submap synchronously'
+require_text "$HYPR_CONFIG" 'hl.dispatch(hl.dsp.exec_cmd(power_menu))' \
+    'SUPER+P no longer launches the Power Menu after arming compositor input'
+require_text "$HYPR_CONFIG" '{ ignore_mods = true }' \
+    'pre-map Power Menu actions do not accept a key pressed while SUPER is still held'
+require_text "$HYPR_CONFIG" 'quickshell_power_menu_key.sh' \
+    'pre-map Power Menu submap does not hand captured actions to the retry bridge'
+
+submap_line="$(first_line_number "$HYPR_CONFIG" 'hl.dispatch(hl.dsp.submap("power-menu-fast"))')"
+exec_line="$(first_line_number "$HYPR_CONFIG" 'hl.dispatch(hl.dsp.exec_cmd(power_menu))')"
+[[ -n "$submap_line" && -n "$exec_line" && "$submap_line" -lt "$exec_line" ]] \
+    || fail 'SUPER+P launches process work before compositor key ownership is active'
+
+require_text "$POWER_MENU_KEY" 'powermenu fastKey' \
+    'pre-map key bridge does not target the Power Menu action queue'
+require_text "$POWER_MENU_KEY" 'sleep ' \
+    'pre-map key bridge does not retry while Quickshell/window activation catches up'
 
 mkdir -p "$TMP/bin" "$TMP/runtime" "$TMP/config/hypr/scripts"
 chmod 700 "$TMP/runtime"
@@ -248,4 +290,4 @@ forbid_log_text "$TMP/qs-close.log" 'powermenu captureWanted' \
 forbid_log_text "$TMP/qs-close.log" 'powermenu reveal' \
     'SUPER+P close toggle reopened visuals after closing the menu'
 
-printf '%s\n' 'PASS: SUPER+P capture latency and immediate input arming'
+printf '%s\n' 'PASS: SUPER+P capture latency and compositor-owned immediate input'
