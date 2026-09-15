@@ -1,0 +1,92 @@
+name: Lockscreen Save Error Patcher
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+    paths:
+      - .github/workflows/lockscreen-save-error-patcher.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+
+      - name: Patch editor Save diagnostics
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("config/quickshell/awtarchy/LockscreenEditor.qml")
+          text = path.read_text()
+
+          replacements = [
+              (
+                  '    property string statusMessage: ""\n',
+                  '    property string statusMessage: ""\n'
+                  '    property string saveErrorMessage: ""\n',
+              ),
+              (
+                  '        statusMessage = "Saving…";\n',
+                  '        saveErrorMessage = "";\n'
+                  '        statusMessage = "Saving…";\n',
+              ),
+              (
+                  '    Process { id: saveProcess; onExited: (exitCode, exitStatus) => { if (exitCode === 0) { BarState.refresh(); root.statusMessage = "Refreshing Auto contrast…"; contrastPersistProcess.exec(["bash", root.contrastBackend]); } else root.statusMessage = "Could not save lockscreen presentation"; } }\n',
+                  '    Process {\n'
+                  '        id: saveProcess\n'
+                  '        stderr: SplitParser {\n'
+                  '            onRead: line => {\n'
+                  '                const detail = String(line || "").trim();\n'
+                  '                if (detail.length > 0 && root.saveErrorMessage.length === 0)\n'
+                  '                    root.saveErrorMessage = detail;\n'
+                  '            }\n'
+                  '        }\n'
+                  '        onExited: (exitCode, exitStatus) => {\n'
+                  '            if (exitCode === 0) {\n'
+                  '                BarState.refresh();\n'
+                  '                root.statusMessage = "Refreshing Auto contrast…";\n'
+                  '                contrastPersistProcess.exec(["bash", root.contrastBackend]);\n'
+                  '            } else {\n'
+                  '                root.statusMessage = root.saveErrorMessage.length > 0\n'
+                  '                    ? "Save failed: " + root.saveErrorMessage\n'
+                  '                    : "Could not save lockscreen presentation";\n'
+                  '            }\n'
+                  '        }\n'
+                  '    }\n',
+              ),
+          ]
+
+          for old, new in replacements:
+              count = text.count(old)
+              if count != 1:
+                  raise SystemExit(f"expected exactly one edit target, found {count}: {old[:80]!r}")
+              text = text.replace(old, new, 1)
+
+          path.write_text(text)
+          PY
+
+      - name: Verify Save regression suite
+        shell: bash
+        run: |
+          bash -n tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          git diff --check
+
+      - name: Commit patch and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git rm -- .github/workflows/lockscreen-save-error-patcher.yml
+          git add -- config/quickshell/awtarchy/LockscreenEditor.qml
+          git commit -m "fix(lockscreen): surface save backend errors"
+          git push origin HEAD:feature/lockscreen-interactive-effects
