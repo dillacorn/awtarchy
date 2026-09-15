@@ -88,4 +88,20 @@ jq -e '
 ' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
     || fail 'stale wallpaper state was not repaired to a safe savable background'
 
+# Optional custom-image files can disappear between releases or user sessions.
+# A stale file reference must be removed rather than making every future Save fail.
+rm -f -- "$TMP/custom.png"
+editor_output="$(
+    XDG_CONFIG_HOME="$TMP/config" XDG_CACHE_HOME="$TMP/cache" HOME="$TMP/home" HYPR_QUICKSHELL_SCRIPT=/bin/false \
+        bash "$TMP/config/hypr/scripts/quickshell_lockscreen_editor_save.sh" \
+        "$editor_layout" "$visibility" black '#000000' '' cover 0.5 0.5 none 0 10 auto \
+        "$custom_images" "$visualizer" 90 pixel 1800 90 pixelated split squares '•' 24h \
+        "$timezone_clocks" "$custom_texts"
+)" || fail 'stale custom-image file still bricks editor Save'
+
+jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
+    || fail 'repaired stale custom-image state did not return explicit JSON success'
+jq -e '.lockscreen_custom_images == []' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
+    || fail 'stale custom-image reference was not removed during Save'
+
 printf '%s\n' 'PASS: lockscreen background composition save dispatch'
