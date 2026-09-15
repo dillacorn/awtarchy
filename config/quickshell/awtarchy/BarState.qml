@@ -150,8 +150,8 @@ Singleton {
         lockscreen_wallpaper_focal_y: 0.5,
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
-        lockscreen_wallpaper_blur: 0,
-        lockscreen_blur_style: "smooth",
+        lockscreen_wallpaper_blur: 10,
+        lockscreen_blur_style: "pixelated",
         lockscreen_background_opacity_previous: 100,
     })
     readonly property var defaultLockscreenVisualizer: ({
@@ -845,12 +845,12 @@ Singleton {
 
     function lockscreenWallpaperBlur() {
         const value = Number(data().lockscreen_wallpaper_blur);
-        return Number.isFinite(value) ? Math.max(0, Math.min(100, Math.round(value))) : 0;
+        return Number.isFinite(value) ? Math.max(0, Math.min(200, Math.round(value))) : 10;
     }
 
     function lockscreenBlurStyle() {
-        const value = String(data().lockscreen_blur_style || "smooth");
-        return ["smooth", "pixelated"].indexOf(value) >= 0 ? value : "smooth";
+        const value = String(data().lockscreen_blur_style || "pixelated");
+        return ["smooth", "pixelated"].indexOf(value) >= 0 ? value : "pixelated";
     }
 
     function lockscreenWeatherUnits() {

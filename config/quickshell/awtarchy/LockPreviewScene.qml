@@ -200,6 +200,19 @@ Item {
         customImageEntryPhaseTimer.restart();
     }
 
+    function smoothBlurMaximum() {
+        const value = Math.max(0, Math.min(200, Number(root.wallpaperBlur)));
+        const extra = Math.max(0, Math.min(1, (value - 100) / 100));
+        return Math.round(32 + 96 * extra);
+    }
+
+    function pixelBlurFactor() {
+        const value = Math.max(0, Math.min(200, Number(root.wallpaperBlur)));
+        const base = 63 * Math.pow(Math.max(0, Math.min(1, value / 100)), 1.2);
+        const extra = 64 * Math.max(0, Math.min(1, (value - 100) / 100));
+        return 1 + base + extra;
+    }
+
     function wallpaperGeometry() {
         const sourceWidth = Number(wallpaperImage.sourceSize.width);
         const sourceHeight = Number(wallpaperImage.sourceSize.height);
@@ -944,7 +957,7 @@ Item {
         layer.effect: MultiEffect {
             autoPaddingEnabled: false
             blurEnabled: true
-            blurMax: 32
+            blurMax: root.smoothBlurMaximum()
             blur: Math.max(0, Math.min(1, root.wallpaperBlur / 100))
         }
     }
@@ -958,8 +971,7 @@ Item {
         live: true
         recursive: false
         smooth: false
-        readonly property real pixelFactor: 1
-            + 63 * Math.pow(Math.max(0, Math.min(1, root.wallpaperBlur / 100)), 1.2)
+        readonly property real pixelFactor: root.pixelBlurFactor()
         textureSize: Qt.size(
             Math.max(1, Math.round(width / pixelFactor)),
             Math.max(1, Math.round(height / pixelFactor)))

@@ -126,8 +126,8 @@ Singleton {
     property real draftWallpaperFocalY: 0.5
     property string draftOverlayMode: "none"
     property int draftOverlayStrength: 0
-    property int draftWallpaperBlur: 0
-    property string draftBlurStyle: "smooth"
+    property int draftWallpaperBlur: 10
+    property string draftBlurStyle: "pixelated"
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
@@ -480,10 +480,10 @@ Singleton {
         draftOverlayStrength = Number.isFinite(overlayStrength)
             ? Math.max(0, Math.min(100, Math.round(overlayStrength))) : 0;
         draftWallpaperBlur = Number.isFinite(wallpaperBlur)
-            ? Math.max(0, Math.min(100, Math.round(wallpaperBlur))) : 0;
+            ? Math.max(0, Math.min(200, Math.round(wallpaperBlur))) : 10;
         draftWallpaperBlurExplicit = snapshot.wallpaperBlurExplicit === true;
         draftBlurStyle = ["smooth", "pixelated"].indexOf(String(snapshot.blurStyle)) >= 0
-            ? String(snapshot.blurStyle) : "smooth";
+            ? String(snapshot.blurStyle) : "pixelated";
         draftWeatherUnits = ["auto", "fahrenheit", "celsius"].indexOf(String(snapshot.weatherUnits)) >= 0
             ? String(snapshot.weatherUnits) : "auto";
         scheduleContrastRefresh();
@@ -1278,7 +1278,7 @@ Singleton {
 
     function setBlurFromPointer(pointerX, trackWidth) {
         if (trackWidth > 0)
-            setDraftWallpaperBlur(Number(pointerX) * 100 / Number(trackWidth));
+            setDraftWallpaperBlur(Number(pointerX) * 200 / Number(trackWidth));
     }
 
     function draftBrightness() {
@@ -1347,7 +1347,7 @@ Singleton {
         if (!Number.isFinite(next))
             return;
         recordUndoBeforeChange();
-        draftWallpaperBlur = Math.max(0, Math.min(100, Math.round(next)));
+        draftWallpaperBlur = Math.max(0, Math.min(200, Math.round(next)));
         draftWallpaperBlurExplicit = true;
     }
 
@@ -1360,7 +1360,7 @@ Singleton {
     }
 
     function resetDraftBrightness() { setDraftBrightness(0); }
-    function resetDraftWallpaperBlur() { setDraftWallpaperBlur(0); }
+    function resetDraftWallpaperBlur() { setDraftWallpaperBlur(10); }
     function resetDraftBackgroundOpacity() { setDraftBackgroundOpacity(100); }
     function resetDraftWallpaperFocal() { setDraftWallpaperFocal(0.5, 0.5); }
 
@@ -1686,7 +1686,7 @@ Singleton {
         recordUndoBeforeChange(); draftLayout = defaultLayout(); draftCustomImages = []; draftTimezoneClocks=[]; draftCustomTexts=[]; previewTimezoneValues=({}); draftVisualizer = defaultVisualizer(); draftBackgroundOpacity = 100; draftLastBackgroundOpacity = 100;
         draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordMaskMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
         draftVisibility = defaultVisibility(); draftBackgroundMode = "black"; draftBackgroundColor = "#000000"; draftWallpaperPath = "";
-        draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 0; draftBlurStyle = "smooth"; draftWallpaperBlurExplicit = false;
+        draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 10; draftBlurStyle = "pixelated"; draftWallpaperBlurExplicit = false;
         draftWeatherUnits = "auto"; draftAutoAccents = defaultAutoAccents(); selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "Defaults loaded. Save to apply."; scheduleContrastRefresh();
     }
 
@@ -2182,11 +2182,11 @@ Singleton {
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftBrightness() }
                         Text { text: "Blur"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         Rectangle { id: blurTrack; Layout.preferredWidth: 110; Layout.preferredHeight: 14; radius: height / 2; color: Theme.popupBackground; border.width: 1; border.color: Theme.active
-                            Rectangle { width: root.draftWallpaperBlur * parent.width / 100; height: parent.height; radius: height / 2; color: Theme.focus }
-                            Rectangle { x: root.draftWallpaperBlur * parent.width / 100 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
+                            Rectangle { width: root.draftWallpaperBlur * parent.width / 200; height: parent.height; radius: height / 2; color: Theme.focus }
+                            Rectangle { x: root.draftWallpaperBlur * parent.width / 200 - width / 2; anchors.verticalCenter: parent.verticalCenter; width: 12; height: 12; radius: 6; color: Theme.foreground }
                             MouseArea { anchors.fill: parent; onPressed: mouse => { root.beginHistoryTransaction(); root.setBlurFromPointer(mouse.x, width); }; onPositionChanged: mouse => { if (pressed) root.setBlurFromPointer(mouse.x, width); }; onReleased: root.commitHistoryTransaction() }
                         }
-                        TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 100 }
+                        TextField { id: blurField; Layout.preferredWidth: 46; text: String(root.draftWallpaperBlur); validator: IntValidator { bottom: 0; top: 200 }
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftWallpaperBlur(text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetDraftWallpaperBlur() }
                         Text { text: "Blur Type"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }

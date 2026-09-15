@@ -221,8 +221,8 @@ lockscreen_composition_defaults() {
         lockscreen_wallpaper_focal_y: 0.5,
         lockscreen_overlay_mode: "none",
         lockscreen_overlay_strength: 0,
-        lockscreen_wallpaper_blur: 0,
-        lockscreen_blur_style: "smooth",
+        lockscreen_wallpaper_blur: 10,
+        lockscreen_blur_style: "pixelated",
         lockscreen_background_opacity_previous: 100,
     }'
 }
@@ -274,6 +274,20 @@ normalize_percent_integer() {
     local numeric=$((10#$value))
     (( numeric >= 0 && numeric <= 100 )) || {
         printf '%s must be 0-100\n' "$label" >&2
+        exit 2
+    }
+    printf '%d' "$numeric"
+}
+
+normalize_lockscreen_blur_integer() {
+    local value="$1" label="$2"
+    [[ "$value" =~ ^[0-9]+$ ]] || {
+        printf '%s must be an integer\n' "$label" >&2
+        exit 2
+    }
+    local numeric=$((10#$value))
+    (( numeric >= 0 && numeric <= 200 )) || {
+        printf '%s must be 0-200\n' "$label" >&2
         exit 2
     }
     printf '%d' "$numeric"
@@ -626,7 +640,7 @@ save_lockscreen_editor() {
     local focal_y="${8:-0.5}"
     local overlay_mode="${9:-none}"
     local overlay_strength="${10:-0}"
-    local wallpaper_blur="${11:-0}"
+    local wallpaper_blur="${11:-10}"
     local weather_units="${12:-auto}"
     local custom_images_input="${13:-[]}"
     local visualizer_input="${14:-$LOCKSCREEN_VISUALIZER_DEFAULT_JSON}"
@@ -634,7 +648,7 @@ save_lockscreen_editor() {
     local entry_transition_input="${16:-}"
     local entry_transition_duration_input="${17:-1800}"
     local background_opacity_previous_input="${18:-100}"
-    local blur_style="${19:-smooth}"
+    local blur_style="${19:-pixelated}"
     local custom_images visualizer background_opacity background_opacity_previous entry_transition entry_transition_duration
     if ! normalized="$(normalize_lockscreen_layout_json "$1" 2>/dev/null)"; then
         printf 'invalid lockscreen layout\n' >&2
@@ -667,7 +681,7 @@ save_lockscreen_editor() {
     focal_x="$(normalize_unit_interval "$focal_x" 'lockscreen wallpaper focal x')"
     focal_y="$(normalize_unit_interval "$focal_y" 'lockscreen wallpaper focal y')"
     overlay_strength="$(normalize_percent_integer "$overlay_strength" 'lockscreen overlay strength')"
-    wallpaper_blur="$(normalize_percent_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
+    wallpaper_blur="$(normalize_lockscreen_blur_integer "$wallpaper_blur" 'lockscreen wallpaper blur')"
     wallpaper="$(normalize_lockscreen_wallpaper_path "$wallpaper")"
     if [[ "$background" == 'wallpaper' && -z "$wallpaper" ]]; then
         printf 'wallpaper background requires a selected local image\n' >&2
@@ -743,8 +757,8 @@ reset_lockscreen_presentation() {
         | .lockscreen_wallpaper_focal_y = 0.5
         | .lockscreen_overlay_mode = "none"
         | .lockscreen_overlay_strength = 0
-        | .lockscreen_wallpaper_blur = 0
-        | .lockscreen_blur_style = "smooth"
+        | .lockscreen_wallpaper_blur = 10
+        | .lockscreen_blur_style = "pixelated"
         | .lockscreen_weather_units = "auto"
         | .lockscreen_weather_location = ""
         | .lockscreen_layout = $layout

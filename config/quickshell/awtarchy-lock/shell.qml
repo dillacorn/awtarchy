@@ -45,15 +45,15 @@ ShellRoot {
     property real lockWallpaperFocalY: 0.5
     property string lockOverlayMode: "none"
     property int lockOverlayStrength: 0
-    property int lockWallpaperBlur: 0
-    property string lockBlurStyle: "smooth"
+    property int lockWallpaperBlur: 10
+    property string lockBlurStyle: "pixelated"
     property string lockWeatherLocation: ""
     readonly property string wallpaperFit: normalizedWallpaperFit(lockWallpaperFit)
     readonly property real wallpaperFocalX: normalizedUnitInterval(lockWallpaperFocalX, 0.5)
     readonly property real wallpaperFocalY: normalizedUnitInterval(lockWallpaperFocalY, 0.5)
     readonly property string overlayMode: normalizedOverlayMode(lockOverlayMode)
     readonly property int overlayStrength: normalizedPercent(lockOverlayStrength)
-    readonly property int wallpaperBlur: normalizedPercent(lockWallpaperBlur)
+    readonly property int wallpaperBlur: normalizedBlurPercent(lockWallpaperBlur)
     readonly property string blurStyle: normalizedBlurStyle(lockBlurStyle)
     property var lockLayout: defaultLockLayout()
     property var lockCustomImages: []
@@ -247,7 +247,12 @@ ShellRoot {
 
     function normalizedBlurStyle(value) {
         const key = String(value || "");
-        return ["smooth", "pixelated"].indexOf(key) >= 0 ? key : "smooth";
+        return ["smooth", "pixelated"].indexOf(key) >= 0 ? key : "pixelated";
+    }
+
+    function normalizedBlurPercent(value) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.max(0, Math.min(200, Math.round(numeric))) : 10;
     }
 
     function normalizedUnitInterval(value, fallback) {
@@ -455,8 +460,8 @@ ShellRoot {
         lockWallpaperFocalY = 0.5;
         lockOverlayMode = "none";
         lockOverlayStrength = 0;
-        lockWallpaperBlur = 0;
-        lockBlurStyle = "smooth";
+        lockWallpaperBlur = 10;
+        lockBlurStyle = "pixelated";
         lockWeatherLocation = "";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
@@ -503,7 +508,7 @@ ShellRoot {
             lockWallpaperFocalY = normalizedUnitInterval(parsed.lockscreen_wallpaper_focal_y, 0.5);
             lockOverlayMode = normalizedOverlayMode(parsed.lockscreen_overlay_mode);
             lockOverlayStrength = normalizedPercent(parsed.lockscreen_overlay_strength);
-            lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);
+            lockWallpaperBlur = normalizedBlurPercent(parsed.lockscreen_wallpaper_blur);
             lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
