@@ -14,13 +14,6 @@ capture_dir=""
 editor_suppressed=0
 prepared=0
 
-restore_editor() {
-    if (( editor_suppressed )); then
-        "$QS_BIN" -c awtarchy ipc call lockcapture restoreEditor >/dev/null 2>&1 || true
-        editor_suppressed=0
-    fi
-}
-
 cleanup_incomplete_capture() {
     if [[ -n "$capture_dir" && -x "$CAPTURE_HELPER" ]]; then
         "$CAPTURE_HELPER" cleanup "$capture_dir" >/dev/null 2>&1 || true
@@ -46,6 +39,13 @@ if [[ -x "$CAPTURE_HELPER" ]]; then
         fi
     fi
 fi
+
+restore_editor() {
+    if (( editor_suppressed )); then
+        "$QS_BIN" -c awtarchy ipc call lockcapture restoreEditor >/dev/null 2>&1 || true
+        editor_suppressed=0
+    fi
+}
 
 # Restore the editor before the power menu appears. The completed capture bundle,
 # when present, stays private until Lock consumes it or PowerMenu discards it.
