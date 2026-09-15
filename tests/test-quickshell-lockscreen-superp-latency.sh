@@ -217,8 +217,8 @@ POWER_BEGIN_RESPONSE=false \
     || fail 'SUPER+P close toggle performs screenshot work'
 
 # Lock is the only Power Menu action that must hand off to the fresh secure
-# capture path. QML must hide the real layer-surface backing window and any
-# open lockscreen editor preview before starting the frozen desktop capture.
+# capture path. QML must hide every layer-surface backing window and any open
+# lockscreen editor preview before starting the frozen desktop capture.
 require_text "$POWER_MENU_QML" 'function beginFocused()' \
     'Power Menu has no immediate focused-open entrypoint'
 require_text "$POWER_MENU_QML" 'openForScreen(focusedScreen());' \
@@ -231,13 +231,15 @@ require_text "$POWER_MENU_QML" 'powerWindow.visible = false;' \
     'Lock action does not close the Power Menu before capture'
 require_text "$POWER_MENU_QML" 'powerWindow.backingWindowVisible' \
     'Lock action does not verify the real Power Menu backing window is gone before capture'
+require_text "$POWER_MENU_QML" 'secondaryShadeVariants.instances' \
+    'Lock action does not verify secondary-monitor Power Menu backing windows are gone before capture'
 require_text "$POWER_MENU_QML" 'LockscreenEditor.suppressForLockCapture()' \
     'Lock action does not suppress an open lockscreen editor before capture'
 require_text "$POWER_MENU_QML" 'LockscreenEditor.lockCaptureBackingHidden()' \
     'Lock action does not verify editor backing windows are gone before capture'
 require_text "$POWER_MENU_QML" 'LockscreenEditor.restoreAfterLockCapture()' \
     'Lock action cannot restore editor state after secure handoff or failure'
-require_text "$POWER_MENU_QML" 'startAction(action, freshLockCommand);' \
+require_text "$POWER_MENU_QML" 'root.startAction(action, root.freshLockCommand);' \
     'Lock action does not use the fresh secure capture path after closing the menu'
 require_text "$POWER_MENU_QML" 'Behavior on opacity' \
     'Power Menu immediate-open path has no fade-in animation'
