@@ -17,6 +17,7 @@ Singleton {
     readonly property int visualFadeDuration: 120
     readonly property int lockHandoffPollInterval: 10
     readonly property int lockHandoffMaxAttempts: 200
+    readonly property int lockCaptureSettleDuration: 50
 
     // Preserve the existing wlogout layout order and keybinds.
     readonly property var actions: [
@@ -39,6 +40,7 @@ Singleton {
     property var deferredLockAction: null
     property int lockHandoffAttempts: 0
     property bool lockEditorSuppressed: false
+    property bool lockHardHide: false
 
     function focusedScreen() {
         const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
@@ -69,6 +71,8 @@ Singleton {
         deferredLockAction = null;
         lockHandoffAttempts = 0;
         lockHandoffTimer.stop();
+        lockCaptureSettleTimer.stop();
+        lockHardHide = false;
         actionPending = false;
         closeAfterActionSuccess = false;
         powerWindow.visible = true;
@@ -84,6 +88,7 @@ Singleton {
         capturePreparing = true;
         captureReady = false;
         queuedAction = null;
+        lockHardHide = false;
         visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = true;
@@ -115,12 +120,14 @@ Singleton {
         if (actionPending)
             return;
         lockHandoffTimer.stop();
+        lockCaptureSettleTimer.stop();
         restoreSuppressedEditor();
         capturePreparing = false;
         captureReady = false;
         queuedAction = null;
         deferredLockAction = null;
         lockHandoffAttempts = 0;
+        lockHardHide = false;
         visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = false;
@@ -128,6 +135,7 @@ Singleton {
     }
     function finishHandoffClose() {
         lockHandoffTimer.stop();
+        lockCaptureSettleTimer.stop();
         restoreSuppressedEditor();
         actionPending = false;
         closeAfterActionSuccess = false;
@@ -139,6 +147,7 @@ Singleton {
         visualOpacity = 0.0;
         visualReady = false;
         powerWindow.visible = false;
+        lockHardHide = false;
     }
     function toggleForScreen(targetScreen) {
         if (actionPending || !FlyoutManager.acceptToggle("power"))
@@ -233,12 +242,15 @@ Singleton {
         lockHandoffAttempts = 0;
         lockEditorSuppressed = LockscreenEditor.suppressForLockCapture();
 
-        // Remove every Power Menu surface before the frozen desktop capture.
-        // The timer below waits for the real QsWindow backing objects to unmap;
-        // hiding a QML item alone is not sufficient for a secure clean frame.
+        // Lock is a hard cut, not the normal Power Menu fade. Disable every
+        // opacity behavior first, unmap the layer surfaces immediately, then
+        // wait for both the backing-window state and a compositor settle frame
+        // before allowing the fresh screenshot capture to begin.
+        lockHardHide = true;
+        powerWindow.visible = false;
         visualOpacity = 0.0;
         visualReady = false;
-        powerWindow.visible = false;
+        lockCaptureSettleTimer.stop();
         lockHandoffTimer.restart();
     }
 
@@ -287,16 +299,34 @@ Singleton {
 
             if (root.powerMenuBackingHidden()
                     && LockscreenEditor.lockCaptureBackingHidden()) {
-                const action = root.deferredLockAction;
-                root.deferredLockAction = null;
                 stop();
-                root.startAction(action, root.freshLockCommand);
+                lockCaptureSettleTimer.restart();
                 return;
             }
 
             root.lockHandoffAttempts += 1;
             if (root.lockHandoffAttempts >= root.lockHandoffMaxAttempts)
                 root.abortLockHandoff();
+        }
+    }
+
+    Timer {
+        id: lockCaptureSettleTimer
+        interval: root.lockCaptureSettleDuration
+        repeat: false
+        onTriggered: {
+            if (root.deferredLockAction === null)
+                return;
+
+            if (!root.powerMenuBackingHidden()
+                    || !LockscreenEditor.lockCaptureBackingHidden()) {
+                root.lockHandoffTimer.restart();
+                return;
+            }
+
+            const action = root.deferredLockAction;
+            root.deferredLockAction = null;
+            root.startAction(action, root.freshLockCommand);
         }
     }
 
@@ -359,6 +389,7 @@ Singleton {
             border.width: 0
 
             Behavior on opacity {
+                enabled: !root.lockHardHide
                 NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
             }
         }
@@ -397,6 +428,7 @@ Singleton {
             columnSpacing: 16
 
             Behavior on opacity {
+                enabled: !root.lockHardHide
                 NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
             }
 
@@ -485,6 +517,7 @@ Singleton {
                 border.width: 0
 
                 Behavior on opacity {
+                    enabled: !root.lockHardHide
                     NumberAnimation { duration: root.visualFadeDuration; easing.type: Easing.OutCubic }
                 }
             }
