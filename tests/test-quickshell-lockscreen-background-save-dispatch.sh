@@ -104,4 +104,22 @@ jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
 jq -e '.lockscreen_custom_images == []' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
     || fail 'stale custom-image reference was not removed during Save'
 
+# Timezone database contents can also change across systems/releases. A clock
+# referencing a no-longer-installed zone is optional presentation state and must
+# be removed without blocking unrelated lockscreen saves.
+printf 'image\n' >"$TMP/custom.png"
+stale_timezone_clocks='[{"id":"timezone-stale","timezone":"Etc/AwtarchyMissingZone","format":"24h","show_label":true,"x":0.5,"y":0.6,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"rotation":0,"color":"auto","visible":true}]'
+editor_output="$(
+    XDG_CONFIG_HOME="$TMP/config" XDG_CACHE_HOME="$TMP/cache" HOME="$TMP/home" HYPR_QUICKSHELL_SCRIPT=/bin/false \
+        bash "$TMP/config/hypr/scripts/quickshell_lockscreen_editor_save.sh" \
+        "$editor_layout" "$visibility" black '#000000' '' cover 0.5 0.5 none 0 10 auto \
+        "$custom_images" "$visualizer" 90 pixel 1800 90 pixelated split squares '•' 24h \
+        "$stale_timezone_clocks" "$custom_texts"
+)" || fail 'stale timezone resource still bricks editor Save'
+
+jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
+    || fail 'repaired stale timezone state did not return explicit JSON success'
+jq -e '.lockscreen_timezone_clocks == []' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
+    || fail 'stale timezone clock was not removed during Save'
+
 printf '%s\n' 'PASS: lockscreen background composition save dispatch'
