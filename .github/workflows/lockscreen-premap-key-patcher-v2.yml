@@ -1,0 +1,37 @@
+name: Lockscreen Pre-map Key Patcher V2
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Apply production patch
+        run: bash .github/lockscreen-premap-patch.sh
+      - name: Validate targeted regression
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n config/hypr/scripts/quickshell_power_menu.sh
+          bash -n config/hypr/scripts/quickshell_power_menu_key.sh
+          shellcheck config/hypr/scripts/quickshell_power_menu.sh config/hypr/scripts/quickshell_power_menu_key.sh
+          bash tests/test-quickshell-lockscreen-superp-latency.sh
+          git diff --check
+      - name: Commit production patch
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add config/hypr/hyprland.lua config/hypr/scripts/quickshell_power_menu.sh config/hypr/scripts/quickshell_power_menu_key.sh config/quickshell/awtarchy/PowerMenu.qml
+          git commit -m 'fix(lockscreen): capture power keys in compositor'
+          git push origin HEAD:feature/lockscreen-interactive-effects
