@@ -1,0 +1,36 @@
+name: Temporary Fix PowerMenu History Tab
+
+on:
+  push:
+    branches: [fix/power-menu-capture-after-hard-hide]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: fix/power-menu-capture-after-hard-hide
+      - name: Fix managed-history separator
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('local/share/awtarchy/quickshell-managed-history.sha256')
+          text = path.read_text(encoding='utf-8')
+          digest = '331da0170c6117e8ae9170330b09680a2e235b4a7f86890f576914a3bfe0b6f7'
+          bad = digest + r'\t' + '.config/quickshell/awtarchy/PowerMenu.qml'
+          good = digest + '\t' + '.config/quickshell/awtarchy/PowerMenu.qml'
+          if bad not in text:
+              raise SystemExit('malformed PowerMenu managed-history row not found')
+          path.write_text(text.replace(bad, good, 1), encoding='utf-8')
+          PY
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- local/share/awtarchy/quickshell-managed-history.sha256
+          git commit -m 'chore: fix PowerMenu managed-history separator'
+          git push origin HEAD:fix/power-menu-capture-after-hard-hide
