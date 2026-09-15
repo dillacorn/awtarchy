@@ -135,6 +135,7 @@ Singleton {
     property var draftAutoAccents: defaultAutoAccents()
     property string selectedElement: "logo"
     property string statusMessage: ""
+    property string saveErrorMessage: ""
     property bool elementPaletteOpen: false
     property bool backgroundPaletteOpen: false
     property bool contrastRefreshPending: false
@@ -1775,6 +1776,7 @@ Singleton {
 
     function save() {
         if (saveProcess.running || contrastPersistProcess.running) return;
+        saveErrorMessage = "";
         statusMessage = "Saving…";
         saveProcess.exec(["bash", editorSaveBackend, JSON.stringify(draftLayout), JSON.stringify(draftVisibility), draftBackgroundMode, draftBackgroundColor, draftWallpaperPath, draftWallpaperFit,
             String(draftWallpaperFocalX), String(draftWallpaperFocalY), draftOverlayMode, String(draftOverlayStrength), String(draftWallpaperBlur), draftWeatherUnits, JSON.stringify(draftCustomImages), JSON.stringify(draftVisualizer), String(draftBackgroundOpacity), String(draftEntryTransition), String(draftEntryTransitionDuration), String(draftLastBackgroundOpacity), String(draftBlurStyle),
@@ -1783,7 +1785,27 @@ Singleton {
 
     function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
 
-    Process { id: saveProcess; onExited: (exitCode, exitStatus) => { if (exitCode === 0) { BarState.refresh(); root.statusMessage = "Refreshing Auto contrast…"; contrastPersistProcess.exec(["bash", root.contrastBackend]); } else root.statusMessage = "Could not save lockscreen presentation"; } }
+    Process {
+        id: saveProcess
+        stderr: SplitParser {
+            onRead: line => {
+                const detail = String(line || "").trim();
+                if (detail.length > 0 && root.saveErrorMessage.length === 0)
+                    root.saveErrorMessage = detail;
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                BarState.refresh();
+                root.statusMessage = "Refreshing Auto contrast…";
+                contrastPersistProcess.exec(["bash", root.contrastBackend]);
+            } else {
+                root.statusMessage = root.saveErrorMessage.length > 0
+                    ? "Save failed: " + root.saveErrorMessage
+                    : "Could not save lockscreen presentation";
+            }
+        }
+    }
     Process { id: contrastPersistProcess; onExited: (exitCode, exitStatus) => { root.statusMessage = exitCode === 0 ? "Saved" : "Saved; Auto contrast cache could not refresh"; } }
 
     NumberAnimation { id: editorEntranceFade; target: root; property: "editorEntranceOpacity"; from: 0; to: 1; duration: root.editorEntranceFadeDuration; easing.type: Easing.OutCubic }
