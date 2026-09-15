@@ -144,6 +144,32 @@ normalize_custom_texts() {
     '
 }
 
+filter_stale_custom_images() {
+    local value="$1" candidate count index path_type path
+
+    # Keep malformed/non-array input intact so the authoritative backend still
+    # rejects bad schema. Only remove optional image entries whose otherwise
+    # local-looking file reference has gone stale on disk.
+    if ! candidate="$(jq -ce 'if type == "array" then . else empty end' <<<"$value" 2>/dev/null)"; then
+        printf '%s' "$value"
+        return 0
+    fi
+
+    count="$(jq -r 'length' <<<"$candidate")"
+    for ((index = count - 1; index >= 0; --index)); do
+        path_type="$(jq -r --argjson index "$index" '.[$index].path | type' <<<"$candidate" 2>/dev/null || true)"
+        [[ "$path_type" == "string" ]] || continue
+        path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$candidate")"
+        if [[ "$path" == /* && "$path" != *://* && "$path" != *$'\n'* && "$path" != *$'\r'* \
+            && ( ! -f "$path" || ! -r "$path" ) ]]; then
+            candidate="$(jq -c --argjson index "$index" 'del(.[$index])' <<<"$candidate")"
+        fi
+    done
+
+    printf '%s' "$candidate"
+}
+
+custom_images_input="$(filter_stale_custom_images "$custom_images_input")"
 backend_layout="$(jq -ce 'with_entries(.value |= del(.rotation))' <<<"$layout_input")"
 backend_custom_images="$(jq -ce '[.[] | del(.spawn_timing)]' <<<"$custom_images_input")"
 backend_visualizer="$(jq -ce 'del(.rotation)' <<<"$visualizer_input")"
