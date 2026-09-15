@@ -223,18 +223,24 @@ replace_once(
         actionProcess.command = ["sh", "-lc", action.command];''',
 )
 
-# Append exact current stock hashes for every managed file changed by this pass,
-# plus the current application-state hash exposed by the full updater validator.
+# Append exact current stock hashes for every managed file touched by this pass
+# and by the immediately preceding blur pass so the append-only migration ledger
+# remains complete at the final candidate.
 history_path = ROOT / "local/share/awtarchy/quickshell-managed-history.sha256"
 history = history_path.read_text()
 managed = {
     "config/hypr/scripts/quickshell_application_state.sh": ".config/hypr/scripts/quickshell_application_state.sh",
     "config/hypr/scripts/quickshell_lockscreen_capture.sh": ".config/hypr/scripts/quickshell_lockscreen_capture.sh",
+    "config/hypr/scripts/quickshell_lockscreen_editor_save.sh": ".config/hypr/scripts/quickshell_lockscreen_editor_save.sh",
     "config/hypr/scripts/quickshell_power_menu.sh": ".config/hypr/scripts/quickshell_power_menu.sh",
     "config/quickshell/awtarchy/shell.qml": ".config/quickshell/awtarchy/shell.qml",
+    "config/quickshell/awtarchy/BarState.qml": ".config/quickshell/awtarchy/BarState.qml",
     "config/quickshell/awtarchy/LockscreenEditor.qml": ".config/quickshell/awtarchy/LockscreenEditor.qml",
+    "config/quickshell/awtarchy/LockPreviewScene.qml": ".config/quickshell/awtarchy/LockPreviewScene.qml",
     "config/quickshell/awtarchy/PowerMenu.qml": ".config/quickshell/awtarchy/PowerMenu.qml",
     "config/quickshell/awtarchy-lock/LockSurface.qml": ".config/quickshell/awtarchy-lock/LockSurface.qml",
+    "config/quickshell/awtarchy-lock/LockScene.qml": ".config/quickshell/awtarchy-lock/LockScene.qml",
+    "config/quickshell/awtarchy-lock/shell.qml": ".config/quickshell/awtarchy-lock/shell.qml",
 }
 lines = []
 for repo_path, home_path in managed.items():
