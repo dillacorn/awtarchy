@@ -15,17 +15,24 @@ fail() {
 }
 
 validate_runtime_dir() {
-    [[ -n "$RUNTIME_DIR" ]] || fail 'XDG_RUNTIME_DIR is not set.'
-    [[ -d "$RUNTIME_DIR" && ! -L "$RUNTIME_DIR" && -O "$RUNTIME_DIR" ]] \
-        || fail 'XDG_RUNTIME_DIR is not an owned regular directory.'
+    if [[ -z "$RUNTIME_DIR" ]]; then
+        fail 'XDG_RUNTIME_DIR is not set.'
+        return 1
+    fi
+    if [[ ! -d "$RUNTIME_DIR" || -L "$RUNTIME_DIR" || ! -O "$RUNTIME_DIR" ]]; then
+        fail 'XDG_RUNTIME_DIR is not an owned regular directory.'
+        return 1
+    fi
 }
 
 ensure_capture_root() {
     validate_runtime_dir || return 1
 
     if [[ -e "$CAPTURE_ROOT" || -L "$CAPTURE_ROOT" ]]; then
-        [[ -d "$CAPTURE_ROOT" && ! -L "$CAPTURE_ROOT" && -O "$CAPTURE_ROOT" ]] \
-            || fail 'capture root is not an owned regular directory.'
+        if [[ ! -d "$CAPTURE_ROOT" || -L "$CAPTURE_ROOT" || ! -O "$CAPTURE_ROOT" ]]; then
+            fail 'capture root is not an owned regular directory.'
+            return 1
+        fi
     else
         mkdir -m 700 -- "$CAPTURE_ROOT"
     fi
@@ -39,11 +46,17 @@ safe_output_name() {
 
 refresh_outputs() {
     mapfile -t OUTPUTS < <(hyprctl monitors -j | jq -er '.[].name')
-    ((${#OUTPUTS[@]} > 0)) || fail 'Hyprland reported no active outputs.'
+    if ((${#OUTPUTS[@]} == 0)); then
+        fail 'Hyprland reported no active outputs.'
+        return 1
+    fi
 
     local output
     for output in "${OUTPUTS[@]}"; do
-        safe_output_name "$output" || fail "unsafe output name: $output"
+        if ! safe_output_name "$output"; then
+            fail "unsafe output name: $output"
+            return 1
+        fi
     done
 }
 
@@ -55,16 +68,26 @@ validate_capture_dir() {
     parent="$(dirname -- "$target")"
     base="$(basename -- "$target")"
 
-    [[ "$parent" == "$CAPTURE_ROOT" ]] || fail 'capture directory is outside the capture root.'
-    [[ "$base" =~ ^capture\.[A-Za-z0-9]+$ ]] || fail 'capture directory name is invalid.'
-    [[ -d "$target" && ! -L "$target" && -O "$target" ]] \
-        || fail 'capture directory is not an owned regular directory.'
+    if [[ "$parent" != "$CAPTURE_ROOT" ]]; then
+        fail 'capture directory is outside the capture root.'
+        return 1
+    fi
+    if [[ ! "$base" =~ ^capture\.[A-Za-z0-9]+$ ]]; then
+        fail 'capture directory name is invalid.'
+        return 1
+    fi
+    if [[ ! -d "$target" || -L "$target" || ! -O "$target" ]]; then
+        fail 'capture directory is not an owned regular directory.'
+        return 1
+    fi
 }
 
 validate_capture_file() {
     local target="$1"
-    [[ -f "$target" && ! -L "$target" && -O "$target" && -r "$target" && -s "$target" ]] \
-        || fail "invalid capture file: $target"
+    if [[ ! -f "$target" || -L "$target" || ! -O "$target" || ! -r "$target" || ! -s "$target" ]]; then
+        fail "invalid capture file: $target"
+        return 1
+    fi
 }
 
 remove_owned_capture_dir() {
@@ -245,10 +268,10 @@ discard_prepared_capture() {
     if [[ ! -e "$PREPARED_POINTER" && ! -L "$PREPARED_POINTER" ]]; then
         return 0
     fi
-    [[ -f "$PREPARED_POINTER" && ! -L "$PREPARED_POINTER" && -O "$PREPARED_POINTER" ]] || {
+    if [[ ! -f "$PREPARED_POINTER" || -L "$PREPARED_POINTER" || ! -O "$PREPARED_POINTER" ]]; then
         rm -f -- "$PREPARED_POINTER"
         return 1
-    }
+    fi
 
     IFS= read -r capture_dir <"$PREPARED_POINTER" || capture_dir=""
     rm -f -- "$PREPARED_POINTER"
