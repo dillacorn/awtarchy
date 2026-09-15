@@ -231,7 +231,8 @@ stage_complete() {
 }
 
 consume_prepared_capture() {
-    local capture_dir parent base output
+    local capture_dir parent base clean_file output
+    local found_pair=0
 
     ensure_capture_root || return 1
     [[ -f "$PREPARED_POINTER" && ! -L "$PREPARED_POINTER" && -O "$PREPARED_POINTER" ]] \
@@ -246,17 +247,29 @@ consume_prepared_capture() {
     [[ "$base" =~ ^capture\.[A-Za-z0-9]+$ ]] || return 1
     [[ -d "$capture_dir" && ! -L "$capture_dir" && -O "$capture_dir" ]] || return 1
 
-    if ! refresh_outputs; then
-        rm -rf -- "$capture_dir"
-        return 1
-    fi
-    for output in "${OUTPUTS[@]}"; do
-        if ! validate_capture_file "${capture_dir}/${output}.png" \
+    # Consumption is intentionally independent of a second Hyprland monitor
+    # query. The complete private bundle was already validated against the live
+    # output set at stage-complete; a hotplug after that point safely falls back
+    # to the lock surface's black backing for any newly added output.
+    shopt -s nullglob
+    for clean_file in "$capture_dir"/*.png; do
+        [[ "$clean_file" == *.transition.png ]] && continue
+        output="$(basename -- "$clean_file" .png)"
+        if ! safe_output_name "$output" \
+            || ! validate_capture_file "$clean_file" \
             || ! validate_capture_file "${capture_dir}/${output}.transition.png"; then
+            shopt -u nullglob
             rm -rf -- "$capture_dir"
             return 1
         fi
+        found_pair=1
     done
+    shopt -u nullglob
+
+    if (( ! found_pair )); then
+        rm -rf -- "$capture_dir"
+        return 1
+    fi
 
     printf '%s\n' "$capture_dir"
 }
