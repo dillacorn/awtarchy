@@ -20,8 +20,8 @@ jobs:
           bash tests/test-bibata-cursor-migration.sh
           bash tests/test-bibata-cursor-options.sh
 
-  patch-approved-lockscreen-blur:
-    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'ci(lockscreen): trigger approved blur patcher' }}"
+  patch-approved-lockscreen-two-snapshot:
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'ci(lockscreen): trigger two-snapshot production patcher' }}"
     permissions:
       contents: write
     runs-on: ubuntu-24.04
@@ -32,27 +32,30 @@ jobs:
           fetch-depth: 0
       - name: Guard exact parent state
         run: |
-          test "$(git rev-parse HEAD^)" = "0a03cb553146496883c7180f07d9b192a7f535b1"
+          test "$(git rev-parse HEAD^)" = "2bc3a85cebe0b186897adcf0cfe78cc89b7d5d12"
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install -y jq shellcheck
-      - name: Apply approved blur implementation
-        run: python3 .github/scripts/patch_lockscreen_blur_approved.py
-      - name: Validate focused blur behavior
+      - name: Apply approved two-snapshot implementation
+        run: python3 .github/scripts/patch_lockscreen_two_snapshot.py
+      - name: Validate focused capture behavior
         run: |
-          bash -n config/hypr/scripts/quickshell_application_state.sh
-          shellcheck config/hypr/scripts/quickshell_application_state.sh
-          bash tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_capture.sh
+          bash -n config/hypr/scripts/quickshell_power_menu.sh
+          shellcheck config/hypr/scripts/quickshell_lockscreen_capture.sh
+          shellcheck config/hypr/scripts/quickshell_power_menu.sh
+          bash tests/test-quickshell-lockscreen-capture.sh
+          bash tests/test-quickshell-lockscreen-transition-layer.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
           git diff --check
       - name: Commit approved production change
         run: |
           git config user.name 'dillacorn'
           git config user.email '28743863+dillacorn@users.noreply.github.com'
           git add \
-            config/hypr/scripts/quickshell_application_state.sh \
-            config/quickshell/awtarchy/BarState.qml \
+            config/quickshell/awtarchy/shell.qml \
             config/quickshell/awtarchy/LockscreenEditor.qml \
-            config/quickshell/awtarchy/LockPreviewScene.qml \
-            config/quickshell/awtarchy-lock/LockScene.qml \
-            config/quickshell/awtarchy-lock/shell.qml
-          git commit -m 'fix(lockscreen): strengthen composition blur'
+            config/quickshell/awtarchy/PowerMenu.qml \
+            config/quickshell/awtarchy-lock/LockSurface.qml \
+            local/share/awtarchy/quickshell-managed-history.sha256
+          git commit -m 'fix(lockscreen): complete two-snapshot power transition'
           git push origin HEAD:feature/lockscreen-interactive-effects
