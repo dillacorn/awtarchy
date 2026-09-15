@@ -244,4 +244,32 @@ require_text "$POWER_MENU_QML" 'root.startAction(action, root.freshLockCommand);
 require_text "$POWER_MENU_QML" 'Behavior on opacity' \
     'Power Menu immediate-open path has no fade-in animation'
 
+# Once L is accepted, the menu must stay gone until the user explicitly opens
+# it again. Internal handoff timeout/process-exit recovery must not remap it,
+# and a duplicate compositor bridge delivery must be acknowledged while the
+# first action is already pending instead of retrying until a later remap.
+python3 - "$POWER_MENU_QML" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+try:
+    abort_body = text.split("function abortLockHandoff()", 1)[1].split("function startAction", 1)[0]
+    exit_body = text.split("onExited: exitCode => {", 1)[1].split("    IpcHandler {", 1)[0]
+    fast_body = text.split("function fastKey(key: string): bool", 1)[1].split("function captureWanted()", 1)[0]
+except IndexError as exc:
+    raise SystemExit(f"FAIL: unable to locate Power Menu lock handoff source block: {exc}")
+
+if "openForScreen(" in abort_body:
+    raise SystemExit("FAIL: lock handoff timeout can remap the Power Menu")
+if "openForScreen(" in exit_body:
+    raise SystemExit("FAIL: failed lock process can remap the Power Menu after L")
+
+pending_index = fast_body.find("actionPending")
+visible_index = fast_body.find("if (!powerWindow.visible)")
+if pending_index < 0 or visible_index < 0 or pending_index > visible_index:
+    raise SystemExit("FAIL: duplicate fast-key delivery retries after the lock action already hid the menu")
+PY
+
 printf '%s\n' 'PASS: SUPER+P opens capture-free and lock capture is deferred until L'
