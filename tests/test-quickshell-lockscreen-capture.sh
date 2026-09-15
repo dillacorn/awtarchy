@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_capture.sh"
 LOCK_MANAGER="${ROOT}/config/hypr/scripts/awtarchy_lock.sh"
 POWER_MENU="${ROOT}/config/hypr/scripts/quickshell_power_menu.sh"
+POWER_MENU_QML="${ROOT}/config/quickshell/awtarchy/PowerMenu.qml"
 MAIN_SHELL="${ROOT}/config/quickshell/awtarchy/shell.qml"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
 SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
@@ -26,15 +27,6 @@ forbid_text() {
     if grep -Fq -- "$text" "$file"; then
         fail "$message"
     fi
-}
-
-require_order() {
-    local file="$1" first="$2" second="$3" message="$4"
-    local first_line second_line
-    first_line="$(grep -nF -- "$first" "$file" | head -n1 | cut -d: -f1 || true)"
-    second_line="$(grep -nF -- "$second" "$file" | head -n1 | cut -d: -f1 || true)"
-    [[ -n "$first_line" && -n "$second_line" && "$first_line" -lt "$second_line" ]] \
-        || fail "$message"
 }
 
 mode_of() {
@@ -166,9 +158,8 @@ if PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
 fi
 [[ -f "$outside/sentinel" ]] || fail 'cleanup removed data outside the dedicated capture root'
 
-# The editor-visible fallback must still stage two distinct snapshots in one
-# private bundle. The first snapshot is the visible editor/settings view; the
-# clean desktop is captured only after those backing windows have unmapped.
+# Keep the staged helper path safe for compatibility with older prepared-lock
+# callers even though SUPER+P no longer performs this work before showing UI.
 printf '%s\n' '[{"name":"DP-1"},{"name":"HDMI-A-1"}]' >"$TMP/monitors.json"
 stage_dir="$(run_stage_begin)" || fail 'two-snapshot staging did not capture the transition source'
 [[ ! -e "$root/prepared" ]] || fail 'transition-only staging published an incomplete prepared bundle'
@@ -215,42 +206,42 @@ require_text "$LOCK_MANAGER" 'AWTARCHY_LOCK_CAPTURE_DIR=' \
 require_text "$LOCK_MANAGER" 'env -u AWTARCHY_LOCK_CAPTURE_DIR' \
     'lock manager does not fail closed when capture preparation fails'
 require_text "$LOCK_MANAGER" 'consume-prepared' \
-    'Power Menu lock path does not consume the already prepared capture bundle'
+    'legacy prepared lock path can no longer consume a validated prepared bundle'
 
-# SUPER+P arms transparent keyboard input first, then captures the visible frame
-# and checks real editor backing state. If already clean it promotes that frame
-# immediately. If an editor is mapped it preserves the secure two-snapshot
-# fallback: suppress, verify, recapture, restore, and only then reveal visuals.
+# SUPER+P now presents the Power Menu immediately. It must not enter any secure
+# capture/editor-suppression path until the user actually chooses Lock.
 require_text "$POWER_MENU" 'powermenu begin' \
-    'SUPER+P does not arm input before capture work begins'
-require_text "$POWER_MENU" 'stage-begin' \
-    'SUPER+P does not capture the visible transition source first'
-require_text "$POWER_MENU" 'editorHidden' \
-    'SUPER+P does not inspect real editor backing state after the first capture'
-require_text "$POWER_MENU" 'stage-promote-clean' \
-    'SUPER+P does not reuse an already-clean first capture'
-require_text "$POWER_MENU" 'suppressEditor' \
-    'SUPER+P has no editor-visible suppression fallback'
-require_text "$POWER_MENU" 'stage-complete' \
-    'SUPER+P has no separate clean capture for the editor-visible fallback'
-require_text "$POWER_MENU" 'restoreEditor' \
-    'SUPER+P does not restore an editor after the fallback clean capture'
-require_text "$POWER_MENU" 'powermenu reveal' \
-    'SUPER+P has no explicit post-capture visual reveal'
-require_order "$POWER_MENU" 'powermenu begin' 'stage-begin' \
-    'SUPER+P does not arm keyboard input before entering screenshot latency'
-require_order "$POWER_MENU" 'stage-begin' 'editorHidden' \
-    'SUPER+P checks editor state before taking the transition source snapshot'
-require_order "$POWER_MENU" 'editorHidden' 'stage-promote-clean' \
-    'SUPER+P promotes the first frame before proving it is already clean'
-require_order "$POWER_MENU" 'stage-promote-clean' 'suppressEditor' \
-    'SUPER+P enters the fallback before attempting the clean fast path'
-require_order "$POWER_MENU" 'suppressEditor' 'stage-complete' \
-    'SUPER+P fallback captures clean desktop before requesting editor suppression'
-require_order "$POWER_MENU" 'stage-complete' 'restoreEditor' \
-    'SUPER+P restores the editor before the fallback clean desktop snapshot is complete'
-require_order "$POWER_MENU" 'restoreEditor' 'powermenu reveal' \
-    'SUPER+P reveals Power Menu visuals before restoring a fallback-suppressed editor'
+    'SUPER+P does not open the Power Menu through its immediate IPC entrypoint'
+forbid_text "$POWER_MENU" 'stage-begin' \
+    'SUPER+P still captures a transition source before showing the Power Menu'
+forbid_text "$POWER_MENU" 'editorHidden' \
+    'SUPER+P still checks editor capture state before showing the Power Menu'
+forbid_text "$POWER_MENU" 'suppressEditor' \
+    'SUPER+P still suppresses the editor before showing the Power Menu'
+forbid_text "$POWER_MENU" 'stage-complete' \
+    'SUPER+P still performs a clean capture before showing the Power Menu'
+forbid_text "$POWER_MENU" 'powermenu reveal' \
+    'SUPER+P still waits on a second reveal phase after capture work'
+
+# Lock-time handoff must remove all Power Menu and editor backing windows before
+# the existing fresh secure capture path starts. This keeps the frozen desktop
+# clean without charging screenshot latency to opening the menu.
+require_text "$POWER_MENU_QML" 'function beginLockAction(action)' \
+    'Power Menu has no deferred lock-time capture handoff'
+require_text "$POWER_MENU_QML" 'function powerMenuBackingHidden()' \
+    'Power Menu does not expose real backing-window readiness for lock capture'
+require_text "$POWER_MENU_QML" 'powerWindow.backingWindowVisible' \
+    'Power Menu capture readiness ignores its primary backing window'
+require_text "$POWER_MENU_QML" 'secondaryShadeVariants.instances' \
+    'Power Menu capture readiness ignores secondary-monitor shade backing windows'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.suppressForLockCapture()' \
+    'lock-time handoff does not suppress an open lockscreen editor'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.lockCaptureBackingHidden()' \
+    'lock-time handoff does not wait for editor backing windows to unmap'
+require_text "$POWER_MENU_QML" 'root.startAction(action, root.freshLockCommand);' \
+    'lock-time handoff does not enter the existing fresh secure capture path'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.restoreAfterLockCapture()' \
+    'lock-time handoff cannot restore editor state after capture/lock completion'
 
 # Readiness must be based on real QsWindow backing state for both the primary
 # editor and secondary-monitor preview windows, not a QML visibility guess.
@@ -274,17 +265,17 @@ require_text "$MAIN_SHELL" 'restoreEditor' \
     'lock-capture IPC does not expose editor restoration'
 
 # The secure compositor-owned surface keeps the clean frame as its only desktop
-# backdrop, while the separate editor/settings frame is used only as transition
-# source. This prevents background transparency from revealing the dirty source.
+# backdrop. Direct lock capture hard-links the same clean frozen desktop frame
+# into the transition slot, so the transition never needs live unlocked content.
 require_text "$SURFACE" 'transitionCaptureSource' \
-    'secure surface does not load the staged editor/settings transition frame separately'
+    'secure surface does not load the validated transition frame separately'
 require_text "$SURFACE" 'id: transitionBacking' \
     'secure surface does not isolate the transition source in its own backing item'
 require_text "$SURFACE" 'startSource: transitionBacking' \
-    'lock transition does not begin from the staged editor/settings screenshot'
+    'lock transition does not begin from the validated transition capture'
 require_text "$SURFACE" 'desktopBackingSource: desktopBacking' \
     'secure lockscreen composition no longer uses the clean frozen desktop backdrop'
 forbid_text "$SURFACE" 'startSource: desktopBacking' \
-    'lock transition still starts from the clean desktop instead of the visible editor/settings snapshot'
+    'lock transition bypasses its validated transition source item'
 
 printf 'PASS: secure lockscreen snapshot capture contract\n'
