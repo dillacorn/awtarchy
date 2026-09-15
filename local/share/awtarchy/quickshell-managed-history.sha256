@@ -1333,3 +1333,6 @@ caee80fb74c27bb027c4ffa89d9db9f8033749f06c6bf81422e65a77d2b9e89d	.config/quicksh
 # Lockscreen Save migration compatibility and actionable diagnostics.
 6ac2f5fc2ee7beaa9395c4215194c0c3e5c7be8f325d1c2ea00040a4580805b1	.config/hypr/scripts/quickshell_lockscreen_editor_save.sh
 ab6b05a8d6b0017ccddf51ad4a9592167678f3e360ff8a5ade30a90d0e7dfbc5	.config/quickshell/awtarchy/LockscreenEditor.qml
+
+# Lockscreen interaction response and secure capture latency optimization.
+f003ed9f8d2f0bfb2481c2569a6ad3b8309c067166219d13a282c832e569b58d	.config/quickshell/awtarchy-lock/LockSurface.qml
