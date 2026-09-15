@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
+SURFACE_QML="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 AUDIO_QML="${ROOT}/config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -35,34 +36,24 @@ reject_text "$SCENE_QML" 'audioEffectsEnabled' \
 reject_text "$SCENE_QML" 'audioOffsetX' \
     'logo blocks still carry audio displacement'
 
-python3 - "$SCENE_QML" <<'PY'
-from pathlib import Path
-import sys
-
-text = Path(sys.argv[1]).read_text(encoding="utf-8")
-try:
-    step = text.split("function stepLogoExplosion()", 1)[1].split("function updateClockText()", 1)[0]
-    expiry = step.split("if (logoExplosionActive && logoExplosionElapsedMs >= logoExplosionMaxMs)", 1)[1]
-    expiry = expiry.split("if (returning && maxMotion < 1.2)", 1)[0]
-except IndexError as exc:
-    raise SystemExit("FAIL: logo explosion expiry structure changed unexpectedly") from exc
-
-if "logoReturnPending = true;" not in expiry:
-    raise SystemExit("FAIL: explosion expiry can strand logo blocks before their return-to-home finishes")
-PY
-
-require_text "$SCENE_QML" 'readonly property real logoHoverSpring: 110' \
-    'logo hover response is still too soft'
-require_text "$SCENE_QML" 'readonly property real logoHomeSpring: 72' \
-    'logo return-to-home response is still too soft'
-require_text "$SCENE_QML" 'readonly property real logoHoverDamping: 18' \
-    'logo hover response is still too fluid'
-require_text "$SCENE_QML" 'readonly property real logoHomeDamping: 14' \
-    'logo return-to-home response is still too fluid'
-require_text "$SCENE_QML" 'readonly property int logoExplosionScatterMs: 340' \
-    'logo explosion lingers too long before returning'
-require_text "$SCENE_QML" 'readonly property int logoExplosionMaxMs: 1100' \
-    'logo explosion active phase still lasts too long'
+# Keep the established physics engine, but advance it at a second active-only
+# cadence on the real secure surface so hover/explosion response is materially
+# quicker without adding idle work. When explosion state drops, explicitly keep
+# return-to-home active until the scene's own settle condition clears it.
+require_text "$SURFACE_QML" 'id: logoInteractionBoost' \
+    'secure lock surface has no active-only interaction speed boost'
+require_text "$SURFACE_QML" 'interval: scene.logoPhysicsIntervalMs' \
+    'interaction speed boost does not track the configured physics cadence'
+require_text "$SURFACE_QML" 'running: scene.logoSimulationActive' \
+    'interaction speed boost runs while the logo is idle'
+require_text "$SURFACE_QML" 'onTriggered: scene.stepLogoExplosion()' \
+    'interaction speed boost does not advance the existing physics engine'
+require_text "$SURFACE_QML" 'function onLogoExplosionActiveChanged()' \
+    'secure lock surface does not observe explosion expiry'
+require_text "$SURFACE_QML" 'scene.logoReturnPending = true;' \
+    'explosion expiry can strand logo blocks before their return-to-home finishes'
+require_text "$SURFACE_QML" 'scene.logoHoverDirty = true;' \
+    'explosion expiry does not keep the active-only physics timer alive'
 
 # Parsed CAVA frames are presented directly; a second QML smoothing cadence
 # would reintroduce the lag observed in the first runtime pass.
