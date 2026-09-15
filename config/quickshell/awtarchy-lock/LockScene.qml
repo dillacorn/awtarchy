@@ -260,6 +260,29 @@ Item {
             === "after-logo" ? "after-logo" : "during-logo";
     }
 
+    function logoScreenEdgeStartOffset(edgeSide, finalCellX, finalCellY, randomX, randomY) {
+        const rx = Number(randomX);
+        const ry = Number(randomY);
+        const stretch = Math.max(
+            Math.abs(root.elementStretchX("logo")),
+            Math.abs(root.elementStretchY("logo")));
+        const blockExtent = Math.max(root.wordmarkCellWidth, root.wordmarkCellHeight)
+            * Math.max(0.01, root.elementScale("logo")) * Math.max(1, stretch);
+        const margin = Math.max(32 * root.uiScale, blockExtent * 2);
+        let sceneX = (Number.isFinite(rx) ? Math.max(0, Math.min(1, rx)) : 0.5) * root.width;
+        let sceneY = (Number.isFinite(ry) ? Math.max(0, Math.min(1, ry)) : 0.5) * root.height;
+        if (edgeSide === 0)
+            sceneX = -margin;
+        else if (edgeSide === 1)
+            sceneX = root.width + margin;
+        else if (edgeSide === 2)
+            sceneY = -margin;
+        else
+            sceneY = root.height + margin;
+        const mapped = wordmarkItem.mapFromItem(root, sceneX, sceneY);
+        return Qt.point(mapped.x - finalCellX, mapped.y - finalCellY);
+    }
+
     function customImageSpawnOffset(image, itemWidth, itemHeight) {
         let mode = customImageSpawnMode(image);
         if (mode === "none" || mode === "pixel-warp")
@@ -1201,16 +1224,10 @@ Item {
                             readonly property real jitterY: (randomE - 0.5) * 130 * root.uiScale
                             readonly property real swarmStartX: Math.cos(startAngle) * startDistance
                             readonly property real swarmStartY: Math.sin(startAngle) * startDistance
-                            readonly property real edgeStartX: edgeSide === 0
-                                ? -finalCellX - edgeMargin
-                                : edgeSide === 1
-                                    ? root.wordmarkWidth - finalCellX + edgeMargin
-                                    : jitterX
-                            readonly property real edgeStartY: edgeSide === 2
-                                ? -finalCellY - edgeMargin
-                                : edgeSide === 3
-                                    ? root.wordmarkHeight - finalCellY + edgeMargin
-                                    : jitterY
+                            readonly property var edgeScreenStart: root.logoScreenEdgeStartOffset(
+                                edgeSide, finalCellX, finalCellY, randomD, randomE)
+                            readonly property real edgeStartX: edgeScreenStart.x
+                            readonly property real edgeStartY: edgeScreenStart.y
                             readonly property real centerStartX: root.wordmarkWidth / 2
                                 - finalCellX + jitterX * 0.35
                             readonly property real centerStartY: root.wordmarkHeight / 2

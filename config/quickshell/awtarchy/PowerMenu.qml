@@ -12,7 +12,7 @@ Singleton {
 
     // Preserve the existing wlogout layout order and keybinds.
     readonly property var actions: [
-        { label: "", text: "Lock (L)", key: "l", command: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true },
+        { label: "", text: "Lock (L)", key: "l", command: "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true },
         { label: "", text: "Hibernate (H)", key: "h", command: "~/.config/hypr/scripts/awtarchy_lock.sh hibernate", closeAfterSuccess: true },
         { label: "", text: "Reboot (R)", key: "r", command: "systemctl reboot", closeAfterSuccess: false },
         { label: "", text: "Shutdown (S)", key: "s", command: "systemctl poweroff", closeAfterSuccess: false },

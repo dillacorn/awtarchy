@@ -43,7 +43,6 @@ check_bool_setting set-lockscreen-show-time lockscreen_show_time
 check_bool_setting set-lockscreen-show-date lockscreen_show_date
 check_bool_setting set-lockscreen-show-username lockscreen_show_username
 check_bool_setting set-lockscreen-show-weather lockscreen_show_weather
-check_bool_setting set-lockscreen-hide-lock-settings-before-capture lockscreen_hide_lock_settings_before_capture
 
 require_text "$BAR_STATE" 'lockscreen_logo_physics_hz: 30' \
     'BarState stock logo physics rate is not 30 Hz'
@@ -128,28 +127,10 @@ done
     || fail 'Cursor/Lockscreen action columns do not share a hard minimum width'
 [[ "$(grep -Fc -- 'Layout.maximumWidth: root.sectionActionColumnWidth' "$QUICK_SETTINGS")" -eq 2 ]] \
     || fail 'Cursor/Lockscreen action columns do not share a hard maximum width'
-require_text "$QUICK_SETTINGS" 'text: "Hide Quickshell Lock Settings Before Lock Capture"' \
-    'Quick Settings still exposes the wrong lock-capture option label'
-reject_text "$QUICK_SETTINGS" 'Hide Quick Settings Before Lock Capture' \
-    'retired Quick Settings hide-before-capture wording remains'
-require_text "$QUICK_SETTINGS" 'LockscreenEditor.prepareLockCapture()' \
-    'lock capture does not delegate temporary editor suppression to LockscreenEditor'
-require_text "$QUICK_SETTINGS" 'function restoreLockCapture(): void' \
-    'Quick Settings IPC has no editor restore hook after capture'
-require_text "$EDITOR_QML" 'property bool lockCaptureSuppressed: false' \
-    'lockscreen editor does not track temporary capture suppression'
-require_text "$EDITOR_QML" 'function prepareLockCapture()' \
-    'lockscreen editor has no temporary hide path for secure capture'
-require_text "$EDITOR_QML" 'function restoreAfterLockCapture()' \
-    'lockscreen editor has no state-preserving restore path after capture'
-require_text "$EDITOR_QML" 'return !editorWindow.backingWindowVisible;' \
-    'lockscreen editor does not wait for its real backing window to unmap'
-require_text "$LOCK_SCRIPT" 'hide_lock_settings_before_capture()' \
-    'lock launcher still owns the old Quick Settings capture-hide path'
-require_text "$LOCK_SCRIPT" 'restore_lock_settings_after_capture()' \
-    'lock launcher does not restore editor surfaces after the frozen capture'
-reject_text "$LOCK_SCRIPT" 'lockscreen_hide_quickshell_before_capture' \
-    'retired Quick Settings capture-hide state remains in the lock launcher'
+reject_text "$QUICK_SETTINGS" 'Hide Quickshell Lock Settings Before Lock Capture' \
+    'retired lock-capture hide toggle remains in Quick Settings'
+reject_text "$LOCK_SCRIPT" 'hide_lock_settings_before_capture' \
+    'retired lock-editor suppression path remains in the lock manager'
 require_text "$EDITOR_QML" 'id: imageOpacityField' \
     'Image Opacity is missing the Background Opacity-style numeric field'
 require_text "$EDITOR_QML" 'function resetSelectedElementOpacity()' \
@@ -160,5 +141,16 @@ require_text "$EDITOR_QML" 'SettingsButton { label: "Reset"; textSize: 9; onClic
     'Image Opacity has no Reset button matching Background Opacity'
 require_text "$EDITOR_QML" 'SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }' \
     'Image Opacity has no Opaque button matching Background Opacity'
+
+# Edges In must start beyond the actual monitor bounds and map those screen
+# coordinates through the transformed logo before converging on each glyph.
+require_text "$SCENE_QML" 'function logoScreenEdgeStartOffset(' \
+    'shared scene has no monitor-edge logo spawn helper'
+require_text "$SCENE_QML" 'wordmarkItem.mapFromItem(root, sceneX, sceneY)' \
+    'logo edge spawn does not map monitor coordinates through the transformed wordmark'
+require_text "$SCENE_QML" 'readonly property var edgeScreenStart: root.logoScreenEdgeStartOffset(' \
+    'Edges In particles do not consume the monitor-edge spawn helper'
+reject_text "$SCENE_QML" 'readonly property real edgeStartX: edgeSide === 0' \
+    'Edges In still starts relative to the wordmark bounds'
 
 printf '%s\n' 'PASS: lockscreen coherent pointer and interactive effects contracts'

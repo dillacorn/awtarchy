@@ -108,7 +108,7 @@ FocusScope {
     Rectangle {
         id: closedControl
         anchors.fill: parent
-        color: closedMouse.containsMouse || root.activeFocus ? Theme.hover : Theme.surface
+        color: closedMouse.containsMouse || root.activeFocus ? Theme.hover : Theme.background
         border.width: 1
         border.color: root.menuOpen || root.activeFocus ? Theme.focus : Theme.muted
         radius: 4

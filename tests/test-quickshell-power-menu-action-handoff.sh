@@ -46,7 +46,7 @@ require("onExited: exitCode => {",
 require("function finishHandoffClose()",
         "power menu has no explicit close path for an already-covered screen")
 
-require('command: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true',
+require('command: "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true',
         "Lock does not keep the power menu visible until compositor-secure confirmation")
 require('command: "~/.config/hypr/scripts/awtarchy_lock.sh hibernate", closeAfterSuccess: true',
         "Hibernate does not retain the overlay through its secure-lock handoff")

@@ -6,6 +6,7 @@ umask 077
 
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-}"
 CAPTURE_ROOT="${RUNTIME_DIR}/awtarchy-lock-transition"
+PREPARED_POINTER="${CAPTURE_ROOT}/prepared"
 
 fail() {
     printf 'quickshell_lockscreen_capture.sh: %s\n' "$*" >&2
@@ -99,12 +100,47 @@ prepare_capture() {
     printf '%s\n' "$capture_dir"
 }
 
+
+stage_capture() {
+    local capture_dir pointer_tmp
+
+    ensure_capture_root || return 1
+    rm -f -- "$PREPARED_POINTER"
+    capture_dir="$(prepare_capture)" || return 1
+
+    pointer_tmp="$(mktemp "${CAPTURE_ROOT}/prepared.XXXXXX")"
+    printf '%s\n' "$capture_dir" >"$pointer_tmp"
+    chmod 600 -- "$pointer_tmp"
+    mv -f -- "$pointer_tmp" "$PREPARED_POINTER"
+}
+
+consume_prepared_capture() {
+    local capture_dir parent base
+
+    ensure_capture_root || return 1
+    [[ -f "$PREPARED_POINTER" && ! -L "$PREPARED_POINTER" && -O "$PREPARED_POINTER" ]] \
+        || return 1
+
+    IFS= read -r capture_dir <"$PREPARED_POINTER" || capture_dir=""
+    rm -f -- "$PREPARED_POINTER"
+
+    parent="$(dirname -- "$capture_dir")"
+    base="$(basename -- "$capture_dir")"
+    [[ "$parent" == "$CAPTURE_ROOT" ]] || return 1
+    [[ "$base" =~ ^capture\.[A-Za-z0-9]+$ ]] || return 1
+    [[ -d "$capture_dir" && ! -L "$capture_dir" && -O "$capture_dir" ]] || return 1
+
+    printf '%s\n' "$capture_dir"
+}
+
 usage() {
     cat <<'EOF'
 Usage: quickshell_lockscreen_capture.sh <command> [argument]
 
 Commands:
   prepare               Capture every active Hyprland output.
+  stage                 Capture every active output for the next Power Menu lock.
+  consume-prepared      Return and consume the staged Power Menu capture.
   cleanup <capture-dir> Remove one validated capture directory.
 EOF
 }
@@ -113,6 +149,14 @@ case "${1:-}" in
     prepare)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
         prepare_capture
+        ;;
+    stage)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        stage_capture
+        ;;
+    consume-prepared)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        consume_prepared_capture
         ;;
     cleanup)
         [[ $# -eq 2 ]] || { usage >&2; exit 2; }

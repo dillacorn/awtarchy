@@ -93,24 +93,15 @@ rejects "$SURFACE" 'onExited: scene.handlePointerClick' \
 cmp -s "$SCENE" "$PREVIEW_SCENE" \
     || fail 'secure/editor scene copies diverged'
 
-# Real lock capture may optionally hide Quickshell lock settings before full-output grim
-# capture. The setting is opt-in; capture remains frozen and fail-closed.
-contains "$STATE" 'lockscreen_hide_lock_settings_before_capture' \
-    'capture-hide preference is not persisted in the shared state backend'
-contains "$BAR_STATE" 'lockscreenHideLockSettingsBeforeCapture' \
-    'BarState does not expose the capture-hide preference'
-contains "$QUICK_SETTINGS" 'Hide Quickshell Lock Settings Before Lock Capture' \
-    'Quick Settings has no user-facing capture-hide fallback control'
-contains "$QUICK_SETTINGS" 'LockscreenEditor.prepareLockCapture()' \
-    'Quick Settings does not delegate capture suppression to the lock editor'
-contains "$LOCK_MANAGER" 'ipc call quicksettings prepareLockCapture' \
-    'real lock path does not request lock-editor suppression before capture'
-contains "$LOCK_MANAGER" 'ipc call quicksettings lockCaptureHidden' \
-    'real lock path does not wait for the lock editor to unmap before capture'
-contains "$LOCK_MANAGER" 'ipc call quicksettings restoreLockCapture' \
-    'real lock path does not restore the editor after the frozen capture'
-rejects "$LOCK_MANAGER" 'ipc call quicksettings close' \
-    'real lock path still closes unrelated Quick Settings before capture'
+# Power Menu locking now uses the clean snapshot staged before SUPER+P reveals the menu.
+rejects "$STATE" 'lockscreen_hide_lock_settings_before_capture' \
+    'retired capture-hide preference remains in shared state'
+rejects "$QUICK_SETTINGS" 'Hide Quickshell Lock Settings Before Lock Capture' \
+    'retired capture-hide control remains in Quick Settings'
+contains "$LOCK_MANAGER" 'lock-prepared)' \
+    'real lock path has no staged Power Menu capture mode'
+contains "$LOCK_MANAGER" 'consume-prepared' \
+    'staged Power Menu lock does not consume its prepared capture'
 contains "$LOCK_MANAGER" 'quickshell_lockscreen_capture.sh' \
     'real lock path no longer uses the secure frozen capture helper'
 

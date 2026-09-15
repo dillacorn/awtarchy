@@ -157,17 +157,12 @@ require_text "$THEME_QML" 'function themeData() {' \
 
 require_text "$MANAGER" 'CONFIG_NAME="awtarchy-lock"' \
     'lock manager does not target only awtarchy-lock for lock authority'
-require_text "$MANAGER" 'SHELL_CONFIG_NAME="awtarchy"' \
-    'capture fallback does not name the unlocked shell separately from lock authority'
-# Capture preparation may contact only the unlocked presentation shell; lock authority remains awtarchy-lock.
-require_text "$MANAGER" 'ipc call quicksettings prepareLockCapture' \
-    'capture preparation does not use the dedicated editor-suppression IPC'
-require_text "$MANAGER" 'ipc call quicksettings lockCaptureHidden' \
-    'capture preparation does not verify the editor surface has unmapped'
-require_text "$MANAGER" 'ipc call quicksettings restoreLockCapture' \
-    'capture preparation does not restore editor presentation after the frozen capture'
-reject_text "$MANAGER" 'ipc call quicksettings close' \
-    'lock capture still closes the unrelated Quick Settings flyout'
+require_text "$MANAGER" 'lock-prepared)' \
+    'lock manager has no staged Power Menu capture command'
+require_text "$MANAGER" 'consume-prepared' \
+    'prepared lock path does not consume the staged capture'
+reject_text "$MANAGER" 'ipc call quicksettings prepareLockCapture' \
+    'retired editor-suppression IPC remains in the lock manager'
 # The expansion syntax below is intentionally matched as literal shell source.
 # shellcheck disable=SC2016
 require_text "$MANAGER" 'QS_BIN="${QS_BIN:-qs}"' \

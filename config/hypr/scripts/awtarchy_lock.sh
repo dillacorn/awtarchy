@@ -5,14 +5,11 @@ set -euo pipefail
 export LC_ALL=C.UTF-8
 
 CONFIG_NAME="awtarchy-lock"
-SHELL_CONFIG_NAME="awtarchy"
 QS_BIN="${QS_BIN:-qs}"
 SYSTEMCTL_BIN="${SYSTEMCTL_BIN:-systemctl}"
 LOGINCTL_BIN="${LOGINCTL_BIN:-loginctl}"
 POLL_INTERVAL="${AWTARCHY_LOCK_POLL_INTERVAL:-0.05}"
-CAPTURE_HIDE_DELAY="${AWTARCHY_LOCK_CAPTURE_HIDE_DELAY:-0.18}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
-STATE_FILE="${CACHE_HOME}/awtarchy/quickshell-state.json"
 LOG_DIR="${CACHE_HOME}/awtarchy"
 LOG_FILE="${AWTARCHY_LOCK_LOG:-${LOG_DIR}/lockscreen.log}"
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
@@ -23,7 +20,8 @@ usage() {
 Usage: awtarchy_lock.sh <command>
 
 Commands:
-  lock                 Start the dedicated Awtarchy session locker.
+  lock                 Start the dedicated Awtarchy session locker with a fresh capture.
+  lock-prepared        Start the locker using only the staged SUPER+P capture.
   status               Print unlocked, starting, or secure.
   wait-secure [secs]   Wait until the compositor confirms the lock is secure.
   hibernate            Lock securely, then hibernate.
@@ -78,63 +76,9 @@ cleanup_capture() {
     bash "$CAPTURE_HELPER" cleanup "$capture_dir" >>"$LOG_FILE" 2>&1 || true
 }
 
-hide_lock_settings_before_capture_enabled() {
-    command -v jq >/dev/null 2>&1 || return 1
-    [[ -s "$STATE_FILE" ]] || return 1
-    jq -e '.lockscreen_hide_lock_settings_before_capture == true' \
-        "$STATE_FILE" >/dev/null 2>&1
-}
-
-hide_lock_settings_before_capture() {
-    local live_response="" live_available=false hidden_response=""
-
-    # Consult the in-memory QML preference first so a just-clicked toggle does
-    # not race its asynchronous state-file write.
-    if live_response="$(
-        "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings prepareLockCapture 2>>"$LOG_FILE" |
-            tail -n1
-    )"; then
-        live_available=true
-    fi
-
-    if [[ "$live_available" == true ]]; then
-        [[ "$live_response" == true ]] || return 0
-    else
-        # Persisted fallback confirms the opt-in. Without desktop-shell IPC there
-        # is no safe surface-control channel, so do not block the actual lock.
-        hide_lock_settings_before_capture_enabled || return 0
-        return 0
-    fi
-
-    # Wait on the real lock-editor QsWindow backing surface instead of assuming a fixed
-    # compositor delay was sufficient. Keep the bounded sleep fallback for an
-    # older/unreachable desktop shell so locking itself is never blocked here.
-    for _ in {1..25}; do
-        if hidden_response="$(
-            "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings lockCaptureHidden 2>>"$LOG_FILE" |
-                tail -n1
-        )" && [[ "$hidden_response" == true ]]; then
-            return 0
-        fi
-        sleep 0.02
-    done
-
-    case "$CAPTURE_HIDE_DELAY" in
-        0|0.[0-9]|0.[0-9][0-9]|0.[0-9][0-9][0-9]|1|1.0|1.00|1.000)
-            sleep "$CAPTURE_HIDE_DELAY"
-            ;;
-        *)
-            sleep 0.18
-            ;;
-    esac
-}
-
-restore_lock_settings_after_capture() {
-    "$QS_BIN" -c "$SHELL_CONFIG_NAME" ipc call quicksettings restoreLockCapture \
-        >>"$LOG_FILE" 2>&1 || true
-}
 
 start_lock() {
+    local capture_mode="${1:-fresh}"
     local state capture_dir="" capture_helper="$CAPTURE_HELPER"
 
     need_qs || return $?
@@ -147,12 +91,21 @@ start_lock() {
     esac
 
     mkdir -p -- "$LOG_DIR"
-    hide_lock_settings_before_capture
 
     if [[ -f "$capture_helper" ]]; then
-        capture_dir="$(bash "$capture_helper" prepare 2>>"$LOG_FILE")" || capture_dir=""
+        case "$capture_mode" in
+            fresh)
+                capture_dir="$(bash "$capture_helper" prepare 2>>"$LOG_FILE")" || capture_dir=""
+                ;;
+            prepared)
+                capture_dir="$(bash "$capture_helper" consume-prepared 2>>"$LOG_FILE")" || capture_dir=""
+                ;;
+            *)
+                printf 'awtarchy_lock.sh: invalid capture mode: %s\n' "$capture_mode" >&2
+                return 2
+                ;;
+        esac
     fi
-    restore_lock_settings_after_capture
 
     if [[ -n "$capture_dir" ]]; then
         AWTARCHY_LOCK_CAPTURE_DIR="$capture_dir" \
@@ -251,7 +204,11 @@ command_name="${1:-}"
 case "$command_name" in
     lock)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }
-        start_lock
+        start_lock fresh
+        ;;
+    lock-prepared)
+        [[ $# -eq 1 ]] || { usage >&2; exit 2; }
+        start_lock prepared
         ;;
     status)
         [[ $# -eq 1 ]] || { usage >&2; exit 2; }

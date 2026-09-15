@@ -153,7 +153,6 @@ Singleton {
         lockscreen_wallpaper_blur: 0,
         lockscreen_blur_style: "smooth",
         lockscreen_background_opacity_previous: 100,
-        lockscreen_hide_lock_settings_before_capture: false
     })
     readonly property var defaultLockscreenVisualizer: ({
         enabled: false,
@@ -401,7 +400,6 @@ Singleton {
             lockscreen_show_date: false,
             lockscreen_show_username: false,
             lockscreen_show_weather: false,
-            lockscreen_hide_lock_settings_before_capture: false,
             lockscreen_background: "black",
             lockscreen_background_color: "#000000",
             lockscreen_wallpaper_path: "",
@@ -801,9 +799,6 @@ Singleton {
         return lockscreenBooleanPreference("lockscreen_show_weather", false);
     }
 
-    function lockscreenHideLockSettingsBeforeCapture() {
-        return lockscreenBooleanPreference("lockscreen_hide_lock_settings_before_capture", false);
-    }
 
     function lockscreenBackground() {
         const value = String(data().lockscreen_background || "");

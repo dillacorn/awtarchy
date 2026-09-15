@@ -91,6 +91,10 @@ contains "$SELECTOR" 'Flickable {' \
     'compact selector popup cannot scroll long option sets'
 contains "$SELECTOR" 'clip: true' \
     'compact selector popup does not clip its scrollable option viewport'
+contains "$SELECTOR" 'color: closedMouse.containsMouse || root.activeFocus ? Theme.hover : Theme.background' \
+    'compact selector does not render a valid themed background before hover'
+not_contains "$SELECTOR" 'Theme.surface' \
+    'compact selector still references undefined Theme.surface'
 
 contains "$SELECTOR" 'readonly property bool directClockToggle:' \
     'compact selector does not recognize the primary 24h/12h clock model'
@@ -202,18 +206,20 @@ contains "$EDITOR" 'else if(isCustomText(name)){const next=cloneCustomTexts(draf
 contains "$EDITOR" 'else { const next = cloneLayout(draftLayout); next[name].opacity = value; draftLayout = next; }' \
     'built-in element opacity is not handled by the shared element opacity path'
 
-# Custom image opacity should use the same direct slider interaction language as
-# Background Opacity while retaining numeric precision and one undo transaction.
-contains "$EDITOR" 'function setElementOpacityFromPointer(name, pointerX, trackWidth)' \
-    'editor has no shared pointer-to-element-opacity path'
-contains "$EDITOR" 'id: imageOpacityTrack' \
-    'custom image opacity has no slider track'
-contains "$EDITOR" 'visible: root.isCustomImage(root.selectedElement)' \
-    'custom image opacity slider is not scoped to images'
-contains "$EDITOR" 'root.setElementOpacityFromPointer(root.selectedElement, mouse.x, width)' \
-    'custom image opacity slider does not update the selected image'
-contains "$EDITOR" 'root.setDraftOpacitySilently(name, value)' \
-    'image opacity drag does not reuse a silent shared state path inside one undo transaction'
+# Custom image opacity intentionally stays compact: numeric precision with arrow-key
+# editing plus Reset/Opaque actions, without a horizontal drag slider.
+contains "$EDITOR" 'id: imageOpacityField' \
+    'custom image opacity numeric field is missing'
+not_contains "$EDITOR" 'id: imageOpacityTrack' \
+    'custom image opacity slider still exists'
+contains "$EDITOR" 'function resetSelectedElementOpacity()' \
+    'custom image opacity has no Reset behavior'
+contains "$EDITOR" 'function toggleSelectedElementOpaque()' \
+    'custom image opacity has no Opaque behavior'
+contains "$EDITOR" 'SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }' \
+    'custom image opacity has no Reset button'
+contains "$EDITOR" 'SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }' \
+    'custom image opacity has no Opaque button'
 
 # Keep the final editor usability contracts together so runtime candidates
 # cannot regress selector input ownership, timezone controls, transform priority,
