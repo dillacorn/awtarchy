@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
 EDITOR_SAVE="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor_save.sh"
+EDITOR_QML="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -121,5 +122,16 @@ jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
     || fail 'repaired stale timezone state did not return explicit JSON success'
 jq -e '.lockscreen_timezone_clocks == []' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
     || fail 'stale timezone clock was not removed during Save'
+
+# A genuinely invalid presentation must still fail, but the editor must surface
+# the backend reason instead of collapsing every failure into a generic message.
+grep -Fq 'property string saveErrorMessage: ""' "$EDITOR_QML" \
+    || fail 'editor does not keep backend Save error detail'
+grep -Fq 'stderr: SplitParser {' "$EDITOR_QML" \
+    || fail 'editor Save process does not capture backend stderr'
+grep -Fq 'root.saveErrorMessage = detail' "$EDITOR_QML" \
+    || fail 'editor Save process does not retain the first backend failure detail'
+grep -Fq '"Save failed: " + root.saveErrorMessage' "$EDITOR_QML" \
+    || fail 'editor does not present the backend Save failure reason'
 
 printf '%s\n' 'PASS: lockscreen background composition save dispatch'
