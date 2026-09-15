@@ -1,0 +1,34 @@
+name: Temporary Register PowerMenu Hard Hide Hash
+
+on:
+  push:
+    branches: [fix/power-menu-capture-after-hard-hide]
+
+permissions:
+  contents: write
+
+jobs:
+  register:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: fix/power-menu-capture-after-hard-hide
+      - name: Register managed hash
+        shell: bash
+        run: |
+          set -euo pipefail
+          file='local/share/awtarchy/quickshell-managed-history.sha256'
+          hash='331da0170c6117e8ae9170330b09680a2e235b4a7f86890f576914a3bfe0b6f7'
+          path='.config/quickshell/awtarchy/PowerMenu.qml'
+          entry="${hash}\t${path}"
+          if ! grep -Fqx -- "$entry" "$file"; then
+            printf '\n# 2026-09-15 hard-hide Power Menu before fresh lock capture.\n%s\n' "$entry" >> "$file"
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$file"
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore: register PowerMenu hard-hide hash'
+            git push origin HEAD:fix/power-menu-capture-after-hard-hide
+          fi
