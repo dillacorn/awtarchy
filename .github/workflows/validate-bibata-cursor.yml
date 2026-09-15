@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
       - name: Guard exact parent state
         run: |
-          test "$(git rev-parse HEAD^)" = "48f2ecda6186d0e49bffd0ab91ccb4e1d5183e74"
+          test "$(git rev-parse HEAD^)" = "0a03cb553146496883c7180f07d9b192a7f535b1"
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install -y jq shellcheck
       - name: Apply approved blur implementation
