@@ -39,3 +39,128 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v3-7-0:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Temporary release bridge: v3.7.0' &&
+      github.event.pull_request.head.ref == 'release/v3.7.0-one-use' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: v3.7.0
+      RELEASE_TITLE: Awtarchy v3.7.0 Quickshell
+      EXPECTED_SHA: 74e6edca328be90ddddf12f9417b2cd7051a312b
+      PROPOSED_NOTES: .github/release-bridge/v3.7.0-notes.md
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: release/v3.7.0-one-use
+          fetch-depth: 0
+
+      - name: Guard exact release target
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [[ "$actual_main" != "$EXPECTED_SHA" ]]; then
+              echo "main moved: expected $EXPECTED_SHA, got $actual_main" >&2
+              false
+          fi
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "$VERSION release already exists" >&2
+              false
+          fi
+          if git ls-remote --exit-code origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+              echo "$VERSION tag already exists" >&2
+              false
+          fi
+
+      - name: Validate proposed release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous="$RUNNER_TEMP/previous-stable.md"
+          proposed="$RUNNER_TEMP/proposed-release.md"
+          gh release view v3.6.2 --json body --jq .body > "$previous"
+          cp "$PROPOSED_NOTES" "$proposed"
+          python3 .github/scripts/validate-stable-release-notes.py \
+              --version "$VERSION" \
+              --notes "$proposed" \
+              --previous "$previous"
+
+      - name: Publish exact stable release
+        shell: bash
+        run: |
+          set -euo pipefail
+          actual_main="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          if [[ "$actual_main" != "$EXPECTED_SHA" ]]; then
+              echo "main moved before publish: expected $EXPECTED_SHA, got $actual_main" >&2
+              false
+          fi
+          if gh release view "$VERSION" >/dev/null 2>&1; then
+              echo "$VERSION release appeared before publish" >&2
+              false
+          fi
+          if git ls-remote --exit-code origin "refs/tags/$VERSION" >/dev/null 2>&1; then
+              echo "$VERSION tag appeared before publish" >&2
+              false
+          fi
+          gh release create "$VERSION" \
+              --target "$EXPECTED_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes-file "$RUNNER_TEMP/proposed-release.md"
+
+      - name: Re-read and verify published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          previous="$RUNNER_TEMP/previous-stable.md"
+          proposed="$RUNNER_TEMP/proposed-release.md"
+          published="$RUNNER_TEMP/published-release.md"
+          release_json="$RUNNER_TEMP/release.json"
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$VERSION" > "$release_json"
+
+          python3 - "$release_json" "$proposed" "$published" "$VERSION" "$RELEASE_TITLE" "$EXPECTED_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          release_path, proposed_path, published_path, version, title, expected_sha = sys.argv[1:]
+          data = json.loads(Path(release_path).read_text(encoding="utf-8"))
+          published = data["body"]
+          Path(published_path).write_text(published, encoding="utf-8")
+
+          if data["tag_name"] != version:
+              raise SystemExit(f"tag mismatch: {data['tag_name']} != {version}")
+          if data["name"] != title:
+              raise SystemExit(f"name mismatch: {data['name']} != {title}")
+          if data["draft"]:
+              raise SystemExit("release is unexpectedly draft")
+          if data["prerelease"]:
+              raise SystemExit("release is unexpectedly prerelease")
+          if data["target_commitish"] != expected_sha:
+              raise SystemExit(
+                  f"target mismatch: {data['target_commitish']} != {expected_sha}"
+              )
+
+          proposed = Path(proposed_path).read_text(encoding="utf-8")
+          if published != proposed and published.rstrip("\n") != proposed.rstrip("\n"):
+              raise SystemExit("published release body differs from proposed release body")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+              --version "$VERSION" \
+              --notes "$published" \
+              --previous "$previous"
+
+          git fetch --force origin "refs/tags/$VERSION:refs/tags/$VERSION"
+          tag_commit="$(git rev-list -n 1 "$VERSION")"
+          if [[ "$tag_commit" != "$EXPECTED_SHA" ]]; then
+              echo "tag target mismatch: expected $EXPECTED_SHA, got $tag_commit" >&2
+              false
+          fi
