@@ -1351,3 +1351,6 @@ dd704b9b09cb896ececca39fdc0b05ef6d31cf1428bfbf3936c244a3d03d4a0f	.config/hypr/sc
 # 2026-09-15 deferred Power Menu lock capture handoff.
 6415460c6656c32e30475f0cca8d54844d9a0d464fe74673fba062bd24bf9f6a	.config/hypr/scripts/quickshell_power_menu.sh
 410d9a4221782e91e51a6f0c98ab9e5ba42a26fe78d43a605ce5b14451273323	.config/quickshell/awtarchy/PowerMenu.qml
+
+# 2026-09-15 keep Power Menu hidden after committed lock handoff.
+7ec3ff9a688eeb5f13ee0b5bf06da0688b54d116b5df887140945264dbe960c4	.config/quickshell/awtarchy/PowerMenu.qml
