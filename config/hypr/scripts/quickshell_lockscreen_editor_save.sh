@@ -74,7 +74,7 @@ normalize_timezone_clocks() {
                 or ((.id // "") | type) != "string"
                 or ((.id // "") | test("^timezone-[A-Za-z0-9_-]{1,64}$") | not)
                 or ((.timezone // "UTC") | type) != "string"
-                or ((.timezone // "UTC") | startswith("/") or contains("..") or test("[\\u0000-\\u001f\\u007f-\\u009f]"))
+                or ((.timezone // "UTC") | startswith("/") or contains("..") or test("[[:cntrl:]]"))
                 or ((.color // "auto") | type) != "string"
                 or (((.color // "auto") == "auto" or ((.color // "") | test("^#[0-9A-Fa-f]{6}$"))) | not)
             )
@@ -209,3 +209,4 @@ jq \
 chmod --reference="$STATE_FILE" "$tmp_file" 2>/dev/null || true
 mv -f -- "$tmp_file" "$STATE_FILE"
 tmp_file=""
+printf '%s\n' '{"ok":true}'
