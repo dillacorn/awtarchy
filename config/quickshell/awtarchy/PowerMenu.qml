@@ -13,6 +13,7 @@ Singleton {
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string lockCaptureHelper: configHome + "/hypr/scripts/quickshell_lockscreen_capture.sh"
+    readonly property string freshLockCommand: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5"
 
     // Preserve the existing wlogout layout order and keybinds.
     readonly property var actions: [
@@ -27,6 +28,10 @@ Singleton {
         Theme.background.r, Theme.background.g, Theme.background.b, 0.85)
     property bool actionPending: false
     property bool closeAfterActionSuccess: false
+    property bool visualReady: false
+    property bool capturePreparing: false
+    property bool captureReady: false
+    property var queuedAction: null
 
     function focusedScreen() {
         const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
@@ -34,11 +39,39 @@ Singleton {
         return matches.length > 0 ? matches[0] : (Quickshell.screens.length > 0 ? Quickshell.screens[0] : null);
     }
 
+    function focusInputSoon() {
+        Qt.callLater(() => keyCatcher.forceActiveFocus());
+    }
+
     function openForScreen(targetScreen) {
         if (targetScreen)
             powerWindow.screen = targetScreen;
+        capturePreparing = false;
+        captureReady = false;
+        queuedAction = null;
+        visualReady = true;
         powerWindow.visible = true;
-        Qt.callLater(() => keyCatcher.forceActiveFocus());
+        focusInputSoon();
+    }
+
+    function armForScreen(targetScreen) {
+        if (targetScreen)
+            powerWindow.screen = targetScreen;
+        capturePreparing = true;
+        captureReady = false;
+        queuedAction = null;
+        visualReady = false;
+        powerWindow.visible = true;
+        focusInputSoon();
+    }
+
+    function beginFocused() {
+        if (powerWindow.visible) {
+            close();
+            return false;
+        }
+        armForScreen(focusedScreen());
+        return true;
     }
 
     function openFocused() { openForScreen(focusedScreen()); }
@@ -48,12 +81,20 @@ Singleton {
     function close() {
         if (actionPending)
             return;
+        capturePreparing = false;
+        captureReady = false;
+        queuedAction = null;
+        visualReady = false;
         powerWindow.visible = false;
         discardPreparedCapture();
     }
     function finishHandoffClose() {
         actionPending = false;
         closeAfterActionSuccess = false;
+        capturePreparing = false;
+        captureReady = false;
+        queuedAction = null;
+        visualReady = false;
         powerWindow.visible = false;
     }
     function toggleForScreen(targetScreen) {
@@ -63,16 +104,67 @@ Singleton {
     }
     function toggleFocused() { toggleForScreen(focusedScreen()); }
 
-    function runAction(action) {
-        if (actionPending)
+    function captureWanted() {
+        return powerWindow.visible && capturePreparing;
+    }
+
+    function capturePrepared() {
+        if (!powerWindow.visible || !capturePreparing)
+            return false;
+
+        capturePreparing = false;
+        captureReady = true;
+        if (queuedAction !== null) {
+            const action = queuedAction;
+            queuedAction = null;
+            startAction(action, "");
+        }
+        return true;
+    }
+
+    function captureFailed() {
+        if (!powerWindow.visible || !capturePreparing)
             return;
 
+        capturePreparing = false;
+        captureReady = false;
+        if (queuedAction !== null) {
+            const action = queuedAction;
+            queuedAction = null;
+            startAction(action, freshLockCommand);
+        }
+    }
+
+    function reveal() {
+        if (!powerWindow.visible || actionPending || queuedAction !== null)
+            return;
+        visualReady = true;
+    }
+
+    function startAction(action, commandOverride) {
         actionPending = true;
         closeAfterActionSuccess = action.closeAfterSuccess === true;
         if (action.key !== "l")
             discardPreparedCapture();
-        actionProcess.command = ["sh", "-lc", action.command];
+        const selectedCommand = commandOverride && commandOverride.length > 0
+            ? commandOverride
+            : action.command;
+        actionProcess.command = ["sh", "-lc", selectedCommand];
         actionProcess.running = true;
+    }
+
+    function runAction(action) {
+        if (actionPending || queuedAction !== null)
+            return;
+
+        if (capturePreparing && action.key === "l") {
+            queuedAction = action;
+            return;
+        }
+
+        if (capturePreparing)
+            capturePreparing = false;
+        startAction(action, "");
     }
 
     Process {
@@ -82,6 +174,8 @@ Singleton {
             if (exitCode !== 0) {
                 root.actionPending = false;
                 root.closeAfterActionSuccess = false;
+                root.visualReady = true;
+                root.focusInputSoon();
                 return;
             }
 
@@ -92,6 +186,11 @@ Singleton {
 
     IpcHandler {
         target: "powermenu"
+        function begin(): bool { return root.beginFocused(); }
+        function captureWanted(): bool { return root.captureWanted(); }
+        function capturePrepared(): bool { return root.capturePrepared(); }
+        function captureFailed(): void { root.captureFailed(); }
+        function reveal(): void { root.reveal(); }
         function toggle(): void { root.toggleFocused(); }
         function open(): void { root.openFocused(); }
         function close(): void { root.close(); }
@@ -111,11 +210,13 @@ Singleton {
 
         MouseArea {
             anchors.fill: parent
+            visible: root.visualReady
             onClicked: root.close()
         }
 
         Rectangle {
             anchors.fill: parent
+            visible: root.visualReady
             color: root.shadeColor
             border.width: 0
         }
@@ -147,6 +248,7 @@ Singleton {
 
         GridLayout {
             anchors.centerIn: parent
+            visible: root.visualReady
             columns: 3
             rowSpacing: 34
             columnSpacing: 16
@@ -211,7 +313,8 @@ Singleton {
             required property var modelData
 
             screen: modelData
-            visible: powerWindow.visible
+            visible: root.visualReady
+                && powerWindow.visible
                 && powerWindow.screen
                 && modelData.name !== powerWindow.screen.name
             color: "transparent"
