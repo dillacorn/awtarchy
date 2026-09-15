@@ -40,6 +40,7 @@ Singleton {
     }
 
     function focusInputSoon() {
+        keyCatcher.forceActiveFocus();
         Qt.callLater(() => keyCatcher.forceActiveFocus());
     }
 
@@ -131,7 +132,7 @@ Singleton {
         if (queuedAction !== null) {
             const action = queuedAction;
             queuedAction = null;
-            startAction(action, freshLockCommand);
+            startAction(action, action.key === "l" ? freshLockCommand : "");
         }
     }
 
@@ -146,10 +147,10 @@ Singleton {
         closeAfterActionSuccess = action.closeAfterSuccess === true;
         if (action.key !== "l")
             discardPreparedCapture();
-        const selectedCommand = commandOverride && commandOverride.length > 0
-            ? commandOverride
-            : action.command;
-        actionProcess.command = ["sh", "-lc", selectedCommand];
+        if (commandOverride && commandOverride.length > 0)
+            actionProcess.command = ["sh", "-lc", commandOverride];
+        else
+            actionProcess.command = ["sh", "-lc", action.command];
         actionProcess.running = true;
     }
 
@@ -157,13 +158,11 @@ Singleton {
         if (actionPending || queuedAction !== null)
             return;
 
-        if (capturePreparing && action.key === "l") {
+        if (capturePreparing) {
             queuedAction = action;
             return;
         }
 
-        if (capturePreparing)
-            capturePreparing = false;
         startAction(action, "");
     }
 
