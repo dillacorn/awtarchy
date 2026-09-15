@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_capture.sh"
 POWER_MENU="${ROOT}/config/hypr/scripts/quickshell_power_menu.sh"
+POWER_MENU_QML="${ROOT}/config/quickshell/awtarchy/PowerMenu.qml"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
 
@@ -22,8 +23,17 @@ forbid_log_text() {
     fi
 }
 
+first_line_number() {
+    grep -Fn -- "$2" "$1" | head -n1 | cut -d: -f1
+}
+
+last_line_number() {
+    grep -Fn -- "$2" "$1" | tail -n1 | cut -d: -f1
+}
+
 [[ -f "$HELPER" ]] || fail 'lockscreen capture helper is missing'
 [[ -f "$POWER_MENU" ]] || fail 'Quickshell Power Menu helper is missing'
+[[ -f "$POWER_MENU_QML" ]] || fail 'Quickshell Power Menu QML is missing'
 
 require_text "$HELPER" 'stage-promote-clean' \
     'capture helper has no one-snapshot clean-desktop promotion path'
@@ -31,6 +41,18 @@ require_text "$POWER_MENU" 'editorHidden' \
     'SUPER+P does not check whether the first snapshot is already a clean desktop'
 require_text "$POWER_MENU" 'stage-promote-clean' \
     'SUPER+P does not use the one-snapshot fast path'
+require_text "$POWER_MENU_QML" 'property bool visualReady: false' \
+    'Power Menu cannot arm keyboard input before its visuals are revealed'
+require_text "$POWER_MENU_QML" 'property var queuedAction: null' \
+    'Power Menu cannot retain an action pressed while capture is still preparing'
+require_text "$POWER_MENU_QML" 'function begin(): bool' \
+    'Power Menu IPC has no immediate input-arm entrypoint'
+require_text "$POWER_MENU_QML" 'function capturePrepared(): bool' \
+    'Power Menu IPC cannot release a queued action when capture becomes ready'
+require_text "$POWER_MENU_QML" 'if (capturePreparing && action.key === "l")' \
+    'Power Menu does not queue an immediate Lock key while secure capture is preparing'
+require_text "$POWER_MENU_QML" 'queuedAction = action;' \
+    'Power Menu drops an action pressed before the visible menu appears'
 
 mkdir -p "$TMP/bin" "$TMP/runtime" "$TMP/config/hypr/scripts"
 chmod 700 "$TMP/runtime"
@@ -66,6 +88,7 @@ while (($#)); do
 done
 [[ -n "$output" && -n "$destination" ]] || exit 2
 printf '%s\n' "$output" >>"$GRIM_LOG"
+printf 'grim:%s\n' "$output" >>"$EVENT_LOG"
 if [[ -n "${GRIM_BARRIER_DIR:-}" ]]; then
     mkdir -p -- "$GRIM_BARRIER_DIR"
     : >"$GRIM_BARRIER_DIR/$output"
@@ -84,11 +107,13 @@ chmod +x "$TMP/bin/grim"
 # A multi-monitor capture must launch all grim workers before waiting for any
 # one of them. The barrier deliberately makes a serial loop fail.
 : >"$TMP/grim-parallel.log"
+: >"$TMP/events-parallel.log"
 parallel_capture="$(
     PATH="$TMP/bin:$PATH" \
     XDG_RUNTIME_DIR="$TMP/runtime" \
     FAKE_MONITORS="$TMP/monitors.json" \
     GRIM_LOG="$TMP/grim-parallel.log" \
+    EVENT_LOG="$TMP/events-parallel.log" \
     GRIM_BARRIER_DIR="$TMP/barrier-parallel" \
     GRIM_EXPECTED_CONCURRENCY=2 \
         bash "$HELPER" prepare
@@ -109,7 +134,17 @@ cat >"$TMP/bin/qs" <<'SH'
 set -euo pipefail
 printf '%q ' "$@" >>"$QS_LOG"
 printf '\n' >>"$QS_LOG"
+printf 'qs:%s\n' "$*" >>"$EVENT_LOG"
 case " $* " in
+    *' powermenu begin '*)
+        printf '%s\n' true
+        ;;
+    *' powermenu captureWanted '*)
+        printf '%s\n' true
+        ;;
+    *' powermenu capturePrepared '*)
+        printf '%s\n' true
+        ;;
     *' lockcapture editorHidden '*)
         printf '%s\n' true
         ;;
@@ -124,16 +159,18 @@ SH
 chmod +x "$TMP/bin/qs"
 
 # With no editor backing window mapped, the first capture is already a clean
-# desktop. SUPER+P must promote that snapshot and open the Power Menu without
-# suppressing/restoring the editor or taking a second screenshot pass.
+# desktop. SUPER+P must arm the invisible keyboard surface before grim starts,
+# then promote that one snapshot and only reveal visuals after capture is ready.
 rm -rf -- "$TMP/runtime/awtarchy-lock-transition" "$TMP/barrier-fast"
 : >"$TMP/grim-fast.log"
 : >"$TMP/qs.log"
+: >"$TMP/events-fast.log"
 PATH="$TMP/bin:$PATH" \
 XDG_RUNTIME_DIR="$TMP/runtime" \
 XDG_CONFIG_HOME="$TMP/config" \
 FAKE_MONITORS="$TMP/monitors.json" \
 GRIM_LOG="$TMP/grim-fast.log" \
+EVENT_LOG="$TMP/events-fast.log" \
 GRIM_BARRIER_DIR="$TMP/barrier-fast" \
 GRIM_EXPECTED_CONCURRENCY=2 \
 QS_LOG="$TMP/qs.log" \
@@ -143,14 +180,31 @@ QS_BIN=qs \
 
 [[ "$(wc -l <"$TMP/grim-fast.log")" -eq 2 ]] \
     || fail 'SUPER+P clean fast path performed more than one capture pass'
+require_text "$TMP/qs.log" 'powermenu begin' \
+    'SUPER+P does not arm Power Menu keyboard input before capture'
+require_text "$TMP/qs.log" 'powermenu captureWanted' \
+    'SUPER+P cannot cancel capture after an early non-lock action'
 require_text "$TMP/qs.log" 'lockcapture editorHidden' \
     'SUPER+P did not query clean-desktop readiness'
-require_text "$TMP/qs.log" 'powermenu toggle' \
-    'SUPER+P did not open the Power Menu after preparing the clean bundle'
+require_text "$TMP/qs.log" 'powermenu capturePrepared' \
+    'SUPER+P does not release queued input after publishing the secure capture'
+require_text "$TMP/qs.log" 'powermenu reveal' \
+    'SUPER+P does not reveal the Power Menu after capture preparation'
+forbid_log_text "$TMP/qs.log" 'powermenu toggle' \
+    'SUPER+P still waits until after capture before activating the Power Menu'
 forbid_log_text "$TMP/qs.log" 'lockcapture suppressEditor' \
     'SUPER+P unnecessarily suppressed an already-hidden editor'
 forbid_log_text "$TMP/qs.log" 'lockcapture restoreEditor' \
     'SUPER+P unnecessarily restored an editor that was never suppressed'
+
+begin_line="$(first_line_number "$TMP/events-fast.log" 'powermenu begin')"
+first_grim_line="$(first_line_number "$TMP/events-fast.log" 'grim:')"
+last_grim_line="$(last_line_number "$TMP/events-fast.log" 'grim:')"
+reveal_line="$(first_line_number "$TMP/events-fast.log" 'powermenu reveal')"
+[[ -n "$begin_line" && -n "$first_grim_line" && "$begin_line" -lt "$first_grim_line" ]] \
+    || fail 'Power Menu keyboard input is not armed before the screenshot latency window'
+[[ -n "$reveal_line" && -n "$last_grim_line" && "$reveal_line" -gt "$last_grim_line" ]] \
+    || fail 'Power Menu visuals are revealed before the clean screenshot finishes'
 
 prepared="$(
     PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
@@ -165,4 +219,4 @@ done
 PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
     bash "$TMP/config/hypr/scripts/quickshell_lockscreen_capture.sh" cleanup "$prepared"
 
-printf '%s\n' 'PASS: SUPER+P capture latency fast path'
+printf '%s\n' 'PASS: SUPER+P capture latency and immediate input arming'
