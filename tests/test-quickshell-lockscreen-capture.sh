@@ -217,9 +217,12 @@ require_text "$LOCK_MANAGER" 'env -u AWTARCHY_LOCK_CAPTURE_DIR' \
 require_text "$LOCK_MANAGER" 'consume-prepared' \
     'Power Menu lock path does not consume the already prepared capture bundle'
 
-# SUPER+P captures the visible frame first, then checks real editor backing state.
-# If already clean it promotes that frame immediately. If an editor is mapped it
-# preserves the secure two-snapshot fallback: suppress, verify, recapture, restore.
+# SUPER+P arms transparent keyboard input first, then captures the visible frame
+# and checks real editor backing state. If already clean it promotes that frame
+# immediately. If an editor is mapped it preserves the secure two-snapshot
+# fallback: suppress, verify, recapture, restore, and only then reveal visuals.
+require_text "$POWER_MENU" 'powermenu begin' \
+    'SUPER+P does not arm input before capture work begins'
 require_text "$POWER_MENU" 'stage-begin' \
     'SUPER+P does not capture the visible transition source first'
 require_text "$POWER_MENU" 'editorHidden' \
@@ -232,6 +235,10 @@ require_text "$POWER_MENU" 'stage-complete' \
     'SUPER+P has no separate clean capture for the editor-visible fallback'
 require_text "$POWER_MENU" 'restoreEditor' \
     'SUPER+P does not restore an editor after the fallback clean capture'
+require_text "$POWER_MENU" 'powermenu reveal' \
+    'SUPER+P has no explicit post-capture visual reveal'
+require_order "$POWER_MENU" 'powermenu begin' 'stage-begin' \
+    'SUPER+P does not arm keyboard input before entering screenshot latency'
 require_order "$POWER_MENU" 'stage-begin' 'editorHidden' \
     'SUPER+P checks editor state before taking the transition source snapshot'
 require_order "$POWER_MENU" 'editorHidden' 'stage-promote-clean' \
@@ -242,8 +249,8 @@ require_order "$POWER_MENU" 'suppressEditor' 'stage-complete' \
     'SUPER+P fallback captures clean desktop before requesting editor suppression'
 require_order "$POWER_MENU" 'stage-complete' 'restoreEditor' \
     'SUPER+P restores the editor before the fallback clean desktop snapshot is complete'
-require_order "$POWER_MENU" 'restoreEditor' 'powermenu toggle' \
-    'SUPER+P opens Power Menu before restoring a fallback-suppressed editor'
+require_order "$POWER_MENU" 'restoreEditor' 'powermenu reveal' \
+    'SUPER+P reveals Power Menu visuals before restoring a fallback-suppressed editor'
 
 # Readiness must be based on real QsWindow backing state for both the primary
 # editor and secondary-monitor preview windows, not a QML visibility guess.
