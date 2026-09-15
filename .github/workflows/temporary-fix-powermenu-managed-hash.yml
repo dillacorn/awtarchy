@@ -1,0 +1,39 @@
+name: Temporary Fix PowerMenu Managed Hash
+
+on:
+  push:
+    branches:
+      - fix/lockscreen-defer-capture-until-lock
+
+permissions:
+  contents: write
+
+jobs:
+  fix-hash:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: fix/lockscreen-defer-capture-until-lock
+      - name: Compute exact stock hash and self-clean
+        shell: bash
+        run: |
+          set -euo pipefail
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+          managed='config/quickshell/awtarchy/PowerMenu.qml'
+          home_path='.config/quickshell/awtarchy/PowerMenu.qml'
+          wrong=$'410dddd7df89ff0639690cc2cae1279be6f75f366f4265ba6bff4d7a0d99badd\t.config/quickshell/awtarchy/PowerMenu.qml'
+          current="$(sha256sum "$managed" | awk '{print $1}')"
+          exact="${current}"$'\t'"${home_path}"
+          grep -Fvx -- "$wrong" "$history" >"${history}.tmp"
+          mv -- "${history}.tmp" "$history"
+          if ! grep -Fqx -- "$exact" "$history"; then
+            printf '%s\n' "$exact" >>"$history"
+          fi
+          printf 'Exact PowerMenu stock hash: %s\n' "$current"
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- "$history"
+          git rm -- '.github/workflows/temporary-fix-powermenu-managed-hash.yml'
+          git commit -m 'chore: register exact PowerMenu stock hash'
+          git push origin "HEAD:${GITHUB_REF_NAME}"
