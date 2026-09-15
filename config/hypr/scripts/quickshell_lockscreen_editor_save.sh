@@ -169,19 +169,29 @@ filter_stale_custom_images() {
     printf '%s' "$candidate"
 }
 
+filter_stale_timezone_clocks() {
+    local candidate="$1" count index zone
+
+    # Schema is already normalized before this point. A missing zoneinfo file is
+    # therefore an external-resource disappearance, not malformed clock data.
+    count="$(jq -r 'length' <<<"$candidate")"
+    for ((index = count - 1; index >= 0; --index)); do
+        zone="$(jq -r --argjson index "$index" '.[$index].timezone' <<<"$candidate")"
+        if [[ -z "$zone" || ! -f "${ZONEINFO_ROOT}/${zone}" ]]; then
+            candidate="$(jq -c --argjson index "$index" 'del(.[$index])' <<<"$candidate")"
+        fi
+    done
+
+    printf '%s' "$candidate"
+}
+
 custom_images_input="$(filter_stale_custom_images "$custom_images_input")"
 backend_layout="$(jq -ce 'with_entries(.value |= del(.rotation))' <<<"$layout_input")"
 backend_custom_images="$(jq -ce '[.[] | del(.spawn_timing)]' <<<"$custom_images_input")"
 backend_visualizer="$(jq -ce 'del(.rotation)' <<<"$visualizer_input")"
 timezone_clocks="$(normalize_timezone_clocks "$timezone_clocks_input")"
+timezone_clocks="$(filter_stale_timezone_clocks "$timezone_clocks")"
 custom_texts="$(normalize_custom_texts "$custom_texts_input")"
-
-while IFS= read -r zone; do
-    [[ -n "$zone" && -f "${ZONEINFO_ROOT}/${zone}" ]] || {
-        printf 'invalid timezone clock zone: %s\n' "$zone" >&2
-        exit 2
-    }
-done < <(jq -r '.[].timezone' <<<"$timezone_clocks")
 
 backend_args=("${@:1:19}")
 backend_args[0]="$backend_layout"
