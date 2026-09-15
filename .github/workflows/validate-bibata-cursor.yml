@@ -21,7 +21,7 @@ jobs:
           bash tests/test-bibata-cursor-options.sh
 
   patch-approved-lockscreen-two-snapshot:
-    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'ci(lockscreen): trigger two-snapshot production patcher' }}"
+    if: "${{ github.event_name == 'push' && github.event.head_commit.message == 'ci(lockscreen): retry two-snapshot production patcher' }}"
     permissions:
       contents: write
     runs-on: ubuntu-24.04
@@ -32,7 +32,7 @@ jobs:
           fetch-depth: 0
       - name: Guard exact parent state
         run: |
-          test "$(git rev-parse HEAD^)" = "2bc3a85cebe0b186897adcf0cfe78cc89b7d5d12"
+          test "$(git rev-parse HEAD^)" = "a04eaff16961f8d8dd0b5372706c26f91ec51dd0"
       - name: Install validation tools
         run: sudo apt-get update && sudo apt-get install -y jq shellcheck
       - name: Apply approved two-snapshot implementation
