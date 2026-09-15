@@ -144,12 +144,37 @@ normalize_custom_texts() {
     '
 }
 
-filter_stale_custom_images() {
-    local value="$1" candidate count index path_type path
+custom_image_entry_schema_valid() {
+    jq -e -n --argjson candidate "$1" '
+        def allowed_keys: ["id", "opacity", "path", "rotation", "scale", "spawn_animation", "spawn_timing", "stretch_x", "stretch_y", "visible", "x", "y"];
+        def spawns: ["none", "pixel-warp", "closest-edge", "top", "bottom", "left", "right"];
+        ($candidate | type) == "object"
+        and (($candidate | keys - allowed_keys | length) == 0)
+        and ($candidate.id | type) == "string"
+        and ($candidate.id | test("^image-[A-Za-z0-9_-]{1,64}$"))
+        and ($candidate.path | type) == "string"
+        and ($candidate.path | startswith("/"))
+        and ($candidate.path | contains("://") | not)
+        and ($candidate.path | test("[[:cntrl:]]") | not)
+        and ($candidate.x | type) == "number" and $candidate.x >= 0.05 and $candidate.x <= 0.95
+        and ($candidate.y | type) == "number" and $candidate.y >= 0.08 and $candidate.y <= 0.92
+        and ($candidate.scale | type) == "number" and $candidate.scale >= 0.50 and $candidate.scale <= 100.00
+        and ($candidate.stretch_x | type) == "number" and $candidate.stretch_x >= 0.25 and $candidate.stretch_x <= 4.00
+        and ($candidate.stretch_y | type) == "number" and $candidate.stretch_y >= 0.25 and $candidate.stretch_y <= 4.00
+        and ($candidate.opacity | type) == "number" and $candidate.opacity >= 0 and $candidate.opacity <= 100
+        and (($candidate.rotation // 0) | type) == "number"
+        and ($candidate.rotation // 0) >= -180 and ($candidate.rotation // 0) <= 180
+        and (($candidate.spawn_animation // "none") | type) == "string"
+        and (($candidate.spawn_animation // "none") as $spawn | (spawns | index($spawn) != null))
+        and ($candidate.visible | type) == "boolean"
+    ' >/dev/null 2>&1
+}
 
-    # Keep malformed/non-array input intact so the authoritative backend still
-    # rejects bad schema. Only remove optional image entries whose otherwise
-    # local-looking file reference has gone stale on disk.
+filter_stale_custom_images() {
+    local value="$1" candidate count index entry path
+
+    # Keep malformed input intact so the authoritative backend still rejects it.
+    # Only schema-valid optional images whose local file disappeared are removed.
     if ! candidate="$(jq -ce 'if type == "array" then . else empty end' <<<"$value" 2>/dev/null)"; then
         printf '%s' "$value"
         return 0
@@ -157,11 +182,10 @@ filter_stale_custom_images() {
 
     count="$(jq -r 'length' <<<"$candidate")"
     for ((index = count - 1; index >= 0; --index)); do
-        path_type="$(jq -r --argjson index "$index" '.[$index].path | type' <<<"$candidate" 2>/dev/null || true)"
-        [[ "$path_type" == "string" ]] || continue
-        path="$(jq -r --argjson index "$index" '.[$index].path' <<<"$candidate")"
-        if [[ "$path" == /* && "$path" != *://* && "$path" != *$'\n'* && "$path" != *$'\r'* \
-            && ( ! -f "$path" || ! -r "$path" ) ]]; then
+        entry="$(jq -c --argjson index "$index" '.[$index]' <<<"$candidate")"
+        custom_image_entry_schema_valid "$entry" || continue
+        path="$(jq -r '.path' <<<"$entry")"
+        if [[ ! -f "$path" || ! -r "$path" ]]; then
             candidate="$(jq -c --argjson index "$index" 'del(.[$index])' <<<"$candidate")"
         fi
     done
@@ -199,12 +223,16 @@ backend_args[12]="$backend_custom_images"
 backend_args[13]="$backend_visualizer"
 
 # Older/upgraded state can retain wallpaper mode after its wallpaper path has
-# been cleared or the file has disappeared. Treat that as stale optional state,
-# not a fatal presentation error: persist a safe black background so Save stays
-# usable and the broken wallpaper reference is removed atomically.
+# been cleared or a previously-valid local file has disappeared. Repair only
+# that stale optional state; malformed paths still go to the strict backend.
 if [[ "${backend_args[2]}" == "wallpaper" ]]; then
     wallpaper_path="${backend_args[4]}"
-    if [[ -z "$wallpaper_path" || "$wallpaper_path" != /* || ! -f "$wallpaper_path" || ! -r "$wallpaper_path" ]]; then
+    if [[ -z "$wallpaper_path" ]]; then
+        backend_args[2]="black"
+        backend_args[4]=""
+    elif [[ "$wallpaper_path" == /* && "$wallpaper_path" != *://* \
+        && "$wallpaper_path" != *$'\n'* && "$wallpaper_path" != *$'\r'* \
+        && ( ! -f "$wallpaper_path" || ! -r "$wallpaper_path" ) ]]; then
         backend_args[2]="black"
         backend_args[4]=""
     fi
