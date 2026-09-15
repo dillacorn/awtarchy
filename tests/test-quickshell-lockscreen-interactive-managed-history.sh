@@ -22,6 +22,7 @@ managed_files=(
     'config/quickshell/awtarchy/BarState.qml:.config/quickshell/awtarchy/BarState.qml'
     'config/quickshell/awtarchy/QuickSettings.qml:.config/quickshell/awtarchy/QuickSettings.qml'
     'config/quickshell/awtarchy/LockscreenEditor.qml:.config/quickshell/awtarchy/LockscreenEditor.qml'
+    'config/quickshell/awtarchy/LockscreenCompactSelector.qml:.config/quickshell/awtarchy/LockscreenCompactSelector.qml'
     'config/quickshell/awtarchy/LockPreviewScene.qml:.config/quickshell/awtarchy/LockPreviewScene.qml'
     'config/quickshell/awtarchy/LockPreviewTransitionLayer.qml:.config/quickshell/awtarchy/LockPreviewTransitionLayer.qml'
     'config/quickshell/awtarchy/LockPreviewWallpaperState.qml:.config/quickshell/awtarchy/LockPreviewWallpaperState.qml'
