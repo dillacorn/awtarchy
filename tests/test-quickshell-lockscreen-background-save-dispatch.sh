@@ -69,4 +69,23 @@ jq -e '
 ' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
     || fail 'editor-save wrapper did not atomically persist current extension fields'
 
+# Upgraded installations may carry the legacy-inconsistent combination
+# lockscreen_background="wallpaper" with no wallpaper path. Saving any editor
+# change must repair that stale optional resource state instead of bricking Save.
+editor_output="$(
+    XDG_CONFIG_HOME="$TMP/config" XDG_CACHE_HOME="$TMP/cache" HOME="$TMP/home" HYPR_QUICKSHELL_SCRIPT=/bin/false \
+        bash "$TMP/config/hypr/scripts/quickshell_lockscreen_editor_save.sh" \
+        "$editor_layout" "$visibility" wallpaper '#000000' '' cover 0.5 0.5 none 0 10 auto \
+        "$custom_images" "$visualizer" 90 pixel 1800 90 pixelated split squares '•' 24h \
+        "$timezone_clocks" "$custom_texts"
+)" || fail 'stale wallpaper-without-path state still bricks editor Save'
+
+jq -e '.ok == true' <<<"$editor_output" >/dev/null 2>&1 \
+    || fail 'repaired stale wallpaper state did not return explicit JSON success'
+jq -e '
+    .lockscreen_background == "black"
+    and .lockscreen_wallpaper_path == ""
+' "$TMP/cache/awtarchy/quickshell-state.json" >/dev/null \
+    || fail 'stale wallpaper state was not repaired to a safe savable background'
+
 printf '%s\n' 'PASS: lockscreen background composition save dispatch'
