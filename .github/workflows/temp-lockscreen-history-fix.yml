@@ -1,0 +1,57 @@
+name: Temporary Lockscreen Managed History Fix
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-interactive-effects
+    paths:
+      - .github/workflows/temp-lockscreen-history-fix.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-verify:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 2
+      - name: Verify exact failed parent
+        run: test "$(git rev-parse HEAD^)" = "2623ffaea4d51c47d3270c817458ec2624c55b80"
+      - name: Patch managed history coverage
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path('tests/test-quickshell-lockscreen-interactive-managed-history.sh')
+          text = path.read_text()
+          needle = "    'config/hypr/scripts/quickshell_application_state.sh:.config/hypr/scripts/quickshell_application_state.sh'\n"
+          addition = needle + "    'config/hypr/scripts/quickshell_lockscreen_editor_save.sh:.config/hypr/scripts/quickshell_lockscreen_editor_save.sh'\n"
+          if addition not in text:
+              if text.count(needle) != 1:
+                  raise SystemExit('focused managed-history insertion point is not unique')
+              path.write_text(text.replace(needle, addition, 1))
+          PY
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+          installed='.config/hypr/scripts/quickshell_lockscreen_editor_save.sh'
+          digest="$(sha256sum config/hypr/scripts/quickshell_lockscreen_editor_save.sh | awk '{print $1}')"
+          entry="${digest}"$'\t'"${installed}"
+          grep -Fqx -- "$entry" "$history" || printf '%s\t%s\n' "$digest" "$installed" >> "$history"
+      - name: Validate correction
+        run: |
+          bash -n tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          shellcheck tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          history='local/share/awtarchy/quickshell-managed-history.sha256'
+          installed='.config/hypr/scripts/quickshell_lockscreen_editor_save.sh'
+          digest="$(sha256sum config/hypr/scripts/quickshell_lockscreen_editor_save.sh | awk '{print $1}')"
+          grep -Fqx -- "${digest}"$'\t'"${installed}" "$history"
+          git diff --check
+      - name: Commit verified correction
+        run: |
+          git config user.name dillacorn
+          git config user.email 28743863+dillacorn@users.noreply.github.com
+          git add tests/test-quickshell-lockscreen-interactive-managed-history.sh local/share/awtarchy/quickshell-managed-history.sha256
+          git diff --cached --quiet && false
+          git commit -m 'test(lockscreen): cover editor save managed history'
+          git push origin HEAD:feature/lockscreen-interactive-effects
