@@ -1,0 +1,52 @@
+name: Lockscreen Updater Assertion Patcher
+
+on:
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    if: github.event.pull_request.number == 181 && github.event.pull_request.head.ref == 'feature/lockscreen-interactive-effects'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: feature/lockscreen-interactive-effects
+          fetch-depth: 0
+      - name: Refresh updater Power Menu migration contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path('tests/test-quickshell-updater-migration.sh')
+          text = path.read_text()
+          old = '''grep -Fq 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh"' "$home/.config/hypr/hyprland.lua" \\
+            || fail "updater did not migrate the power menu"
+          '''
+          new = '''grep -Fq 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"' "$home/.config/hypr/hyprland.lua" \\
+            || fail "updater did not migrate the power menu launcher"
+          grep -Fq 'local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"' "$home/.config/hypr/hyprland.lua" \\
+            || fail "updater did not migrate the pre-map Power Menu key bridge"
+          grep -Fq 'hl.dispatch(hl.dsp.submap("power-menu-fast"))' "$home/.config/hypr/hyprland.lua" \\
+            || fail "updater did not migrate compositor-owned Power Menu input"
+          assert_file "$home/.config/hypr/scripts/quickshell_power_menu_key.sh"
+          '''
+          if text.count(old) != 1:
+              raise SystemExit(f'expected one obsolete Power Menu updater assertion, found {text.count(old)}')
+          path.write_text(text.replace(old, new, 1))
+          PY
+          bash -n tests/test-quickshell-updater-migration.sh
+          git diff --check
+      - name: Commit updated contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add tests/test-quickshell-updater-migration.sh
+          git commit -m 'test(lockscreen): track updater fast power path'
+          git push origin HEAD:feature/lockscreen-interactive-effects
