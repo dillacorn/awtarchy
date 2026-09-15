@@ -528,7 +528,9 @@ local yazi = "alacritty -e yazi"
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
-local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh"
+local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"
+local power_menu_noalt = "~/.config/hypr/scripts/quickshell_power_menu.sh noalt"
+local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"
 local hypr_quicksettings = "~/.config/hypr/scripts/quickshell_quick_settings_toggle.sh"
 local awtarchy_tips_tui = "~/.config/hypr/scripts/launch_handler.sh awtarchy-tips-tui \"alacritty --class awtarchy-tips-tui -e ~/.config/hypr/scripts/awtarchy-tips-tui.sh\""
 
@@ -639,6 +641,29 @@ local media_binds = {
     { "XF86AudioPrev", "playerctl previous", { locked = true } },
 }
 
+local function power_menu_fast_dispatch(action, return_submap)
+    return function()
+        hl.dispatch(hl.dsp.submap(return_submap))
+        hl.dispatch(hl.dsp.exec_cmd(power_menu_key .. " " .. action))
+    end
+end
+
+local function bind_power_menu_fast_actions(return_submap)
+    for _, action in ipairs({ "l", "h", "r", "s", "o", "z" }) do
+        hl.bind(action, power_menu_fast_dispatch(action, return_submap), { ignore_mods = true })
+    end
+    hl.bind("escape", power_menu_fast_dispatch("escape", return_submap), { ignore_mods = true })
+    hl.bind("p", power_menu_fast_dispatch("escape", return_submap), { ignore_mods = true })
+end
+
+hl.define_submap("power-menu-fast", function()
+    bind_power_menu_fast_actions("reset")
+end)
+
+hl.define_submap("power-menu-fast-noalt", function()
+    bind_power_menu_fast_actions("noalt")
+end)
+
 -- ───────────────────────────────────────────────────────────────────────────────
 -- DEFAULT MODE (ALT is modifier; SUPER is app/meta)
 -- ───────────────────────────────────────────────────────────────────────────────
@@ -710,7 +735,10 @@ hl.bind("SUPER + ALT + CTRL + N", hl.dsp.exec_cmd(hyprsunset_ctl .. " toggle"), 
 hl.bind("SUPER + E", hl.dsp.exec_cmd("pcmanfm-qt"), {})
 hl.bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(yazi), {})
 hl.bind("SUPER + I", hl.dsp.exec_cmd(hyprpicker), {})
-hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})
+hl.bind("SUPER + P", function()
+    hl.dispatch(hl.dsp.submap("power-menu-fast"))
+    hl.dispatch(hl.dsp.exec_cmd(power_menu))
+end, {})
 
 -- Themes / wallpaper
 for _, bind in ipairs({
@@ -957,7 +985,10 @@ hl.define_submap("noalt", function()
     hl.bind("SUPER + E", hl.dsp.exec_cmd("pcmanfm-qt"), {})
     hl.bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(yazi), {})
         hl.bind("SUPER + I", hl.dsp.exec_cmd(hyprpicker), {})
-    hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})
+    hl.bind("SUPER + P", function()
+        hl.dispatch(hl.dsp.submap("power-menu-fast-noalt"))
+        hl.dispatch(hl.dsp.exec_cmd(power_menu_noalt))
+    end, {})
 
     -- Themes / wallpaper
     for _, bind in ipairs({

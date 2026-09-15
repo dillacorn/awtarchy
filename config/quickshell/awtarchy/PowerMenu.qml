@@ -105,6 +105,28 @@ Singleton {
     }
     function toggleFocused() { toggleForScreen(focusedScreen()); }
 
+    function fastKey(key: string): bool {
+        if (!powerWindow.visible)
+            return false;
+
+        const normalized = String(key || "").toLowerCase();
+        if (normalized === "escape") {
+            close();
+            return true;
+        }
+
+        if (actionPending || queuedAction !== null)
+            return true;
+
+        for (let i = 0; i < actions.length; ++i) {
+            if (normalized === actions[i].key) {
+                runAction(actions[i]);
+                return true;
+            }
+        }
+        return false;
+    }
+
     function captureWanted() {
         return powerWindow.visible && capturePreparing;
     }
@@ -186,6 +208,7 @@ Singleton {
     IpcHandler {
         target: "powermenu"
         function begin(): bool { return root.beginFocused(); }
+        function fastKey(key: string): bool { return root.fastKey(key); }
         function captureWanted(): bool { return root.captureWanted(); }
         function capturePrepared(): bool { return root.capturePrepared(); }
         function captureFailed(): void { root.captureFailed(); }

@@ -7,12 +7,28 @@ SCRIPTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts"
 CAPTURE_HELPER="${SCRIPTS_DIR}/quickshell_lockscreen_capture.sh"
 QS_BIN="${QS_BIN:-qs}"
 POLL_INTERVAL="${AWTARCHY_LOCK_CAPTURE_POLL_INTERVAL:-0.05}"
+RETURN_SUBMAP="${1:-reset}"
+case "$RETURN_SUBMAP" in
+    reset|noalt) ;;
+    *) RETURN_SUBMAP="reset" ;;
+esac
 
 capture_dir=""
 editor_suppressed=0
 prepared=0
 hidden=""
 wanted=""
+submap_restored=0
+
+restore_input_submap() {
+    if (( submap_restored )); then
+        return 0
+    fi
+    submap_restored=1
+    hyprctl dispatch "hl.dsp.submap(\"${RETURN_SUBMAP}\")" >/dev/null 2>&1 || true
+}
+
+trap restore_input_submap EXIT
 
 cleanup_incomplete_capture() {
     if [[ -n "$capture_dir" && -x "$CAPTURE_HELPER" ]]; then
@@ -111,6 +127,7 @@ main() {
     # If no action was already accepted, make the visual Power Menu visible.
     # reveal() is intentionally a no-op during an action handoff.
     "$QS_BIN" -c awtarchy ipc call powermenu reveal >/dev/null 2>&1 || true
+    restore_input_submap
 }
 
 main "$@"
