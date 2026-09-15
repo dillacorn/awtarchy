@@ -13,6 +13,7 @@ POLL_INTERVAL="${AWTARCHY_LOCK_CAPTURE_POLL_INTERVAL:-0.05}"
 capture_dir=""
 editor_suppressed=0
 prepared=0
+hidden=""
 
 cleanup_incomplete_capture() {
     if [[ -n "$capture_dir" && -x "$CAPTURE_HELPER" ]]; then
@@ -24,7 +25,18 @@ cleanup_incomplete_capture() {
 if [[ -x "$CAPTURE_HELPER" ]]; then
     capture_dir="$("$CAPTURE_HELPER" stage-begin 2>/dev/null || true)"
     if [[ -n "$capture_dir" ]]; then
-        if "$QS_BIN" -c awtarchy ipc call lockcapture suppressEditor >/dev/null 2>&1; then
+        # In the normal case no Lockscreen Editor backing window is mapped, so
+        # the first snapshot is already both the visible transition source and
+        # a clean frozen desktop. Publish it immediately instead of hiding UI,
+        # polling, and paying for a second full-resolution screenshot pass.
+        hidden="$("$QS_BIN" -c awtarchy ipc call lockcapture editorHidden 2>/dev/null | tail -n1 || true)"
+        if [[ "$hidden" == true ]]; then
+            if "$CAPTURE_HELPER" stage-promote-clean "$capture_dir" >/dev/null 2>&1; then
+                prepared=1
+            fi
+        elif "$QS_BIN" -c awtarchy ipc call lockcapture suppressEditor >/dev/null 2>&1; then
+            # Editor-visible fallback preserves the approved two-snapshot path:
+            # transition frame first, then a verified clean desktop frame.
             editor_suppressed=1
             for _ in {1..80}; do
                 hidden="$("$QS_BIN" -c awtarchy ipc call lockcapture editorHidden 2>/dev/null | tail -n1 || true)"
@@ -47,8 +59,9 @@ restore_editor() {
     fi
 }
 
-# Restore the editor before the power menu appears. The completed capture bundle,
-# when present, stays private until Lock consumes it or PowerMenu discards it.
+# Restore an editor only when the fallback path actually suppressed one. The
+# completed capture bundle stays private until Lock consumes it or PowerMenu
+# discards it.
 restore_editor
 if (( ! prepared )); then
     cleanup_incomplete_capture
