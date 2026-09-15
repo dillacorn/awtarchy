@@ -36,6 +36,7 @@ first_line_number() {
 [[ -f "$HYPR_CONFIG" ]] || fail 'Hyprland config is missing'
 
 # The secure capture helper itself must keep the parallel multi-monitor path.
+# shellcheck disable=SC2016 -- this is an intentional literal source-code match.
 require_text "$HELPER" 'grim -l 1 -o "$output" "$output_file" &' \
     'multi-monitor capture no longer launches grim workers concurrently'
 
