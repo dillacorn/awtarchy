@@ -84,8 +84,12 @@ assert_count "$HYPR" '{ "ALT + P", app_launcher },' 2 \
     'ALT+P application launcher binding changed unexpectedly'
 assert_count "$HYPR" '{ "SUPER + D", app_launcher },' 2 \
     'SUPER+D application launcher binding changed unexpectedly'
-assert_count "$HYPR" 'hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})' 2 \
+assert_count "$HYPR" 'hl.bind("SUPER + P", function()' 2 \
     'SUPER+P power-menu binding changed unexpectedly'
+assert_count "$HYPR" 'hl.dispatch(hl.dsp.submap("power-menu-fast"))' 1 \
+    'default SUPER+P no longer arms compositor-owned input'
+assert_count "$HYPR" 'hl.dispatch(hl.dsp.submap("power-menu-fast-noalt"))' 1 \
+    'noalt SUPER+P no longer arms compositor-owned input'
 
 python3 - "$HYPR" <<'PY'
 import pathlib

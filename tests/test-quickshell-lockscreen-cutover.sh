@@ -22,6 +22,20 @@ require_text() {
     grep -Fq -- "$text" "$file" || fail "$message"
 }
 
+require_order() {
+    local file="$1" first="$2" second="$3" message="$4"
+    python3 - "$file" "$first" "$second" "$message" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+first = text.find(sys.argv[2])
+second = text.find(sys.argv[3])
+if first < 0 or second < 0 or first >= second:
+    raise SystemExit(sys.argv[4])
+PY
+}
+
 reject_text() {
     local file="$1" text="$2" message="$3"
     if grep -Fq -- "$text" "$file"; then
@@ -48,15 +62,25 @@ reject_text "$HYPRIDLE" 'hyprlock' \
 
 reject_text "$HYPRLAND" 'hl.bind("SUPER + L", hl.dsp.exec_cmd("~/.config/hypr/scripts/awtarchy_lock.sh lock"), {})' \
     'native locker steals SUPER + L from normal movement bindings'
-require_text "$HYPRLAND" 'hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})' \
+require_text "$HYPRLAND" 'hl.bind("SUPER + P", function()' \
     'SUPER + P no longer opens the power menu'
+require_text "$HYPRLAND" 'hl.dispatch(hl.dsp.submap("power-menu-fast"))' \
+    'SUPER + P does not arm compositor-owned Power Menu input first'
+require_text "$HYPRLAND" 'hl.dispatch(hl.dsp.exec_cmd(power_menu))' \
+    'SUPER + P no longer launches the power menu'
+require_order "$HYPRLAND" \
+    'hl.dispatch(hl.dsp.submap("power-menu-fast"))' \
+    'hl.dispatch(hl.dsp.exec_cmd(power_menu))' \
+    'SUPER + P launches the Power Menu before compositor key ownership is active'
 reject_text "$HYPRLAND" '/usr/bin/hyprlock' \
     'Hyprland still grants a Hyprlock permission'
 reject_text "$HYPRLAND" 'exec_cmd("hyprlock")' \
     'Hyprland still launches Hyprlock'
 
-require_text "$POWER_MENU" 'command: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5"' \
-    'Power Menu Lock does not keep the overlay until native lock secure confirmation'
+require_text "$POWER_MENU" 'command: "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5"' \
+    'Power Menu Lock does not consume the SUPER+P snapshot while keeping coverage until native lock secure confirmation'
+reject_text "$POWER_MENU" 'command: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5"' \
+    'Power Menu Lock still takes a fresh capture after the Power Menu is visible'
 require_text "$POWER_MENU" 'command: "~/.config/hypr/scripts/awtarchy_lock.sh hibernate"' \
     'Power Menu Hibernate does not use secure lock-then-hibernate'
 require_text "$POWER_MENU" 'command: "~/.config/hypr/scripts/awtarchy_lock.sh suspend"' \

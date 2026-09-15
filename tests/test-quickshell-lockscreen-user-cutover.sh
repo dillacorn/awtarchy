@@ -32,10 +32,16 @@ reject_text "$HYPRLAND" \
     'hl.bind("SUPER + L", hl.dsp.exec_cmd("~/.config/hypr/scripts/awtarchy_lock.sh lock"), {})' \
     'native locker still steals SUPER+L instead of using SUPER+P then L'
 require_text "$HYPRLAND" \
-    'hl.bind("SUPER + P", hl.dsp.exec_cmd(power_menu), {})' \
+    'hl.bind("SUPER + P", function()' \
     'power menu bind is missing after lockscreen cutover'
+require_text "$HYPRLAND" \
+    'hl.dispatch(hl.dsp.submap("power-menu-fast"))' \
+    'power menu bind does not arm compositor-owned immediate input'
+require_text "$HYPRLAND" \
+    'hl.dispatch(hl.dsp.exec_cmd(power_menu))' \
+    'power menu bind no longer launches the Power Menu'
 require_text "$POWER_MENU" \
-    '{ label: "", text: "Lock (L)", key: "l", command: "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true }' \
+    '{ label: "", text: "Lock (L)", key: "l", command: "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5", closeAfterSuccess: true }' \
     'power menu L action does not keep coverage until the native locker is secure'
 reject_text "$MIGRATOR" \
     'NEW_BIND = '\''hl.bind("SUPER + L", hl.dsp.exec_cmd("~/.config/hypr/scripts/awtarchy_lock.sh lock"), {})'\''' \
