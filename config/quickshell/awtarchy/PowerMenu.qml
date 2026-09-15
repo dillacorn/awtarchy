@@ -148,17 +148,20 @@ Singleton {
     function toggleFocused() { toggleForScreen(focusedScreen()); }
 
     function fastKey(key: string): bool {
+        const normalized = String(key || "").toLowerCase();
+        if (!normalized)
+            return false;
+
+        if (actionPending || queuedAction !== null || deferredLockAction !== null)
+            return true;
+
         if (!powerWindow.visible)
             return false;
 
-        const normalized = String(key || "").toLowerCase();
         if (normalized === "escape") {
             close();
             return true;
         }
-
-        if (actionPending || queuedAction !== null || deferredLockAction !== null)
-            return true;
 
         for (let i = 0; i < actions.length; ++i) {
             if (normalized === actions[i].key) {
@@ -240,14 +243,7 @@ Singleton {
     }
 
     function abortLockHandoff() {
-        const targetScreen = powerWindow.screen || focusedScreen();
-        lockHandoffTimer.stop();
-        deferredLockAction = null;
-        lockHandoffAttempts = 0;
-        actionPending = false;
-        closeAfterActionSuccess = false;
-        restoreSuppressedEditor();
-        openForScreen(targetScreen);
+        finishHandoffClose();
     }
 
     function startAction(action, commandOverride) {
@@ -309,11 +305,13 @@ Singleton {
 
         onExited: exitCode => {
             if (exitCode !== 0) {
-                const targetScreen = powerWindow.screen || root.focusedScreen();
-                root.actionPending = false;
-                root.closeAfterActionSuccess = false;
-                root.restoreSuppressedEditor();
-                root.openForScreen(targetScreen);
+                if (powerWindow.visible) {
+                    root.actionPending = false;
+                    root.closeAfterActionSuccess = false;
+                    root.restoreSuppressedEditor();
+                } else {
+                    root.finishHandoffClose();
+                }
                 return;
             }
 
