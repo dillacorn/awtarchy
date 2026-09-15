@@ -35,6 +35,35 @@ reject_text "$SCENE_QML" 'audioEffectsEnabled' \
 reject_text "$SCENE_QML" 'audioOffsetX' \
     'logo blocks still carry audio displacement'
 
+python3 - "$SCENE_QML" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+try:
+    step = text.split("function stepLogoExplosion()", 1)[1].split("function updateClockText()", 1)[0]
+    expiry = step.split("if (logoExplosionActive && logoExplosionElapsedMs >= logoExplosionMaxMs)", 1)[1]
+    expiry = expiry.split("if (returning && maxMotion < 1.2)", 1)[0]
+except IndexError as exc:
+    raise SystemExit("FAIL: logo explosion expiry structure changed unexpectedly") from exc
+
+if "logoReturnPending = true;" not in expiry:
+    raise SystemExit("FAIL: explosion expiry can strand logo blocks before their return-to-home finishes")
+PY
+
+require_text "$SCENE_QML" 'readonly property real logoHoverSpring: 110' \
+    'logo hover response is still too soft'
+require_text "$SCENE_QML" 'readonly property real logoHomeSpring: 72' \
+    'logo return-to-home response is still too soft'
+require_text "$SCENE_QML" 'readonly property real logoHoverDamping: 18' \
+    'logo hover response is still too fluid'
+require_text "$SCENE_QML" 'readonly property real logoHomeDamping: 14' \
+    'logo return-to-home response is still too fluid'
+require_text "$SCENE_QML" 'readonly property int logoExplosionScatterMs: 340' \
+    'logo explosion lingers too long before returning'
+require_text "$SCENE_QML" 'readonly property int logoExplosionMaxMs: 1100' \
+    'logo explosion active phase still lasts too long'
+
 # Parsed CAVA frames are presented directly; a second QML smoothing cadence
 # would reintroduce the lag observed in the first runtime pass.
 require_text "$AUDIO_QML" 'bands = result;' \
