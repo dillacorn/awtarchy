@@ -36,7 +36,8 @@ first_line_number() {
 [[ -f "$HYPR_CONFIG" ]] || fail 'Hyprland config is missing'
 
 # The secure capture helper itself must keep the parallel multi-monitor path.
-# shellcheck disable=SC2016 -- this is an intentional literal source-code match.
+# Intentional literal source-code match.
+# shellcheck disable=SC2016
 require_text "$HELPER" 'grim -l 1 -o "$output" "$output_file" &' \
     'multi-monitor capture no longer launches grim workers concurrently'
 
@@ -216,8 +217,8 @@ POWER_BEGIN_RESPONSE=false \
     || fail 'SUPER+P close toggle performs screenshot work'
 
 # Lock is the only Power Menu action that must hand off to the fresh secure
-# capture path. QML must hide the real layer-surface backing window first, then
-# start awtarchy_lock.sh lock after backingWindowVisible reports false.
+# capture path. QML must hide the real layer-surface backing window and any
+# open lockscreen editor preview before starting the frozen desktop capture.
 require_text "$POWER_MENU_QML" 'function beginFocused()' \
     'Power Menu has no immediate focused-open entrypoint'
 require_text "$POWER_MENU_QML" 'openForScreen(focusedScreen());' \
@@ -230,6 +231,12 @@ require_text "$POWER_MENU_QML" 'powerWindow.visible = false;' \
     'Lock action does not close the Power Menu before capture'
 require_text "$POWER_MENU_QML" 'powerWindow.backingWindowVisible' \
     'Lock action does not verify the real Power Menu backing window is gone before capture'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.suppressForLockCapture()' \
+    'Lock action does not suppress an open lockscreen editor before capture'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.lockCaptureBackingHidden()' \
+    'Lock action does not verify editor backing windows are gone before capture'
+require_text "$POWER_MENU_QML" 'LockscreenEditor.restoreAfterLockCapture()' \
+    'Lock action cannot restore editor state after secure handoff or failure'
 require_text "$POWER_MENU_QML" 'startAction(action, freshLockCommand);' \
     'Lock action does not use the fresh secure capture path after closing the menu'
 require_text "$POWER_MENU_QML" 'Behavior on opacity' \
