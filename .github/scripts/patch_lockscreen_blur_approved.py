@@ -160,6 +160,6 @@ replace_once(shell,
 
     function normalizedUnitInterval''')
 replace_all_exact(shell, 'lockWallpaperBlur = 0;\n        lockBlurStyle = "smooth";',
-                  'lockWallpaperBlur = 10;\n        lockBlurStyle = "pixelated";', 2)
+                  'lockWallpaperBlur = 10;\n        lockBlurStyle = "pixelated";', 1)
 replace_all_exact(shell, 'lockWallpaperBlur = normalizedPercent(parsed.lockscreen_wallpaper_blur);',
-                  'lockWallpaperBlur = normalizedBlurPercent(parsed.lockscreen_wallpaper_blur);', 2)
+                  'lockWallpaperBlur = normalizedBlurPercent(parsed.lockscreen_wallpaper_blur);', 1)
