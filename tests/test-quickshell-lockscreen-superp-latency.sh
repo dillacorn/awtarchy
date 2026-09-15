@@ -49,8 +49,8 @@ require_text "$POWER_MENU_QML" 'function begin(): bool' \
     'Power Menu IPC has no immediate input-arm entrypoint'
 require_text "$POWER_MENU_QML" 'function capturePrepared(): bool' \
     'Power Menu IPC cannot release a queued action when capture becomes ready'
-require_text "$POWER_MENU_QML" 'if (capturePreparing && action.key === "l")' \
-    'Power Menu does not queue an immediate Lock key while secure capture is preparing'
+require_text "$POWER_MENU_QML" 'if (capturePreparing) {' \
+    'Power Menu does not queue immediate action keys while secure capture is preparing'
 require_text "$POWER_MENU_QML" 'queuedAction = action;' \
     'Power Menu drops an action pressed before the visible menu appears'
 
