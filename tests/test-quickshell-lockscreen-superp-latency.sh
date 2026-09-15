@@ -137,7 +137,7 @@ printf '\n' >>"$QS_LOG"
 printf 'qs:%s\n' "$*" >>"$EVENT_LOG"
 case " $* " in
     *' powermenu begin '*)
-        printf '%s\n' true
+        printf '%s\n' "${POWER_BEGIN_RESPONSE:-true}"
         ;;
     *' powermenu captureWanted '*)
         printf '%s\n' true
@@ -218,5 +218,34 @@ for output in DP-1 HDMI-A-1; do
 done
 PATH="$TMP/bin:$PATH" XDG_RUNTIME_DIR="$TMP/runtime" \
     bash "$TMP/config/hypr/scripts/quickshell_lockscreen_capture.sh" cleanup "$prepared"
+
+# SUPER+P is still a toggle. If begin reports that it closed an already-open
+# menu, the helper must stop immediately and must not pay for any grim capture.
+rm -rf -- "$TMP/runtime/awtarchy-lock-transition" "$TMP/barrier-close"
+: >"$TMP/grim-close.log"
+: >"$TMP/qs-close.log"
+: >"$TMP/events-close.log"
+PATH="$TMP/bin:$PATH" \
+XDG_RUNTIME_DIR="$TMP/runtime" \
+XDG_CONFIG_HOME="$TMP/config" \
+FAKE_MONITORS="$TMP/monitors.json" \
+GRIM_LOG="$TMP/grim-close.log" \
+EVENT_LOG="$TMP/events-close.log" \
+GRIM_BARRIER_DIR="$TMP/barrier-close" \
+GRIM_EXPECTED_CONCURRENCY=2 \
+QS_LOG="$TMP/qs-close.log" \
+QS_BIN=qs \
+POWER_BEGIN_RESPONSE=false \
+    bash "$POWER_MENU" >/dev/null \
+    || fail 'SUPER+P close toggle path failed'
+
+[[ ! -s "$TMP/grim-close.log" ]] \
+    || fail 'SUPER+P close toggle still performs screenshot work after closing the menu'
+require_text "$TMP/qs-close.log" 'powermenu begin' \
+    'SUPER+P close toggle did not use the immediate begin entrypoint'
+forbid_log_text "$TMP/qs-close.log" 'powermenu captureWanted' \
+    'SUPER+P close toggle continued into capture coordination'
+forbid_log_text "$TMP/qs-close.log" 'powermenu reveal' \
+    'SUPER+P close toggle reopened visuals after closing the menu'
 
 printf '%s\n' 'PASS: SUPER+P capture latency and immediate input arming'
