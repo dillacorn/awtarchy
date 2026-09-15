@@ -967,8 +967,13 @@ grep -Fxq "https://github.com/dillacorn/awtarchy/archive/${TEST_COMMIT}.tar.gz" 
   || fail "successful migration changed the stable runtime"
 grep -Fq '.config/hypr/scripts/quickshell.sh start &' "$home/.config/hypr/hyprland.lua" \
   || fail "updater did not migrate Hyprland startup to Quickshell"
-grep -Fq 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh"' "$home/.config/hypr/hyprland.lua" \
-  || fail "updater did not migrate the power menu"
+grep -Fq 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"' "$home/.config/hypr/hyprland.lua" \
+  || fail "updater did not migrate the power menu launcher"
+grep -Fq 'local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"' "$home/.config/hypr/hyprland.lua" \
+  || fail "updater did not migrate the pre-map Power Menu key bridge"
+grep -Fq 'hl.dispatch(hl.dsp.submap("power-menu-fast"))' "$home/.config/hypr/hyprland.lua" \
+  || fail "updater did not migrate compositor-owned Power Menu input"
+assert_file "$home/.config/hypr/scripts/quickshell_power_menu_key.sh"
 grep -Fq -- '-- personal Hyprland customization survives migration' "$home/.config/hypr/hyprland.lua" \
   || fail "updater lost the user's Hyprland customization"
 ! grep -Fq 'fuzzel_toggle.sh' "$home/.config/hypr/hyprland.lua" \
