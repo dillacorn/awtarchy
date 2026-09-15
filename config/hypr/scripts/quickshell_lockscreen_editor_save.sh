@@ -161,6 +161,19 @@ backend_args=("${@:1:19}")
 backend_args[0]="$backend_layout"
 backend_args[12]="$backend_custom_images"
 backend_args[13]="$backend_visualizer"
+
+# Older/upgraded state can retain wallpaper mode after its wallpaper path has
+# been cleared or the file has disappeared. Treat that as stale optional state,
+# not a fatal presentation error: persist a safe black background so Save stays
+# usable and the broken wallpaper reference is removed atomically.
+if [[ "${backend_args[2]}" == "wallpaper" ]]; then
+    wallpaper_path="${backend_args[4]}"
+    if [[ -z "$wallpaper_path" || "$wallpaper_path" != /* || ! -f "$wallpaper_path" || ! -r "$wallpaper_path" ]]; then
+        backend_args[2]="black"
+        backend_args[4]=""
+    fi
+fi
+
 bash "$STATE_BACKEND" save-lockscreen-editor "${backend_args[@]}"
 
 mkdir -p -- "$(dirname -- "$STATE_FILE")"
