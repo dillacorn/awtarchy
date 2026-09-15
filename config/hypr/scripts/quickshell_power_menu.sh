@@ -29,12 +29,12 @@ cleanup_incomplete_capture() {
 }
 
 if [[ -x "$CAPTURE_HELPER" ]]; then
-    capture_dir="$($CAPTURE_HELPER stage-begin 2>/dev/null || true)"
+    capture_dir="$("$CAPTURE_HELPER" stage-begin 2>/dev/null || true)"
     if [[ -n "$capture_dir" ]]; then
         if "$QS_BIN" -c awtarchy ipc call lockcapture suppressEditor >/dev/null 2>&1; then
             editor_suppressed=1
             for _ in {1..80}; do
-                hidden="$($QS_BIN -c awtarchy ipc call lockcapture editorHidden 2>/dev/null | tail -n1 || true)"
+                hidden="$("$QS_BIN" -c awtarchy ipc call lockcapture editorHidden 2>/dev/null | tail -n1 || true)"
                 if [[ "$hidden" == true ]]; then
                     if "$CAPTURE_HELPER" stage-complete "$capture_dir" >/dev/null 2>&1; then
                         prepared=1
