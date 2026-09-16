@@ -16,13 +16,16 @@ jobs:
           fetch-depth: 0
       - name: Install validation tools
         run: sudo apt-get update -qq && sudo apt-get install -y -qq lua5.4
-      - name: Apply final wording cleanup
-        run: python3 .github/scripts/feature-lockscreen-media-editor-task7.py
+      - name: Apply final cleanup
+        run: |
+          python3 .github/scripts/feature-lockscreen-media-editor-task7.py
+          python3 .github/scripts/feature-lockscreen-media-editor-task8.py
       - name: Focused contracts
         run: |
           bash tests/test-quickshell-lockscreen-media-editor-polish.sh
           bash tests/test-quickshell-lockscreen-media-preroll.sh
           bash tests/test-quickshell-lockscreen-animated-contrast.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
       - name: Full lockscreen regression suite
         run: |
           for test in tests/test-quickshell-lockscreen-*.sh; do
@@ -31,6 +34,8 @@ jobs:
           done
           node tests/test-quickshell-lockscreen-efficiency.mjs
           bash tests/test-lua-validation.sh
+          bash tests/test-quickshell-production-readiness.sh
+          bash tests/test-quickshell-updater-migration.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
@@ -43,6 +48,6 @@ jobs:
           fi
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/quickshell/awtarchy/LockscreenEditor.qml tests/test-quickshell-lockscreen-media-editor-polish.sh
-          git commit -m 'Polish lockscreen media editor wording'
+          git add config/quickshell/awtarchy/LockscreenEditor.qml tests/test-quickshell-lockscreen-media-editor-polish.sh tests/test-quickshell-lockscreen-interactive-managed-history.sh local/share/awtarchy/quickshell-managed-history.sha256
+          git commit -m 'Polish lockscreen media editor'
           git push origin HEAD:feature/lockscreen-media-editor-polish
