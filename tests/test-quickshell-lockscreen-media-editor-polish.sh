@@ -9,6 +9,10 @@ HYPRLAND="${ROOT}/config/hypr/hyprland.lua"
 EDITOR_LAUNCHER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor.sh"
 PICKER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh"
 RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
+LOCK_MEDIA="${ROOT}/config/quickshell/awtarchy-lock/LockMedia.qml"
+PREVIEW_MEDIA="${ROOT}/config/quickshell/awtarchy/LockMedia.qml"
+LOCK_SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
+PREVIEW_SCENE="${ROOT}/config/quickshell/awtarchy/LockPreviewScene.qml"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -74,5 +78,42 @@ reject_text "$PICKER" '--select-only --type images --resume' \
     'Awtwall lockscreen picker still forces still-image mode'
 require_text "$RUNTIME" 'quickshell qt6-multimedia qt6-multimedia-ffmpeg' \
     'mandatory Quickshell package group does not include Qt Multimedia and its FFmpeg backend'
+
+require_file "$LOCK_MEDIA" 'secure lockscreen media renderer is missing'
+require_file "$PREVIEW_MEDIA" 'preview lockscreen media renderer is missing'
+cmp -s "$LOCK_MEDIA" "$PREVIEW_MEDIA" \
+    || fail 'secure and preview media renderers diverge'
+require_text "$LOCK_MEDIA" 'import QtMultimedia' \
+    'lockscreen media renderer does not import Qt Multimedia'
+require_text "$LOCK_MEDIA" 'normalized.endsWith(".gif")' \
+    'lockscreen media renderer does not detect GIF media'
+require_text "$LOCK_MEDIA" 'normalized.endsWith(".mp4")' \
+    'lockscreen media renderer does not detect MP4 media'
+require_text "$LOCK_MEDIA" 'AnimatedImage {' \
+    'GIF media is not rendered with AnimatedImage'
+require_text "$LOCK_MEDIA" 'MediaPlayer {' \
+    'MP4 media has no MediaPlayer renderer'
+require_text "$LOCK_MEDIA" 'VideoOutput {' \
+    'MP4 media has no VideoOutput renderer'
+require_text "$LOCK_MEDIA" 'loops: MediaPlayer.Infinite' \
+    'lockscreen video does not loop continuously'
+require_text "$LOCK_MEDIA" 'autoPlay: true' \
+    'lockscreen video does not begin decoding immediately'
+require_text "$LOCK_MEDIA" 'activeAudioTrack: -1' \
+    'lockscreen video does not explicitly disable embedded audio tracks'
+require_text "$LOCK_MEDIA" 'readonly property bool playbackAdvanced: videoFrameCount >= 2' \
+    'lockscreen video does not expose decoded-frame advancement'
+reject_text "$LOCK_MEDIA" 'AudioOutput' \
+    'lockscreen media renderer attaches an audio output'
+require_text "$LOCK_SCENE" 'LockMedia {' \
+    'shared lockscreen scene does not use the media-aware renderer'
+require_text "$LOCK_SCENE" 'id: wallpaperMedia' \
+    'background wallpaper is not media-aware'
+require_text "$LOCK_SCENE" 'wallpaperMedia.sourceSize' \
+    'background geometry does not use media source dimensions'
+require_text "$LOCK_SCENE" 'id: customImageSource' \
+    'custom media renderer no longer preserves the existing delegate identity'
+cmp -s "$LOCK_SCENE" "$PREVIEW_SCENE" \
+    || fail 'secure and preview presentation scenes diverge'
 
 printf 'PASS: lockscreen media/editor polish contracts\n'
