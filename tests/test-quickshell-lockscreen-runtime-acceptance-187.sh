@@ -107,7 +107,7 @@ has "$PICKER" '.fullscreen' 'picker does not verify exact-client fullscreen stat
 has "$PICKER" 'mode = "fullscreen"' 'picker does not request true fullscreen mode'
 has "$PICKER" 'action = "set"' 'picker fullscreen request can toggle instead of set'
 lacks "$PICKER" 'class:^(awtarchy-lock-wallpaper)$' 'picker still dispatches by class instead of exact address'
-has "$PICKER" '--select-only --type images' 'picker no longer uses selection-only mode'
+has "$PICKER" '--select-only --type all' 'picker no longer uses all-media selection-only mode'
 bash "$ROOT/tests/test-quickshell-lockscreen-picker-targeting.sh" >/dev/null \
     || fail 'exact mapped Awtwall fullscreen targeting contract failed'
 

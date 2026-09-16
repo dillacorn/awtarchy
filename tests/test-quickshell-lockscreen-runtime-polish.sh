@@ -116,10 +116,8 @@ require_file "$PICKER_HELPER" 'selection-only lockscreen wallpaper picker helper
 bash -n "$PICKER_HELPER" || fail 'selection-only wallpaper picker helper has invalid Bash syntax'
 require_text "$PICKER_HELPER" '--select-only' \
     'lockscreen wallpaper picker does not use Awtwall selection-only mode'
-require_text "$PICKER_HELPER" '--type' \
-    'lockscreen wallpaper picker does not filter to images'
-require_text "$PICKER_HELPER" 'images' \
-    'lockscreen wallpaper picker does not request image media'
+require_text "$PICKER_HELPER" '--type all' \
+    'lockscreen wallpaper picker does not expose all supported Awtwall media'
 require_text "$PICKER_HELPER" '--select-result' \
     'lockscreen wallpaper picker has no detached result path'
 require_text "$PICKER_HELPER" '--help' \

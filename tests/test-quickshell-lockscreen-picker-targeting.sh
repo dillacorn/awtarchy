@@ -30,8 +30,8 @@ reject_text() {
 # client targeting.
 require_text "$PICKER" '--class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper' \
     'picker terminal identity is not exact and stable'
-require_text "$PICKER" '--select-only --type images' \
-    'picker no longer uses Awtwall selection-only mode'
+require_text "$PICKER" '--select-only --type all' \
+    'picker no longer uses Awtwall all-media selection-only mode'
 require_text "$PICKER" '.address' \
     'picker does not resolve the mapped client address from hyprctl clients JSON'
 require_text "$PICKER" 'address:' \
