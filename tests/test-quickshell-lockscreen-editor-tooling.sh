@@ -41,8 +41,10 @@ require_text 'function translateSelectedElements(dx, dy, selectPrimary)' 'editor
 require_text 'function clampedGroupDelta(dx, dy)' 'group movement does not clamp against all member bounds'
 require_text 'function writeDraftPoint(name, x, y, selectPrimary)' 'point writer shadows the selectElement() helper'
 require_text 'Qt.ShiftModifier | Qt.ControlModifier' 'Shift/Ctrl additive multi-selection is missing'
-require_text 'if (additive) root.selectElement(parent.elementName, true);' 'additive pointer selection does not toggle group membership'
-require_text 'else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false);' 'normal press collapses an existing selected group before drag'
+require_text 'if (additive)' 'additive pointer-selection branch is missing'
+require_text 'root.selectElement(parent.elementName, true);' 'additive pointer selection does not toggle group membership'
+require_text 'else if (!root.selectedContains(parent.elementName))' 'normal press does not preserve an existing selected group'
+require_text 'root.selectElement(parent.elementName, false);' 'normal press cannot collapse selection to a newly selected element'
 
 # Smart alignment uses screen center and peer centers, while Alt explicitly
 # disables snapping for free placement. Guide coordinates are editor-only.
