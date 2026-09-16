@@ -155,7 +155,6 @@ Singleton {
     readonly property real keyboardNudge: 0.002
     readonly property real keyboardNudgeLarge: 0.01
     readonly property real dragActivationThresholdPx: 5
-    readonly property real dragActivationThresholdPx: 5
 
     property var undoStack: []
     property var redoStack: []
@@ -1407,7 +1406,7 @@ Singleton {
     function acceptCustomImageSelection(line) {
         if (!open) return;
         const value = String(line || "").trim();
-        if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Awtwall returned an invalid local image"; return; }
+        if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Awtwall returned an invalid local media"; return; }
         addCustomImage(value);
     }
 
@@ -1669,13 +1668,13 @@ Singleton {
 
     function nextCustomImageId() { const prefix = "image-" + Date.now().toString(36); let suffix = 0; let candidate = prefix; while (customImageIndex(candidate) >= 0) { suffix += 1; candidate = prefix + "_" + suffix; } return candidate; }
     function addCustomImage(imagePath) {
-        const value = String(imagePath || "").trim(); if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Custom image must be a local absolute path"; return; }
-        if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; }
+        const value = String(imagePath || "").trim(); if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Custom media must be a local absolute path"; return; }
+        if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom media limit reached (" + customImageMaximum + ")"; return; }
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); const id = nextCustomImageId();
         next.push(({ id: id, path: value, x: 0.5, y: 0.5, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true }));
-        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Image added. Save to apply.";
+        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Media added. Save to apply.";
     }
-    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Image removed. Save to apply."; }
+    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Media removed. Save to apply."; }
 
     function setDraftEntryTransition(value) {
         const key = String(value || ""); if (["fade", "pixel", "edges", "wipe"].indexOf(key) < 0) return;
@@ -1766,7 +1765,7 @@ Singleton {
     }
 
     function suspendForWallpaperPicker() { if (!open || pickerSuspended || wallpaperPickerProcess.running || customImagePickerProcess.running) return; if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening lockscreen wallpaper picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]); }
-    function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom image picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
+    function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom media limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom media picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function resumeAfterWallpaperPicker() { if (!open || !pickerSuspended) return; pickerSuspended = false; editorWindow.visible = true; editorEntranceOpacity = 1; FlyoutManager.claimOverlay("lockscreen-editor"); scheduleContrastRefresh(); Qt.callLater(() => editorFocus.forceActiveFocus()); }
 
     function close() {
@@ -1840,10 +1839,9 @@ Singleton {
     Process {
         id: customImagePickerProcess
         stdout: SplitParser { onRead: line => root.acceptCustomImageSelection(line) }
-        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom image picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom image picker…") root.statusMessage = "No image selected."; root.resumeAfterWallpaperPicker(); }
+        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom media picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom media picker…") root.statusMessage = "No media selected."; root.resumeAfterWallpaperPicker(); }
     }
 
-    Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
     Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
 
@@ -2109,17 +2107,16 @@ Singleton {
                         Item { Layout.fillWidth: true }
                         Text { visible: root.statusMessage.length > 0; text: root.statusMessage.length > 0 ? root.statusMessage : "Password cannot be hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.maximumWidth: 260 }
                         Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
-                        Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                         SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }
                         SettingsButton { label: "Save"; active: true; textSize: 9; available: !saveProcess.running && !contrastPersistProcess.running; onClicked: root.save() }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
-                        SettingsButton { label: "Add Image"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
+                        SettingsButton { label: "Add Media"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
                         SettingsButton { label: "Add timezone clock"; textSize: 9; available: root.draftTimezoneClocks.length < root.timezoneClockMaximum; onClicked: root.addTimezoneClock() }
                         SettingsButton { label: "Add custom text"; textSize: 9; available: root.draftCustomTexts.length < root.customTextMaximum; onClicked: root.addCustomText() }
-                        SettingsButton { label: "Remove Image"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
+                        SettingsButton { label: "Remove Media"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
                         SettingsButton { label: "Remove clock"; textSize: 9; visible: root.isTimezoneClock(root.selectedElement); available: visible; onClicked: root.removeTimezoneClock(root.selectedElement) }
                         SettingsButton { label: "Remove text"; textSize: 9; visible: root.isCustomText(root.selectedElement); available: visible; onClicked: root.removeCustomText(root.selectedElement) }
                         Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
@@ -2138,12 +2135,12 @@ Singleton {
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), Number(text) / 100) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
                         Item { Layout.fillWidth: true }
-                        Text { text: root.isCustomImage(root.selectedElement) ? "Custom images are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                        Text { text: root.isCustomImage(root.selectedElement) ? "Custom media are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isCustomImage(root.selectedElement)
-                        Text { text: "Image Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Text { text: "Media Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 0; top: 100 }
                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }

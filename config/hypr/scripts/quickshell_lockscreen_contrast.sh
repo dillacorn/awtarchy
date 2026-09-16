@@ -10,6 +10,8 @@ CACHE_FILE="${CACHE_DIR}/lockscreen-contrast.json"
 ELEMENTS="logo time date username weather password"
 DEFAULT_LAYOUT='{"logo":{"x":0.5,"y":0.34},"time":{"x":0.5,"y":0.51},"date":{"x":0.5,"y":0.555},"username":{"x":0.5,"y":0.595},"weather":{"x":0.5,"y":0.635},"password":{"x":0.5,"y":0.7}}'
 TMP_FILE=""
+TMP_DIR=""
+WALLPAPER_SAMPLE=""
 OUTPUT_STDOUT=0
 OVERRIDE_BACKGROUND=""
 OVERRIDE_BACKGROUND_COLOR=""
@@ -18,6 +20,7 @@ OVERRIDE_LAYOUT=""
 
 cleanup() {
     [[ -z "$TMP_FILE" ]] || rm -f -- "$TMP_FILE"
+    [[ -z "$TMP_DIR" ]] || rm -rf -- "$TMP_DIR"
 }
 trap cleanup EXIT
 
@@ -92,6 +95,34 @@ layout_value() {
         | if ($value | type) == "number" and $value >= 0 and $value <= 1
           then $value else ($fallback | tonumber) end
     ' <<<"$layout" 2>/dev/null || printf '%s\n' "$fallback"
+}
+
+function prepare_wallpaper_sample() {
+    local image="$1" output
+    WALLPAPER_SAMPLE="$image"
+
+    if [[ ! -f "$image" || ! -r "$image" ]]; then
+        return 0
+    fi
+
+    case "${image,,}" in
+        *.gif)
+            command -v magick >/dev/null 2>&1 || return 0
+            TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/awtarchy-lock-contrast.XXXXXX")"
+            output="${TMP_DIR}/wallpaper.png"
+            if magick "${image}[0]" "$output" >/dev/null 2>&1; then
+                WALLPAPER_SAMPLE="$output"
+            fi
+            ;;
+        *.mp4)
+            command -v ffmpeg >/dev/null 2>&1 || return 0
+            TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/awtarchy-lock-contrast.XXXXXX")"
+            output="${TMP_DIR}/wallpaper.png"
+            if ffmpeg -v error -nostdin -i "$image" -map 0:v:0 -frames:v 1 -y "$output" >/dev/null 2>&1; then
+                WALLPAPER_SAMPLE="$output"
+            fi
+            ;;
+    esac
 }
 
 sample_wallpaper_contrast() {
@@ -181,12 +212,17 @@ if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$layout"; then
     layout="$DEFAULT_LAYOUT"
 fi
 
+WALLPAPER_SAMPLE="$wallpaper"
+if [[ "$background" == "wallpaper" ]]; then
+    prepare_wallpaper_sample "$wallpaper"
+fi
+
 colors='{}'
 for element in $ELEMENTS; do
     case "$background" in
         black) color="#ffffff" ;;
         color) color="$(contrast_for_hex "$background_color")" ;;
-        wallpaper) color="$(sample_wallpaper_contrast "$wallpaper" "$layout" "$element")" ;;
+        wallpaper) color="$(sample_wallpaper_contrast "$WALLPAPER_SAMPLE" "$layout" "$element")" ;;
     esac
     colors="$(jq -c --arg element "$element" --arg color "$color" \
         '. + {($element): $color}' <<<"$colors")"

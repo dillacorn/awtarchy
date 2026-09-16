@@ -213,10 +213,10 @@ require_text "$EDITOR" 'text: "Stretch X"' \
     'editor has no horizontal stretch precision control'
 require_text "$EDITOR" 'text: "Stretch Y"' \
     'editor has no vertical stretch precision control'
-require_text "$EDITOR" 'label: "Add Image"' \
-    'editor has no local custom-image insertion action'
-require_text "$EDITOR" 'label: "Remove Image"' \
-    'editor has no custom-image removal action'
+require_text "$EDITOR" 'label: "Add Media"' \
+    'editor has no local custom-media insertion action'
+require_text "$EDITOR" 'label: "Remove Media"' \
+    'editor has no custom-media removal action'
 require_text "$EDITOR" 'JSON.stringify(draftCustomImages)' \
     'atomic editor save does not include custom images'
 reject_text "$EDITOR" '< 2.00' 'editor still disables scaling at 200%'
