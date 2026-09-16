@@ -21,6 +21,7 @@ jobs:
           python3 .github/scripts/feature-lockscreen-media-editor-task3.py
           python3 .github/scripts/feature-lockscreen-media-editor-task4.py
           python3 .github/scripts/feature-lockscreen-media-editor-task5.py
+          python3 .github/scripts/feature-lockscreen-media-editor-task6.py
       - name: Focused contracts
         run: |
           bash tests/test-quickshell-lockscreen-media-editor-polish.sh
@@ -36,6 +37,7 @@ jobs:
           bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
           node tests/test-quickshell-lockscreen-efficiency.mjs
+          bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
       - name: Validate diff
         run: git diff --check
       - name: Commit validated implementation
@@ -45,6 +47,6 @@ jobs:
           fi
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy-lock/LockSurface.qml tests/test-quickshell-lockscreen-runtime-regressions.sh
-          git commit -m 'Pre-roll lockscreen video transitions'
+          git add config/hypr/scripts/quickshell_lockscreen_contrast.sh config/quickshell/awtarchy/LockscreenEditor.qml tests/test-quickshell-lockscreen-element-system.sh
+          git commit -m 'Support animated lockscreen contrast'
           git push origin HEAD:feature/lockscreen-media-editor-polish
