@@ -22,6 +22,8 @@ jobs:
           python3 .github/scripts/feature-lockscreen-media-editor-task4.py
       - name: Focused contract
         run: bash tests/test-quickshell-lockscreen-media-editor-polish.sh
+      - name: Video pre-roll contract
+        run: bash tests/test-quickshell-lockscreen-media-preroll.sh
       - name: Media renderer regressions
         run: |
           bash tests/test-quickshell-lockscreen-editor.sh
