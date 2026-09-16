@@ -554,6 +554,7 @@ ShellRoot {
         function ping(): string { return "ok"; }
         function reload(): void { Quickshell.reload(false); }
         function hardReload(): void { Quickshell.reload(true); }
+        function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }
         function quit(): void { Qt.quit(); }
         function beginBarDrag(monitor: string): void { root.beginBarDrag(monitor); }
         function previewBarDrag(monitor: string, candidate: string): void { root.previewBarDrag(monitor, candidate); }

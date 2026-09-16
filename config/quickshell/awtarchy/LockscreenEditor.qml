@@ -155,6 +155,7 @@ Singleton {
     readonly property real keyboardNudge: 0.002
     readonly property real keyboardNudgeLarge: 0.01
     readonly property real dragActivationThresholdPx: 5
+    readonly property real dragActivationThresholdPx: 5
 
     property var undoStack: []
     property var redoStack: []
@@ -1843,6 +1844,7 @@ Singleton {
     }
 
     Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
+    Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
     Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
 
     LockPreviewAudioAnalyzer { id: previewAudioAnalyzer; enabled: root.editingActive && !root.pickerSuspended && root.draftVisualizer.enabled; performanceMode: root.draftVisualizer.performance }
@@ -2106,6 +2108,7 @@ Singleton {
                         SettingsButton { label: "Weather"; active: root.activeDrawer === "weather"; textSize: 9; onClicked: root.toggleDrawer("weather") }
                         Item { Layout.fillWidth: true }
                         Text { visible: root.statusMessage.length > 0; text: root.statusMessage.length > 0 ? root.statusMessage : "Password cannot be hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.maximumWidth: 260 }
+                        Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                         Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                         SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }
                         SettingsButton { label: "Save"; active: true; textSize: 9; available: !saveProcess.running && !contrastPersistProcess.running; onClicked: root.save() }

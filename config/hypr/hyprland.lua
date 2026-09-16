@@ -532,6 +532,7 @@ local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"
 local power_menu_noalt = "~/.config/hypr/scripts/quickshell_power_menu.sh noalt"
 local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"
 local hypr_quicksettings = "~/.config/hypr/scripts/quickshell_quick_settings_toggle.sh"
+local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"
 local awtarchy_tips_tui = "~/.config/hypr/scripts/launch_handler.sh awtarchy-tips-tui \"alacritty --class awtarchy-tips-tui -e ~/.config/hypr/scripts/awtarchy-tips-tui.sh\""
 
 -- Audio
@@ -725,6 +726,7 @@ end
 
 -- Brightness / color temperature
 hl.bind("SUPER + ALT + backspace", hl.dsp.exec_cmd(hypr_quicksettings), {})
+hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})
 hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})
 hl.bind("SUPER + ALT + minus", hl.dsp.exec_cmd(hypr_ddc_brightness .. " down 5"), {})
 hl.bind("SUPER + ALT + CTRL + bracketright", hl.dsp.exec_cmd(hyprsunset_ctl .. " up"), {})

@@ -2236,6 +2236,14 @@ Singleton {
                                             textSize: root.scaledText(9)
                                             onClicked: root.openLockscreenEditor()
                                         }
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Super + Alt + E"
+                                            color: Theme.muted
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.scaledText(8)
+                                            horizontalAlignment: Text.AlignHCenter
+                                        }
                                     }
                                 }
 
