@@ -50,6 +50,7 @@ Item {
     property bool unlocking: false
     property bool entered: false
     property bool externalEntryTransitionRunning: false
+    property bool externalEntryTransitionPending: false
     property int presentationReplayToken: 0
     property string presentationPhase: "transition"
     property int logoEntryEpoch: 0
@@ -58,7 +59,12 @@ Item {
     property var customTextSelections: ({})
     property string individualImageReplayId: ""
     property int individualImageReplayEpoch: 0
-    readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning
+    readonly property bool effectiveEntryTransitionRunning:
+        externalEntryTransitionRunning || externalEntryTransitionPending
+    readonly property bool backgroundMediaNeedsPreroll:
+        root.backgroundMode === "wallpaper" && wallpaperMedia.mediaKind === "video"
+    readonly property bool backgroundMediaPlaybackAdvanced:
+        !root.backgroundMediaNeedsPreroll || wallpaperMedia.playbackAdvanced
     readonly property bool customImageEntryStarted:
         presentationPhase === "custom-images" || presentationPhase === "settled"
     readonly property bool fullPresentationPlaybackActive:

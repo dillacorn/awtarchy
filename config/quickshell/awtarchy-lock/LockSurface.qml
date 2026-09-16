@@ -56,7 +56,7 @@ WlSessionLockSurface {
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
         ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".transition.png"
         : ""
-    readonly property bool transitionComplete: !transitionLayer.running
+    readonly property bool transitionComplete: root.transitionStarted && !transitionLayer.running
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
     readonly property int maskedCount: root.passwordFailureMaskCount > 0
@@ -65,6 +65,8 @@ WlSessionLockSurface {
         : Math.round((24 + maskedCount * 14) * uiScale * passwordScale)
 
     property bool entered: false
+    property bool transitionStarted: false
+    property bool preRollSchedulingReady: false
     property int submittedMaskCount: 0
     property int passwordFailureMaskCount: 0
 
@@ -86,6 +88,27 @@ WlSessionLockSurface {
             if (!root.unlocking)
                 password.forceActiveFocus();
         });
+    }
+
+    function startEntryTransition() {
+        if (!root.preRollSchedulingReady || root.transitionStarted || root.unlocking)
+            return;
+        videoPreRollTimeout.stop();
+        // Keep the pending scene gate asserted until the transition reports
+        // running, then release the frozen pre-roll cover.
+        transitionLayer.restart();
+        root.transitionStarted = true;
+    }
+
+    function scheduleEntryTransition() {
+        if (!root.preRollSchedulingReady || root.transitionStarted || root.unlocking)
+            return;
+        if (!scene.backgroundMediaNeedsPreroll || scene.backgroundMediaPlaybackAdvanced) {
+            root.startEntryTransition();
+            return;
+        }
+        if (!videoPreRollTimeout.running)
+            videoPreRollTimeout.restart();
     }
 
     PinchHandler {
@@ -188,7 +211,28 @@ WlSessionLockSurface {
             desktopBackingSource: desktopBacking
             previewMode: false
             externalEntryTransitionRunning: transitionLayer.running
+            externalEntryTransitionPending: !root.transitionStarted
         }
+    }
+
+    // While a video destination decodes its first frames, keep the secure
+    // captured desktop visible. The live destination continues rendering below.
+    ShaderEffectSource {
+        id: preRollCover
+        anchors.fill: parent
+        z: 999
+        sourceItem: transitionBacking
+        live: true
+        recursive: false
+        smooth: true
+        visible: !root.transitionStarted
+    }
+
+    Timer {
+        id: videoPreRollTimeout
+        interval: 750
+        repeat: false
+        onTriggered: root.startEntryTransition()
     }
 
     // Double the active interaction cadence without adding any idle polling.
@@ -210,6 +254,14 @@ WlSessionLockSurface {
                 scene.logoHoverDirty = true;
             }
         }
+
+        function onBackgroundMediaNeedsPrerollChanged() {
+            root.scheduleEntryTransition();
+        }
+
+        function onBackgroundMediaPlaybackAdvancedChanged() {
+            root.scheduleEntryTransition();
+        }
     }
 
     LockTransitionLayer {
@@ -221,6 +273,7 @@ WlSessionLockSurface {
         mode: root.entryTransition
         duration: root.entryTransitionDuration
         replayToken: 0
+        autoStart: false
 
         onFinished: {
             root.entered = true;
@@ -379,6 +432,8 @@ WlSessionLockSurface {
 
     Component.onCompleted: {
         root.entered = true;
+        root.preRollSchedulingReady = true;
+        root.scheduleEntryTransition();
         root.focusPasswordWhenReady();
     }
 }

@@ -243,8 +243,8 @@ require_text "$SURFACE_QML" 'inputMethodHints: Qt.ImhSensitiveData' \
     'secure password TextInput lost sensitive-data input hints'
 require_text "$SCENE_QML" 'const minimum = name === "password" ? 20 : 0;' \
     'password presentation opacity is not bounded to the approved visible minimum'
-require_text "$SCENE_QML" 'readonly property bool effectiveEntryTransitionRunning: externalEntryTransitionRunning' \
-    'shared presentation content is not gated by the external transition layer'
+require_text "$SCENE_QML" 'externalEntryTransitionRunning || externalEntryTransitionPending' \
+    'shared presentation content is not gated by active or pending external transition state'
 require_text "$SURFACE_QML" 'Behavior on opacity' \
     'secure password content has no opacity transition animation'
 require_text "$SCENE_QML" 'Behavior on opacity' \
