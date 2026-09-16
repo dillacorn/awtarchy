@@ -80,9 +80,11 @@ Accepted reports are sent through an Awtarchy Cloudflare Worker and may create a
 
 See [PRIVACY.md](PRIVACY.md) for the exact reporting and data-handling model.
 
-## Wallpaper Collections
+## Wallpapers
 
-* [Wallhaven](https://wallhaven.cc/)
+* [Browse wallpapers on Wallhaven](https://wallhaven.cc/)
+* [Awtarchy Geology](awtarchy_geology.png)
+* [Awtarchy Space](awtarchy_space.png)
 
 ## Browser Notes
 
