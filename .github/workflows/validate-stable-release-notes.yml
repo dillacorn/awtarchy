@@ -71,7 +71,7 @@ jobs:
           test "$(jq -r .isDraft /tmp/release-before.json)" = "false"
           test "$(jq -r .isPrerelease /tmp/release-before.json)" = "false"
 
-          jq -r .body /tmp/release-before.json > /tmp/current-v3.7.0.md
+          jq -rj .body /tmp/release-before.json > /tmp/current-v3.7.0.md
           gh release view v3.6.2 --json body --jq .body > /tmp/previous-v3.6.2.md
           gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.7.0" --jq .object.sha > /tmp/tag-before.sha
 
@@ -110,9 +110,17 @@ jobs:
           gh release view v3.7.0 \
             --json name,tagName,targetCommitish,isDraft,isPrerelease,body \
             > /tmp/release-after.json
-          jq -r .body /tmp/release-after.json > /tmp/published-v3.7.0.md
+          jq -rj .body /tmp/release-after.json > /tmp/published-v3.7.0.md
 
-          cmp .github/release-v3.7.0-simplified-notes.md /tmp/published-v3.7.0.md
+          python3 - <<'PY'
+          from pathlib import Path
+
+          expected = Path('.github/release-v3.7.0-simplified-notes.md').read_text(encoding='utf-8').rstrip('\n')
+          published = Path('/tmp/published-v3.7.0.md').read_text(encoding='utf-8').rstrip('\n')
+          if expected != published:
+              raise SystemExit('published v3.7.0 body differs from the validated simplified body')
+          PY
+
           python3 .github/scripts/validate-stable-release-notes.py \
             --version v3.7.0 \
             --notes /tmp/published-v3.7.0.md \
