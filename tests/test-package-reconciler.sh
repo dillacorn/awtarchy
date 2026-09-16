@@ -4,7 +4,6 @@ IFS=$'\n\t'
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 RECONCILER="${ROOT}/local/share/awtarchy/awtarchy-package-reconcile.sh"
-PACMAN_RECOVERY="${ROOT}/local/share/awtarchy/awtarchy-pacman-recovery.sh"
 LAUNCHER="${ROOT}/local/bin/awtarchy"
 TMP="$(mktemp -d)"
 trap 'rm -rf -- "$TMP"' EXIT
@@ -117,21 +116,16 @@ printf '%s\n' "$output" | grep -Fq 'AUR catalog packages:' \
 printf '%s\n' "$output" | grep -Fq 'Flatpak catalog apps:' \
   || fail "review did not load the current runtime Flatpak catalog"
 
-# Pacman sync-database recovery is intentionally isolated from ordinary package
-# reconciliation. These tests use fake pacman/mirror tools and a temporary sync
-# directory so CI can exercise the failure/recovery flow without root or network.
-[[ -f $PACMAN_RECOVERY ]] || fail "pacman sync database recovery helper is missing"
-[[ -x $PACMAN_RECOVERY ]] || fail "pacman sync database recovery helper is not executable"
-bash -n "$PACMAN_RECOVERY"
-
-grep -Fq 'PACMAN_RECOVERY=' "$LAUNCHER" \
-  || fail "launcher does not track the pacman recovery helper"
-grep -Fq 'new_pacman_recovery=' "$LAUNCHER" \
-  || fail "self-update does not install the pacman recovery helper"
-grep -Fq 'offer_pacman_sync_recovery_before_update' "$LAUNCHER" \
-  || fail "stable update does not preflight cached pacman sync databases"
+# Recovery lives in the package reconciler so the existing self-updater ships it
+# without adding another installed maintenance component. The normal update path
+# already invokes --needs-action before changing configs, so that mode must run
+# the pacman sync-database preflight as well.
+grep -Fq 'pacman_sync_db_preflight' "$RECONCILER" \
+  || fail "package reconciler has no pacman sync database preflight"
 grep -Fq 'pacman_install_with_recovery' "$RECONCILER" \
   || fail "package reconciler does not route repository installs through recovery"
+grep -Fq 'pacman_sync_db_preflight || true' "$RECONCILER" \
+  || fail "--needs-action does not invoke the pacman recovery preflight"
 
 recovery_root="${TMP}/pacman-recovery"
 recovery_bin="${recovery_root}/bin"
@@ -185,10 +179,6 @@ if [[ " $* " == *' -Slq '* ]]; then
   if [[ -f "${RECOVERY_STATE}/repaired" ]]; then
     exit 0
   fi
-  if [[ $mode == package-signature ]]; then
-    printf '%s\n' 'error: /var/cache/pacman/pkg/example.pkg.tar.zst is corrupted (invalid or corrupted package (PGP signature))' >&2
-    exit 41
-  fi
   printf "error: %s: signature from \"Example Signer <signer@example.invalid>\" is invalid\n" "$repo" >&2
   printf "error: database '%s' is not valid (invalid or corrupted database (PGP signature))\n" "$repo" >&2
   printf '%s\n' 'error: failed to synchronize all databases (unexpected error)' >&2
@@ -224,7 +214,13 @@ if [[ " $* " == *' -Syu '* ]]; then
   if [[ -f "${RECOVERY_STATE}/repaired" ]]; then
     exit 0
   fi
+  if [[ $mode == package-signature ]]; then
+    printf '%s\n' 'error: /var/cache/pacman/pkg/example.pkg.tar.zst is corrupted (invalid or corrupted package (PGP signature))' >&2
+    exit 41
+  fi
+  printf "error: %s: signature from \"Example Signer <signer@example.invalid>\" is invalid\n" "$repo" >&2
   printf "error: database '%s' is not valid (invalid or corrupted database (PGP signature))\n" "$repo" >&2
+  printf '%s\n' 'error: failed to synchronize all databases (unexpected error)' >&2
   exit 43
 fi
 
@@ -241,7 +237,7 @@ printf 'reflector\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
 EOF_REFLECTOR
 chmod 0755 "$recovery_bin/reflector"
 
-run_recovery() {
+run_recovery_check() {
   RECOVERY_STATE="$recovery_state" \
   RECOVERY_LOG="$recovery_log" \
   RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
@@ -251,7 +247,20 @@ run_recovery() {
   AWTARCHY_PACMAN_CONF="$recovery_conf" \
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
-  "$PACMAN_RECOVERY" "$@"
+  "$RECONCILER" --pacman-recovery-check
+}
+
+run_recovery_pacman() {
+  RECOVERY_STATE="$recovery_state" \
+  RECOVERY_LOG="$recovery_log" \
+  RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
+  AWTARCHY_PACMAN_RECOVERY_TEST_MODE=1 \
+  AWTARCHY_PACMAN_BIN="$recovery_bin/pacman" \
+  AWTARCHY_PACMAN_SYNC_DIR="$recovery_sync" \
+  AWTARCHY_PACMAN_CONF="$recovery_conf" \
+  AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
+  AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
+  "$RECONCILER" --pacman-recovery-run -- "$@"
 }
 
 reset_recovery_case() {
@@ -265,7 +274,7 @@ reset_recovery_case() {
 }
 
 reset_recovery_case cachyos-extra-znver4
-AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery check \
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_check \
   || fail "CachyOS sync database recovery did not succeed"
 [[ ! -e "$recovery_sync/cachyos-extra-znver4.db" ]] \
   || fail "CachyOS recovery did not clear only the broken database cache"
@@ -279,7 +288,7 @@ grep -Fq -- '-Syy' "$recovery_log" \
   || fail "CachyOS recovery did not force a database resync"
 
 reset_recovery_case extra
-AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery check \
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_check \
   || fail "Arch sync database recovery did not succeed"
 grep -Fq $'reflector\t--verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist' "$recovery_log" \
   || fail "Arch recovery did not refresh standard Arch mirrors with reflector"
@@ -287,7 +296,7 @@ grep -Fq -- '-Syy' "$recovery_log" \
   || fail "Arch recovery did not force a database resync"
 
 reset_recovery_case core
-if AWTARCHY_ASSUME_PACMAN_REPAIR=no run_recovery check >/dev/null 2>&1; then
+if AWTARCHY_ASSUME_PACMAN_REPAIR=no run_recovery_check >/dev/null 2>&1; then
   fail "declined pacman recovery unexpectedly succeeded"
 fi
 [[ -e "$recovery_sync/core.db" && -e "$recovery_sync/core.db.sig" ]] \
@@ -296,7 +305,7 @@ fi
   || fail "declining pacman recovery forced a database resync"
 
 reset_recovery_case extra package-signature
-if AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery run -- -Syu --needed --noconfirm quickshell >/dev/null 2>&1; then
+if AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm quickshell >/dev/null 2>&1; then
   fail "package-file signature failure was incorrectly treated as a sync database failure"
 fi
 [[ -e "$recovery_sync/extra.db" && -e "$recovery_sync/extra.db.sig" ]] \
@@ -312,7 +321,7 @@ set -euo pipefail
 printf 'cachy-rate\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
 EOF_EXISTING_RATE
 chmod 0755 "$recovery_bin/cachyos-rate-mirrors"
-AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery run -- -Syu --needed --noconfirm quickshell \
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm quickshell \
   || fail "pacman command was not retried after successful sync database recovery"
 [[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
   || fail "pacman recovery did not retry the original command exactly once"
