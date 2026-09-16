@@ -39,3 +39,92 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  edit-v3-7-0-release-notes:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Temporary simplify v3.7.0 release notes' &&
+      github.event.pull_request.head.ref == 'release/v3.7.0-notes-simplify'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Guard exact published release and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: 74e6edca328be90ddddf12f9417b2cd7051a312b
+        run: |
+          set -euo pipefail
+
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.7.0" --jq .object.sha)" = "$EXPECTED_SHA"
+
+          gh release view v3.7.0 \
+            --json name,tagName,targetCommitish,isDraft,isPrerelease,body \
+            > /tmp/release-before.json
+
+          test "$(jq -r .name /tmp/release-before.json)" = "Awtarchy v3.7.0 Quickshell"
+          test "$(jq -r .tagName /tmp/release-before.json)" = "v3.7.0"
+          test "$(jq -r .targetCommitish /tmp/release-before.json)" = "$EXPECTED_SHA"
+          test "$(jq -r .isDraft /tmp/release-before.json)" = "false"
+          test "$(jq -r .isPrerelease /tmp/release-before.json)" = "false"
+
+          jq -r .body /tmp/release-before.json > /tmp/current-v3.7.0.md
+          gh release view v3.6.2 --json body --jq .body > /tmp/previous-v3.6.2.md
+          gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.7.0" --jq .object.sha > /tmp/tag-before.sha
+
+      - name: Validate simplified release notes
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.7.0 \
+            --notes .github/release-v3.7.0-simplified-notes.md \
+            --previous /tmp/current-v3.7.0.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.7.0 \
+            --notes .github/release-v3.7.0-simplified-notes.md \
+            --previous /tmp/previous-v3.6.2.md
+
+      - name: Edit and verify published release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_SHA: 74e6edca328be90ddddf12f9417b2cd7051a312b
+        run: |
+          set -euo pipefail
+
+          edited=0
+          rollback() {
+            if [ "$edited" -eq 1 ]; then
+              gh release edit v3.7.0 --notes-file /tmp/current-v3.7.0.md >/dev/null || true
+            fi
+          }
+          trap rollback ERR
+
+          gh release edit v3.7.0 \
+            --notes-file .github/release-v3.7.0-simplified-notes.md \
+            >/dev/null
+          edited=1
+
+          gh release view v3.7.0 \
+            --json name,tagName,targetCommitish,isDraft,isPrerelease,body \
+            > /tmp/release-after.json
+          jq -r .body /tmp/release-after.json > /tmp/published-v3.7.0.md
+
+          cmp .github/release-v3.7.0-simplified-notes.md /tmp/published-v3.7.0.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.7.0 \
+            --notes /tmp/published-v3.7.0.md \
+            --previous /tmp/current-v3.7.0.md
+
+          test "$(jq -r .name /tmp/release-after.json)" = "Awtarchy v3.7.0 Quickshell"
+          test "$(jq -r .tagName /tmp/release-after.json)" = "v3.7.0"
+          test "$(jq -r .targetCommitish /tmp/release-after.json)" = "$EXPECTED_SHA"
+          test "$(jq -r .isDraft /tmp/release-after.json)" = "false"
+          test "$(jq -r .isPrerelease /tmp/release-after.json)" = "false"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)" = "$EXPECTED_SHA"
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.7.0" --jq .object.sha)" = "$(cat /tmp/tag-before.sha)"
+
+          edited=0
+          trap - ERR
