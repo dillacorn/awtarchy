@@ -214,8 +214,8 @@ Item {
     }
 
     function wallpaperGeometry() {
-        const sourceWidth = Number(wallpaperImage.sourceSize.width);
-        const sourceHeight = Number(wallpaperImage.sourceSize.height);
+        const sourceWidth = Number(wallpaperMedia.sourceSize.width);
+        const sourceHeight = Number(wallpaperMedia.sourceSize.height);
         if (!Number.isFinite(sourceWidth) || !Number.isFinite(sourceHeight)
                 || sourceWidth <= 0 || sourceHeight <= 0 || root.width <= 0 || root.height <= 0)
             return ({ x: 0, y: 0, width: root.width, height: root.height });
@@ -929,18 +929,17 @@ Item {
                 color: root.backgroundMode === "color" ? root.backgroundColor : "#000000"
             }
 
-            Image {
-                id: wallpaperImage
+            LockMedia {
+                id: wallpaperMedia
                 readonly property var geometry: root.wallpaperGeometry()
                 x: geometry.x
                 y: geometry.y
                 width: geometry.width
                 height: geometry.height
                 visible: root.backgroundMode === "wallpaper" && root.wallpaperSource.length > 0
+                active: visible
                 source: root.wallpaperSource
-                fillMode: Image.Stretch
-                asynchronous: true
-                cache: true
+                contentFit: "stretch"
             }
 
             Rectangle {
@@ -1040,15 +1039,14 @@ Item {
                     spawnAnimation.restart();
                 }
 
-                Image {
+                LockMedia {
                     id: customImageSource
                     anchors.fill: parent
+                    active: customImageDelegate.visible
                     source: String(customImageDelegate.modelData.path || "").startsWith("/")
                         ? "file://" + String(customImageDelegate.modelData.path) : ""
-                    asynchronous: true
-                    cache: true
-                    fillMode: Image.PreserveAspectFit
-                    smooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.effectiveSpawnProgress >= 0.999
+                    contentFit: "contain"
+                    mediaSmooth: customImageDelegate.spawnMode !== "pixel-warp" || customImageDelegate.effectiveSpawnProgress >= 0.999
                 }
 
                 ShaderEffectSource {
