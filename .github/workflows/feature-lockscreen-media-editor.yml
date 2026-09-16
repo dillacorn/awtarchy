@@ -1,0 +1,16 @@
+name: Feature lockscreen media/editor validation
+
+on:
+  push:
+    branches: [feature/lockscreen-media-editor-polish]
+
+permissions:
+  contents: read
+
+jobs:
+  focused:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - name: Focused contract
+        run: bash tests/test-quickshell-lockscreen-media-editor-polish.sh
