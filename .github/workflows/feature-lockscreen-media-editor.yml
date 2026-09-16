@@ -24,4 +24,13 @@ jobs:
       - name: Trace updater migration
         env:
           AWTARCHY_TEST_KEEP_TMP: "1"
-        run: bash -x tests/test-quickshell-updater-migration.sh
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/debug-tmp"
+          set +e
+          TMPDIR="$GITHUB_WORKSPACE/debug-tmp" bash -x tests/test-quickshell-updater-migration.sh
+          rc=$?
+          echo '=== captured update output ==='
+          find "$GITHUB_WORKSPACE/debug-tmp" -type f -name update.out -print -exec cat {} \; || true
+          echo '=== captured pacman log ==='
+          find "$GITHUB_WORKSPACE/debug-tmp" -type f -name pacman.log -print -exec cat {} \; || true
+          exit "$rc"
