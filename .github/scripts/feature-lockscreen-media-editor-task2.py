@@ -11,6 +11,15 @@ def replace_once(path: Path, old: str, new: str, label: str) -> None:
     path.write_text(text.replace(old, new, 1))
 
 
+def replace_first(path: Path, old: str, new: str, label: str) -> None:
+    text = path.read_text()
+    if new in text:
+        return
+    if old not in text:
+        raise SystemExit(f"missing patch target: {label}")
+    path.write_text(text.replace(old, new, 1))
+
+
 shell = Path("config/quickshell/awtarchy/shell.qml")
 replace_once(
     shell,
@@ -58,12 +67,12 @@ replace_once(
     'local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"\n',
     "Hyprland editor launcher variable",
 )
-replace_once(
+replace_first(
     hypr,
     'hl.bind("SUPER + ALT + backspace", hl.dsp.exec_cmd(hypr_quicksettings), {})\n',
     'hl.bind("SUPER + ALT + backspace", hl.dsp.exec_cmd(hypr_quicksettings), {})\n'
     'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})\n',
-    "Hyprland editor shortcut",
+    "global Hyprland editor shortcut",
 )
 
 launcher = Path("config/hypr/scripts/quickshell_lockscreen_editor.sh")
