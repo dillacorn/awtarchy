@@ -3,10 +3,18 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
+SHELL_QML="${ROOT}/config/quickshell/awtarchy/shell.qml"
+QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
+HYPRLAND="${ROOT}/config/hypr/hyprland.lua"
+EDITOR_LAUNCHER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor.sh"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
     exit 1
+}
+
+require_file() {
+    [[ -f "$1" ]] || fail "$2"
 }
 
 require_text() {
@@ -43,5 +51,19 @@ require_text "$EDITOR" 'Ctrl+S Save' \
     'editor does not advertise its save shortcut'
 require_text "$EDITOR" 'Esc Cancel' \
     'editor does not advertise its cancel shortcut'
+
+require_text "$SHELL_QML" 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' \
+    'desktop shell has no focused lockscreen-editor IPC action'
+require_file "$EDITOR_LAUNCHER" 'lockscreen editor launcher helper is missing'
+require_text "$EDITOR_LAUNCHER" 'ipc call control openLockscreenEditor' \
+    'lockscreen editor launcher does not call the focused IPC action'
+require_text "$HYPRLAND" 'local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"' \
+    'Hyprland does not define the lockscreen editor launcher'
+require_text "$HYPRLAND" 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' \
+    'Super+Alt+E is not bound to the lockscreen editor'
+require_text "$QUICK_SETTINGS" 'label: "Edit Layout"' \
+    'Quick Settings lost the lockscreen Edit Layout control'
+require_text "$QUICK_SETTINGS" 'text: "Super + Alt + E"' \
+    'Quick Settings does not advertise the direct editor shortcut'
 
 printf 'PASS: lockscreen media/editor polish contracts\n'
