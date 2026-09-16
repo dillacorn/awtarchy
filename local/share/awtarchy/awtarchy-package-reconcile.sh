@@ -14,6 +14,9 @@ REVIEW_ONLY=0
 MIGRATE_REPLACEMENTS_ONLY=0
 MIGRATE_LOCKSCREEN_RETIREMENT_ONLY=0
 NEEDS_ACTION_ONLY=0
+PACMAN_RECOVERY_CHECK_ONLY=0
+PACMAN_RECOVERY_RUN_ONLY=0
+declare -a PACMAN_RECOVERY_RUN_ARGS=()
 
 # Packages required by currently exposed Awtarchy shell/runtime features.
 # Keep this list small. The full installer catalog remains authoritative for
@@ -110,6 +113,18 @@ while (( $# )); do
     --needs-action)
       NEEDS_ACTION_ONLY=1
       ;;
+    --pacman-recovery-check)
+      PACMAN_RECOVERY_CHECK_ONLY=1
+      ;;
+    --pacman-recovery-run)
+      PACMAN_RECOVERY_RUN_ONLY=1
+      shift
+      [[ ${1:-} == -- ]] || die "--pacman-recovery-run requires -- before pacman arguments."
+      shift
+      (( $# > 0 )) || die "--pacman-recovery-run requires pacman arguments."
+      PACMAN_RECOVERY_RUN_ARGS=("$@")
+      break
+      ;;
     -h|--help|help)
       usage
       exit 0
@@ -121,9 +136,11 @@ while (( $# )); do
   shift
 done
 
-[[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
-  || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
-have pacman || die "pacman is required for package reconciliation."
+if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 )); then
+  [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
+    || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
+  have pacman || die "pacman is required for package reconciliation."
+fi
 
 strip_outer_quotes() {
   local value="$1"
@@ -651,6 +668,329 @@ as_root() {
   fi
 }
 
+pacman_recovery_supported_runtime() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    return 0
+  fi
+  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+}
+
+pacman_recovery_configure() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
+    PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
+    PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
+    PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
+  else
+    PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_CONF=/etc/pacman.conf
+    PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
+    PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
+    PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
+  fi
+
+  [[ -x $PACMAN_RECOVERY_PACMAN ]] \
+    || { warn "Pacman recovery binary is unavailable: ${PACMAN_RECOVERY_PACMAN}"; return 1; }
+  [[ -r $PACMAN_RECOVERY_CONF ]] \
+    || { warn "Pacman recovery configuration is unavailable: ${PACMAN_RECOVERY_CONF}"; return 1; }
+}
+
+pacman_recovery_as_root() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    "$@"
+  else
+    as_root "$@"
+  fi
+}
+
+pacman_recovery_run_capture() {
+  local root_mode="$1" error_file="$2"
+  shift 2
+  local rc=0
+
+  : >"$error_file"
+  if [[ $root_mode == root ]]; then
+    if pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    if "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  fi
+
+  if [[ -s $error_file ]]; then
+    cat -- "$error_file" >&2
+  fi
+  return "$rc"
+}
+
+pacman_recovery_parse_repos() {
+  local error_file="$1" line
+  local saw_sync_failure=0
+  local -a repos=()
+
+  grep -Fq 'failed to synchronize all databases' "$error_file" \
+    && saw_sync_failure=1
+
+  while IFS= read -r line; do
+    if [[ $line =~ ^error:\ database\ \'([A-Za-z0-9@._+:-]+)\'\ is\ not\ valid\ \(invalid\ or\ corrupted\ database\ \(PGP\ signature\)\)$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+      continue
+    fi
+    if (( saw_sync_failure == 1 )) \
+      && [[ $line =~ ^error:\ ([A-Za-z0-9@._+:-]+):\ signature\ from\ .+\ is\ invalid$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+    fi
+  done <"$error_file"
+
+  (( ${#repos[@]} > 0 )) || return 1
+  printf '%s\n' "${repos[@]}" | LC_ALL=C sort -u
+}
+
+pacman_recovery_repo_is_cachyos() {
+  [[ $1 == cachyos || $1 == cachyos-* ]]
+}
+
+pacman_recovery_repo_is_arch() {
+  [[ $1 =~ ^(core|extra|multilib)(-testing|-staging)?$ ]]
+}
+
+pacman_recovery_repo_in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ $item == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+pacman_recovery_write_config_without_repos() {
+  local destination="$1"
+  shift
+  local -a blocked=("$@")
+  local line section="" skip=0
+
+  : >"$destination"
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^\[([A-Za-z0-9@._+:-]+)\][[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      if pacman_recovery_repo_in_list "$section" "${blocked[@]}"; then
+        skip=1
+      else
+        skip=0
+      fi
+    fi
+    (( skip == 1 )) || printf '%s\n' "$line" >>"$destination"
+  done <"$PACMAN_RECOVERY_CONF"
+}
+
+pacman_recovery_bootstrap_tool() {
+  local kind="$1"
+  shift
+  local -a repos=("$@")
+  local tmp_conf
+
+  tmp_conf="$(mktemp)"
+  pacman_recovery_write_config_without_repos "$tmp_conf" "${repos[@]}"
+
+  case "$kind" in
+    cachyos)
+      log "CachyOS mirror tool is missing; bootstrapping rate-mirrors and cachyos-rate-mirrors without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm rate-mirrors cachyos-rate-mirrors; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap cachyos-rate-mirrors; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    arch)
+      log "Arch mirror tool is missing; trying to bootstrap reflector without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm reflector; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap reflector; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    *)
+      rm -f -- "$tmp_conf"
+      return 1
+      ;;
+  esac
+
+  rm -f -- "$tmp_conf"
+}
+
+pacman_recovery_refresh_mirrors() {
+  local -a repos=("$@")
+  local repo need_cachy=0 need_arch=0
+
+  [[ $PACMAN_RECOVERY_SKIP_MIRROR_REFRESH == 1 ]] && return 0
+
+  for repo in "${repos[@]}"; do
+    pacman_recovery_repo_is_cachyos "$repo" && need_cachy=1
+    pacman_recovery_repo_is_arch "$repo" && need_arch=1
+  done
+
+  if (( need_cachy == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      pacman_recovery_bootstrap_tool cachyos "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      log "Refreshing CachyOS mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" \
+        || warn "CachyOS mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+
+  if (( need_arch == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      pacman_recovery_bootstrap_tool arch "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      log "Refreshing standard Arch mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+        --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist \
+        || warn "Arch mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+}
+
+pacman_recovery_confirm() {
+  local answer=""
+  local -a repos=("$@")
+
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    case "${AWTARCHY_ASSUME_PACMAN_REPAIR:-no}" in
+      y|Y|yes|YES) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    warn "Pacman has an invalid signed repository database, but no interactive terminal is available for repair approval."
+    return 1
+  fi
+
+  printf '\nAwtarchy detected an invalid signed pacman repository database:\n' >/dev/tty
+  printf '  - %s\n' "${repos[@]}" >/dev/tty
+  printf '\nAwtarchy can refresh supported mirrors, remove only the affected cached\n' >/dev/tty
+  printf 'repository database/signature files, force a fresh sync, and retry once.\n' >/dev/tty
+  printf 'It will not disable signature checking or reset your pacman keyring.\n\n' >/dev/tty
+  printf 'Attempt this repair? [y/N] ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=''
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *)
+      printf 'Pacman repository repair skipped.\n' >/dev/tty
+      return 1
+      ;;
+  esac
+}
+
+pacman_recovery_clear_sync_databases() {
+  local repo
+  for repo in "$@"; do
+    pacman_recovery_as_root rm -f -- \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db" \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db.sig"
+  done
+}
+
+pacman_recovery_repair() {
+  local -a repos=("$@")
+  local error_file rc=0
+
+  (( ${#repos[@]} > 0 )) || return 1
+  pacman_recovery_confirm "${repos[@]}" || return 1
+
+  pacman_recovery_refresh_mirrors "${repos[@]}"
+  pacman_recovery_clear_sync_databases "${repos[@]}"
+
+  error_file="$(mktemp)"
+  log "Forcing a fresh pacman database sync..."
+  if pacman_recovery_run_capture root "$error_file" -Syy; then
+    rm -f -- "$error_file"
+    log "Pacman repository database recovery completed."
+    return 0
+  else
+    rc=$?
+  fi
+  rm -f -- "$error_file"
+  warn "Pacman database resync still failed; no signature checks were bypassed and no keyring changes were made."
+  return "$rc"
+}
+
+pacman_sync_db_preflight() {
+  local error_file rc=0
+  local -a repos=()
+
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture user "$error_file" -Slq >/dev/null; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+  pacman_recovery_repair "${repos[@]}"
+}
+
+pacman_recovery_run_command() {
+  local error_file rc=0 retry_rc=0
+  local -a repos=() args=("$@")
+
+  pacman_recovery_supported_runtime || {
+    as_root pacman "${args[@]}"
+    return $?
+  }
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+
+  if ! pacman_recovery_repair "${repos[@]}"; then
+    return "$rc"
+  fi
+
+  error_file="$(mktemp)"
+  log "Retrying the original pacman command once..."
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    retry_rc=0
+  else
+    retry_rc=$?
+  fi
+  rm -f -- "$error_file"
+  return "$retry_rc"
+}
+
+pacman_install_with_recovery() {
+  pacman_recovery_run_command "$@"
+}
+
 ensure_aur_scanner() {
   if [[ -x "$AUR_SCAN_BIN" ]] && "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
     return 0
@@ -752,7 +1092,7 @@ apply_cheese_snapshot_replacement() {
 
   log "Replacing retired Cheese camera app with Snapshot..."
   if ! package_installed snapshot; then
-    as_root pacman -S --needed --noconfirm snapshot
+    pacman_install_with_recovery -S --needed --noconfirm snapshot
   fi
   record_managed_packages snapshot
   as_root pacman -R --noconfirm cheese
@@ -760,7 +1100,6 @@ apply_cheese_snapshot_replacement() {
   CHEESE_REPLACEMENT_NEEDED=0
   log "Replaced Cheese with Snapshot."
 }
-
 
 apply_bibata_cursor_replacement() {
   array_contains bibata-cursor-theme-bin "${AUR_CATALOG[@]}" || return 0
@@ -866,6 +1205,20 @@ package_reconciliation_needs_action() {
   (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
   return 1
 }
+
+if (( PACMAN_RECOVERY_CHECK_ONLY == 1 )); then
+  pacman_sync_db_preflight
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_RUN_ONLY == 1 )); then
+  pacman_recovery_run_command "${PACMAN_RECOVERY_RUN_ARGS[@]}"
+  exit $?
+fi
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  pacman_sync_db_preflight || true
+fi
 
 collect_state
 
@@ -1025,7 +1378,7 @@ recover_package_disk_headroom
 
 if (( ${#install_arch[@]} )); then
   log "Installing Arch packages with a full system upgrade: ${install_arch[*]}"
-  as_root pacman -Syu --needed --noconfirm "${install_arch[@]}"
+  pacman_install_with_recovery -Syu --needed --noconfirm "${install_arch[@]}"
   record_managed_packages "${install_arch[@]}"
 fi
 
