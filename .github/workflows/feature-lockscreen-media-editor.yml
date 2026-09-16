@@ -19,13 +19,16 @@ jobs:
           python3 .github/scripts/feature-lockscreen-media-editor-apply.py
           python3 .github/scripts/feature-lockscreen-media-editor-task2.py
           python3 .github/scripts/feature-lockscreen-media-editor-task3.py
+          python3 .github/scripts/feature-lockscreen-media-editor-task4.py
       - name: Focused contract
         run: bash tests/test-quickshell-lockscreen-media-editor-polish.sh
-      - name: Picker and runtime contracts
+      - name: Media renderer regressions
         run: |
-          bash -n config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh
-          bash tests/test-quickshell-lockscreen-picker-targeting.sh
-          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
+          bash tests/test-quickshell-lockscreen-editor.sh
+          bash tests/test-quickshell-lockscreen-element-system.sh
+          bash tests/test-quickshell-lockscreen-runtime-regressions.sh
+          bash tests/test-quickshell-lockscreen-transition-layer.sh
+          bash tests/test-quickshell-lockscreen-entry-transitions.sh
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
       - name: Validate diff
         run: git diff --check
@@ -36,6 +39,6 @@ jobs:
           fi
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh local/share/awtarchy/awtarchy-runtime.sh tests/test-quickshell-lockscreen-picker-targeting.sh tests/test-quickshell-lockscreen-runtime-acceptance-187.sh tests/test-quickshell-lockscreen-runtime-polish.sh
-          git commit -m 'Allow lockscreen media selection'
+          git add config/quickshell/awtarchy-lock/LockMedia.qml config/quickshell/awtarchy/LockMedia.qml config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
+          git commit -m 'Render lockscreen animated media'
           git push origin HEAD:feature/lockscreen-media-editor-polish
