@@ -7,6 +7,8 @@ SHELL_QML="${ROOT}/config/quickshell/awtarchy/shell.qml"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 HYPRLAND="${ROOT}/config/hypr/hyprland.lua"
 EDITOR_LAUNCHER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor.sh"
+PICKER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh"
+RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -65,5 +67,12 @@ require_text "$QUICK_SETTINGS" 'label: "Edit Layout"' \
     'Quick Settings lost the lockscreen Edit Layout control'
 require_text "$QUICK_SETTINGS" 'text: "Super + Alt + E"' \
     'Quick Settings does not advertise the direct editor shortcut'
+
+require_text "$PICKER" '--select-only --type all --resume' \
+    'Awtwall lockscreen selection is still restricted to still images'
+reject_text "$PICKER" '--select-only --type images --resume' \
+    'Awtwall lockscreen picker still forces still-image mode'
+require_text "$RUNTIME" 'quickshell qt6-multimedia qt6-multimedia-ffmpeg' \
+    'mandatory Quickshell package group does not include Qt Multimedia and its FFmpeg backend'
 
 printf 'PASS: lockscreen media/editor polish contracts\n'
