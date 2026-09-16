@@ -20,18 +20,21 @@ jobs:
           python3 .github/scripts/feature-lockscreen-media-editor-task2.py
           python3 .github/scripts/feature-lockscreen-media-editor-task3.py
           python3 .github/scripts/feature-lockscreen-media-editor-task4.py
-      - name: Focused contract
-        run: bash tests/test-quickshell-lockscreen-media-editor-polish.sh
-      - name: Video pre-roll contract
-        run: bash tests/test-quickshell-lockscreen-media-preroll.sh
-      - name: Media renderer regressions
+          python3 .github/scripts/feature-lockscreen-media-editor-task5.py
+      - name: Focused contracts
+        run: |
+          bash tests/test-quickshell-lockscreen-media-editor-polish.sh
+          bash tests/test-quickshell-lockscreen-media-preroll.sh
+      - name: Transition and runtime regressions
         run: |
           bash tests/test-quickshell-lockscreen-editor.sh
           bash tests/test-quickshell-lockscreen-element-system.sh
           bash tests/test-quickshell-lockscreen-runtime-regressions.sh
           bash tests/test-quickshell-lockscreen-transition-layer.sh
           bash tests/test-quickshell-lockscreen-entry-transitions.sh
+          bash tests/test-quickshell-lockscreen-third-runtime-pass.sh
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
+          node tests/test-quickshell-lockscreen-efficiency.mjs
       - name: Validate diff
         run: git diff --check
       - name: Commit validated implementation
@@ -41,6 +44,6 @@ jobs:
           fi
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/quickshell/awtarchy-lock/LockMedia.qml config/quickshell/awtarchy/LockMedia.qml config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml
-          git commit -m 'Render lockscreen animated media'
+          git add config/quickshell/awtarchy-lock/LockScene.qml config/quickshell/awtarchy/LockPreviewScene.qml config/quickshell/awtarchy-lock/LockSurface.qml tests/test-quickshell-lockscreen-runtime-regressions.sh
+          git commit -m 'Pre-roll lockscreen video transitions'
           git push origin HEAD:feature/lockscreen-media-editor-polish
