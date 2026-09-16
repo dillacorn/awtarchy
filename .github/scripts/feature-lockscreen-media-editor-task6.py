@@ -10,6 +10,15 @@ def replace_once(path: str, old: str, new: str) -> None:
     target.write_text(text.replace(old, new, 1), encoding="utf-8")
 
 
+def replace_exact(path: str, old: str, new: str, expected: int) -> None:
+    target = Path(path)
+    text = target.read_text(encoding="utf-8")
+    count = text.count(old)
+    if count != expected:
+        raise SystemExit(f"{path}: expected {expected} replacement targets, found {count}: {old!r}")
+    target.write_text(text.replace(old, new), encoding="utf-8")
+
+
 helper = Path("config/hypr/scripts/quickshell_lockscreen_contrast.sh")
 text = helper.read_text(encoding="utf-8")
 
@@ -99,9 +108,9 @@ text = text.replace(old, new, 1)
 helper.write_text(text, encoding="utf-8")
 
 editor = "config/quickshell/awtarchy/LockscreenEditor.qml"
+replace_exact(editor, "Custom image limit reached (", "Custom media limit reached (", 2)
 replacements = [
     ("Custom image must be a local absolute path", "Custom media must be a local absolute path"),
-    ("Custom image limit reached (", "Custom media limit reached ("),
     ("Image added. Save to apply.", "Media added. Save to apply."),
     ("Image removed. Save to apply.", "Media removed. Save to apply."),
     ("Awtwall returned an invalid local image", "Awtwall returned an invalid local media"),
