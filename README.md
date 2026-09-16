@@ -82,9 +82,7 @@ See [PRIVACY.md](PRIVACY.md) for the exact reporting and data-handling model.
 
 ## Wallpaper Collections
 
-* [dharmx/walls](https://github.com/dharmx/walls)
-* [Gruvbox Wallpapers](https://github.com/AngelJumbo/gruvbox-wallpapers)
-* [Aesthetic Wallpapers](https://github.com/D3Ext/aesthetic-wallpapers)
+* [Wallhaven](https://wallhaven.cc/)
 
 ## Browser Notes
 
