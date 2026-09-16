@@ -25,6 +25,7 @@ jobs:
         run: |
           bash tests/test-quickshell-lockscreen-media-editor-polish.sh
           bash tests/test-quickshell-lockscreen-media-preroll.sh
+          bash tests/test-quickshell-lockscreen-animated-contrast.sh
       - name: Transition and runtime regressions
         run: |
           bash tests/test-quickshell-lockscreen-editor.sh
