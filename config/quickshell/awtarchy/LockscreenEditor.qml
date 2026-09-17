@@ -133,6 +133,12 @@ Singleton {
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
+    property var draftSharedProfile: ({})
+    property var draftMonitorOverrides: ({})
+    property string activeMonitorName: ""
+    property bool profileLoadActive: false
+    property var profileUndoStacks: ({})
+    property var profileRedoStacks: ({})
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
@@ -381,6 +387,265 @@ Singleton {
         } catch (error) {
             return null;
         }
+    }
+
+    function profileFromDraftScalars() {
+        return ({
+            lockscreen_layout: cloneLayout(draftLayout),
+            lockscreen_show_logo: !!draftVisibility.logo,
+            lockscreen_show_time: !!draftVisibility.time,
+            lockscreen_show_date: !!draftVisibility.date,
+            lockscreen_show_username: !!draftVisibility.username,
+            lockscreen_show_weather: !!draftVisibility.weather,
+            lockscreen_custom_images: cloneCustomImages(draftCustomImages),
+            lockscreen_timezone_clocks: cloneTimezoneClocks(draftTimezoneClocks),
+            lockscreen_custom_texts: cloneCustomTexts(draftCustomTexts),
+            lockscreen_visualizer: cloneVisualizer(draftVisualizer),
+            lockscreen_background: draftBackgroundMode,
+            lockscreen_background_color: draftBackgroundColor,
+            lockscreen_wallpaper_path: draftWallpaperPath,
+            lockscreen_wallpaper_fit: draftWallpaperFit,
+            lockscreen_wallpaper_focal_x: draftWallpaperFocalX,
+            lockscreen_wallpaper_focal_y: draftWallpaperFocalY,
+            lockscreen_background_opacity: draftBackgroundOpacity,
+            lockscreen_background_opacity_previous: draftLastBackgroundOpacity,
+            lockscreen_overlay_mode: draftOverlayMode,
+            lockscreen_overlay_strength: draftOverlayStrength,
+            lockscreen_wallpaper_blur: draftWallpaperBlur,
+            lockscreen_blur_style: draftBlurStyle,
+            lockscreen_weather_units: draftWeatherUnits,
+            lockscreen_animation: draftLogoSpawnAnimation,
+            lockscreen_entry_transition: draftEntryTransition,
+            lockscreen_entry_transition_duration: draftEntryTransitionDuration,
+            lockscreen_password_mask_mode: draftPasswordMaskMode,
+            lockscreen_password_mask_character: draftPasswordMaskCharacter,
+            lockscreen_clock_format: draftClockFormat
+        });
+    }
+
+    function loadProfileIntoDraft(profile) {
+        if (!profile || typeof profile !== "object")
+            return;
+        profileLoadActive = true;
+        try {
+            draftLayout = cloneLayout(profile.lockscreen_layout);
+            draftCustomImages = cloneCustomImages(profile.lockscreen_custom_images);
+            draftTimezoneClocks = cloneTimezoneClocks(profile.lockscreen_timezone_clocks);
+            draftCustomTexts = cloneCustomTexts(profile.lockscreen_custom_texts);
+            draftVisualizer = cloneVisualizer(profile.lockscreen_visualizer);
+            draftVisibility = cloneVisibility(({
+                logo: profile.lockscreen_show_logo,
+                time: profile.lockscreen_show_time,
+                date: profile.lockscreen_show_date,
+                username: profile.lockscreen_show_username,
+                weather: profile.lockscreen_show_weather,
+                password: true
+            }));
+            draftBackgroundMode = String(profile.lockscreen_background || "black");
+            draftBackgroundColor = String(profile.lockscreen_background_color || "#000000").toLowerCase();
+            draftWallpaperPath = String(profile.lockscreen_wallpaper_path || "");
+            draftWallpaperFit = String(profile.lockscreen_wallpaper_fit || "cover");
+            draftWallpaperFocalX = Number(profile.lockscreen_wallpaper_focal_x);
+            draftWallpaperFocalY = Number(profile.lockscreen_wallpaper_focal_y);
+            draftBackgroundOpacity = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_background_opacity))));
+            draftLastBackgroundOpacity = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_background_opacity_previous))));
+            draftOverlayMode = String(profile.lockscreen_overlay_mode || "none");
+            draftOverlayStrength = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_overlay_strength))));
+            draftWallpaperBlur = Math.max(0, Math.min(200, Math.round(Number(profile.lockscreen_wallpaper_blur))));
+            draftBlurStyle = String(profile.lockscreen_blur_style || "pixelated");
+            draftWeatherUnits = String(profile.lockscreen_weather_units || "auto");
+            draftLogoSpawnAnimation = normalizedLogoSpawn(profile.lockscreen_animation);
+            draftEntryTransition = String(profile.lockscreen_entry_transition || "fade");
+            draftEntryTransitionDuration = Math.max(800, Math.min(6000, Math.round(Number(profile.lockscreen_entry_transition_duration))));
+            draftPasswordMaskMode = normalizedPasswordMaskMode(profile.lockscreen_password_mask_mode);
+            draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(profile.lockscreen_password_mask_character);
+            draftClockFormat = normalizedClockFormat(profile.lockscreen_clock_format);
+            draftWallpaperBlurExplicit = false;
+            draftAutoAccents = defaultAutoAccents();
+            refreshPreviewTimezoneValues();
+            if (!elementExists(selectedElement))
+                selectedElement = "logo";
+            selectedElements = [selectedElement];
+            clearGuides();
+        } finally {
+            profileLoadActive = false;
+        }
+        scheduleContrastRefresh();
+    }
+
+    function hasIndividualConfiguration(name) {
+        const key = String(name || "");
+        return key.length > 0 && draftMonitorOverrides
+            && typeof draftMonitorOverrides === "object"
+            && Object.prototype.hasOwnProperty.call(draftMonitorOverrides, key);
+    }
+
+    function activeProfileKey() {
+        return hasIndividualConfiguration(activeMonitorName)
+            ? "monitor:" + activeMonitorName : "shared";
+    }
+
+    function stashHistoryForActiveProfile() {
+        const key = activeProfileKey();
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        undo[key] = cloneSnapshot(undoStack) || [];
+        redo[key] = cloneSnapshot(redoStack) || [];
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+    }
+
+    function restoreHistoryForActiveProfile() {
+        const key = activeProfileKey();
+        undoStack = cloneSnapshot(profileUndoStacks[key]) || [];
+        redoStack = cloneSnapshot(profileRedoStacks[key]) || [];
+        historyTransactionActive = false;
+        historyTransactionSnapshot = null;
+    }
+
+    function flushActiveProfile() {
+        const profile = cloneSnapshot(profileFromDraftScalars());
+        if (!profile)
+            return;
+        if (hasIndividualConfiguration(activeMonitorName)) {
+            const next = Object.assign({}, draftMonitorOverrides);
+            next[activeMonitorName] = profile;
+            draftMonitorOverrides = next;
+        } else {
+            draftSharedProfile = profile;
+        }
+    }
+
+    function effectiveProfileForMonitor(name) {
+        const key = String(name || "");
+        if (key === activeMonitorName)
+            return profileFromDraftScalars();
+        if (hasIndividualConfiguration(key))
+            return cloneSnapshot(draftMonitorOverrides[key]);
+        if (!hasIndividualConfiguration(activeMonitorName))
+            return profileFromDraftScalars();
+        return cloneSnapshot(draftSharedProfile);
+    }
+
+    function connectedScreenByName(name) {
+        const key = String(name || "");
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            if (screens[i] && String(screens[i].name || "") === key)
+                return screens[i];
+        }
+        return null;
+    }
+
+    function useIndividualConfiguration() {
+        if (activeMonitorName.length === 0 || hasIndividualConfiguration(activeMonitorName))
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
+        const next = Object.assign({}, draftMonitorOverrides);
+        next[activeMonitorName] = cloneSnapshot(profileFromDraftScalars());
+        draftMonitorOverrides = next;
+        restoreHistoryForActiveProfile();
+        statusMessage = activeMonitorName + " now uses an Individual configuration";
+    }
+
+    function useSharedConfiguration() {
+        if (activeMonitorName.length === 0 || !hasIndividualConfiguration(activeMonitorName))
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
+        const next = Object.assign({}, draftMonitorOverrides);
+        delete next[activeMonitorName];
+        draftMonitorOverrides = next;
+        loadProfileIntoDraft(draftSharedProfile);
+        restoreHistoryForActiveProfile();
+        statusMessage = activeMonitorName + " now uses Shared configuration";
+    }
+
+    function copyConfigurationTo(name) {
+        const targetName = String(name || "");
+        if (targetName.length === 0 || targetName === activeMonitorName || !connectedScreenByName(targetName))
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        flushActiveProfile();
+        const source = cloneSnapshot(profileFromDraftScalars());
+        const next = Object.assign({}, draftMonitorOverrides);
+        next[targetName] = cloneSnapshot(source);
+        draftMonitorOverrides = next;
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        delete undo["monitor:" + targetName];
+        delete redo["monitor:" + targetName];
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+        statusMessage = "Copied configuration to " + targetName;
+    }
+
+    function copyConfigurationToAllOthers() {
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        flushActiveProfile();
+        const source = cloneSnapshot(profileFromDraftScalars());
+        const next = Object.assign({}, draftMonitorOverrides);
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        const screens = Quickshell.screens || [];
+        let copied = 0;
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length === 0 || name === activeMonitorName)
+                continue;
+            next[name] = cloneSnapshot(source);
+            delete undo["monitor:" + name];
+            delete redo["monitor:" + name];
+            copied++;
+        }
+        draftMonitorOverrides = next;
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+        statusMessage = copied > 0 ? "Copied configuration to all other displays" : "No other displays connected";
+    }
+
+    function switchActiveMonitor(name) {
+        const target = connectedScreenByName(name);
+        if (!target || String(name) === activeMonitorName)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
+        activeMonitorName = String(name);
+        editorWindow.screen = target;
+        const profile = hasIndividualConfiguration(activeMonitorName)
+            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+        loadProfileIntoDraft(profile);
+        restoreHistoryForActiveProfile();
+        statusMessage = "Editing " + activeMonitorName;
+        Qt.callLater(() => editorFocus.forceActiveFocus());
+    }
+
+    function reconcileActiveMonitor() {
+        if (!open || connectedScreenByName(activeMonitorName))
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
+        const target = focusedScreen();
+        if (!target)
+            return;
+        activeMonitorName = String(target.name || "");
+        editorWindow.screen = target;
+        const profile = hasIndividualConfiguration(activeMonitorName)
+            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+        loadProfileIntoDraft(profile);
+        restoreHistoryForActiveProfile();
+        statusMessage = "Editing " + activeMonitorName;
     }
 
     function editorSnapshot() {
@@ -1695,15 +1960,24 @@ Singleton {
     }
 
     function loadPersistedDraft() {
-        const state = BarState.data();
-        draftLayout = cloneLayout(BarState.lockscreenLayout()); draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages()); draftTimezoneClocks=cloneTimezoneClocks(BarState.lockscreenTimezoneClocks()); draftCustomTexts=cloneCustomTexts(BarState.lockscreenCustomTexts()); draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer()); refreshPreviewTimezoneValues();
-        draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity(); draftLastBackgroundOpacity = BarState.lockscreenPreviousBackgroundOpacity(); draftEntryTransition = BarState.lockscreenEntryTransition(); draftEntryTransitionDuration = BarState.lockscreenEntryTransitionDuration();
-        draftLogoSpawnAnimation = normalizedLogoSpawn(BarState.lockscreenAnimationPreference()); draftPasswordMaskMode = normalizedPasswordMaskMode(state.lockscreen_password_mask_mode); draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(state.lockscreen_password_mask_character); draftClockFormat = normalizedClockFormat(state.lockscreen_clock_format);
-        draftVisibility = cloneVisibility(({ logo: BarState.lockscreenShowLogo(), time: BarState.lockscreenShowTime(), date: BarState.lockscreenShowDate(), username: BarState.lockscreenShowUsername(), weather: BarState.lockscreenShowWeather(), password: true }));
-        draftBackgroundMode = BarState.lockscreenBackground(); draftBackgroundColor = BarState.lockscreenBackgroundColor(); draftWallpaperPath = BarState.lockscreenWallpaperPath(); draftWallpaperFit = BarState.lockscreenWallpaperFit();
-        draftWallpaperFocalX = BarState.lockscreenWallpaperFocalX(); draftWallpaperFocalY = BarState.lockscreenWallpaperFocalY(); draftOverlayMode = BarState.lockscreenOverlayMode(); draftOverlayStrength = BarState.lockscreenOverlayStrength();
-        draftWallpaperBlur = BarState.lockscreenWallpaperBlur(); draftBlurStyle = BarState.lockscreenBlurStyle(); draftWallpaperBlurExplicit = false; draftWeatherUnits = BarState.lockscreenWeatherUnits(); draftAutoAccents = defaultAutoAccents();
-        selectedElement = elementExists(selectedElement) ? selectedElement : "logo"; selectedElements = [selectedElement]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "";
+        const shared = BarState.lockscreenSharedProfile();
+        const overrides = BarState.lockscreenMonitorOverrides();
+        draftSharedProfile = cloneSnapshot(shared) || ({});
+        draftMonitorOverrides = cloneSnapshot(overrides) || ({});
+        if (activeMonitorName.length === 0 && editorWindow.screen && editorWindow.screen.name)
+            activeMonitorName = String(editorWindow.screen.name);
+        const profile = hasIndividualConfiguration(activeMonitorName)
+            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+        loadProfileIntoDraft(profile);
+        profileUndoStacks = ({});
+        profileRedoStacks = ({});
+        undoStack = [];
+        redoStack = [];
+        historyTransactionActive = false;
+        historyTransactionSnapshot = null;
+        elementPaletteOpen = false;
+        backgroundPaletteOpen = false;
+        statusMessage = "";
     }
 
     function focusedScreen() { const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""; const screens = Quickshell.screens || []; for (let i = 0; i < screens.length; ++i) if (screens[i] && screens[i].name === name) return screens[i]; return screens.length > 0 ? screens[0] : null; }
@@ -1722,7 +1996,12 @@ Singleton {
 
     function openForScreen(target) {
         elementOpacityBeforeOpaque = ({});
-        if (target) editorWindow.screen = target; loadPersistedDraft(); settingsBarOffsetY = 0; undoStack = []; redoStack = []; historyTransactionActive = false; historyTransactionSnapshot = null; inertiaOwner = ""; activeDrawer = ""; pickerSuspended = false;
+        if (target)
+            editorWindow.screen = target;
+        activeMonitorName = target && target.name
+            ? String(target.name) : (editorWindow.screen && editorWindow.screen.name ? String(editorWindow.screen.name) : "");
+        loadPersistedDraft();
+        settingsBarOffsetY = 0; undoStack = []; redoStack = []; historyTransactionActive = false; historyTransactionSnapshot = null; inertiaOwner = ""; activeDrawer = ""; pickerSuspended = false;
         editingActive = true; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 0; editorWindow.visible = false; statusMessage = "Capturing current desktop preview…"; previewCaptureDelay.restart();
     }
     function openFocused() { openForScreen(focusedScreen()); }
@@ -1772,16 +2051,20 @@ Singleton {
         elementOpacityBeforeOpaque = ({});
         lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
-        const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview); loadPersistedDraft();
+        const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview);
     }
 
     function save() {
-        if (saveProcess.running || contrastPersistProcess.running) return;
+        if (saveProcess.running || contrastPersistProcess.running)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
         saveErrorMessage = "";
         statusMessage = "Saving…";
-        saveProcess.exec(["bash", editorSaveBackend, JSON.stringify(draftLayout), JSON.stringify(draftVisibility), draftBackgroundMode, draftBackgroundColor, draftWallpaperPath, draftWallpaperFit,
-            String(draftWallpaperFocalX), String(draftWallpaperFocalY), draftOverlayMode, String(draftOverlayStrength), String(draftWallpaperBlur), draftWeatherUnits, JSON.stringify(draftCustomImages), JSON.stringify(draftVisualizer), String(draftBackgroundOpacity), String(draftEntryTransition), String(draftEntryTransitionDuration), String(draftLastBackgroundOpacity), String(draftBlurStyle),
-            String(draftLogoSpawnAnimation), String(draftPasswordMaskMode), String(draftPasswordMaskCharacter), String(draftClockFormat), JSON.stringify(draftTimezoneClocks), JSON.stringify(draftCustomTexts)]);
+        saveProcess.exec(["bash", editorSaveBackend, "--profiles",
+            JSON.stringify(draftSharedProfile), JSON.stringify(draftMonitorOverrides)]);
     }
 
     function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Media " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
@@ -1843,6 +2126,14 @@ Singleton {
     }
 
     LockPreviewAudioAnalyzer { id: previewAudioAnalyzer; enabled: root.editingActive && !root.pickerSuspended && root.draftVisualizer.enabled; performanceMode: root.draftVisualizer.performance }
+
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            if (root.open)
+                Qt.callLater(() => root.reconcileActiveMonitor());
+        }
+    }
 
     PanelWindow {
         id: editorWindow
@@ -2075,6 +2366,27 @@ Singleton {
         }
                 ColumnLayout {
                     id: editorDockContent; anchors.fill: parent; anchors.margins: 9; spacing: 6
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7
+                        Text { text: "Display"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Repeater {
+                            model: Quickshell.screens
+                            SettingsButton { required property var modelData; label: String(modelData.name); active: root.activeMonitorName === String(modelData.name); textSize: 9; onClicked: root.switchActiveMonitor(String(modelData.name)) }
+                        }
+                        Text { text: root.hasIndividualConfiguration(root.activeMonitorName) ? "Individual" : "Shared"; color: root.hasIndividualConfiguration(root.activeMonitorName) ? Theme.focus : Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; font.bold: true }
+                        SettingsButton { label: root.hasIndividualConfiguration(root.activeMonitorName) ? "Use Shared Configuration" : "Use Individual Configuration"; textSize: 9; onClicked: { if (root.hasIndividualConfiguration(root.activeMonitorName)) root.useSharedConfiguration(); else root.useIndividualConfiguration(); } }
+                        Item { Layout.fillWidth: true }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7
+                        Text { text: "Copy Configuration To"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Repeater {
+                            model: Quickshell.screens
+                            SettingsButton { required property var modelData; visible: String(modelData.name) !== root.activeMonitorName; label: String(modelData.name); textSize: 9; onClicked: root.copyConfigurationTo(String(modelData.name)) }
+                        }
+                        SettingsButton { label: "All Other Displays"; textSize: 9; available: (Quickshell.screens || []).length > 1; onClicked: root.copyConfigurationToAllOthers() }
+                        Item { Layout.fillWidth: true }
+                    }
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7
                         Text { text: root.elementLabel(root.selectedElement); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 10; font.bold: true }
@@ -2422,22 +2734,30 @@ Singleton {
     Variants {
         id: editorPreviewVariants; model: Quickshell.screens
         PanelWindow {
-            id: secondaryPreviewWindow; required property var modelData; screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
+            id: secondaryPreviewWindow; required property var modelData; readonly property var monitorProfile: root.effectiveProfileForMonitor(modelData.name); screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
             color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
             Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }
             Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
                 Image { anchors.fill: parent; source: root.previewCaptureSourceForScreen(modelData); fillMode: Image.Stretch; asynchronous: false; cache: false }
             }
-            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: root.draftLogoSpawnAnimation
+            LockPreviewWallpaperState { id: secondaryWallpaperState; path: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_path }
+            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: secondaryPreviewWindow.monitorProfile.lockscreen_animation
                 externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
                 individualImageReplayId: root.previewIndividualImageReplayId; individualImageReplayEpoch: root.previewIndividualImageReplayEpoch
-                randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false; showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
-                weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
-                overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility
+                randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false
+                showLogo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo; showTime: secondaryPreviewWindow.monitorProfile.lockscreen_show_time; showDate: secondaryPreviewWindow.monitorProfile.lockscreen_show_date; showUsername: secondaryPreviewWindow.monitorProfile.lockscreen_show_username; showWeather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather
+                weatherText: secondaryPreviewWindow.monitorProfile.lockscreen_weather_units === "celsius" ? "22°C · Clear" : "72°F · Clear"
+                backgroundMode: secondaryPreviewWindow.monitorProfile.lockscreen_background; wallpaperSource: secondaryWallpaperState.source; backgroundColor: secondaryPreviewWindow.monitorProfile.lockscreen_background_color
+                wallpaperFit: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_fit; wallpaperFocalX: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_x; wallpaperFocalY: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_y
+                overlayMode: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_mode; overlayStrength: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_strength; wallpaperBlur: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_blur; blurStyle: secondaryPreviewWindow.monitorProfile.lockscreen_blur_style
+                autoAccents: root.draftAutoAccents; layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: ({}); customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
+                visualizer: secondaryPreviewWindow.monitorProfile.lockscreen_visualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: secondaryPreviewWindow.monitorProfile.lockscreen_background_opacity
+                passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
+                desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: ({ logo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo, time: secondaryPreviewWindow.monitorProfile.lockscreen_show_time, date: secondaryPreviewWindow.monitorProfile.lockscreen_show_date, username: secondaryPreviewWindow.monitorProfile.lockscreen_show_username, weather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather, password: true })
             }
-            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition; duration: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition_duration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+
         }
     }
 }
