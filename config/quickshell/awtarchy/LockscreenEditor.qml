@@ -141,12 +141,6 @@ Singleton {
     property var profileRedoStacks: ({})
     property var draftSharedAutoAccents: defaultAutoAccents()
     property var draftMonitorAutoAccents: ({})
-    property var draftSharedProfile: ({})
-    property var draftMonitorOverrides: ({})
-    property string activeMonitorName: ""
-    property bool profileLoadActive: false
-    property var profileUndoStacks: ({})
-    property var profileRedoStacks: ({})
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
