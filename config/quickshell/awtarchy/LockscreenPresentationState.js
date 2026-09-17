@@ -218,6 +218,14 @@ function normalizedWallpaperPath(value) {
     return path;
 }
 
+function normalizedPasswordFeedbackMode(value, legacyValue) {
+    const mode = String(value === undefined || value === null ? "" : value);
+    if (["squares", "dots", "custom", "sparks", "mini-flash", "hidden"].indexOf(mode) >= 0)
+        return mode;
+    const legacy = String(legacyValue === undefined || legacyValue === null ? "" : legacyValue);
+    return ["squares", "dots", "custom"].indexOf(legacy) >= 0 ? legacy : "squares";
+}
+
 function normalizedPasswordMaskCharacter(value) {
     const text = String(value === undefined || value === null ? "" : value);
     const points = Array.from(text);
@@ -268,8 +276,8 @@ function normalizedProfile(value) {
             ["fade", "pixel", "edges", "wipe"], "fade"),
         lockscreen_entry_transition_duration: normalizedInteger(raw.lockscreen_entry_transition_duration,
             1800, 800, 6000),
-        lockscreen_password_mask_mode: normalizedEnum(raw.lockscreen_password_mask_mode,
-            ["squares", "dots", "custom"], "squares"),
+        lockscreen_password_feedback_mode: normalizedPasswordFeedbackMode(
+            raw.lockscreen_password_feedback_mode, raw.lockscreen_password_mask_mode),
         lockscreen_password_mask_character: normalizedPasswordMaskCharacter(
             raw.lockscreen_password_mask_character),
         lockscreen_clock_format: normalizedEnum(raw.lockscreen_clock_format,
