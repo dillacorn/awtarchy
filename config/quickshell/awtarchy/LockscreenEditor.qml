@@ -91,10 +91,13 @@ Singleton {
         { key: "split", label: "Split In" },
         { key: "off", label: "No Spawn Animation" }
     ]
-    readonly property var passwordMaskPresets: [
+    readonly property var passwordFeedbackPresets: [
         { key: "squares", label: "Squares" },
         { key: "dots", label: "Dots" },
-        { key: "custom", label: "Custom Character" }
+        { key: "custom", label: "Custom Character" },
+        { key: "sparks", label: "Sparks" },
+        { key: "mini-flash", label: "Mini Flash" },
+        { key: "hidden", label: "Hidden" }
     ]
     readonly property var clockFormatPresets: [
         { key: "24h", label: "24-hour" },
@@ -112,7 +115,7 @@ Singleton {
     property string draftEntryTransition: "fade"
     property int draftEntryTransitionDuration: 1800
     property string draftLogoSpawnAnimation: "split"
-    property string draftPasswordMaskMode: "squares"
+    property string draftPasswordFeedbackMode: "squares"
     property string draftPasswordMaskCharacter: "•"
     property string draftClockFormat: "24h"
     property int entryTransitionReplayToken: 0
@@ -436,7 +439,7 @@ Singleton {
             lockscreen_animation: draftLogoSpawnAnimation,
             lockscreen_entry_transition: draftEntryTransition,
             lockscreen_entry_transition_duration: draftEntryTransitionDuration,
-            lockscreen_password_mask_mode: draftPasswordMaskMode,
+            lockscreen_password_feedback_mode: draftPasswordFeedbackMode,
             lockscreen_password_mask_character: draftPasswordMaskCharacter,
             lockscreen_clock_format: draftClockFormat
         });
@@ -476,7 +479,7 @@ Singleton {
             draftLogoSpawnAnimation = normalizedLogoSpawn(profile.lockscreen_animation);
             draftEntryTransition = String(profile.lockscreen_entry_transition || "fade");
             draftEntryTransitionDuration = Math.max(800, Math.min(6000, Math.round(Number(profile.lockscreen_entry_transition_duration))));
-            draftPasswordMaskMode = normalizedPasswordMaskMode(profile.lockscreen_password_mask_mode);
+            draftPasswordFeedbackMode = normalizedPasswordFeedbackMode(profile.lockscreen_password_feedback_mode);
             draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(profile.lockscreen_password_mask_character);
             draftClockFormat = normalizedClockFormat(profile.lockscreen_clock_format);
             draftWallpaperBlurExplicit = false;
@@ -1005,7 +1008,7 @@ Singleton {
             entryTransition: draftEntryTransition,
             entryTransitionDuration: draftEntryTransitionDuration,
             logoSpawnAnimation: draftLogoSpawnAnimation,
-            passwordMaskMode: draftPasswordMaskMode,
+            passwordFeedbackMode: draftPasswordFeedbackMode,
             passwordMaskCharacter: draftPasswordMaskCharacter,
             clockFormat: draftClockFormat,
             wallpaperPath: draftWallpaperPath,
@@ -1073,7 +1076,7 @@ Singleton {
         draftEntryTransitionDuration = Number.isFinite(transitionDuration)
             ? Math.max(800, Math.min(6000, transitionDuration)) : 1800;
         draftLogoSpawnAnimation = normalizedLogoSpawn(snapshot.logoSpawnAnimation);
-        draftPasswordMaskMode = normalizedPasswordMaskMode(snapshot.passwordMaskMode);
+        draftPasswordFeedbackMode = normalizedPasswordFeedbackMode(snapshot.passwordFeedbackMode);
         draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(snapshot.passwordMaskCharacter);
         draftClockFormat = normalizedClockFormat(snapshot.clockFormat);
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
@@ -1270,15 +1273,16 @@ Singleton {
         return 4;
     }
 
-    function normalizedPasswordMaskMode(value) {
+    function normalizedPasswordFeedbackMode(value) {
         const key = String(value === undefined ? "squares" : value);
-        return ["squares", "dots", "custom"].indexOf(key) >= 0 ? key : "squares";
+        return ["squares", "dots", "custom", "sparks", "mini-flash", "hidden"].indexOf(key) >= 0
+            ? key : "squares";
     }
 
-    function passwordMaskIndex(value) {
-        const key = normalizedPasswordMaskMode(value);
-        for (let i = 0; i < passwordMaskPresets.length; ++i) {
-            if (passwordMaskPresets[i].key === key)
+    function passwordFeedbackIndex(value) {
+        const key = normalizedPasswordFeedbackMode(value);
+        for (let i = 0; i < passwordFeedbackPresets.length; ++i) {
+            if (passwordFeedbackPresets[i].key === key)
                 return i;
         }
         return 0;
@@ -1310,13 +1314,13 @@ Singleton {
         statusMessage = "Logo spawn animation updated. Use Preview Entry to replay.";
     }
 
-    function setDraftPasswordMaskMode(value) {
-        const key = normalizedPasswordMaskMode(value);
-        if (draftPasswordMaskMode === key)
+    function setDraftPasswordFeedbackMode(value) {
+        const key = normalizedPasswordFeedbackMode(value);
+        if (draftPasswordFeedbackMode === key)
             return;
         recordUndoBeforeChange();
-        draftPasswordMaskMode = key;
-        statusMessage = "Password mask updated";
+        draftPasswordFeedbackMode = key;
+        statusMessage = "Password feedback updated";
     }
 
     function setDraftPasswordMaskCharacter(value) {
@@ -1835,7 +1839,7 @@ Singleton {
             if (name === "logo")
                 draftLogoSpawnAnimation = "split";
             else if (name === "password") {
-                draftPasswordMaskMode = "squares";
+                draftPasswordFeedbackMode = "squares";
                 draftPasswordMaskCharacter = "•";
             } else if (name === "time")
                 draftClockFormat = "24h";
@@ -2321,7 +2325,7 @@ Singleton {
 
     function resetDraft() {
         recordUndoBeforeChange(); draftLayout = defaultLayout(); draftCustomImages = []; draftTimezoneClocks=[]; draftCustomTexts=[]; previewTimezoneValues=({}); draftVisualizer = defaultVisualizer(); draftBackgroundOpacity = 100; draftLastBackgroundOpacity = 100;
-        draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordMaskMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
+        draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordFeedbackMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
         draftVisibility = defaultVisibility(); draftBackgroundMode = "black"; draftBackgroundColor = "#000000"; draftWallpaperPath = "";
         draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 10; draftBlurStyle = "pixelated"; draftWallpaperBlurExplicit = false;
         draftWeatherUnits = "auto"; draftAutoAccents = defaultAutoAccents(); selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "Defaults loaded. Save to apply."; scheduleContrastRefresh();
@@ -2697,7 +2701,7 @@ Singleton {
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
                 wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY; overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
                 blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; timezoneClocks: root.draftTimezoneClocks; timezoneValues: root.previewTimezoneValues; customTexts: root.draftCustomTexts; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat
+                passwordMaskMode: root.draftPasswordFeedbackMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat
                 desktopBackingSource: editorTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility; editorHeldElement: root.heldElement; editorHoldScale: root.heldScaleBoost
             }
             LockPreviewTransitionLayer { id: editorTransitionLayer; anchors.fill: parent; z: 160; startSource: editorTransitionStart; endSource: previewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
@@ -3057,17 +3061,17 @@ Singleton {
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.selectedElement === "password"
-                        Text { text: "Password Mask"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Text { text: "Password Feedback"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
                             popupBoundary: editorFocus
                             Layout.preferredWidth: 190
-                            model: root.passwordMaskPresets
-                            currentIndex: root.passwordMaskIndex(root.draftPasswordMaskMode)
-                            onActivated: index => root.setDraftPasswordMaskMode(root.passwordMaskPresets[index].key)
+                            model: root.passwordFeedbackPresets
+                            currentIndex: root.passwordFeedbackIndex(root.draftPasswordFeedbackMode)
+                            onActivated: index => root.setDraftPasswordFeedbackMode(root.passwordFeedbackPresets[index].key)
                         }
-                        Text { visible: root.draftPasswordMaskMode === "custom"; text: "Character"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Text { visible: root.draftPasswordFeedbackMode === "custom"; text: "Character"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
-                            visible: root.draftPasswordMaskMode === "custom"
+                            visible: root.draftPasswordFeedbackMode === "custom"
                             Layout.preferredWidth: 48
                             text: root.draftPasswordMaskCharacter
                             maximumLength: 2
@@ -3077,7 +3081,7 @@ Singleton {
                             onEditingFinished: root.setDraftPasswordMaskCharacter(text)
                         }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Masking is presentation-only; the actual password remains hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { text: "Feedback is presentation-only; the actual password remains hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout {
@@ -3375,7 +3379,7 @@ Singleton {
                 overlayMode: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_mode; overlayStrength: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_strength; wallpaperBlur: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_blur; blurStyle: secondaryPreviewWindow.monitorProfile.lockscreen_blur_style
                 autoAccents: root.autoAccentsForMonitor(modelData.name); layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: secondaryPreviewWindow.monitorTimezoneValues; customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
                 visualizer: secondaryPreviewWindow.monitorProfile.lockscreen_visualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: secondaryPreviewWindow.monitorProfile.lockscreen_background_opacity
-                passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
+                passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_feedback_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
                 desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: ({ logo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo, time: secondaryPreviewWindow.monitorProfile.lockscreen_show_time, date: secondaryPreviewWindow.monitorProfile.lockscreen_show_date, username: secondaryPreviewWindow.monitorProfile.lockscreen_show_username, weather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather, password: true })
             }
             LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition; duration: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition_duration; replayToken: root.entryTransitionReplayToken; autoStart: false }
