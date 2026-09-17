@@ -24,19 +24,22 @@ jobs:
           node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
           bash tests/test-quickshell-lockscreen-profile-save-parity.sh
           bash -n config/hypr/scripts/quickshell_application_state.sh
+      - name: Apply Task 2 patch
+        run: python3 .github/scripts/feature-lockscreen-profile-editor-task2.py
+      - name: Task 2 GREEN
+        run: |
+          bash tests/test-quickshell-lockscreen-shared-preview-settle.sh
+          bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
+          bash tests/test-quickshell-lockscreen-editor.sh
           git diff --check
-      - name: Commit Task 1 production changes
+      - name: Commit Task 2 production changes
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           git config user.name dillacorn
           git config user.email 28743863+dillacorn@users.noreply.github.com
-          git add config/quickshell/awtarchy/LockscreenPresentationState.js \
-                  config/quickshell/awtarchy-lock/LockscreenPresentationState.js \
-                  config/hypr/scripts/quickshell_application_state.sh
+          git add config/quickshell/awtarchy/LockscreenEditor.qml
           git diff --cached --quiet || {
-            git commit -m "Fix lockscreen profile save parity"
+            git commit -m "Settle shared lockscreen previews after drag"
             git push origin HEAD:feature/lockscreen-media-editor-polish
           }
-      - name: Task 2 RED
-        run: bash tests/test-quickshell-lockscreen-shared-preview-settle.sh
