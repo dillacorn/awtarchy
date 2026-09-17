@@ -23,7 +23,15 @@ function loadPresentationState(file) {
 
 for (const file of copies) {
   const api = loadPresentationState(file);
-  for (const fn of ["sharedProfile", "monitorOverrides", "profileForMonitor", "cloneProfile"])
+  for (const fn of [
+    "sharedProfile",
+    "monitorOverrides",
+    "monitorProfiles",
+    "lastEditedProfile",
+    "migratedMonitorProfiles",
+    "profileForMonitor",
+    "cloneProfile",
+  ])
     assert.equal(typeof api[fn], "function", `${path.basename(file)} is missing ${fn}()`);
 
   const shared = api.sharedProfile({
@@ -64,23 +72,47 @@ for (const file of copies) {
 
   const dp1 = api.cloneProfile(shared);
   dp1.lockscreen_background_color = "#abcdef";
-  const overrides = api.monitorOverrides({
+
+  const legacyState = {
+    ...shared,
     lockscreen_monitor_overrides: {
       "DP-1": dp1,
       "HDMI-A-1": { lockscreen_show_time: true },
     },
+  };
+  const migrated = api.migratedMonitorProfiles(legacyState);
+  assert.equal(migrated["DP-1"].lockscreen_background_color, "#abcdef");
+  assert.equal(migrated["HDMI-A-1"].lockscreen_background, "black");
+  assert.equal(migrated["HDMI-A-1"].lockscreen_show_time, true);
+
+  const fallback = api.lastEditedProfile(legacyState);
+  assert.equal(fallback.lockscreen_background_color, "#112233");
+  assert.equal(
+    api.profileForMonitor(migrated, fallback, "DP-1").lockscreen_background_color,
+    "#abcdef",
+  );
+  assert.equal(
+    api.profileForMonitor(migrated, fallback, "eDP-1").lockscreen_background_color,
+    "#112233",
+    "unseen monitors must resolve from the last-edited fallback",
+  );
+
+  const explicit = api.monitorProfiles({
+    lockscreen_monitor_profiles: {
+      "DP-2": dp1,
+    },
+    lockscreen_monitor_overrides: {
+      "DP-1": { lockscreen_background_color: "#ff0000" },
+    },
   });
-
-  assert.equal(api.profileForMonitor(shared, overrides, "DP-1").lockscreen_background_color, "#abcdef");
-  assert.equal(api.profileForMonitor(shared, overrides, "eDP-1").lockscreen_background_color, "#112233");
-
-  assert.equal(overrides["HDMI-A-1"].lockscreen_background, "black");
-  assert.equal(overrides["HDMI-A-1"].lockscreen_background_color, "#000000");
-  assert.equal(overrides["HDMI-A-1"].lockscreen_show_time, true);
-  assert.notEqual(
-    overrides["HDMI-A-1"].lockscreen_background_color,
-    shared.lockscreen_background_color,
-    "partial stored overrides must use static defaults rather than inherit the current Shared profile",
+  assert.deepEqual(Object.keys(explicit), ["DP-2"]);
+  assert.deepEqual(
+    Object.keys(api.migratedMonitorProfiles({
+      lockscreen_monitor_profiles: {},
+      lockscreen_monitor_overrides: { "DP-1": dp1 },
+    })),
+    [],
+    "an explicit new monitor-profile map must prevent legacy overrides from remaining active",
   );
 
   const cloned = api.cloneProfile(shared);
