@@ -62,7 +62,9 @@ process.stdout.write(JSON.stringify(profile));
 NODE
 )"
 
-if ! bash "$BACKEND" save-lockscreen-editor-profiles "$profile" '{}' 2>"$TMP/profile-error"; then
+profiles="$(jq -cn --argjson profile "$profile" '{"DP-1":$profile}')"
+
+if ! bash "$BACKEND" save-lockscreen-editor-profiles "$profiles" "$profile" 2>"$TMP/profile-error"; then
     printf '%s\n' 'FAIL: resolver-normalized custom media profile was rejected' >&2
     cat "$TMP/profile-error" >&2
     exit 1
@@ -81,10 +83,13 @@ jq -e '
   and (.lockscreen_custom_images | length) == 1
   and .lockscreen_custom_images[0].id == "image-roundtrip"
   and (.lockscreen_custom_images[0] | has("color") | not)
+  and .lockscreen_monitor_profiles["DP-1"].lockscreen_custom_images[0].id == "image-roundtrip"
+  and .lockscreen_last_edited_profile.lockscreen_custom_images[0].id == "image-roundtrip"
 ' "$saved" >/dev/null
 
 invalid_layout="$(jq -c '.lockscreen_layout.password.opacity = 0' <<<"$profile")"
-if bash "$BACKEND" save-lockscreen-editor-profiles "$invalid_layout" '{}' 2>"$TMP/error"; then
+invalid_profiles="$(jq -cn --argjson profile "$invalid_layout" '{"DP-1":$profile}')"
+if bash "$BACKEND" save-lockscreen-editor-profiles "$invalid_profiles" "$profile" 2>"$TMP/error"; then
     printf '%s\n' 'FAIL: invalid layout profile unexpectedly saved' >&2
     exit 1
 fi
