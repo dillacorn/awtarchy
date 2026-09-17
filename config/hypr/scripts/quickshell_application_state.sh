@@ -567,7 +567,7 @@ normalize_lockscreen_custom_images_json() {
                 and (.scale | type) == "number" and .scale >= 0.50 and .scale <= 100.00
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4.00
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4.00
-                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and (.opacity | type) == "number" and .opacity >= 5 and .opacity <= 100
                 and ((.rotation // 0) | type) == "number"
                 and (.rotation // 0) >= -180 and (.rotation // 0) <= 180
                 and ((.spawn_animation // "none") | type) == "string"
@@ -626,7 +626,7 @@ validate_lockscreen_profile_layout_section() {
             and ($value.scale >= 0.5 and $value.scale <= 100)
             and ($value.stretch_x >= 0.25 and $value.stretch_x <= 4)
             and ($value.stretch_y >= 0.25 and $value.stretch_y <= 4)
-            and ($value.opacity >= (if $password then 20 else 0 end) and $value.opacity <= 100)
+            and ($value.opacity >= 5 and $value.opacity <= 100)
             and ($value.rotation >= -180 and $value.rotation <= 180);
         ($candidate | type) == "object"
         and ($candidate.lockscreen_layout | type) == "object"
@@ -722,7 +722,7 @@ normalize_lockscreen_profile_json() {
                 and (.scale | type) == "number" and .scale >= 0.5 and .scale <= 100
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4
-                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and (.opacity | type) == "number" and .opacity >= 5 and .opacity <= 100
                 and (.rotation | type) == "number" and .rotation >= -180 and .rotation <= 180
                 and (.spawn_animation | type) == "string"
                 and (.spawn_animation as $spawn | ["none", "pixel-warp", "closest-edge", "top", "bottom", "left", "right"] | index($spawn) != null)
@@ -747,7 +747,7 @@ normalize_lockscreen_profile_json() {
                 and (.scale | type) == "number" and .scale >= 0.5 and .scale <= 100
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4
-                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and (.opacity | type) == "number" and .opacity >= 5 and .opacity <= 100
                 and (.rotation | type) == "number" and .rotation >= -180 and .rotation <= 180
                 and valid_color(.color)
                 and (.visible | type) == "boolean");
@@ -769,7 +769,7 @@ normalize_lockscreen_profile_json() {
                 and (.scale | type) == "number" and .scale >= 0.5 and .scale <= 100
                 and (.stretch_x | type) == "number" and .stretch_x >= 0.25 and .stretch_x <= 4
                 and (.stretch_y | type) == "number" and .stretch_y >= 0.25 and .stretch_y <= 4
-                and (.opacity | type) == "number" and .opacity >= 0 and .opacity <= 100
+                and (.opacity | type) == "number" and .opacity >= 5 and .opacity <= 100
                 and (.rotation | type) == "number" and .rotation >= -180 and .rotation <= 180
                 and valid_color(.color)
                 and (.visible | type) == "boolean");
@@ -782,7 +782,7 @@ normalize_lockscreen_profile_json() {
             and ($value.scale | type) == "number" and $value.scale >= 0.5 and $value.scale <= 100
             and ($value.stretch_x | type) == "number" and $value.stretch_x >= 0.25 and $value.stretch_x <= 4
             and ($value.stretch_y | type) == "number" and $value.stretch_y >= 0.25 and $value.stretch_y <= 4
-            and ($value.opacity | type) == "number" and $value.opacity >= 0 and $value.opacity <= 100
+            and ($value.opacity | type) == "number" and $value.opacity >= 5 and $value.opacity <= 100
             and ($value.rotation | type) == "number" and $value.rotation >= -180 and $value.rotation <= 180
             and valid_color($value.color)
             and ($value.bands | type) == "number" and ($value.bands | floor) == $value.bands and $value.bands >= 4 and $value.bands <= 64
