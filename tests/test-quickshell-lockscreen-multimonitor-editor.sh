@@ -35,6 +35,10 @@ rejects "$EDITOR" 'Use Existing Shared' 'Shared conversion dialog still exists'
 rejects "$EDITOR" 'Use This Display as Shared' 'Shared promotion dialog still exists'
 rejects "$EDITOR" 'function applySavedConfigurationToShared(' 'saved configurations still target Shared mode'
 
+BAR="$ROOT/config/quickshell/awtarchy/BarState.qml"
+rejects "$BAR" 'function lockscreenSharedProfile()' 'BarState still exposes active Shared profile facade'
+rejects "$BAR" 'function lockscreenMonitorOverrides()' 'BarState still exposes active Individual override facade'
+
 python3 - "$EDITOR" <<'PY'
 from pathlib import Path
 import sys
