@@ -41,6 +41,27 @@ for (const file of copies) {
   assert.equal(shared.lockscreen_layout.logo.rotation, 12);
   assert.equal(shared.lockscreen_show_password, undefined, "password visibility must not become a persisted profile field");
 
+  const legacyPassword = api.sharedProfile({
+    lockscreen_layout: {
+      password: {
+        x: 0.94,
+        y: 0.91,
+        scale: 1,
+        stretch_x: 1,
+        stretch_y: 1,
+        opacity: 5,
+        rotation: 0,
+        color: "auto",
+      },
+    },
+  });
+  assert.equal(legacyPassword.lockscreen_layout.password.x, 0.85,
+    "resolver must clamp password x to the persistence/editor bound");
+  assert.equal(legacyPassword.lockscreen_layout.password.y, 0.86,
+    "resolver must clamp password y to the persistence/editor bound");
+  assert.equal(legacyPassword.lockscreen_layout.password.opacity, 20,
+    "resolver must clamp password opacity to the persistence/editor minimum");
+
   const dp1 = api.cloneProfile(shared);
   dp1.lockscreen_background_color = "#abcdef";
   const overrides = api.monitorOverrides({
