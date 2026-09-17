@@ -101,12 +101,14 @@ require_text "$SHELL_QML" 'randomFormationMode: root.randomFormationMode' \
 
 # LockSurface resolves presentation from the effective monitor profile;
 # LockScene implements the actual families shared with the unlocked editor.
-require_text "$SURFACE_QML" 'required property var sharedProfile' \
-    'lock surface does not receive the Shared presentation snapshot'
-require_text "$SURFACE_QML" 'required property var monitorOverrides' \
-    'lock surface does not receive monitor presentation overrides'
+require_text "$SURFACE_QML" 'required property var monitorProfiles' \
+    'lock surface does not receive per-display presentation profiles'
+require_text "$SURFACE_QML" 'required property var lastEditedProfile' \
+    'lock surface does not receive the fallback last-edited profile'
 require_text "$SURFACE_QML" 'readonly property var profile: LockscreenPresentationState.profileForMonitor(' \
     'lock surface does not resolve its effective monitor profile'
+require_text "$SURFACE_QML" 'root.monitorProfiles, root.lastEditedProfile, root.monitorName' \
+    'lock surface still resolves presentation through Shared/Individual state'
 require_text "$SURFACE_QML" 'required property int randomFormationMode' \
     'lock surface does not receive the shared per-lock random family'
 require_text "$SURFACE_QML" 'animationPreference: root.profile.lockscreen_animation' \
