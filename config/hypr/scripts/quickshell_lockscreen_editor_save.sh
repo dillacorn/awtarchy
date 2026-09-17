@@ -370,7 +370,8 @@ jq \
         rotation: clamp($visualizer_extension.rotation; 0; -180; 180)
     })
     | .lockscreen_animation = $logo_animation
-    | .lockscreen_password_mask_mode = $mask_mode
+    | .lockscreen_password_feedback_mode = $mask_mode
+    | del(.lockscreen_password_mask_mode)
     | .lockscreen_password_mask_character = $mask_character
     | .lockscreen_clock_format = $clock_format
     | .lockscreen_timezone_clocks = $timezone_clocks
