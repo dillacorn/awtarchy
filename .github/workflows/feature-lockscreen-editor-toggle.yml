@@ -32,6 +32,8 @@ jobs:
           python3 .github/scripts/feature-lockscreen-monitor-profile-task4.py
       - name: Multi-monitor editor regression
         run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
+      - name: Monitor contrast regression
+        run: bash tests/test-quickshell-lockscreen-monitor-contrast.sh
       - name: Verify editor and existing contracts
         run: |
           sudo apt-get update -qq
