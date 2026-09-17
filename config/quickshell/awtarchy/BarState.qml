@@ -482,9 +482,19 @@ Singleton {
         return LockscreenPresentationState.monitorOverrides(data());
     }
 
+    function lockscreenMonitorProfiles() {
+        const dependency = revision;
+        return LockscreenPresentationState.migratedMonitorProfiles(data());
+    }
+
+    function lockscreenLastEditedProfile() {
+        const dependency = revision;
+        return LockscreenPresentationState.lastEditedProfile(data());
+    }
+
     function lockscreenProfileForMonitor(name) {
         return LockscreenPresentationState.profileForMonitor(
-            lockscreenSharedProfile(), lockscreenMonitorOverrides(), String(name || ""));
+            lockscreenMonitorProfiles(), lockscreenLastEditedProfile(), String(name || ""));
     }
 
     function lockscreenSavedProfiles() {
