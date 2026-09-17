@@ -63,9 +63,9 @@ NODE
 )"
 
 if ! bash "$BACKEND" save-lockscreen-editor-profiles "$profile" '{}' 2>"$TMP/profile-error"; then
+    printf '%s\n' 'FAIL: resolver-normalized custom media profile was rejected' >&2
     cat "$TMP/profile-error" >&2
-    jq '.' <<<"$profile" >&2
-    exit 2
+    exit 1
 fi
 
 saved="$XDG_CACHE_HOME/awtarchy/quickshell-state.json"
