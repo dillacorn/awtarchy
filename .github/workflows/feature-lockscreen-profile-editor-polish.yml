@@ -1,0 +1,23 @@
+name: Feature lockscreen profile editor polish
+
+on:
+  push:
+    branches: [feature/lockscreen-media-editor-polish]
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          fetch-depth: 0
+      - name: Install test dependencies
+        run: sudo apt-get update && sudo apt-get install -y jq
+      - name: Task 1 RED
+        run: |
+          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
+          bash tests/test-quickshell-lockscreen-profile-save-parity.sh
