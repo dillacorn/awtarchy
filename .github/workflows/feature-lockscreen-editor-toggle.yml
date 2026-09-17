@@ -36,9 +36,11 @@ jobs:
         run: python3 .github/scripts/feature-lockscreen-monitor-profile-task5.py
       - name: Monitor contrast regression
         run: bash tests/test-quickshell-lockscreen-monitor-contrast.sh
+      - name: Apply per-monitor weather and timezones
+        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task6.py
       - name: Monitor weather regression
         run: bash tests/test-quickshell-lockscreen-monitor-weather.sh
-      - name: Verify contrast and existing contracts
+      - name: Verify weather, contrast, and existing contracts
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.4
@@ -61,14 +63,14 @@ jobs:
           bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
           git diff --check
-      - name: Commit per-monitor contrast production patch
+      - name: Commit per-monitor weather production patch
         run: |
-          if git diff --quiet -- config/hypr/scripts/quickshell_lockscreen_contrast.sh config/quickshell/awtarchy/LockscreenContrast.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy-lock/LockContrastCache.qml; then
-            echo "Per-monitor contrast already present."
+          if git diff --quiet -- config/hypr/scripts/quickshell_lockscreen_weather.sh config/quickshell/awtarchy/LockscreenWeather.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy-lock/LockWeatherCache.qml config/quickshell/awtarchy-lock/LockSurface.qml config/quickshell/awtarchy-lock/shell.qml; then
+            echo "Per-monitor weather/timezone patch already present."
             exit 0
           fi
           git config user.name "dillacorn"
           git config user.email "28743863+dillacorn@users.noreply.github.com"
-          git add config/hypr/scripts/quickshell_lockscreen_contrast.sh config/quickshell/awtarchy/LockscreenContrast.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy-lock/LockContrastCache.qml
-          git commit -m "Resolve lockscreen contrast per monitor"
+          git add config/hypr/scripts/quickshell_lockscreen_weather.sh config/quickshell/awtarchy/LockscreenWeather.qml config/quickshell/awtarchy/LockscreenEditor.qml config/quickshell/awtarchy-lock/LockWeatherCache.qml config/quickshell/awtarchy-lock/LockSurface.qml config/quickshell/awtarchy-lock/shell.qml
+          git commit -m "Scope lockscreen weather and clocks per monitor"
           git push origin HEAD:feature/lockscreen-media-editor-polish
