@@ -977,6 +977,7 @@ hl.define_submap("noalt", function()
 
     -- Brightness / color temperature in "noalt"
     hl.bind("SUPER + ALT + backspace", hl.dsp.exec_cmd(hypr_quicksettings), {})
+    hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})
     hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})
     hl.bind("SUPER + ALT + minus", hl.dsp.exec_cmd(hypr_ddc_brightness .. " down 5"), {})
     hl.bind("SUPER + ALT + CTRL + bracketright", hl.dsp.exec_cmd(hyprsunset_ctl .. " up"), {})
