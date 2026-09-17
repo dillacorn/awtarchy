@@ -204,6 +204,17 @@ not_contains "$EDITOR" 'id: settingsBarAltDrag' \
 not_contains "$EDITOR" 'acceptedModifiers: Qt.AltModifier' \
     'settings-bar dragging still requires Alt'
 
+contains "$EDITOR" 'function selectElementByName(name)' \
+    'Element tab has no explicit selection action'
+contains "$EDITOR" 'function elementSelectorModel()' \
+    'Element tab has no selector model for built-in and dynamic elements'
+contains "$EDITOR" 'Text { text: "Select Element";' \
+    'Element tab has no explicit element selector label'
+contains "$EDITOR" 'model: root.elementSelectorModel()' \
+    'Element selector does not include the current editable element set'
+contains "$EDITOR" 'root.selectElementByName(root.elementSelectorModel()[index].key)' \
+    'Element selector does not select the chosen element'
+
 contains "$EDITOR" 'Text { text: "Opacity";' \
     'selected element settings do not expose opacity'
 contains "$EDITOR" 'onEditingFinished: root.setDraftOpacity(root.selectedElement, text)' \
