@@ -118,4 +118,81 @@ require_text "$EDITOR" 'property var draftSavedProfiles: []' 'editor has no save
 require_text "$EDITOR" 'BarState.lockscreenSavedProfiles()' 'editor does not load persisted saved profiles'
 require_text "$EDITOR" 'JSON.stringify(draftSavedProfiles)' 'Ctrl+S does not include saved profiles in the atomic transaction'
 
-printf '%s\n' 'PASS: reusable lockscreen configurations persist atomically'
+# Layout-tab reusable configuration controls and actions.
+require_text "$EDITOR" 'function confirmSaveCurrentConfiguration()' 'editor cannot create a named saved configuration'
+require_text "$EDITOR" 'function confirmRenameSavedConfiguration()' 'editor cannot rename a saved configuration'
+require_text "$EDITOR" 'function confirmDeleteSavedConfiguration()' 'editor cannot delete a saved configuration'
+require_text "$EDITOR" 'function moveSavedConfiguration(' 'editor cannot reorder saved configurations'
+require_text "$EDITOR" 'function confirmOverwriteSavedConfiguration()' 'editor cannot overwrite a saved configuration from the current display'
+require_text "$EDITOR" 'function applySavedConfigurationToMonitor(' 'editor cannot apply a saved configuration to a display'
+require_text "$EDITOR" 'function applySavedConfigurationToShared(' 'editor cannot apply a saved configuration to Shared'
+require_text "$EDITOR" 'label: "Save Current Configuration"' 'Layout tab is missing Save Current Configuration'
+require_text "$EDITOR" 'label: "Rename"' 'Layout tab is missing saved-configuration Rename'
+require_text "$EDITOR" 'label: "Delete"' 'Layout tab is missing saved-configuration Delete'
+require_text "$EDITOR" 'label: "Move Up"' 'Layout tab is missing Move Up'
+require_text "$EDITOR" 'label: "Move Down"' 'Layout tab is missing Move Down'
+require_text "$EDITOR" 'label: "Overwrite"' 'Layout tab is missing Overwrite'
+require_text "$EDITOR" 'text: "Apply To"' 'Layout tab is missing Apply To target controls'
+require_text "$EDITOR" 'label: "Shared Configuration"' 'saved configurations cannot be applied explicitly to Shared'
+require_text "$EDITOR" 'model: Quickshell.screens' 'saved configurations do not expose connected display targets'
+require_text "$EDITOR" 'text: "Delete Saved Configuration?"' 'saved-configuration delete has no confirmation dialog'
+require_text "$EDITOR" 'text: "Overwrite Saved Configuration?"' 'saved-configuration overwrite has no confirmation dialog'
+
+python3 - "$EDITOR" <<'PY'
+import pathlib
+import sys
+
+text = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+
+def body(name):
+    marker = f"function {name}("
+    start = text.find(marker)
+    if start < 0:
+        raise SystemExit(f"FAIL: missing function {name}")
+    brace = text.find("{", start)
+    if brace < 0:
+        raise SystemExit(f"FAIL: malformed function {name}")
+    depth = 0
+    quote = None
+    escape = False
+    for i in range(brace, len(text)):
+        ch = text[i]
+        if quote is not None:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == quote:
+                quote = None
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            continue
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:i]
+    raise SystemExit(f"FAIL: unterminated function {name}")
+
+monitor = body("applySavedConfigurationToMonitor")
+if 'next[targetName] = cloneSnapshot(profile)' not in monitor or 'draftMonitorOverrides = next' not in monitor:
+    raise SystemExit("FAIL: applying a saved configuration does not create/replace the target Individual override")
+if 'loadProfileIntoDraft(profile)' not in monitor:
+    raise SystemExit("FAIL: applying a saved configuration to the active display does not load the preset")
+if '"monitor:" + targetName' not in monitor:
+    raise SystemExit("FAIL: monitor-target preset application does not scope history to the target display")
+
+shared = body("applySavedConfigurationToShared")
+if 'draftSharedProfile = cloneSnapshot(profile)' not in shared:
+    raise SystemExit("FAIL: applying a saved configuration to Shared does not replace the Shared draft")
+if 'settledSharedProfile = cloneSnapshot(profile)' not in shared:
+    raise SystemExit("FAIL: applying a saved configuration to Shared does not publish the settled Shared preview")
+if 'next[targetName]' in shared or 'draftMonitorOverrides = next' in shared:
+    raise SystemExit("FAIL: applying a saved configuration to Shared creates a monitor override")
+
+print("PASS: saved configuration editor actions target Shared and Individual profiles correctly")
+PY
+
+printf '%s\n' 'PASS: reusable lockscreen configurations persist atomically and expose Layout actions'
