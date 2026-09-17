@@ -49,8 +49,8 @@ save_replacement = r'''normalize_lockscreen_saved_profiles_json() {
             ($value | type) == "string"
             and ($value | explode | length) >= 1
             and ($value | explode | length) <= 64
-            and ($value | test("\\S"))
-            and ($value | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not);
+            and ($value | test("[^[:space:]]"))
+            and ($value | test("[[:cntrl:]]") | not);
         if
             ($candidate | type) == "array"
             and ($candidate | length) <= $maximum
@@ -108,7 +108,7 @@ save_lockscreen_editor_profiles() {
     fi
     commit_tmp
 }
-'''
+'''.replace('\\"', '"')
 text = replace_once(text, save_anchor, save_replacement, 'profile save function')
 
 old_dispatch = '''    save-lockscreen-editor-profiles)
@@ -189,7 +189,7 @@ if [[ "$profile_mode" == true ]]; then
     printf '%s\n' '{"ok":true}'
     exit 0
 fi
-'''
+'''.replace('\\"', '"')
 text = replace_once(text, profile_mode_anchor, profile_mode_replacement, 'wrapper saved profiles')
 SAVE.write_text(text, encoding="utf-8")
 
@@ -209,7 +209,7 @@ facade_anchor = '''    function lockscreenProfileForMonitor(name) {
     }
 
 '''
-facade_replacement = '''    function lockscreenProfileForMonitor(name) {
+facade_replacement = r'''    function lockscreenProfileForMonitor(name) {
         return LockscreenPresentationState.profileForMonitor(
             lockscreenSharedProfile(), lockscreenMonitorOverrides(), String(name || ""));
     }
@@ -231,7 +231,7 @@ facade_replacement = '''    function lockscreenProfileForMonitor(name) {
             const nameKey = name.toLowerCase();
             if (!/^profile-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
                     || points.length < 1 || points.length > 64 || name.trim().length === 0
-                    || /[\\u0000-\\u001f\\u007f-\\u009f]/.test(name) || names[nameKey]
+                    || /[\u0000-\u001f\u007f-\u009f]/.test(name) || names[nameKey]
                     || !raw.profile || typeof raw.profile !== "object" || Array.isArray(raw.profile))
                 return [];
             ids[id] = true;
@@ -245,7 +245,7 @@ facade_replacement = '''    function lockscreenProfileForMonitor(name) {
         return result;
     }
 
-'''
+'''.replace('\\"', '"')
 text = replace_once(text, facade_anchor, facade_replacement, 'BarState saved profile facade')
 BAR.write_text(text, encoding="utf-8")
 
