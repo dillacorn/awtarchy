@@ -177,13 +177,24 @@ new_press_inertia = '''                            if (root.inertiaOwner.length 
 '''
 replace_once(old_press_inertia, new_press_inertia, 'interrupt inertia settle')
 
-# Pointer cancellation should not leave the passive previews frozen.
-old_cancel = 'if (dragActivated) { root.commitHistoryTransaction(); }'
-new_cancel = 'if (dragActivated) { root.commitHistoryTransaction(); root.settleSharedPreviewHold(); }'
+# Pointer cancellation should not leave passive Shared previews frozen.
+old_cancel = '''                            if (dragActivated) {
+                                root.endEditorHold(parent.elementName);
+                                root.commitHistoryTransaction();
+                            }
+                            dragActivated = false;
+'''
+new_cancel = '''                            if (dragActivated) {
+                                root.endEditorHold(parent.elementName);
+                                root.commitHistoryTransaction();
+                                root.settleSharedPreviewHold();
+                            }
+                            dragActivated = false;
+'''
 replace_once(old_cancel, new_cancel, 'drag cancel settle')
 
 # Inertia completion is the true final drag position. Keep the hold active until
-# the velocity falls below the stop threshold, then publish once.
+# velocity falls below the stop threshold, then publish once.
 old_inertia_tail = 'if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); } }\n'
 new_inertia_tail = 'if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); root.settleSharedPreviewHold(); } }\n'
 replace_once(old_inertia_tail, new_inertia_tail, 'inertia settle')
