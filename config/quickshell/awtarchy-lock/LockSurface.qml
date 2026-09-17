@@ -40,12 +40,24 @@ WlSessionLockSurface {
         ? root.passwordFailureMaskCount : Math.min(password.text.length, 10)
     readonly property real maskSpread: maskedCount === 0 ? 0
         : Math.round((24 + maskedCount * 14) * uiScale * passwordScale)
+    readonly property string passwordFeedbackMode:
+        String(root.profile.lockscreen_password_feedback_mode || "squares")
+    readonly property bool passwordMaskVisible:
+        ["squares", "dots", "custom"].indexOf(root.passwordFeedbackMode) >= 0
 
     property bool entered: false
     property bool transitionStarted: false
     property bool preRollSchedulingReady: false
     property int submittedMaskCount: 0
     property int passwordFailureMaskCount: 0
+    property int passwordTypingEpoch: 0
+    property int passwordFailureEpoch: 0
+    property int previousPasswordLength: 0
+
+    onPasswordFailureEpochChanged: {
+        if (passwordFailureEpoch > 0)
+            passwordFailureEdgeAnimation.restart();
+    }
 
     property var localTimezoneValues: ({})
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
@@ -251,6 +263,7 @@ WlSessionLockSurface {
             backgroundOpacity: root.profile.lockscreen_background_opacity
             passwordMaskMode: root.profile.lockscreen_password_feedback_mode
             passwordMaskCharacter: root.profile.lockscreen_password_mask_character
+            passwordFeedbackEpoch: root.passwordTypingEpoch
             clockFormat: root.profile.lockscreen_clock_format
             desktopBackingSource: desktopBacking
             previewMode: false
@@ -367,7 +380,9 @@ WlSessionLockSurface {
         }
 
         Row {
+            id: passwordMaskRow
             anchors.centerIn: parent
+            visible: root.passwordMaskVisible
             spacing: Math.round(7 * root.uiScale * root.passwordScale)
 
             Repeater {
@@ -429,7 +444,13 @@ WlSessionLockSurface {
             activeFocusOnTab: true
 
             onTextChanged: {
-                if (text.length > 0) {
+                const nextLength = text.length;
+                if (nextLength > root.previousPasswordLength
+                        && (root.passwordFeedbackMode === "sparks"
+                            || root.passwordFeedbackMode === "mini-flash"))
+                    root.passwordTypingEpoch += 1;
+                root.previousPasswordLength = nextLength;
+                if (nextLength > 0) {
                     root.passwordFailureMaskCount = 0;
                     if (root.auth.statusIsError)
                         root.auth.clearStatus();
@@ -454,10 +475,40 @@ WlSessionLockSurface {
         }
     }
 
+    Rectangle {
+        id: passwordFailureEdge
+        anchors.fill: parent
+        z: 1300
+        color: "transparent"
+        border.color: "#ff3030"
+        border.width: Math.max(3, Math.round(7 * root.uiScale))
+        opacity: 0
+        visible: opacity > 0
+    }
+
+    SequentialAnimation {
+        id: passwordFailureEdgeAnimation
+        running: false
+        PropertyAction {
+            target: passwordFailureEdge
+            property: "opacity"
+            value: 0.72
+        }
+        PauseAnimation { duration: 45 }
+        NumberAnimation {
+            target: passwordFailureEdge
+            property: "opacity"
+            to: 0
+            duration: 380
+            easing.type: Easing.OutCubic
+        }
+    }
+
     Connections {
         target: root.auth
 
         function onAuthenticationFailed() {
+            root.passwordFailureEpoch += 1;
             root.passwordFailureMaskCount = Math.max(1, root.submittedMaskCount);
             password.text = "";
             root.focusPasswordWhenReady();
