@@ -10,12 +10,30 @@ Item {
     height: 0
 
     required property bool enabled
+    required property string units
     property string summary: ""
 
     readonly property string cacheHome: Quickshell.env("XDG_CACHE_HOME")
         || (Quickshell.env("HOME") + "/.cache")
     readonly property string cachePath: root.cacheHome
         + "/awtarchy/lockscreen-weather.json"
+
+    function normalizedUnits(value) {
+        const mode = String(value || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(mode) >= 0 ? mode : "auto";
+    }
+
+    function selectedEntry(parsed) {
+        if (parsed.entries && typeof parsed.entries === "object"
+                && !Array.isArray(parsed.entries)) {
+            const selected = parsed.entries[root.units];
+            if (selected && typeof selected === "object" && !Array.isArray(selected))
+                return selected;
+            return null;
+        }
+        // Backward compatibility for a pre-monitor Shared-only cache.
+        return typeof parsed.summary === "string" ? parsed : null;
+    }
 
     function refreshCache() {
         if (!root.enabled) {
@@ -36,11 +54,19 @@ Item {
                 return;
             }
 
-            const value = typeof parsed.summary === "string"
-                ? parsed.summary.trim() : "";
-            const expiresAt = Number(parsed.expires_at);
-            const provider = typeof parsed.provider === "string"
-                ? parsed.provider : "";
+            const mode = root.normalizedUnits(root.units);
+            const entry = parsed.entries && typeof parsed.entries === "object"
+                ? parsed.entries[mode] : root.selectedEntry(parsed);
+            if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+                root.summary = "";
+                return;
+            }
+
+            const value = typeof entry.summary === "string"
+                ? entry.summary.trim() : "";
+            const expiresAt = Number(entry.expires_at);
+            const provider = typeof entry.provider === "string"
+                ? entry.provider : "";
             const now = Math.floor(Date.now() / 1000);
 
             if (value.length === 0 || Array.from(value).length > 96
@@ -61,6 +87,10 @@ Item {
             cacheFile.reload();
         else
             root.summary = "";
+    }
+    onUnitsChanged: {
+        if (root.enabled)
+            root.refreshCache();
     }
 
     FileView {

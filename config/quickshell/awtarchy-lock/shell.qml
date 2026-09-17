@@ -48,6 +48,7 @@ ShellRoot {
     property int lockWallpaperBlur: 10
     property string lockBlurStyle: "pixelated"
     property string lockWeatherLocation: ""
+    property string lockWeatherUnits: "auto"
     readonly property string wallpaperFit: normalizedWallpaperFit(lockWallpaperFit)
     readonly property real wallpaperFocalX: normalizedUnitInterval(lockWallpaperFocalX, 0.5)
     readonly property real wallpaperFocalY: normalizedUnitInterval(lockWallpaperFocalY, 0.5)
@@ -223,6 +224,11 @@ ShellRoot {
     function normalizedClockFormat(value) {
         const key = String(value || "");
         return ["24h", "12h"].indexOf(key) >= 0 ? key : "24h";
+    }
+
+    function normalizedWeatherUnits(value) {
+        const key = String(value || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(key) >= 0 ? key : "auto";
     }
 
     function normalizedBackground(value) {
@@ -463,6 +469,7 @@ ShellRoot {
         lockWallpaperBlur = 10;
         lockBlurStyle = "pixelated";
         lockWeatherLocation = "";
+        lockWeatherUnits = "auto";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
         lockTimezoneClocks = [];
@@ -511,6 +518,7 @@ ShellRoot {
             lockWallpaperBlur = normalizedBlurPercent(parsed.lockscreen_wallpaper_blur);
             lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
+            lockWeatherUnits = normalizedWeatherUnits(parsed.lockscreen_weather_units);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
             lockTimezoneClocks = normalizedTimezoneClocks(parsed.lockscreen_timezone_clocks);
@@ -560,6 +568,7 @@ ShellRoot {
     LockWeatherCache {
         id: lockWeatherCache
         enabled: root.lockShowWeather
+        units: root.lockWeatherUnits
     }
 
     LockWallpaperState {

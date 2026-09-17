@@ -1,5 +1,7 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
 
 WlSessionLockSurface {
@@ -70,6 +72,26 @@ WlSessionLockSurface {
     property int submittedMaskCount: 0
     property int passwordFailureMaskCount: 0
 
+    property var localTimezoneValues: ({})
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")
+    readonly property string timezoneBackend: configHome
+        + "/hypr/scripts/quickshell_lockscreen_timezones.sh"
+
+    function refreshTimezoneValues() {
+        const clocks = root.timezoneClocks || [];
+        if (!Array.isArray(clocks) || clocks.length === 0) {
+            root.localTimezoneValues = ({});
+            return;
+        }
+        if (timezoneProcess.running)
+            return;
+        const args = [root.timezoneBackend, "--batch"];
+        for (const clock of clocks)
+            args.push(String(clock.id), String(clock.timezone), String(clock.format || "24h"));
+        timezoneProcess.exec(args);
+    }
+
     function submitPassword() {
         if ((auth.busy && !auth.responseRequired) || password.text.length === 0)
             return;
@@ -110,6 +132,30 @@ WlSessionLockSurface {
         if (!videoPreRollTimeout.running)
             videoPreRollTimeout.restart();
     }
+
+    Process {
+        id: timezoneProcess
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    const parsed = JSON.parse(String(data || "{}"));
+                    root.localTimezoneValues = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
+                } catch (error) {
+                    root.localTimezoneValues = ({});
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 15000
+        repeat: true
+        running: Array.isArray(root.timezoneClocks) && root.timezoneClocks.length > 0
+        triggeredOnStart: true
+        onTriggered: root.refreshTimezoneValues()
+    }
+
+    onTimezoneClocksChanged: Qt.callLater(() => root.refreshTimezoneValues())
 
     PinchHandler {
         target: null
@@ -200,7 +246,7 @@ WlSessionLockSurface {
             layout: root.layout
             customImages: root.customImages
             timezoneClocks: root.timezoneClocks
-            timezoneValues: root.timezoneValues
+            timezoneValues: root.localTimezoneValues
             customTexts: root.customTexts
             visualizer: root.visualizer
             audioBands: root.audioBands

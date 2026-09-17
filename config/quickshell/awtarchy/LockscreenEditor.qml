@@ -133,6 +133,12 @@ Singleton {
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
+    property var draftSharedProfile: ({})
+    property var draftMonitorOverrides: ({})
+    property string activeMonitorName: ""
+    property bool profileLoadActive: false
+    property var profileUndoStacks: ({})
+    property var profileRedoStacks: ({})
     property var draftSharedAutoAccents: defaultAutoAccents()
     property var draftMonitorAutoAccents: ({})
     property var draftSharedProfile: ({})
@@ -2809,6 +2815,50 @@ Singleton {
         id: editorPreviewVariants; model: Quickshell.screens
         PanelWindow {
             id: secondaryPreviewWindow; required property var modelData; readonly property var monitorProfile: root.effectiveProfileForMonitor(modelData.name); screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
+            property var monitorTimezoneValues: ({})
+            function refreshMonitorTimezoneValues() {
+                const clocks = secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks || [];
+                if (!Array.isArray(clocks) || clocks.length === 0) {
+                    secondaryPreviewWindow.monitorTimezoneValues = ({});
+                    return;
+                }
+                if (secondaryTimezoneProcess.running)
+                    return;
+                const args = [root.timezoneBackend, "--batch"];
+                for (const clock of clocks)
+                    args.push(String(clock.id), String(clock.timezone), String(clock.format || "24h"));
+                secondaryTimezoneProcess.exec(args);
+            }
+            Process {
+                id: secondaryTimezoneProcess
+                stdout: SplitParser {
+                    onRead: data => {
+                        try {
+                            const parsed = JSON.parse(String(data || "{}"));
+                            secondaryPreviewWindow.monitorTimezoneValues = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
+                        } catch (error) {
+                            secondaryPreviewWindow.monitorTimezoneValues = ({});
+                        }
+                    }
+                }
+            }
+            Timer {
+                interval: 15000
+                repeat: true
+                running: secondaryPreviewWindow.visible
+                    && Array.isArray(secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks)
+                    && secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks.length > 0
+                triggeredOnStart: true
+                onTriggered: secondaryPreviewWindow.refreshMonitorTimezoneValues()
+            }
+            onMonitorProfileChanged: {
+                if (secondaryPreviewWindow.visible)
+                    Qt.callLater(() => secondaryPreviewWindow.refreshMonitorTimezoneValues());
+            }
+            onVisibleChanged: {
+                if (secondaryPreviewWindow.visible)
+                    Qt.callLater(() => secondaryPreviewWindow.refreshMonitorTimezoneValues());
+            }
             color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
             Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }
             Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
@@ -2825,12 +2875,13 @@ Singleton {
                 backgroundMode: secondaryPreviewWindow.monitorProfile.lockscreen_background; wallpaperSource: secondaryWallpaperState.source; backgroundColor: secondaryPreviewWindow.monitorProfile.lockscreen_background_color
                 wallpaperFit: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_fit; wallpaperFocalX: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_x; wallpaperFocalY: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_y
                 overlayMode: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_mode; overlayStrength: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_strength; wallpaperBlur: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_blur; blurStyle: secondaryPreviewWindow.monitorProfile.lockscreen_blur_style
-                autoAccents: root.autoAccentsForMonitor(modelData.name); layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: ({}); customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
+                autoAccents: root.autoAccentsForMonitor(modelData.name); layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: secondaryPreviewWindow.monitorTimezoneValues; customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
                 visualizer: secondaryPreviewWindow.monitorProfile.lockscreen_visualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: secondaryPreviewWindow.monitorProfile.lockscreen_background_opacity
                 passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
                 desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: ({ logo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo, time: secondaryPreviewWindow.monitorProfile.lockscreen_show_time, date: secondaryPreviewWindow.monitorProfile.lockscreen_show_date, username: secondaryPreviewWindow.monitorProfile.lockscreen_show_username, weather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather, password: true })
             }
             LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition; duration: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition_duration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+
 
 
         }
