@@ -33,3 +33,5 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-selector-flyout.sh
       - name: Password feedback schema
         run: bash tests/test-quickshell-lockscreen-password-feedback.sh
+      - name: Secure password effects
+        run: bash tests/test-quickshell-lockscreen-password-effects.sh
