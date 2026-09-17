@@ -72,7 +72,10 @@ replace_once(old_load, new_load, 'persisted Shared snapshot initialization')
 
 # Rotation lifecycle.
 pattern = r'(function beginRotateElement\(name, sceneX, sceneY\)\s*\{.*?\n\s*beginHistoryTransaction\(\);)(\n\s*\})'
-if 'function beginRotateElement' in text and 'beginSharedPreviewHold();' not in re.search(pattern, text, re.S).group(0):
+match = re.search(pattern, text, re.S)
+if not match:
+    raise SystemExit('could not locate beginRotateElement')
+if 'beginSharedPreviewHold();' not in match.group(0):
     text, count = re.subn(pattern, r'\1\n        beginSharedPreviewHold();\2', text, count=1, flags=re.S)
     if count != 1:
         raise SystemExit('could not patch beginRotateElement')
@@ -88,16 +91,18 @@ new_end_rotate = '''        rotationElementName = "";
 '''
 replace_once(old_end_rotate, new_end_rotate, 'endRotateElement')
 
-# Resize lifecycle. Begin the hold after the invalid-element guard so group and
-# single-element resize both share the same passive-preview freeze.
-pattern = r'(function beginResizeElement\(name, sceneX, sceneY\)\s*\{\n\s*if \(!elementExists\(name\).*?\n\s*return;)(\n)'
-match = re.search(pattern, text, re.S)
-if not match:
-    raise SystemExit('could not locate beginResizeElement guard')
-body_start = text.find('function beginResizeElement')
-body_end = text.find('function updateResizeElement', body_start)
-if 'beginSharedPreviewHold();' not in text[body_start:body_end]:
-    text = text[:match.end()] + '        beginSharedPreviewHold();\n' + text[match.end():]
+# Resize lifecycle. Freeze before the optional group-resize early return so both
+# group and single-element resize use the same passive-preview behavior.
+old_begin_resize = '''    function beginResizeElement(name, sceneX, sceneY) {
+        if (!elementExists(name) || editorFocus.width<=0 || editorFocus.height<=0) return;
+        if (selectedContains(name) && selectedElements.length>1 && beginGroupResize(sceneX,sceneY)) return;
+'''
+new_begin_resize = '''    function beginResizeElement(name, sceneX, sceneY) {
+        if (!elementExists(name) || editorFocus.width<=0 || editorFocus.height<=0) return;
+        beginSharedPreviewHold();
+        if (selectedContains(name) && selectedElements.length>1 && beginGroupResize(sceneX,sceneY)) return;
+'''
+replace_once(old_begin_resize, new_begin_resize, 'beginResizeElement')
 
 old_end_resize = '''    function endResizeElement() {
         if (resizeElementName.length===0) return;
@@ -173,11 +178,9 @@ new_press_inertia = '''                            if (root.inertiaOwner.length 
 replace_once(old_press_inertia, new_press_inertia, 'interrupt inertia settle')
 
 # Pointer cancellation should not leave the passive previews frozen.
-text = text.replace(
-    'if (dragActivated) { root.commitHistoryTransaction(); }',
-    'if (dragActivated) { root.commitHistoryTransaction(); root.settleSharedPreviewHold(); }',
-    1,
-)
+old_cancel = 'if (dragActivated) { root.commitHistoryTransaction(); }'
+new_cancel = 'if (dragActivated) { root.commitHistoryTransaction(); root.settleSharedPreviewHold(); }'
+replace_once(old_cancel, new_cancel, 'drag cancel settle')
 
 # Inertia completion is the true final drag position. Keep the hold active until
 # the velocity falls below the stop threshold, then publish once.
@@ -185,9 +188,7 @@ old_inertia_tail = 'if (root.inertiaOwner === parent.elementName) root.inertiaOw
 new_inertia_tail = 'if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); root.settleSharedPreviewHold(); } }\n'
 replace_once(old_inertia_tail, new_inertia_tail, 'inertia settle')
 
-# Saving or switching screens during an active transaction must not strand the
-# passive preview hold. These are defensive paths; normal pointer lifecycles
-# settle earlier.
+# Saving during an active transaction must not strand passive previews.
 save_anchor = '''        if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
