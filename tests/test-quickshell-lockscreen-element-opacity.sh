@@ -86,7 +86,11 @@ NODE
 )"
 
 profiles="$(jq -cn --argjson profile "$profile" '{"DP-1":$profile}')"
-bash "$BACKEND" save-lockscreen-editor-profiles "$profiles" "$profile"
+if ! bash "$BACKEND" save-lockscreen-editor-profiles "$profiles" "$profile" 2>"$TMP/error"; then
+    cat "$TMP/error" >&2
+    jq '.' <<<"$profile" >&2
+    exit 2
+fi
 
 invalid="$(jq -c '.lockscreen_layout.time.opacity = 4 | .lockscreen_show_time = true' <<<"$profile")"
 invalid_profiles="$(jq -cn --argjson profile "$invalid" '{"DP-1":$profile}')"
