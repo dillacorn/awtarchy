@@ -64,18 +64,7 @@ NODE
 
 if ! bash "$BACKEND" save-lockscreen-editor-profiles "$profile" '{}' 2>"$TMP/profile-error"; then
     cat "$TMP/profile-error" >&2
-    jq '{
-      keys: (keys | sort),
-      custom_media: .lockscreen_custom_images,
-      visualizer: .lockscreen_visualizer,
-      scalar_types: {
-        background_opacity: (.lockscreen_background_opacity | type),
-        previous_background_opacity: (.lockscreen_background_opacity_previous | type),
-        overlay_strength: (.lockscreen_overlay_strength | type),
-        wallpaper_blur: (.lockscreen_wallpaper_blur | type),
-        transition_duration: (.lockscreen_entry_transition_duration | type)
-      }
-    }' <<<"$profile" >&2
+    jq '.' <<<"$profile" >&2
     exit 2
 fi
 
