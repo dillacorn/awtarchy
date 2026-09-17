@@ -22,20 +22,45 @@ import sys
 
 text = Path(sys.argv[1]).read_text(encoding='utf-8')
 
-def between(start, end):
-    a = text.find(start)
-    b = text.find(end, a + len(start))
-    if a < 0 or b < 0:
-        raise SystemExit(f'FAIL: could not inspect {start}')
-    return text[a:b]
+def body(name):
+    marker = f'function {name}('
+    start = text.find(marker)
+    if start < 0:
+        raise SystemExit(f'FAIL: could not inspect {name}')
+    brace = text.find('{', start)
+    if brace < 0:
+        raise SystemExit(f'FAIL: malformed function {name}')
+    depth = 0
+    quote = None
+    escape = False
+    for i in range(brace, len(text)):
+        ch = text[i]
+        if quote is not None:
+            if escape:
+                escape = False
+            elif ch == '\\':
+                escape = True
+            elif ch == quote:
+                quote = None
+            continue
+        if ch in ('"', "'"):
+            quote = ch
+            continue
+        if ch == '{':
+            depth += 1
+        elif ch == '}':
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:i]
+    raise SystemExit(f'FAIL: unterminated function {name}')
 
-request = between('function useSharedConfiguration()', 'function confirmUseExistingShared()')
+request = body('useSharedConfiguration')
 if 'sharedSwitchConfirmOpen = true' not in request:
     raise SystemExit('FAIL: Use Shared does not open confirmation')
 if 'delete next[activeMonitorName]' in request or 'delete next[sharedSwitchMonitorName]' in request:
     raise SystemExit('FAIL: Use Shared still deletes the Individual profile before confirmation')
 
-existing = between('function confirmUseExistingShared()', 'function confirmPromoteIndividualToShared()')
+existing = body('confirmUseExistingShared')
 for needle in (
     'delete next[targetName]',
     'loadProfileIntoDraft(draftSharedProfile)',
@@ -44,7 +69,7 @@ for needle in (
     if needle not in existing:
         raise SystemExit(f'FAIL: existing Shared conversion missing {needle}')
 
-promote = between('function confirmPromoteIndividualToShared()', 'function cancelUseSharedConfiguration()')
+promote = body('confirmPromoteIndividualToShared')
 for needle in (
     'const promoted = cloneSnapshot(profileFromDraftScalars())',
     'draftSharedProfile = promoted',
@@ -55,7 +80,7 @@ for needle in (
     if needle not in promote:
         raise SystemExit(f'FAIL: promote-to-Shared conversion missing {needle}')
 
-cancel = between('function cancelUseSharedConfiguration()', 'function copyConfigurationTo(')
+cancel = body('cancelUseSharedConfiguration')
 if 'sharedSwitchConfirmOpen = false' not in cancel:
     raise SystemExit('FAIL: cancel does not close Shared switch confirmation')
 if 'draftMonitorOverrides' in cancel or 'draftSharedProfile' in cancel:
