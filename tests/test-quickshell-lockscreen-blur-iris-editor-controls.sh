@@ -110,7 +110,8 @@ forbid_text "$EDITOR" 'settingsBarOffsetY: root.settingsBarOffsetY' 'settings ba
 
 # Secure runtime passes the frozen desktop into the same final composition as
 # the configured background. Smooth/Pixelated are profile-local per monitor.
-require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' 'secure shell does not normalize the Shared presentation snapshot'
+require_text "$LOCK_SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' 'secure shell does not normalize per-display presentation profiles'
+require_text "$LOCK_SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' 'secure shell does not normalize the last-edited fallback profile'
 require_text "$SURFACE" 'blurStyle: root.profile.lockscreen_blur_style' 'secure surface does not receive profile-local blur style'
 require_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not passed into final composition'
 forbid_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'desktop still has an independent pixelated blur path'
