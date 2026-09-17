@@ -15,6 +15,12 @@ function normalizedRotation(value) {
     return clampNumber(value, 0, -180, 180);
 }
 
+function opacityWasZero(value) {
+    const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
+    const opacity = Number(raw.opacity);
+    return Number.isFinite(opacity) && opacity <= 0;
+}
+
 function normalizedElement(value, fallbackX, fallbackY, minimumOpacity) {
     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
     return ({
@@ -23,7 +29,7 @@ function normalizedElement(value, fallbackX, fallbackY, minimumOpacity) {
         scale: clampNumber(raw.scale, 1, 0.50, 100),
         stretch_x: clampNumber(raw.stretch_x, 1, 0.25, 4),
         stretch_y: clampNumber(raw.stretch_y, 1, 0.25, 4),
-        opacity: clampNumber(raw.opacity, 100, minimumOpacity === undefined ? 0 : minimumOpacity, 100),
+        opacity: clampNumber(raw.opacity, 100, minimumOpacity === undefined ? 5 : minimumOpacity, 100),
         rotation: normalizedRotation(raw.rotation),
         color: normalizedColor(raw.color)
     });
@@ -31,23 +37,23 @@ function normalizedElement(value, fallbackX, fallbackY, minimumOpacity) {
 
 function normalizeLayout(value) {
     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
-    const password = normalizedElement(raw.password, 0.50, 0.70, 20);
+    const password = normalizedElement(raw.password, 0.50, 0.70, 5);
     password.x = clampNumber(password.x, 0.50, 0.15, 0.85);
     password.y = clampNumber(password.y, 0.70, 0.20, 0.86);
     return ({
-        logo: normalizedElement(raw.logo, 0.50, 0.34, 0),
-        time: normalizedElement(raw.time, 0.50, 0.51, 0),
-        date: normalizedElement(raw.date, 0.50, 0.555, 0),
-        username: normalizedElement(raw.username, 0.50, 0.595, 0),
-        weather: normalizedElement(raw.weather, 0.50, 0.635, 0),
+        logo: normalizedElement(raw.logo, 0.50, 0.34, 5),
+        time: normalizedElement(raw.time, 0.50, 0.51, 5),
+        date: normalizedElement(raw.date, 0.50, 0.555, 5),
+        username: normalizedElement(raw.username, 0.50, 0.595, 5),
+        weather: normalizedElement(raw.weather, 0.50, 0.635, 5),
         password: password
     });
 }
 
 function normalizeVisualizer(value) {
     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
-    const normalized = normalizedElement(raw, 0.50, 0.80, 0);
-    normalized.enabled = raw.enabled === true;
+    const normalized = normalizedElement(raw, 0.50, 0.80, 5);
+    normalized.enabled = raw.enabled === true && !opacityWasZero(raw);
     normalized.bands = Math.round(clampNumber(raw.bands, 16, 4, 64));
     normalized.gap = Math.round(clampNumber(raw.gap, 4, 0, 24));
     normalized.height = Math.round(clampNumber(raw.height, 100, 25, 300));
@@ -84,7 +90,7 @@ function normalizeCustomImages(value) {
         if (!/^image-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
                 || !path.startsWith("/") || path.indexOf("://") >= 0)
             continue;
-        const normalized = normalizedElement(raw, 0.50, 0.50, 0);
+        const normalized = normalizedElement(raw, 0.50, 0.50, 5);
         // Custom media is not tintable. Keep its persisted schema free of the
         // generic element color field so resolver output round-trips through
         // the authoritative profile backend unchanged.
@@ -93,7 +99,7 @@ function normalizeCustomImages(value) {
         normalized.path = path;
         normalized.spawn_animation = normalizeSpawnAnimation(raw.spawn_animation);
         normalized.spawn_timing = normalizeSpawnTiming(raw.spawn_timing);
-        normalized.visible = raw.visible !== false;
+        normalized.visible = raw.visible !== false && !opacityWasZero(raw);
         result.push(normalized);
         ids[id] = true;
     }
@@ -112,12 +118,12 @@ function normalizeTimezoneClocks(value) {
         let id = String(raw.id || "timezone-" + (i + 1));
         if (!/^timezone-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id])
             id = "timezone-" + (i + 1);
-        const normalized = normalizedElement(raw, 0.50, 0.60 + Math.min(0.24, i * 0.04), 0);
+        const normalized = normalizedElement(raw, 0.50, 0.60 + Math.min(0.24, i * 0.04), 5);
         normalized.id = id;
         normalized.timezone = String(raw.timezone || "UTC");
         normalized.format = String(raw.format || "24h").toLowerCase() === "12h" ? "12h" : "24h";
         normalized.show_label = raw.show_label !== false;
-        normalized.visible = raw.visible !== false;
+        normalized.visible = raw.visible !== false && !opacityWasZero(raw);
         result.push(normalized);
         ids[id] = true;
     }
@@ -153,13 +159,13 @@ function normalizeCustomTexts(value) {
         let id = String(raw.id || "text-" + (i + 1));
         if (!/^text-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id])
             id = "text-" + (i + 1);
-        const normalized = normalizedElement(raw, 0.50, 0.55 + Math.min(0.28, i * 0.04), 0);
+        const normalized = normalizedElement(raw, 0.50, 0.55 + Math.min(0.28, i * 0.04), 5);
         normalized.id = id;
         normalized.text = String(raw.text === undefined ? "Custom Text" : raw.text);
         normalized.variants = normalizeVariants(raw.variants);
         normalized.randomize = raw.randomize === true;
         normalized.alignment = normalizeAlignment(raw.alignment);
-        normalized.visible = raw.visible !== false;
+        normalized.visible = raw.visible !== false && !opacityWasZero(raw);
         result.push(normalized);
         ids[id] = true;
     }
@@ -224,11 +230,16 @@ function normalizedProfile(value) {
     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
     return ({
         lockscreen_layout: normalizeLayout(raw.lockscreen_layout),
-        lockscreen_show_logo: normalizedBoolean(raw.lockscreen_show_logo, true),
-        lockscreen_show_time: normalizedBoolean(raw.lockscreen_show_time, false),
-        lockscreen_show_date: normalizedBoolean(raw.lockscreen_show_date, false),
-        lockscreen_show_username: normalizedBoolean(raw.lockscreen_show_username, false),
-        lockscreen_show_weather: normalizedBoolean(raw.lockscreen_show_weather, false),
+        lockscreen_show_logo: normalizedBoolean(raw.lockscreen_show_logo, true)
+            && !opacityWasZero(raw.lockscreen_layout && raw.lockscreen_layout.logo),
+        lockscreen_show_time: normalizedBoolean(raw.lockscreen_show_time, false)
+            && !opacityWasZero(raw.lockscreen_layout && raw.lockscreen_layout.time),
+        lockscreen_show_date: normalizedBoolean(raw.lockscreen_show_date, false)
+            && !opacityWasZero(raw.lockscreen_layout && raw.lockscreen_layout.date),
+        lockscreen_show_username: normalizedBoolean(raw.lockscreen_show_username, false)
+            && !opacityWasZero(raw.lockscreen_layout && raw.lockscreen_layout.username),
+        lockscreen_show_weather: normalizedBoolean(raw.lockscreen_show_weather, false)
+            && !opacityWasZero(raw.lockscreen_layout && raw.lockscreen_layout.weather),
         lockscreen_custom_images: normalizeCustomImages(raw.lockscreen_custom_images),
         lockscreen_timezone_clocks: normalizeTimezoneClocks(raw.lockscreen_timezone_clocks),
         lockscreen_custom_texts: normalizeCustomTexts(raw.lockscreen_custom_texts),
