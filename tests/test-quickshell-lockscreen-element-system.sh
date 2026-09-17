@@ -217,8 +217,12 @@ require_text "$EDITOR" 'label: "Add Media"' \
     'editor has no local custom-media insertion action'
 require_text "$EDITOR" 'label: "Remove Media"' \
     'editor has no custom-media removal action'
-require_text "$EDITOR" 'JSON.stringify(draftCustomImages)' \
-    'atomic editor save does not include custom images'
+require_text "$EDITOR" 'lockscreen_custom_images: cloneCustomImages(draftCustomImages)' \
+    'profile-based atomic editor save does not include custom media'
+require_text "$EDITOR" 'JSON.stringify(draftSharedProfile)' \
+    'atomic editor save does not serialize the Shared profile'
+require_text "$EDITOR" 'JSON.stringify(draftMonitorOverrides)' \
+    'atomic editor save does not serialize monitor overrides'
 reject_text "$EDITOR" '< 2.00' 'editor still disables scaling at 200%'
 reject_text "$EDITOR" 'customImageScaleMaximum: 10.0' 'editor still has a custom-image-only 10x ceiling'
 
