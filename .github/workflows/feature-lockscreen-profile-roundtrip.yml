@@ -27,3 +27,7 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-saved-profiles.sh
       - name: Per-display editor session
         run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
+      - name: Element opacity floor
+        run: bash tests/test-quickshell-lockscreen-element-opacity.sh
+      - name: Explicit element selection
+        run: bash tests/test-quickshell-lockscreen-selector-flyout.sh
