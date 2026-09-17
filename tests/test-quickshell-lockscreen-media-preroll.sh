@@ -5,6 +5,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 SCENE="$ROOT/config/quickshell/awtarchy-lock/LockScene.qml"
 PREVIEW_SCENE="$ROOT/config/quickshell/awtarchy/LockPreviewScene.qml"
 SURFACE="$ROOT/config/quickshell/awtarchy-lock/LockSurface.qml"
+TRANSITION="$ROOT/config/quickshell/awtarchy-lock/LockTransitionLayer.qml"
 AUTH="$ROOT/config/quickshell/awtarchy-lock/LockAuth.qml"
 
 fail() { printf 'FAIL: %s\n' "$*" >&2; exit 1; }
@@ -58,5 +59,23 @@ reject_text "$AUTH" 'backgroundMediaPlaybackAdvanced' \
     'media readiness leaked into authentication ownership'
 reject_text "$AUTH" 'videoPreRollTimeout' \
     'video pre-roll lifecycle leaked into authentication ownership'
+
+python3 - "$TRANSITION" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+marker = "Component.onCompleted:"
+start = text.find(marker)
+if start < 0:
+    raise SystemExit("FAIL: transition layer has no completion handler")
+block = text[start:]
+if "if (root.autoStart)" not in block or "root.restart()" not in block:
+    raise SystemExit("FAIL: transition layer no longer preserves auto-start behavior")
+if "root.transitionProgress = 1" in block or "root.transitionActive = false" in block:
+    raise SystemExit(
+        "FAIL: transition completion handler can reset a manually started deferred transition"
+    )
+PY
 
 printf '%s\n' 'PASS: lockscreen video pre-roll presentation contracts'
