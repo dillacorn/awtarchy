@@ -59,6 +59,7 @@ Item {
     property var customTextSelections: ({})
     property string individualImageReplayId: ""
     property int individualImageReplayEpoch: 0
+    property int passwordFeedbackEpoch: 0
     readonly property bool effectiveEntryTransitionRunning:
         externalEntryTransitionRunning || externalEntryTransitionPending
     readonly property bool backgroundMediaNeedsPreroll:
@@ -70,7 +71,7 @@ Item {
     readonly property bool fullPresentationPlaybackActive:
         effectiveEntryTransitionRunning || presentationPhase !== "settled"
     readonly property string effectivePasswordMaskMode:
-        ["squares", "dots", "custom"].indexOf(String(passwordMaskMode)) >= 0
+        ["squares", "dots", "custom", "sparks", "mini-flash", "hidden"].indexOf(String(passwordMaskMode)) >= 0
             ? String(passwordMaskMode) : "squares"
     readonly property string effectivePasswordMaskCharacter:
         String(passwordMaskCharacter || "").length > 0 ? String(passwordMaskCharacter) : "•"
@@ -134,6 +135,19 @@ Item {
     readonly property real passwordCenterY: normalizedY("password", 0.70) * height
     readonly property real passwordWidth: Math.round(420 * uiScale * elementScale("password"))
     readonly property real passwordHeight: Math.round(58 * uiScale * elementScale("password"))
+
+    function passwordFeedbackUnit(epoch, index, salt) {
+        const raw = Math.sin((Number(epoch) + 1) * 12.9898
+            + (Number(index) + 1) * 78.233 + Number(salt) * 37.719) * 43758.5453;
+        return raw - Math.floor(raw);
+    }
+
+    function passwordFeedbackCoordinate(epoch, index, salt, extent, padding) {
+        const size = Math.max(1, Number(extent));
+        const inset = Math.max(0, Math.min(size / 2, Number(padding)));
+        return inset + root.passwordFeedbackUnit(epoch, index, salt)
+            * Math.max(0, size - inset * 2);
+    }
 
     property bool pointerActive: false
     property bool logoExplosionActive: false
@@ -1476,7 +1490,115 @@ Item {
         }
 
         Item {
-            visible: root.previewMode
+            id: passwordFeedbackZone
+            x: root.passwordCenterX - width / 2
+            y: root.passwordCenterY - height / 2
+            width: root.passwordWidth
+            height: root.passwordHeight
+            rotation: root.elementRotation("password")
+            transformOrigin: Item.Center
+            transform: Scale {
+                origin.x: passwordFeedbackZone.width / 2
+                origin.y: passwordFeedbackZone.height / 2
+                xScale: root.elementStretchX("password")
+                yScale: root.elementStretchY("password")
+            }
+            clip: true
+            visible: root.effectivePasswordMaskMode === "sparks"
+                || root.effectivePasswordMaskMode === "mini-flash"
+            opacity: (root.previewMode ? 1 : root.securePasswordEntryOpacity)
+                * root.elementOpacity("password")
+            z: 90
+
+            Repeater {
+                id: passwordSparkRepeater
+                model: 7
+
+                Rectangle {
+                    id: passwordSpark
+                    width: Math.max(2, Math.round((2 + root.passwordFeedbackUnit(
+                        root.passwordFeedbackEpoch, index, 11) * 4) * root.uiScale))
+                    height: Math.max(1, Math.round(2 * root.uiScale))
+                    radius: height / 2
+                    color: root.elementColor("password")
+                    opacity: 0
+                    rotation: -55 + root.passwordFeedbackUnit(
+                        root.passwordFeedbackEpoch, index, 23) * 110
+                    x: root.passwordFeedbackCoordinate(root.passwordFeedbackEpoch,
+                        index, 31, passwordFeedbackZone.width, width + 6 * root.uiScale)
+                    y: root.passwordFeedbackCoordinate(root.passwordFeedbackEpoch,
+                        index, 47, passwordFeedbackZone.height, height + 4 * root.uiScale)
+
+                    Connections {
+                        target: root
+                        function onPasswordFeedbackEpochChanged() {
+                            if (root.passwordFeedbackEpoch > 0
+                                    && root.effectivePasswordMaskMode === "sparks")
+                                passwordSparkAnimation.restart();
+                        }
+                    }
+
+                    SequentialAnimation {
+                        id: passwordSparkAnimation
+                        running: false
+                        PropertyAction {
+                            target: passwordSpark
+                            property: "opacity"
+                            value: 0.92
+                        }
+                        NumberAnimation {
+                            target: passwordSpark
+                            property: "opacity"
+                            to: 0
+                            duration: 260
+                            easing.type: Easing.OutCubic
+                        }
+                    }
+                }
+            }
+
+            Rectangle {
+                id: passwordMiniFlash
+                width: Math.max(12, Math.round(22 * root.uiScale))
+                height: width
+                radius: width / 2
+                color: root.elementColor("password")
+                opacity: 0
+                x: root.passwordFeedbackCoordinate(root.passwordFeedbackEpoch,
+                    0, 61, passwordFeedbackZone.width, width / 2 + 4 * root.uiScale)
+                y: root.passwordFeedbackCoordinate(root.passwordFeedbackEpoch,
+                    0, 73, passwordFeedbackZone.height, height / 2 + 3 * root.uiScale)
+
+                Connections {
+                    target: root
+                    function onPasswordFeedbackEpochChanged() {
+                        if (root.passwordFeedbackEpoch > 0
+                                && root.effectivePasswordMaskMode === "mini-flash")
+                            passwordMiniFlashAnimation.restart();
+                    }
+                }
+
+                SequentialAnimation {
+                    id: passwordMiniFlashAnimation
+                    running: false
+                    PropertyAction {
+                        target: passwordMiniFlash
+                        property: "opacity"
+                        value: 0.34
+                    }
+                    NumberAnimation {
+                        target: passwordMiniFlash
+                        property: "opacity"
+                        to: 0
+                        duration: 230
+                        easing.type: Easing.OutCubic
+                    }
+                }
+            }
+        }
+
+        Item {
+            visible: root.previewMode && ["squares", "dots", "custom"].indexOf(root.effectivePasswordMaskMode) >= 0
             rotation: root.elementRotation("password")
             transformOrigin: Item.Center
             x: root.passwordCenterX - width / 2
