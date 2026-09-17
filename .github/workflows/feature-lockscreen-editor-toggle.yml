@@ -42,6 +42,8 @@ jobs:
           python3 .github/scripts/feature-lockscreen-monitor-profile-task6-fix.py
       - name: Monitor weather regression
         run: bash tests/test-quickshell-lockscreen-monitor-weather.sh
+      - name: Secure monitor profile regression
+        run: bash tests/test-quickshell-lockscreen-secure-monitor-profiles.sh
       - name: Verify weather, contrast, and existing contracts
         run: |
           sudo apt-get update -qq
