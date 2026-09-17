@@ -135,6 +135,7 @@ Singleton {
     property var draftAutoAccents: defaultAutoAccents()
     property var draftSharedProfile: ({})
     property var draftMonitorOverrides: ({})
+    property var draftSavedProfiles: []
     property string activeMonitorName: ""
     property bool profileLoadActive: false
     property var profileUndoStacks: ({})
@@ -2121,6 +2122,8 @@ Singleton {
     function loadPersistedDraft() {
         const shared = BarState.lockscreenSharedProfile();
         const overrides = BarState.lockscreenMonitorOverrides();
+        const savedProfiles = BarState.lockscreenSavedProfiles();
+        draftSavedProfiles = cloneSnapshot(savedProfiles) || [];
         draftSharedProfile = cloneSnapshot(shared) || ({});
         settledSharedProfile = cloneSnapshot(draftSharedProfile) || ({});
         sharedPreviewHoldActive = false;
@@ -2233,7 +2236,8 @@ Singleton {
         saveErrorMessage = "";
         statusMessage = "Saving…";
         saveProcess.exec(["bash", editorSaveBackend, "--profiles",
-            JSON.stringify(draftSharedProfile), JSON.stringify(draftMonitorOverrides)]);
+            JSON.stringify(draftSharedProfile), JSON.stringify(draftMonitorOverrides),
+            JSON.stringify(draftSavedProfiles)]);
     }
 
     function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Media " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }

@@ -17,8 +17,8 @@ trap cleanup_tmp EXIT
 
 profile_mode=false
 if [[ "${1:-}" == "--profiles" ]]; then
-    [[ $# -eq 3 ]] || {
-        printf 'usage: %s --profiles <shared-profile-json> <monitor-overrides-json>\n' "${0##*/}" >&2
+    [[ $# -eq 3 || $# -eq 4 ]] || {
+        printf 'usage: %s --profiles <shared-profile-json> <monitor-overrides-json> [saved-profiles-json]\n' "${0##*/}" >&2
         false
     }
     profile_mode=true
@@ -266,10 +266,38 @@ repair_override_profiles() {
     printf '%s' "$result"
 }
 
+repair_saved_profiles() {
+    local value="$1" candidate result='[]' count index entry profile repaired
+    if ! candidate="$(jq -ce 'if type == "array" then . else empty end' <<<"$value" 2>/dev/null)"; then
+        printf '%s' "$value"
+        return 0
+    fi
+
+    count="$(jq -r 'length' <<<"$candidate")"
+    for ((index = 0; index < count; ++index)); do
+        entry="$(jq -c --argjson index "$index" '.[$index]' <<<"$candidate")"
+        if jq -e 'type == "object" and (.profile | type) == "object"' >/dev/null 2>&1 <<<"$entry"; then
+            profile="$(jq -c '.profile' <<<"$entry")"
+            repaired="$(repair_profile_optional_resources "$profile")"
+            if jq -e 'type == "object"' >/dev/null 2>&1 <<<"$repaired"; then
+                entry="$(jq -c --argjson profile "$repaired" '.profile = $profile' <<<"$entry")"
+            fi
+        fi
+        result="$(jq -c --argjson entry "$entry" '. + [$entry]' <<<"$result")"
+    done
+    printf '%s' "$result"
+}
+
 if [[ "$profile_mode" == true ]]; then
     shared_profile="$(repair_profile_optional_resources "$2")"
     monitor_overrides="$(repair_override_profiles "$3")"
-    bash "$STATE_BACKEND" save-lockscreen-editor-profiles "$shared_profile" "$monitor_overrides"
+    if [[ $# -eq 4 ]]; then
+        saved_profiles="$(repair_saved_profiles "$4")"
+        bash "$STATE_BACKEND" save-lockscreen-editor-profiles \
+            "$shared_profile" "$monitor_overrides" "$saved_profiles"
+    else
+        bash "$STATE_BACKEND" save-lockscreen-editor-profiles "$shared_profile" "$monitor_overrides"
+    fi
     printf '%s\n' '{"ok":true}'
     exit 0
 fi

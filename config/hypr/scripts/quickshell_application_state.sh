@@ -28,6 +28,7 @@ LOCKSCREEN_WEATHER_UNITS_JSON='["auto","fahrenheit","celsius"]'
 LOCKSCREEN_LAYOUT_KEYS_JSON='["logo","time","date","username","weather","password"]'
 LOCKSCREEN_LAYOUT_DEFAULT_JSON='{"logo":{"x":0.5,"y":0.34,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto"}}'
 LOCKSCREEN_CUSTOM_IMAGE_MAX=12
+LOCKSCREEN_SAVED_PROFILE_MAX=32
 LOCKSCREEN_CUSTOM_IMAGE_SPAWNS_JSON='["none","pixel-warp","closest-edge","top","bottom","left","right"]'
 LOCKSCREEN_VISUALIZER_SHAPES_JSON='["straight","arc","circle"]'
 LOCKSCREEN_VISUALIZER_DEFAULT_JSON='{"enabled":false,"x":0.5,"y":0.8,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"color":"auto","bands":16,"gap":4,"height":100,"sensitivity":180,"shape":"straight","bend":45,"performance":"balanced"}'
@@ -902,16 +903,73 @@ normalize_lockscreen_monitor_overrides_json() {
     printf '%s' "$result"
 }
 
+normalize_lockscreen_saved_profiles_json() {
+    local value="$1" candidate count index entry profile normalized result='[]'
+
+    if ! candidate="$(jq -ce -n \
+        --argjson candidate "$value" \
+        --argjson maximum "$LOCKSCREEN_SAVED_PROFILE_MAX" '
+        def valid_name($value):
+            ($value | type) == "string"
+            and ($value | explode | length) >= 1
+            and ($value | explode | length) <= 64
+            and ($value | test("[^[:space:]]"))
+            and ($value | test("[[:cntrl:]]") | not);
+        if
+            ($candidate | type) == "array"
+            and ($candidate | length) <= $maximum
+            and all($candidate[];
+                (. | type) == "object"
+                and ((. | keys | sort) == (["id", "name", "profile"] | sort))
+                and (.id | type) == "string"
+                and (.id | test("^profile-[A-Za-z0-9_-]{1,64}$"))
+                and valid_name(.name)
+                and (.profile | type) == "object")
+            and ([ $candidate[].id ] | length) == ([ $candidate[].id ] | unique | length)
+            and ([ $candidate[].name | ascii_downcase ] | length)
+                == ([ $candidate[].name | ascii_downcase ] | unique | length)
+        then $candidate else error("invalid saved lockscreen profiles") end
+    ' 2>/dev/null)"; then
+        printf 'invalid saved lockscreen profiles\n' >&2
+        return 2
+    fi
+
+    count="$(jq -r 'length' <<<"$candidate")"
+    for ((index = 0; index < count; ++index)); do
+        entry="$(jq -c --argjson index "$index" '.[$index]' <<<"$candidate")"
+        profile="$(jq -c '.profile' <<<"$entry")"
+        normalized="$(normalize_lockscreen_profile_json "$profile")" || return $?
+        entry="$(jq -c --argjson profile "$normalized" '.profile = $profile' <<<"$entry")"
+        result="$(jq -c --argjson entry "$entry" '. + [$entry]' <<<"$result")"
+    done
+
+    printf '%s' "$result"
+}
+
 save_lockscreen_editor_profiles() {
-    local shared overrides
+    local shared overrides saved_profiles=''
+    local has_saved_profiles=false
     shared="$(normalize_lockscreen_profile_json "$1")" || return $?
     overrides="$(normalize_lockscreen_monitor_overrides_json "$2")" || return $?
+    if (( $# >= 3 )); then
+        saved_profiles="$(normalize_lockscreen_saved_profiles_json "$3")" || return $?
+        has_saved_profiles=true
+    fi
 
     new_tmp
-    jq --argjson shared "$shared" --argjson overrides "$overrides" '
-        . + $shared
-        | .lockscreen_monitor_overrides = $overrides
-    ' "$STATE_FILE" >"$TMP_FILE"
+    if [[ "$has_saved_profiles" == true ]]; then
+        jq --argjson shared "$shared" --argjson overrides "$overrides" \
+            --argjson saved_profiles "$saved_profiles" '
+            . + $shared
+            | .lockscreen_monitor_overrides = $overrides
+            | .lockscreen_saved_profiles = $saved_profiles
+        ' "$STATE_FILE" >"$TMP_FILE"
+    else
+        jq --argjson shared "$shared" --argjson overrides "$overrides" '
+            . + $shared
+            | .lockscreen_monitor_overrides = $overrides
+        ' "$STATE_FILE" >"$TMP_FILE"
+    fi
     commit_tmp
 }
 
@@ -1954,8 +2012,11 @@ case "$cmd" in
         save_lockscreen_editor "${@:2}"
         ;;
     save-lockscreen-editor-profiles)
-        [[ $# -eq 3 ]] || exit 2
-        save_lockscreen_editor_profiles "$2" "$3"
+        case "$#" in
+            3) save_lockscreen_editor_profiles "$2" "$3" ;;
+            4) save_lockscreen_editor_profiles "$2" "$3" "$4" ;;
+            *) exit 2 ;;
+        esac
         ;;
     reset-lockscreen-presentation)
         reset_lockscreen_presentation
