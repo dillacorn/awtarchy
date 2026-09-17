@@ -17,21 +17,40 @@ require_text "$EDITOR" 'settledSharedProfile = cloneSnapshot(profileFromDraftSca
 
 python3 - "$EDITOR" <<'PY'
 from pathlib import Path
-import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 
-# Continuous direct manipulation must freeze passive Shared previews.
-for fn in ("beginRotateElement", "beginResizeElement", "beginVisualizerWidthResize"):
-    match = re.search(rf"function {fn}\([^)]*\)\s*\{{(.*?)\n\s*\}}", text, re.S)
-    if not match or "beginSharedPreviewHold();" not in match.group(1):
-        raise SystemExit(f"FAIL: {fn} does not begin the Shared preview hold")
+def between(start, end):
+    start_index = text.find(start)
+    if start_index < 0:
+        raise SystemExit(f"FAIL: missing anchor: {start}")
+    end_index = text.find(end, start_index + len(start))
+    if end_index < 0:
+        raise SystemExit(f"FAIL: missing boundary after {start}: {end}")
+    return text[start_index:end_index]
 
-for fn in ("endRotateElement", "endResizeElement", "endVisualizerWidthResize"):
-    match = re.search(rf"function {fn}\([^)]*\)\s*\{{(.*?)\n\s*\}}", text, re.S)
-    if not match or "settleSharedPreviewHold();" not in match.group(1):
-        raise SystemExit(f"FAIL: {fn} does not settle the Shared preview")
+begin_functions = (
+    ("function beginRotateElement(", "function updateRotateElement("),
+    ("function beginResizeElement(", "function updateResizeElement("),
+    ("function beginVisualizerWidthResize(", "function updateVisualizerWidthResize("),
+)
+for start, end in begin_functions:
+    body = between(start, end)
+    if "beginSharedPreviewHold();" not in body:
+        name = start.split("(", 1)[0].replace("function ", "")
+        raise SystemExit(f"FAIL: {name} does not begin the Shared preview hold")
+
+end_functions = (
+    ("function endRotateElement(", "function beginGroupResize("),
+    ("function endResizeElement(", "function setDraftVisualizerWidth("),
+    ("function endVisualizerWidthResize(", "function pointBounds("),
+)
+for start, end in end_functions:
+    body = between(start, end)
+    if "settleSharedPreviewHold();" not in body:
+        name = start.split("(", 1)[0].replace("function ", "")
+        raise SystemExit(f"FAIL: {name} does not settle the Shared preview")
 
 # Element drag and inertia are inline MouseArea/Timer handlers. The hold must
 # begin only after the drag threshold is crossed and remain until inertia ends.
