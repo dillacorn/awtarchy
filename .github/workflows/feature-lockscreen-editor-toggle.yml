@@ -26,9 +26,11 @@ jobs:
           python3 .github/scripts/feature-lockscreen-monitor-profile-task3.py
       - name: Monitor profile state regression
         run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
+      - name: Apply multi-monitor editor session
+        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task4.py
       - name: Multi-monitor editor regression
         run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
-      - name: Verify persistence and existing contracts
+      - name: Verify editor and existing contracts
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.4
@@ -38,19 +40,20 @@ jobs:
           bash tests/test-quickshell-lockscreen-editor-shortcuts.sh
           bash tests/test-quickshell-lockscreen-media-editor-polish.sh
           bash tests/test-quickshell-lockscreen-media-preroll.sh
+          bash tests/test-quickshell-lockscreen-selector-flyout.sh
           bash tests/test-lua-validation.sh
           bash -n config/hypr/scripts/quickshell_application_state.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
           git diff --check
-      - name: Commit persistence production patch
+      - name: Commit multi-monitor editor production patch
         run: |
-          if git diff --quiet -- config/hypr/scripts/quickshell_application_state.sh config/hypr/scripts/quickshell_lockscreen_editor_save.sh config/quickshell/awtarchy/BarState.qml; then
-            echo "Monitor profile persistence already present."
+          if git diff --quiet -- config/quickshell/awtarchy/LockscreenEditor.qml; then
+            echo "Multi-monitor editor session already present."
             exit 0
           fi
           git config user.name "dillacorn"
           git config user.email "28743863+dillacorn@users.noreply.github.com"
-          git add config/hypr/scripts/quickshell_application_state.sh config/hypr/scripts/quickshell_lockscreen_editor_save.sh config/quickshell/awtarchy/BarState.qml
-          git commit -m "Persist lockscreen monitor profiles"
+          git add config/quickshell/awtarchy/LockscreenEditor.qml
+          git commit -m "Add lockscreen multi-monitor editor session"
           git push origin HEAD:feature/lockscreen-media-editor-polish
