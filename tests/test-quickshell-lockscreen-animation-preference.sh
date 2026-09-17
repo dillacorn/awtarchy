@@ -94,19 +94,23 @@ require_text "$SHELL_QML" 'catch (error) {' \
     'lock shell does not guard malformed animation preference state'
 require_text "$SHELL_QML" 'property int randomFormationMode: Math.floor(Math.random() * 4)' \
     'lock shell does not choose one random family per lock'
-require_text "$SHELL_QML" 'animationPreference: root.lockAnimationPreference' \
-    'lock surfaces do not receive the saved animation preference'
+require_text "$SURFACE_QML" 'animationPreference: root.profile.lockscreen_animation' \
+    'lock surface does not resolve the saved animation preference from its monitor profile'
 require_text "$SHELL_QML" 'randomFormationMode: root.randomFormationMode' \
     'lock surfaces do not share the per-lock random family'
 
-# LockSurface keeps the secure pass-through properties; LockScene implements the
-# actual presentation families shared with the unlocked editor.
-require_text "$SURFACE_QML" 'required property string animationPreference' \
-    'lock surface does not receive the animation preference'
+# LockSurface resolves presentation from the effective monitor profile;
+# LockScene implements the actual families shared with the unlocked editor.
+require_text "$SURFACE_QML" 'required property var sharedProfile' \
+    'lock surface does not receive the Shared presentation snapshot'
+require_text "$SURFACE_QML" 'required property var monitorOverrides' \
+    'lock surface does not receive monitor presentation overrides'
+require_text "$SURFACE_QML" 'readonly property var profile: LockscreenPresentationState.profileForMonitor(' \
+    'lock surface does not resolve its effective monitor profile'
 require_text "$SURFACE_QML" 'required property int randomFormationMode' \
-    'lock surface does not receive the shared random family'
-require_text "$SURFACE_QML" 'animationPreference: root.animationPreference' \
-    'lock surface does not pass animation preference into the shared scene'
+    'lock surface does not receive the shared per-lock random family'
+require_text "$SURFACE_QML" 'animationPreference: root.profile.lockscreen_animation' \
+    'lock surface does not pass its profile animation preference into the shared scene'
 require_text "$SURFACE_QML" 'randomFormationMode: root.randomFormationMode' \
     'lock surface does not pass random family into the shared scene'
 require_text "$SCENE_QML" 'animationPreference === "swarm"' \
@@ -142,13 +146,13 @@ reject_text "$SCENE_QML" 'function logoGroupAudioOffset' \
     'presentation scene still maps audio spectrum into logo movement'
 reject_text "$QUICK_SETTINGS" 'text: "Audio Reactive"' \
     'Quick Settings still exposes retired logo audio-reactive state'
-# Pass 3 legitimately owns one analyzer for the standalone visualizer. Its
-# lifecycle and output must be tied to visualizer state, never logo animation.
-require_count "$SHELL_QML" 'LockAudioAnalyzer {' 1 \
-    'secure lock shell does not own exactly one standalone visualizer analyzer'
-require_text "$SHELL_QML" 'enabled: root.lockVisualizer.enabled' \
-    'secure analyzer lifecycle is not tied to standalone visualizer state'
-require_text "$SHELL_QML" 'audioBands: lockAudioAnalyzer.bands' \
+# Each secure monitor surface owns one analyzer for that profile's standalone
+# visualizer. It remains independent from logo formation animation.
+require_count "$SURFACE_QML" 'LockAudioAnalyzer {' 1 \
+    'secure lock surface does not own exactly one standalone visualizer analyzer'
+require_text "$SURFACE_QML" 'enabled: root.profile.lockscreen_visualizer.enabled' \
+    'secure analyzer lifecycle is not tied to the monitor-profile visualizer state'
+require_text "$SURFACE_QML" 'audioBands: lockAudioAnalyzer.bands' \
     'secure analyzer output is not routed as visualizer presentation data'
 reject_text "$SCENE_QML" 'readonly property bool interactiveEffectsEnabled: root.animationPreference !== "off"' \
     'formation Off still suppresses independent pointer effects'

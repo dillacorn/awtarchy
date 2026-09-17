@@ -145,18 +145,17 @@ forbid_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'surface still s
 forbid_text "$QUICK_SETTINGS" 'Background Opacity' 'Quick Settings duplicates editor-owned background opacity control'
 forbid_text "$QUICK_SETTINGS" 'wallpaper blur' 'Quick Settings duplicates editor-owned blur precision control'
 
-# Secure shell independently validates persisted presentation fields.
-require_text "$LOCK_SHELL" 'readonly property string wallpaperFit:' 'secure shell does not normalize wallpaper fit'
-require_text "$LOCK_SHELL" 'readonly property real wallpaperFocalX:' 'secure shell does not normalize focal x'
-require_text "$LOCK_SHELL" 'readonly property real wallpaperFocalY:' 'secure shell does not normalize focal y'
-require_text "$LOCK_SHELL" 'readonly property string overlayMode:' 'secure shell does not normalize overlay mode'
-require_text "$LOCK_SHELL" 'readonly property int overlayStrength:' 'secure shell does not normalize overlay strength'
-require_text "$LOCK_SHELL" 'readonly property int wallpaperBlur:' 'secure shell does not normalize wallpaper blur'
-require_text "$LOCK_SHELL" 'readonly property string blurStyle:' 'secure shell does not normalize blur style'
-require_text "$LOCK_SHELL" 'wallpaperFit: root.wallpaperFit' 'secure scene does not receive wallpaper fit'
-require_text "$LOCK_SHELL" 'overlayStrength: root.overlayStrength' 'secure scene does not receive overlay strength'
-require_text "$LOCK_SHELL" 'wallpaperBlur: root.wallpaperBlur' 'secure scene does not receive blur'
-require_text "$LOCK_SHELL" 'blurStyle: root.blurStyle' 'secure scene does not receive blur style'
+# Secure shell snapshots normalized presentation profiles, and each secure
+# surface binds composition fields from its effective monitor profile.
+require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' 'secure shell does not normalize the Shared presentation snapshot'
+require_text "$LOCK_SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' 'secure shell does not normalize monitor presentation overrides'
+require_text "$SURFACE" 'wallpaperFit: root.profile.lockscreen_wallpaper_fit' 'secure scene does not receive profile wallpaper fit'
+require_text "$SURFACE" 'wallpaperFocalX: root.profile.lockscreen_wallpaper_focal_x' 'secure scene does not receive profile focal x'
+require_text "$SURFACE" 'wallpaperFocalY: root.profile.lockscreen_wallpaper_focal_y' 'secure scene does not receive profile focal y'
+require_text "$SURFACE" 'overlayMode: root.profile.lockscreen_overlay_mode' 'secure scene does not receive profile overlay mode'
+require_text "$SURFACE" 'overlayStrength: root.profile.lockscreen_overlay_strength' 'secure scene does not receive profile overlay strength'
+require_text "$SURFACE" 'wallpaperBlur: root.profile.lockscreen_wallpaper_blur' 'secure scene does not receive profile blur'
+require_text "$SURFACE" 'blurStyle: root.profile.lockscreen_blur_style' 'secure scene does not receive profile blur style'
 
 if grep -Fq 'LockAuth' "$EDITOR"; then
     fail 'unlocked editor must not own authentication'

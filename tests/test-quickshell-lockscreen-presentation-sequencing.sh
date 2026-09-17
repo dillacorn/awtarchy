@@ -93,8 +93,12 @@ require_text "$SCENE" 'required property string clockFormat' \
     'shared scene has no clock format preference'
 require_text "$SCENE" 'root.clockFormat === "12h" ? "h:mm AP" : "HH:mm"' \
     'shared scene does not format both 24-hour and 12-hour AM/PM clocks'
-require_text "$SURFACE" 'passwordMaskMode: root.passwordMaskMode' \
-    'secure surface does not share password-mask presentation with the scene'
+require_text "$SURFACE" 'passwordMaskMode: root.profile.lockscreen_password_mask_mode' \
+    'secure surface does not resolve password-mask presentation from the effective monitor profile'
+require_text "$SURFACE" 'passwordMaskCharacter: root.profile.lockscreen_password_mask_character' \
+    'secure surface does not resolve custom password-mask presentation from the effective monitor profile'
+require_text "$SURFACE" 'clockFormat: root.profile.lockscreen_clock_format' \
+    'secure surface does not resolve clock format from the effective monitor profile'
 
 # Secure settings loading must migrate legacy state by falling back to the old
 # presentation defaults when the new keys are absent or malformed.

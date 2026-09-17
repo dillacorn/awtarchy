@@ -90,7 +90,7 @@ require_text "$EDITOR" 'function setDraftBlurStyle(value)' 'editor cannot switch
 require_text "$EDITOR" 'label: "Smooth"' 'smooth blur style control is missing'
 require_text "$EDITOR" 'label: "Pixelated"' 'pixelated blur style control is missing'
 require_text "$EDITOR" 'blurStyle: root.draftBlurStyle' 'editor preview does not receive blur style'
-require_text "$EDITOR" 'String(draftBlurStyle)' 'editor save payload does not include blur style'
+require_text "$EDITOR" 'lockscreen_blur_style: draftBlurStyle' 'profile-based editor save does not include blur style'
 forbid_text "$EDITOR" 'Iris Reveal' 'retired Iris transition remains in editor controls'
 
 # Explicit reset controls restore the existing defaults through editor history.
@@ -109,10 +109,9 @@ require_text "$EDITOR" 'Math.max(0, Math.min(' 'settings bar movement is not cla
 forbid_text "$EDITOR" 'settingsBarOffsetY: root.settingsBarOffsetY' 'settings bar position leaked into presentation snapshot/save data'
 
 # Secure runtime passes the frozen desktop into the same final composition as
-# the configured background. Smooth/Pixelated consume that final composition.
-require_text "$LOCK_SHELL" 'readonly property string blurStyle:' 'secure shell does not normalize blur style'
-require_text "$LOCK_SHELL" 'blurStyle: root.blurStyle' 'secure surface does not receive blur style'
-require_text "$SURFACE" 'required property string blurStyle' 'secure surface has no blur-style input'
+# the configured background. Smooth/Pixelated are profile-local per monitor.
+require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' 'secure shell does not normalize the Shared presentation snapshot'
+require_text "$SURFACE" 'blurStyle: root.profile.lockscreen_blur_style' 'secure surface does not receive profile-local blur style'
 require_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not passed into final composition'
 forbid_text "$SURFACE" 'id: desktopCapturePixelatedBlur' 'desktop still has an independent pixelated blur path'
 forbid_text "$SURFACE" 'layer.enabled: root.transitionComplete' 'desktop still has an independent smooth blur path'

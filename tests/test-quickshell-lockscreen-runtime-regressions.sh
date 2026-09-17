@@ -141,8 +141,8 @@ require_text "$SHELL_QML" 'property int randomFormationMode: Math.floor(Math.ran
     'lock shell does not choose one randomized formation family per lock'
 require_text "$SHELL_QML" 'randomFormationMode: root.randomFormationMode' \
     'lock surfaces do not share the shell-owned random formation family'
-require_text "$SURFACE_QML" 'required property string animationPreference' \
-    'lock surface does not receive the selected animation preference'
+require_text "$SURFACE_QML" 'animationPreference: root.profile.lockscreen_animation' \
+    'lock scene does not resolve the selected animation preference from the effective monitor profile'
 require_text "$SURFACE_QML" 'required property int randomFormationMode' \
     'lock surface does not receive the shared random formation family'
 for preference in swarm edges center split; do
@@ -188,12 +188,12 @@ reject_text "$SURFACE_QML" 'width: Math.round(250 * root.uiScale)' \
     'lockscreen still renders the password underline'
 reject_text "$SCENE_QML" 'text: "── AWTARCHY ──"' \
     'lockscreen still uses the old tiny Awtarchy heading'
-require_text "$SURFACE_QML" 'required property bool showTime' \
-    'lockscreen does not carry optional time display state'
-require_text "$SURFACE_QML" 'required property bool showDate' \
-    'lockscreen does not carry optional date display state'
-require_text "$SURFACE_QML" 'required property bool showUsername' \
-    'lockscreen does not carry optional username display state'
+require_text "$SURFACE_QML" 'showTime: root.profile.lockscreen_show_time' \
+    'lockscreen does not resolve optional time display state from the effective monitor profile'
+require_text "$SURFACE_QML" 'showDate: root.profile.lockscreen_show_date' \
+    'lockscreen does not resolve optional date display state from the effective monitor profile'
+require_text "$SURFACE_QML" 'showUsername: root.profile.lockscreen_show_username' \
+    'lockscreen does not resolve optional username display state from the effective monitor profile'
 require_text "$SCENE_QML" 'visible: root.presentationVisible("time", root.showTime)' \
     'time metadata is not optional outside editor mode'
 require_text "$SCENE_QML" 'visible: root.presentationVisible("date", root.showDate)' \

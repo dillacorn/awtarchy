@@ -14,6 +14,20 @@ ShellRoot {
     property bool unlockRequested: false
     property var lockSharedProfile: LockscreenPresentationState.sharedProfile(({}))
     property var lockMonitorOverrides: ({})
+    readonly property int captureCleanupTransitionDuration: {
+        let maximum = Number(root.lockSharedProfile.lockscreen_entry_transition_duration);
+        if (!Number.isFinite(maximum))
+            maximum = 1800;
+        const overrides = root.lockMonitorOverrides;
+        if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
+            for (const name of Object.keys(overrides)) {
+                const profile = overrides[name];
+                if (profile && typeof profile === "object" && !Array.isArray(profile))
+                    maximum = Math.max(maximum, Number(profile.lockscreen_entry_transition_duration));
+            }
+        }
+        return Math.max(800, Math.min(6000, Math.round(maximum)));
+    }
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
@@ -627,7 +641,7 @@ ShellRoot {
 
     Timer {
         id: captureCleanupTimer
-        interval: Math.max(3000, Math.min(8000, root.lockEntryTransitionDuration + 2000))
+        interval: Math.max(3000, Math.min(8000, root.captureCleanupTransitionDuration + 2000))
         repeat: false
         onTriggered: root.cleanupTransitionCapture()
     }

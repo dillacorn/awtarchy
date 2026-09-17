@@ -10,6 +10,7 @@ fail() {
 }
 
 managed_files=(
+    'config/hypr/hyprland.lua:.config/hypr/hyprland.lua'
     'config/hypr/scripts/quickshell_application_state.sh:.config/hypr/scripts/quickshell_application_state.sh'
     'config/hypr/scripts/quickshell_lockscreen_editor_save.sh:.config/hypr/scripts/quickshell_lockscreen_editor_save.sh'
     'config/hypr/scripts/quickshell_lockscreen_editor.sh:.config/hypr/scripts/quickshell_lockscreen_editor.sh'
