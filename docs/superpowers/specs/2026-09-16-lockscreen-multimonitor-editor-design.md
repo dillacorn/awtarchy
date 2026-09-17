@@ -47,7 +47,7 @@ An individual override controls the complete visual configuration that the locks
 - background opacity;
 - blur amount and blur style;
 - overlay mode and strength;
-- auto-contrast/accent settings;
+- persisted element color choices, including `auto`; derived Auto Contrast colors are calculated per monitor and are not separately persisted;
 - weather units used by the lockscreen scene;
 - logo spawn animation;
 - entry transition and duration;
@@ -100,19 +100,23 @@ The editor hint remains `Ctrl+S Save • Esc Cancel`; the direct toggle shortcut
 
 The current top-level `lockscreen_*` state remains authoritative for the shared/default profile. Do not migrate existing state into duplicated per-monitor profiles.
 
-Add one new bounded top-level object:
+Add one new bounded top-level object whose override entries use the same persisted field names and meanings as the shared profile:
 
 ```json
 {
   "lockscreen_monitor_overrides": {
     "DP-1": {
       "lockscreen_layout": {},
-      "lockscreen_visibility": {},
+      "lockscreen_show_logo": true,
+      "lockscreen_show_time": false,
+      "lockscreen_show_date": false,
+      "lockscreen_show_username": false,
+      "lockscreen_show_weather": false,
       "lockscreen_custom_images": [],
       "lockscreen_timezone_clocks": [],
       "lockscreen_custom_texts": [],
       "lockscreen_visualizer": {},
-      "lockscreen_background_mode": "black",
+      "lockscreen_background": "black",
       "lockscreen_background_color": "#000000",
       "lockscreen_wallpaper_path": "",
       "lockscreen_wallpaper_fit": "cover",
@@ -125,7 +129,6 @@ Add one new bounded top-level object:
       "lockscreen_wallpaper_blur": 10,
       "lockscreen_blur_style": "pixelated",
       "lockscreen_weather_units": "auto",
-      "lockscreen_auto_accents": {},
       "lockscreen_animation": "split",
       "lockscreen_entry_transition": "fade",
       "lockscreen_entry_transition_duration": 1800,
@@ -137,7 +140,9 @@ Add one new bounded top-level object:
 }
 ```
 
-The exact values above are illustrative defaults, not a second source of defaults. Normalization must reuse the same defaults and validation rules as the shared profile.
+The exact values above are illustrative defaults, not a second source of defaults. Normalization must reuse the same defaults and validation rules as the shared profile. The password element remains always visible under the existing editor validation and therefore does not gain a separate persisted visibility field.
+
+Auto Contrast output is derived from each monitor's effective background/media and persisted element color choices. It must be recomputed for that effective profile where needed, not stored as a separate override field.
 
 The object is keyed by the Quickshell/Hyprland output name used by the existing screen objects, for example `DP-1`.
 
