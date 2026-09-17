@@ -905,6 +905,10 @@ normalize_lockscreen_monitor_overrides_json() {
     printf '%s' "$result"
 }
 
+normalize_lockscreen_monitor_profiles_json() {
+    normalize_lockscreen_monitor_overrides_json "$1"
+}
+
 normalize_lockscreen_saved_profiles_json() {
     local value="$1" candidate count index entry profile normalized result='[]'
 
@@ -949,10 +953,11 @@ normalize_lockscreen_saved_profiles_json() {
 }
 
 save_lockscreen_editor_profiles() {
-    local shared overrides saved_profiles=''
+    local monitor_profiles last_edited saved_profiles=''
     local has_saved_profiles=false
-    shared="$(normalize_lockscreen_profile_json "$1")" || return $?
-    overrides="$(normalize_lockscreen_monitor_overrides_json "$2")" || return $?
+
+    monitor_profiles="$(normalize_lockscreen_monitor_profiles_json "$1")" || return $?
+    last_edited="$(normalize_lockscreen_profile_json "$2")" || return $?
     if (( $# >= 3 )); then
         saved_profiles="$(normalize_lockscreen_saved_profiles_json "$3")" || return $?
         has_saved_profiles=true
@@ -960,16 +965,22 @@ save_lockscreen_editor_profiles() {
 
     new_tmp
     if [[ "$has_saved_profiles" == true ]]; then
-        jq --argjson shared "$shared" --argjson overrides "$overrides" \
+        jq --argjson monitor_profiles "$monitor_profiles" \
+            --argjson last_edited "$last_edited" \
             --argjson saved_profiles "$saved_profiles" '
-            . + $shared
-            | .lockscreen_monitor_overrides = $overrides
+            . + $last_edited
+            | .lockscreen_monitor_profiles = $monitor_profiles
+            | .lockscreen_last_edited_profile = $last_edited
             | .lockscreen_saved_profiles = $saved_profiles
+            | del(.lockscreen_monitor_overrides)
         ' "$STATE_FILE" >"$TMP_FILE"
     else
-        jq --argjson shared "$shared" --argjson overrides "$overrides" '
-            . + $shared
-            | .lockscreen_monitor_overrides = $overrides
+        jq --argjson monitor_profiles "$monitor_profiles" \
+            --argjson last_edited "$last_edited" '
+            . + $last_edited
+            | .lockscreen_monitor_profiles = $monitor_profiles
+            | .lockscreen_last_edited_profile = $last_edited
+            | del(.lockscreen_monitor_overrides)
         ' "$STATE_FILE" >"$TMP_FILE"
     fi
     commit_tmp
