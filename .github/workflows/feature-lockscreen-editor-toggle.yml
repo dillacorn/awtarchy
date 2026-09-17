@@ -36,6 +36,8 @@ jobs:
         run: python3 .github/scripts/feature-lockscreen-monitor-profile-task5.py
       - name: Monitor contrast regression
         run: bash tests/test-quickshell-lockscreen-monitor-contrast.sh
+      - name: Monitor weather regression
+        run: bash tests/test-quickshell-lockscreen-monitor-weather.sh
       - name: Verify contrast and existing contracts
         run: |
           sudo apt-get update -qq
@@ -44,12 +46,16 @@ jobs:
           bash tests/test-quickshell-lockscreen-runtime-polish.sh
           bash tests/test-quickshell-lockscreen-element-system.sh
           bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
+          bash tests/test-quickshell-lockscreen-weather.sh
           bash tests/test-quickshell-lockscreen-weather-units.sh
+          bash tests/test-quickshell-lockscreen-timezones-text.sh
           bash tests/test-quickshell-lockscreen-editor-shortcuts.sh
           bash tests/test-quickshell-lockscreen-media-editor-polish.sh
           bash tests/test-quickshell-lockscreen-media-preroll.sh
           bash tests/test-quickshell-lockscreen-selector-flyout.sh
           bash tests/test-lua-validation.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_timezones.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
           bash -n config/hypr/scripts/quickshell_application_state.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
