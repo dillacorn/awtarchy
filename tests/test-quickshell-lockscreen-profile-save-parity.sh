@@ -74,7 +74,7 @@ saved="$XDG_CACHE_HOME/awtarchy/quickshell-state.json"
 jq -e '
   .lockscreen_layout.password.x == 0.85
   and .lockscreen_layout.password.y == 0.86
-  and .lockscreen_layout.password.opacity == 20
+  and .lockscreen_layout.password.opacity == 5
   and .lockscreen_background_opacity == 50
   and .lockscreen_background_opacity_previous == 71
   and .lockscreen_overlay_strength == 13
