@@ -933,10 +933,23 @@ Singleton {
         stashHistoryForActiveProfile();
         stashAutoAccentsForActiveProfile();
         flushActiveProfile();
+
         activeMonitorName = String(name);
         editorWindow.screen = target;
-        const profile = ensureMonitorProfile(activeMonitorName)
-            || cloneSnapshot(draftLastEditedProfile);
+
+        let profile = null;
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, activeMonitorName)) {
+            profile = cloneSnapshot(draftMonitorProfiles[activeMonitorName]);
+        } else {
+            profile = cloneSnapshot(draftLastEditedProfile);
+            if (profile) {
+                const next = Object.assign({}, draftMonitorProfiles);
+                next[activeMonitorName] = cloneSnapshot(profile);
+                draftMonitorProfiles = next;
+            }
+        }
+
         loadProfileIntoDraft(profile);
         loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
