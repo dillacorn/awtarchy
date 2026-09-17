@@ -1,0 +1,16 @@
+name: Feature lockscreen editor shortcuts
+
+on:
+  push:
+    branches: [feature/lockscreen-media-editor-polish]
+
+permissions:
+  contents: read
+
+jobs:
+  shortcut-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - name: Shortcut regression
+        run: bash tests/test-quickshell-lockscreen-editor-shortcuts.sh
