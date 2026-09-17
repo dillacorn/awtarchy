@@ -185,48 +185,104 @@ sample_wallpaper_contrast() {
     fi
 }
 
-background="black"
-background_color="#000000"
-wallpaper=""
-layout="$DEFAULT_LAYOUT"
 
+profile_colors() {
+    local background="$1" background_color="$2" wallpaper="$3" layout="$4"
+    local colors='{}' color element
+    # Bash dynamic scoping lets prepare_wallpaper_sample update these locals,
+    # keeping each profile's temporary representative frame isolated.
+    local TMP_DIR=""
+    local WALLPAPER_SAMPLE="$wallpaper"
+
+    case "$background" in
+        black|wallpaper|color) ;;
+        *) background="black" ;;
+    esac
+    valid_hex "$background_color" || background_color="#000000"
+    if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$layout"; then
+        layout="$DEFAULT_LAYOUT"
+    fi
+
+    if [[ "$background" == "wallpaper" ]]; then
+        prepare_wallpaper_sample "$wallpaper"
+    fi
+
+    for element in $ELEMENTS; do
+        case "$background" in
+            black) color="#ffffff" ;;
+            color) color="$(contrast_for_hex "$background_color")" ;;
+            wallpaper) color="$(sample_wallpaper_contrast "$WALLPAPER_SAMPLE" "$layout" "$element")" ;;
+        esac
+        colors="$(jq -c --arg element "$element" --arg color "$color" \
+            '. + {($element): $color}' <<<"$colors")"
+    done
+
+    [[ -z "$TMP_DIR" ]] || rm -rf -- "$TMP_DIR"
+    printf '%s\n' "$colors"
+}
+
+profile_fields() {
+    local profile="$1"
+    jq -c --argjson defaults "$DEFAULT_LAYOUT" '
+        {
+            background: (.lockscreen_background // "black"),
+            background_color: (.lockscreen_background_color // "#000000"),
+            wallpaper: (.lockscreen_wallpaper_path // ""),
+            layout: (.lockscreen_layout // $defaults)
+        }
+    ' <<<"$profile" 2>/dev/null || jq -cn --argjson defaults "$DEFAULT_LAYOUT" \
+        '{background:"black",background_color:"#000000",wallpaper:"",layout:$defaults}'
+}
+
+state='{}'
 if [[ -s "$STATE_FILE" ]] && jq -e 'type == "object"' "$STATE_FILE" >/dev/null 2>&1; then
-    background="$(jq -r '.lockscreen_background // "black"' "$STATE_FILE")"
-    background_color="$(jq -r '.lockscreen_background_color // "#000000"' "$STATE_FILE")"
-    wallpaper="$(jq -r '.lockscreen_wallpaper_path // ""' "$STATE_FILE")"
-    layout="$(jq -c '.lockscreen_layout // empty' "$STATE_FILE" 2>/dev/null || true)"
-    [[ -n "$layout" && "$layout" != "null" ]] || layout="$DEFAULT_LAYOUT"
+    state="$(cat -- "$STATE_FILE")"
 fi
+
+shared_profile="$(jq -c '.' <<<"$state")"
+shared_fields="$(profile_fields "$shared_profile")"
+background="$(jq -r '.background' <<<"$shared_fields")"
+background_color="$(jq -r '.background_color' <<<"$shared_fields")"
+wallpaper="$(jq -r '.wallpaper' <<<"$shared_fields")"
+layout="$(jq -c '.layout' <<<"$shared_fields")"
 
 [[ -z "$OVERRIDE_BACKGROUND" ]] || background="$OVERRIDE_BACKGROUND"
 [[ -z "$OVERRIDE_BACKGROUND_COLOR" ]] || background_color="$OVERRIDE_BACKGROUND_COLOR"
 [[ -z "$OVERRIDE_WALLPAPER" ]] || wallpaper="$OVERRIDE_WALLPAPER"
 [[ -z "$OVERRIDE_LAYOUT" ]] || layout="$OVERRIDE_LAYOUT"
 
-case "$background" in
-    black|wallpaper|color) ;;
-    *) background="black" ;;
-esac
-valid_hex "$background_color" || background_color="#000000"
-if ! jq -e 'type == "object"' >/dev/null 2>&1 <<<"$layout"; then
-    layout="$DEFAULT_LAYOUT"
+colors="$(profile_colors "$background" "$background_color" "$wallpaper" "$layout")"
+
+if ((OUTPUT_STDOUT == 1)); then
+    payload="$(jq -cn \
+        --arg provider 'awtarchy-local-contrast' \
+        --arg background "$background" \
+        --arg background_color "$background_color" \
+        --arg wallpaper "$wallpaper" \
+        --argjson colors "$colors" \
+        '{version:2, provider:$provider, background:$background,
+          background_color:$background_color, wallpaper:$wallpaper, colors:$colors}')"
+    printf '%s\n' "$payload"
+    exit 0
 fi
 
-WALLPAPER_SAMPLE="$wallpaper"
-if [[ "$background" == "wallpaper" ]]; then
-    prepare_wallpaper_sample "$wallpaper"
-fi
-
-colors='{}'
-for element in $ELEMENTS; do
-    case "$background" in
-        black) color="#ffffff" ;;
-        color) color="$(contrast_for_hex "$background_color")" ;;
-        wallpaper) color="$(sample_wallpaper_contrast "$WALLPAPER_SAMPLE" "$layout" "$element")" ;;
-    esac
-    colors="$(jq -c --arg element "$element" --arg color "$color" \
-        '. + {($element): $color}' <<<"$colors")"
-done
+monitor_colors='{}'
+monitor_overrides="$(jq -c '
+    if (.lockscreen_monitor_overrides | type) == "object"
+    then .lockscreen_monitor_overrides else {} end
+' <<<"$state")"
+while IFS= read -r monitor; do
+    [[ -n "$monitor" ]] || continue
+    profile="$(jq -c --arg monitor "$monitor" '.[$monitor]' <<<"$monitor_overrides")"
+    fields="$(profile_fields "$profile")"
+    monitor_background="$(jq -r '.background' <<<"$fields")"
+    monitor_background_color="$(jq -r '.background_color' <<<"$fields")"
+    monitor_wallpaper="$(jq -r '.wallpaper' <<<"$fields")"
+    monitor_layout="$(jq -c '.layout' <<<"$fields")"
+    monitor_profile_colors="$(profile_colors "$monitor_background" "$monitor_background_color" "$monitor_wallpaper" "$monitor_layout")"
+    monitor_colors="$(jq -c --arg monitor "$monitor" --argjson colors "$monitor_profile_colors" \
+        '. + {($monitor): $colors}' <<<"$monitor_colors")"
+done < <(jq -r 'keys[]' <<<"$monitor_overrides")
 
 payload="$(jq -cn \
     --arg provider 'awtarchy-local-contrast' \
@@ -234,13 +290,10 @@ payload="$(jq -cn \
     --arg background_color "$background_color" \
     --arg wallpaper "$wallpaper" \
     --argjson colors "$colors" \
-    '{version:2, provider:$provider, background:$background,
-      background_color:$background_color, wallpaper:$wallpaper, colors:$colors}')"
-
-if ((OUTPUT_STDOUT == 1)); then
-    printf '%s\n' "$payload"
-    exit 0
-fi
+    --argjson monitor_colors "$monitor_colors" \
+    '{version:3, provider:$provider, background:$background,
+      background_color:$background_color, wallpaper:$wallpaper,
+      colors:$colors, monitor_colors:$monitor_colors}')"
 
 mkdir -p "$CACHE_DIR"
 TMP_FILE="$(mktemp "${CACHE_FILE}.tmp.XXXXXX")"

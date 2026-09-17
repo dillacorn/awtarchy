@@ -18,6 +18,8 @@ Singleton {
         cacheHome + "/awtarchy/lockscreen-contrast.json"
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
 
+    property var monitorAccents: ({})
+
     property var accents: ({
         logo: "#ffffff",
         time: "#ffffff",
@@ -27,9 +29,26 @@ Singleton {
         password: "#ffffff"
     })
 
+    function normalizedColors(value) {
+        const next = ({});
+        const source = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
+        for (const name of elementNames) {
+            const color = String(source[name] || "").toLowerCase();
+            next[name] = /^#[0-9a-f]{6}$/.test(color) ? color : "#ffffff";
+        }
+        return next;
+    }
+
     function colorFor(name) {
         const value = String(accents && accents[name] !== undefined ? accents[name] : "#ffffff");
         return /^#[0-9a-fA-F]{6}$/.test(value) ? value : "#ffffff";
+    }
+
+    function colorsForMonitor(name) {
+        const key = String(name || "");
+        const value = monitorAccents && monitorAccents[key];
+        return value && typeof value === "object" && !Array.isArray(value)
+            ? normalizedColors(value) : normalizedColors(accents);
     }
 
     function refreshAccent() {
@@ -41,13 +60,14 @@ Singleton {
             if (!parsed || parsed.provider !== "awtarchy-local-contrast"
                     || !parsed.colors || typeof parsed.colors !== "object")
                 return;
-            const next = ({});
-            for (const name of elementNames) {
-                const value = String(parsed.colors[name] || "");
-                next[name] = /^#[0-9a-fA-F]{6}$/.test(value)
-                    ? value.toLowerCase() : "#ffffff";
+            accents = normalizedColors(parsed.colors);
+            const nextMonitors = ({});
+            if (parsed.monitor_colors && typeof parsed.monitor_colors === "object"
+                    && !Array.isArray(parsed.monitor_colors)) {
+                for (const name of Object.keys(parsed.monitor_colors))
+                    nextMonitors[name] = normalizedColors(parsed.monitor_colors[name]);
             }
-            accents = next;
+            monitorAccents = nextMonitors;
         } catch (error) {
             // Keep existing safe contrast values if the local cache is malformed.
         }

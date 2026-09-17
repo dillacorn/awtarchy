@@ -133,6 +133,8 @@ Singleton {
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
+    property var draftSharedAutoAccents: defaultAutoAccents()
+    property var draftMonitorAutoAccents: ({})
     property var draftSharedProfile: ({})
     property var draftMonitorOverrides: ({})
     property string activeMonitorName: ""
@@ -377,6 +379,19 @@ Singleton {
         });
     }
 
+    function cloneAutoAccents(value) {
+        const source = value && typeof value === "object" && !Array.isArray(value)
+            ? value : defaultAutoAccents();
+        const next = defaultAutoAccents();
+        for (const name of elementNames) {
+            const color = String(source[name] || "").toLowerCase();
+            next[name] = validHex(color) ? color : "#ffffff";
+        }
+        const visualizer = String(source.visualizer || source.logo || "#ffffff").toLowerCase();
+        next.visualizer = validHex(visualizer) ? visualizer : "#ffffff";
+        return next;
+    }
+
     function validHex(value) {
         return /^#[0-9a-f]{6}$/.test(String(value || "").toLowerCase());
     }
@@ -480,6 +495,39 @@ Singleton {
             && Object.prototype.hasOwnProperty.call(draftMonitorOverrides, key);
     }
 
+    function stashAutoAccentsForActiveProfile() {
+        const accents = cloneAutoAccents(draftAutoAccents);
+        if (hasIndividualConfiguration(activeMonitorName)) {
+            const next = Object.assign({}, draftMonitorAutoAccents);
+            next[activeMonitorName] = accents;
+            draftMonitorAutoAccents = next;
+        } else {
+            draftSharedAutoAccents = accents;
+        }
+    }
+
+    function loadAutoAccentsForActiveProfile() {
+        if (hasIndividualConfiguration(activeMonitorName)) {
+            const stored = draftMonitorAutoAccents[activeMonitorName];
+            draftAutoAccents = cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(activeMonitorName));
+        } else {
+            draftAutoAccents = cloneAutoAccents(draftSharedAutoAccents);
+        }
+    }
+
+    function autoAccentsForMonitor(name) {
+        const key = String(name || "");
+        if (key === activeMonitorName)
+            return cloneAutoAccents(draftAutoAccents);
+        if (hasIndividualConfiguration(key)) {
+            const stored = draftMonitorAutoAccents[key];
+            return cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(key));
+        }
+        if (!hasIndividualConfiguration(activeMonitorName))
+            return cloneAutoAccents(draftAutoAccents);
+        return cloneAutoAccents(draftSharedAutoAccents);
+    }
+
     function activeProfileKey() {
         return hasIndividualConfiguration(activeMonitorName)
             ? "monitor:" + activeMonitorName : "shared";
@@ -543,9 +591,13 @@ Singleton {
         if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
         flushActiveProfile();
         const next = Object.assign({}, draftMonitorOverrides);
         next[activeMonitorName] = cloneSnapshot(profileFromDraftScalars());
+        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
+        nextAccents[activeMonitorName] = cloneAutoAccents(draftAutoAccents);
+        draftMonitorAutoAccents = nextAccents;
         draftMonitorOverrides = next;
         restoreHistoryForActiveProfile();
         statusMessage = activeMonitorName + " now uses an Individual configuration";
@@ -557,11 +609,16 @@ Singleton {
         if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
         flushActiveProfile();
         const next = Object.assign({}, draftMonitorOverrides);
         delete next[activeMonitorName];
         draftMonitorOverrides = next;
+        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
+        delete nextAccents[activeMonitorName];
+        draftMonitorAutoAccents = nextAccents;
         loadProfileIntoDraft(draftSharedProfile);
+        loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
         statusMessage = activeMonitorName + " now uses Shared configuration";
     }
@@ -577,6 +634,9 @@ Singleton {
         const next = Object.assign({}, draftMonitorOverrides);
         next[targetName] = cloneSnapshot(source);
         draftMonitorOverrides = next;
+        const accentCopies = Object.assign({}, draftMonitorAutoAccents);
+        accentCopies[targetName] = cloneAutoAccents(draftAutoAccents);
+        draftMonitorAutoAccents = accentCopies;
         const undo = Object.assign({}, profileUndoStacks);
         const redo = Object.assign({}, profileRedoStacks);
         delete undo["monitor:" + targetName];
@@ -601,6 +661,9 @@ Singleton {
             if (name.length === 0 || name === activeMonitorName)
                 continue;
             next[name] = cloneSnapshot(source);
+            const accentCopies = Object.assign({}, draftMonitorAutoAccents);
+            accentCopies[name] = cloneAutoAccents(draftAutoAccents);
+            draftMonitorAutoAccents = accentCopies;
             delete undo["monitor:" + name];
             delete redo["monitor:" + name];
             copied++;
@@ -618,12 +681,14 @@ Singleton {
         if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
         flushActiveProfile();
         activeMonitorName = String(name);
         editorWindow.screen = target;
         const profile = hasIndividualConfiguration(activeMonitorName)
             ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
         loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
         statusMessage = "Editing " + activeMonitorName;
         Qt.callLater(() => editorFocus.forceActiveFocus());
@@ -635,6 +700,7 @@ Singleton {
         if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
         flushActiveProfile();
         const target = focusedScreen();
         if (!target)
@@ -644,6 +710,7 @@ Singleton {
         const profile = hasIndividualConfiguration(activeMonitorName)
             ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
         loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
         statusMessage = "Editing " + activeMonitorName;
     }
@@ -1694,6 +1761,7 @@ Singleton {
             const next = defaultAutoAccents();
             for (const name of elementNames) { const value = String(payload.colors[name] || "").toLowerCase(); next[name] = validHex(value) ? value : "#ffffff"; }
             draftAutoAccents = next;
+            stashAutoAccentsForActiveProfile();
         } catch (error) {}
     }
 
@@ -1964,11 +2032,17 @@ Singleton {
         const overrides = BarState.lockscreenMonitorOverrides();
         draftSharedProfile = cloneSnapshot(shared) || ({});
         draftMonitorOverrides = cloneSnapshot(overrides) || ({});
+        draftSharedAutoAccents = cloneAutoAccents(LockscreenContrast.accents);
+        const persistedMonitorAccents = ({});
+        for (const name of Object.keys(draftMonitorOverrides))
+            persistedMonitorAccents[name] = cloneAutoAccents(LockscreenContrast.colorsForMonitor(name));
+        draftMonitorAutoAccents = persistedMonitorAccents;
         if (activeMonitorName.length === 0 && editorWindow.screen && editorWindow.screen.name)
             activeMonitorName = String(editorWindow.screen.name);
         const profile = hasIndividualConfiguration(activeMonitorName)
             ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
         loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
         profileUndoStacks = ({});
         profileRedoStacks = ({});
         undoStack = [];
@@ -2751,12 +2825,13 @@ Singleton {
                 backgroundMode: secondaryPreviewWindow.monitorProfile.lockscreen_background; wallpaperSource: secondaryWallpaperState.source; backgroundColor: secondaryPreviewWindow.monitorProfile.lockscreen_background_color
                 wallpaperFit: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_fit; wallpaperFocalX: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_x; wallpaperFocalY: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_y
                 overlayMode: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_mode; overlayStrength: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_strength; wallpaperBlur: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_blur; blurStyle: secondaryPreviewWindow.monitorProfile.lockscreen_blur_style
-                autoAccents: root.draftAutoAccents; layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: ({}); customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
+                autoAccents: root.autoAccentsForMonitor(modelData.name); layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: ({}); customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
                 visualizer: secondaryPreviewWindow.monitorProfile.lockscreen_visualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: secondaryPreviewWindow.monitorProfile.lockscreen_background_opacity
                 passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
                 desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: ({ logo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo, time: secondaryPreviewWindow.monitorProfile.lockscreen_show_time, date: secondaryPreviewWindow.monitorProfile.lockscreen_show_date, username: secondaryPreviewWindow.monitorProfile.lockscreen_show_username, weather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather, password: true })
             }
             LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition; duration: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition_duration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+
 
         }
     }
