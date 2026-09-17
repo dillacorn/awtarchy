@@ -274,6 +274,47 @@ function sharedProfile(state) {
     return normalizedProfile(state);
 }
 
+function validMonitorName(name) {
+    const value = String(name || "");
+    return Array.from(value).length >= 1
+        && Array.from(value).length <= 128
+        && !/[\u0000-\u001f\u007f-\u009f]/.test(value);
+}
+
+function monitorProfiles(state) {
+    const source = state && typeof state === "object" && !Array.isArray(state)
+        ? state.lockscreen_monitor_profiles : null;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+        return ({});
+
+    const result = ({});
+    const names = Object.keys(source);
+    for (let i = 0; i < names.length; ++i) {
+        const name = String(names[i] || "");
+        const candidate = source[name];
+        if (!validMonitorName(name)
+                || !candidate || typeof candidate !== "object" || Array.isArray(candidate))
+            continue;
+        result[name] = cloneProfile(candidate);
+    }
+    return result;
+}
+
+function lastEditedProfile(state) {
+    const candidate = state && typeof state === "object" && !Array.isArray(state)
+        ? state.lockscreen_last_edited_profile : null;
+    if (candidate && typeof candidate === "object" && !Array.isArray(candidate))
+        return cloneProfile(candidate);
+    return sharedProfile(state || ({}));
+}
+
+function migratedMonitorProfiles(state) {
+    if (state && typeof state === "object" && !Array.isArray(state)
+            && Object.prototype.hasOwnProperty.call(state, "lockscreen_monitor_profiles"))
+        return monitorProfiles(state);
+    return monitorOverrides(state || ({}));
+}
+
 function monitorOverrides(state) {
     const source = state && typeof state === "object" && !Array.isArray(state)
         ? state.lockscreen_monitor_overrides : null;
@@ -294,10 +335,24 @@ function monitorOverrides(state) {
     return result;
 }
 
-function profileForMonitor(shared, overrides, monitorName) {
+function profileForMonitor(profiles, fallback, monitorName) {
     const name = String(monitorName || "");
-    if (overrides && typeof overrides === "object" && !Array.isArray(overrides)
-            && Object.prototype.hasOwnProperty.call(overrides, name))
-        return overrides[name];
-    return shared;
+
+    // Temporary compatibility for callers still using the old
+    // profileForMonitor(sharedProfile, monitorOverrides, name) signature
+    // during the staged migration to per-display profiles.
+    if (profiles && typeof profiles === "object" && !Array.isArray(profiles)
+            && Object.prototype.hasOwnProperty.call(profiles, "lockscreen_layout")) {
+        const shared = profiles;
+        const overrides = fallback;
+        if (overrides && typeof overrides === "object" && !Array.isArray(overrides)
+                && Object.prototype.hasOwnProperty.call(overrides, name))
+            return cloneProfile(overrides[name]);
+        return cloneProfile(shared);
+    }
+
+    if (profiles && typeof profiles === "object" && !Array.isArray(profiles)
+            && Object.prototype.hasOwnProperty.call(profiles, name))
+        return cloneProfile(profiles[name]);
+    return cloneProfile(fallback);
 }
