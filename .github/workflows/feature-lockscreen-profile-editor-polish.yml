@@ -17,20 +17,14 @@ jobs:
           fetch-depth: 0
       - name: Install test dependencies
         run: sudo apt-get update && sudo apt-get install -y jq
-      - name: Apply Task 1 patch
-        run: python3 .github/scripts/feature-lockscreen-profile-editor-task1.py
-      - name: Task 1 GREEN
+      - name: Tasks 1-2 GREEN
         run: |
           node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
           bash tests/test-quickshell-lockscreen-profile-save-parity.sh
-          bash -n config/hypr/scripts/quickshell_application_state.sh
-      - name: Apply Task 2 patch
-        run: python3 .github/scripts/feature-lockscreen-profile-editor-task2.py
-      - name: Task 2 GREEN
-        run: |
           bash tests/test-quickshell-lockscreen-shared-preview-settle.sh
           bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
           bash tests/test-quickshell-lockscreen-editor.sh
+          bash -n config/hypr/scripts/quickshell_application_state.sh
           git diff --check
       - name: Task 3 RED
         run: bash tests/test-quickshell-lockscreen-profile-mode-switch.sh
