@@ -23,3 +23,5 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
       - name: Secure per-display profile contracts
         run: bash tests/test-quickshell-lockscreen-secure-monitor-profiles.sh
+      - name: Per-display editor session
+        run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
