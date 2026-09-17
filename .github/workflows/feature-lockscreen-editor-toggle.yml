@@ -27,7 +27,9 @@ jobs:
       - name: Monitor profile state regression
         run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
       - name: Apply multi-monitor editor session
-        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task4.py
+        run: |
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task4-fix.py
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task4.py
       - name: Multi-monitor editor regression
         run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
       - name: Verify editor and existing contracts
