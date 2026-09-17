@@ -739,7 +739,7 @@ normalize_lockscreen_profile_json() {
                 and (.id | type) == "string" and (.id | test("^timezone-[A-Za-z0-9_-]{1,64}$"))
                 and (.timezone | type) == "string" and (.timezone | length) > 0
                 and (.timezone | startswith("/") | not) and (.timezone | contains("..") | not)
-                and (.timezone | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not)
+                and no_controls(.timezone)
                 and (.format == "24h" or .format == "12h")
                 and (.show_label | type) == "boolean"
                 and (.x | type) == "number" and .x >= 0.05 and .x <= 0.95
