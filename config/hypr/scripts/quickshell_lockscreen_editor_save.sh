@@ -18,7 +18,7 @@ trap cleanup_tmp EXIT
 profile_mode=false
 if [[ "${1:-}" == "--profiles" ]]; then
     [[ $# -eq 3 || $# -eq 4 ]] || {
-        printf 'usage: %s --profiles <shared-profile-json> <monitor-overrides-json> [saved-profiles-json]\n' "${0##*/}" >&2
+        printf 'usage: %s --profiles <monitor-profiles-json> <last-edited-profile-json> [saved-profiles-json]\n' "${0##*/}" >&2
         false
     }
     profile_mode=true
@@ -289,14 +289,15 @@ repair_saved_profiles() {
 }
 
 if [[ "$profile_mode" == true ]]; then
-    shared_profile="$(repair_profile_optional_resources "$2")"
-    monitor_overrides="$(repair_override_profiles "$3")"
+    monitor_profiles="$(repair_override_profiles "$2")"
+    last_edited_profile="$(repair_profile_optional_resources "$3")"
     if [[ $# -eq 4 ]]; then
         saved_profiles="$(repair_saved_profiles "$4")"
         bash "$STATE_BACKEND" save-lockscreen-editor-profiles \
-            "$shared_profile" "$monitor_overrides" "$saved_profiles"
+            "$monitor_profiles" "$last_edited_profile" "$saved_profiles"
     else
-        bash "$STATE_BACKEND" save-lockscreen-editor-profiles "$shared_profile" "$monitor_overrides"
+        bash "$STATE_BACKEND" save-lockscreen-editor-profiles \
+            "$monitor_profiles" "$last_edited_profile"
     fi
     printf '%s\n' '{"ok":true}'
     exit 0
