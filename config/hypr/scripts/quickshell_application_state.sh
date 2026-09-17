@@ -600,8 +600,47 @@ normalize_lockscreen_custom_images_json() {
 }
 
 
+validate_lockscreen_profile_layout_section() {
+    local value="$1"
+    jq -e -n --argjson candidate "$value" '
+        def layout_keys: ["logo", "time", "date", "username", "weather", "password"];
+        def valid_color($value):
+            ($value | type) == "string"
+            and ($value == "auto" or ($value | test("^#[0-9A-Fa-f]{6}$")));
+        def valid_transform($value; $password):
+            ($value | type) == "object"
+            and (($value | keys - ["color", "opacity", "rotation", "scale", "stretch_x", "stretch_y", "x", "y"] | length) == 0)
+            and ($value.x | type) == "number"
+            and ($value.y | type) == "number"
+            and ($value.scale | type) == "number"
+            and ($value.stretch_x | type) == "number"
+            and ($value.stretch_y | type) == "number"
+            and ($value.opacity | type) == "number"
+            and ($value.rotation | type) == "number"
+            and valid_color($value.color)
+            and ($value.x >= (if $password then 0.15 else 0.05 end))
+            and ($value.x <= (if $password then 0.85 else 0.95 end))
+            and ($value.y >= (if $password then 0.20 else 0.08 end))
+            and ($value.y <= (if $password then 0.86 else 0.92 end))
+            and ($value.scale >= 0.5 and $value.scale <= 100)
+            and ($value.stretch_x >= 0.25 and $value.stretch_x <= 4)
+            and ($value.stretch_y >= 0.25 and $value.stretch_y <= 4)
+            and ($value.opacity >= (if $password then 20 else 0 end) and $value.opacity <= 100)
+            and ($value.rotation >= -180 and $value.rotation <= 180);
+        ($candidate | type) == "object"
+        and ($candidate.lockscreen_layout | type) == "object"
+        and (($candidate.lockscreen_layout | keys | sort) == (layout_keys | sort))
+        and all(layout_keys[]; . as $key | valid_transform($candidate.lockscreen_layout[$key]; $key == "password"))
+    ' >/dev/null 2>&1
+}
+
 normalize_lockscreen_profile_json() {
     local value="$1" normalized wallpaper count index path resolved zone
+
+    if ! validate_lockscreen_profile_layout_section "$value"; then
+        printf 'invalid lockscreen profile: layout\n' >&2
+        return 2
+    fi
 
     if ! normalized="$(jq -ce -n --argjson candidate "$value" '
         def profile_keys: [
@@ -793,7 +832,7 @@ normalize_lockscreen_profile_json() {
             and (["24h", "12h"] | index($candidate.lockscreen_clock_format) != null)
         then $candidate else error("invalid lockscreen profile") end
     ' 2>/dev/null)"; then
-        printf 'invalid lockscreen profile\n' >&2
+        printf 'invalid lockscreen profile: schema\n' >&2
         return 2
     fi
 

@@ -31,13 +31,16 @@ function normalizedElement(value, fallbackX, fallbackY, minimumOpacity) {
 
 function normalizeLayout(value) {
     const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
+    const password = normalizedElement(raw.password, 0.50, 0.70, 20);
+    password.x = clampNumber(password.x, 0.50, 0.15, 0.85);
+    password.y = clampNumber(password.y, 0.70, 0.20, 0.86);
     return ({
         logo: normalizedElement(raw.logo, 0.50, 0.34, 0),
         time: normalizedElement(raw.time, 0.50, 0.51, 0),
         date: normalizedElement(raw.date, 0.50, 0.555, 0),
         username: normalizedElement(raw.username, 0.50, 0.595, 0),
         weather: normalizedElement(raw.weather, 0.50, 0.635, 0),
-        password: normalizedElement(raw.password, 0.50, 0.70, 20)
+        password: password
     });
 }
 
