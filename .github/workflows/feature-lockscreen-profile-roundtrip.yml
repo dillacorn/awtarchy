@@ -31,3 +31,5 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-element-opacity.sh
       - name: Explicit element selection
         run: bash tests/test-quickshell-lockscreen-selector-flyout.sh
+      - name: Password feedback schema
+        run: bash tests/test-quickshell-lockscreen-password-feedback.sh
