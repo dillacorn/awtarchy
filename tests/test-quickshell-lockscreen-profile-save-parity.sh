@@ -13,10 +13,14 @@ export XDG_CONFIG_HOME="$TMP/config"
 mkdir -p "$HOME" "$XDG_CACHE_HOME/awtarchy" "$XDG_CONFIG_HOME"
 printf '%s\n' '{"enabled":true,"monitors":{},"launcher_sizes":{}}' >"$XDG_CACHE_HOME/awtarchy/quickshell-state.json"
 
-profile="$(node - "$RESOLVER" <<'NODE'
+media="$TMP/media.png"
+: >"$media"
+
+profile="$(node - "$RESOLVER" "$media" <<'NODE'
 const fs = require('fs');
 const vm = require('vm');
 const file = process.argv[2];
+const media = process.argv[3];
 const source = fs.readFileSync(file, 'utf8').replace(/^\.pragma library\s*/m, '');
 const context = {};
 vm.createContext(context);
@@ -34,6 +38,20 @@ const profile = context.sharedProfile({
       color: 'auto'
     }
   },
+  lockscreen_custom_images: [{
+    id: 'image-roundtrip',
+    path: media,
+    x: 0.5,
+    y: 0.5,
+    scale: 1,
+    stretch_x: 1,
+    stretch_y: 1,
+    opacity: 100,
+    rotation: 0,
+    spawn_animation: 'none',
+    spawn_timing: 'during-logo',
+    visible: true
+  }],
   lockscreen_background_opacity: 50.4,
   lockscreen_background_opacity_previous: 70.7,
   lockscreen_overlay_strength: 12.6,
@@ -56,6 +74,9 @@ jq -e '
   and .lockscreen_overlay_strength == 13
   and .lockscreen_wallpaper_blur == 20
   and .lockscreen_entry_transition_duration == 1800
+  and (.lockscreen_custom_images | length) == 1
+  and .lockscreen_custom_images[0].id == "image-roundtrip"
+  and (.lockscreen_custom_images[0] | has("color") | not)
 ' "$saved" >/dev/null
 
 invalid_layout="$(jq -c '.lockscreen_layout.password.opacity = 0' <<<"$profile")"
