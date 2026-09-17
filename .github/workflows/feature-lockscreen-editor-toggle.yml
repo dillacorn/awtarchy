@@ -26,6 +26,8 @@ jobs:
           python3 .github/scripts/feature-lockscreen-monitor-profile-task3.py
       - name: Monitor profile state regression
         run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
+      - name: Multi-monitor editor regression
+        run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
       - name: Verify persistence and existing contracts
         run: |
           sudo apt-get update -qq
