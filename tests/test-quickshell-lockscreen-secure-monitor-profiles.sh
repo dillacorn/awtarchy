@@ -16,14 +16,14 @@ reject_text() {
 
 # Secure shell loads presentation snapshots once, while authentication/session
 # controls remain global.
-require_text "$SHELL" 'property var lockSharedProfile:' \
-    'secure shell has no Shared profile snapshot'
-require_text "$SHELL" 'property var lockMonitorOverrides:' \
-    'secure shell has no monitor override snapshot'
-require_text "$SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' \
-    'secure shell does not load Shared presentation through the resolver'
-require_text "$SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' \
-    'secure shell does not load monitor overrides through the resolver'
+require_text "$SHELL" 'property var lockMonitorProfiles:' \
+    'secure shell has no per-display profile snapshot'
+require_text "$SHELL" 'property var lockLastEditedProfile:' \
+    'secure shell has no last-edited fallback profile'
+require_text "$SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure shell does not load per-display presentation profiles through the resolver'
+require_text "$SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure shell does not load the last-edited fallback through the resolver'
 require_text "$SHELL" 'lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);' \
     'logo physics stopped being a global secure-session setting'
 require_text "$SHELL" 'lockMouseInteractive = normalizedBoolean(parsed.lockscreen_mouse_interactive, true);' \
@@ -35,18 +35,18 @@ require_text "$SHELL" 'auth: lockAuth' 'secure surfaces no longer share the sing
 # can render different media, weather, accents, clocks, and visualizers.
 require_text "$SURFACE" 'import "LockscreenPresentationState.js" as LockscreenPresentationState' \
     'secure surface does not import the monitor profile resolver'
-require_text "$SURFACE" 'required property var sharedProfile' \
-    'secure surface has no Shared profile input'
-require_text "$SURFACE" 'required property var monitorOverrides' \
-    'secure surface has no monitor override input'
+require_text "$SURFACE" 'required property var monitorProfiles' \
+    'secure surface has no per-display profile input'
+require_text "$SURFACE" 'required property var lastEditedProfile' \
+    'secure surface has no last-edited fallback input'
 require_text "$SURFACE" 'readonly property string monitorName:' \
     'secure surface does not derive its monitor name'
 require_text "$SURFACE" 'String(root.screen.name)' \
     'secure surface monitor identity does not use screen.name'
 require_text "$SURFACE" 'readonly property var profile: LockscreenPresentationState.profileForMonitor(' \
     'secure surface does not resolve its own effective profile'
-require_text "$SURFACE" 'root.sharedProfile, root.monitorOverrides, root.monitorName)' \
-    'secure surface resolver does not use Shared + monitor overrides + monitor name'
+require_text "$SURFACE" 'root.monitorProfiles, root.lastEditedProfile, root.monitorName)' \
+    'secure surface resolver does not use per-display profiles + fallback + monitor name'
 require_text "$SURFACE" 'LockWallpaperState {' \
     'secure surface does not own its wallpaper service'
 require_text "$SURFACE" 'path: root.profile.lockscreen_wallpaper_path' \
@@ -97,9 +97,9 @@ require_text "$SURFACE" 'required property var auth' \
 # Authentication must never select or normalize presentation profiles.
 reject_text "$AUTH" 'LockscreenPresentationState' \
     'LockAuth contains presentation profile logic'
-reject_text "$AUTH" 'lockscreen_monitor_overrides' \
-    'LockAuth reads monitor presentation overrides'
+reject_text "$AUTH" 'lockscreen_monitor_profiles' \
+    'LockAuth reads monitor presentation profiles'
 reject_text "$AUTH" 'profileForMonitor' \
     'LockAuth selects a monitor presentation profile'
 
-printf '%s\n' 'PASS: secure lockscreen per-monitor profile contracts'
+printf '%s\n' 'PASS: secure lockscreen per-display profile contracts'
