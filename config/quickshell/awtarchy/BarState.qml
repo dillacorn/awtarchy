@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import "LockscreenPresentationState.js" as LockscreenPresentationState
 
 Singleton {
     id: root
@@ -408,6 +409,7 @@ Singleton {
             lockscreen_custom_images: [],
             lockscreen_visualizer: root.defaultLockscreenVisualizer,
             lockscreen_background_opacity: 100,
+            lockscreen_monitor_overrides: {},
             monitors: {},
             launcher_sizes: {},
             clipboard_views: {},
@@ -467,6 +469,21 @@ Singleton {
             console.warn("Awtarchy Quickshell: invalid shell state:", error);
             return emptyData();
         }
+    }
+
+    function lockscreenSharedProfile() {
+        const dependency = revision;
+        return LockscreenPresentationState.sharedProfile(data());
+    }
+
+    function lockscreenMonitorOverrides() {
+        const dependency = revision;
+        return LockscreenPresentationState.monitorOverrides(data());
+    }
+
+    function lockscreenProfileForMonitor(name) {
+        return LockscreenPresentationState.profileForMonitor(
+            lockscreenSharedProfile(), lockscreenMonitorOverrides(), String(name || ""));
     }
 
     function identityLabelValid(value) {

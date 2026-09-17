@@ -15,11 +15,19 @@ cleanup_tmp() {
 }
 trap cleanup_tmp EXIT
 
-if [[ $# -ne 23 && $# -ne 25 ]]; then
+profile_mode=false
+if [[ "${1:-}" == "--profiles" ]]; then
+    [[ $# -eq 3 ]] || {
+        printf 'usage: %s --profiles <shared-profile-json> <monitor-overrides-json>\n' "${0##*/}" >&2
+        false
+    }
+    profile_mode=true
+elif [[ $# -ne 23 && $# -ne 25 ]]; then
     printf 'usage: %s <19 existing editor fields> <logo-animation> <mask-mode> <mask-character> <clock-format> [timezone-clocks-json custom-texts-json]\n' "${0##*/}" >&2
     false
 fi
 
+if [[ "$profile_mode" == false ]]; then
 layout_input="${1}"
 custom_images_input="${13:-[]}"
 visualizer_input="${14-}"
@@ -58,6 +66,8 @@ mask_character="$({
         | implode
     '
 })"
+
+fi
 
 normalize_timezone_clocks() {
     jq -ce -n --argjson candidate "$1" '
@@ -208,6 +218,61 @@ filter_stale_timezone_clocks() {
 
     printf '%s' "$candidate"
 }
+
+repair_profile_optional_resources() {
+    local value="$1" candidate images repaired background wallpaper
+    if ! candidate="$(jq -ce 'if type == "object" then . else empty end' <<<"$value" 2>/dev/null)"; then
+        printf '%s' "$value"
+        return 0
+    fi
+
+    images="$(jq -c '.lockscreen_custom_images // []' <<<"$candidate")"
+    repaired="$(filter_stale_custom_images "$images")"
+    if jq -e 'type == "array"' >/dev/null 2>&1 <<<"$repaired"; then
+        candidate="$(jq -c --argjson images "$repaired" '.lockscreen_custom_images = $images' <<<"$candidate")"
+    fi
+
+    background="$(jq -r '.lockscreen_background // ""' <<<"$candidate")"
+    wallpaper="$(jq -r '.lockscreen_wallpaper_path // ""' <<<"$candidate")"
+    if [[ "$background" == "wallpaper" ]]; then
+        if [[ -z "$wallpaper" ]]; then
+            candidate="$(jq -c '.lockscreen_background = "black" | .lockscreen_wallpaper_path = ""' <<<"$candidate")"
+        elif [[ "$wallpaper" == /* && "$wallpaper" != *://* \
+            && "$wallpaper" != *$'\n'* && "$wallpaper" != *$'\r'* \
+            && ( ! -f "$wallpaper" || ! -r "$wallpaper" ) ]]; then
+            candidate="$(jq -c '.lockscreen_background = "black" | .lockscreen_wallpaper_path = ""' <<<"$candidate")"
+        fi
+    fi
+
+    printf '%s' "$candidate"
+}
+
+repair_override_profiles() {
+    local value="$1" candidate result key profile repaired
+    if ! candidate="$(jq -ce 'if type == "object" then . else empty end' <<<"$value" 2>/dev/null)"; then
+        printf '%s' "$value"
+        return 0
+    fi
+    result='{}'
+    while IFS= read -r key; do
+        profile="$(jq -c --arg key "$key" '.[$key]' <<<"$candidate")"
+        repaired="$(repair_profile_optional_resources "$profile")"
+        if jq -e 'type == "object"' >/dev/null 2>&1 <<<"$repaired"; then
+            result="$(jq -c --arg key "$key" --argjson profile "$repaired" '. + {($key): $profile}' <<<"$result")"
+        else
+            result="$(jq -c --arg key "$key" --argjson profile "$profile" '. + {($key): $profile}' <<<"$result")"
+        fi
+    done < <(jq -r 'keys[]' <<<"$candidate")
+    printf '%s' "$result"
+}
+
+if [[ "$profile_mode" == true ]]; then
+    shared_profile="$(repair_profile_optional_resources "$2")"
+    monitor_overrides="$(repair_override_profiles "$3")"
+    bash "$STATE_BACKEND" save-lockscreen-editor-profiles "$shared_profile" "$monitor_overrides"
+    printf '%s\n' '{"ok":true}'
+    exit 0
+fi
 
 custom_images_input="$(filter_stale_custom_images "$custom_images_input")"
 backend_layout="$(jq -ce 'with_entries(.value |= del(.rotation))' <<<"$layout_input")"
