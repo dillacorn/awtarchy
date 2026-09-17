@@ -147,8 +147,8 @@ forbid_text "$QUICK_SETTINGS" 'wallpaper blur' 'Quick Settings duplicates editor
 
 # Secure shell snapshots normalized presentation profiles, and each secure
 # surface binds composition fields from its effective monitor profile.
-require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' 'secure shell does not normalize the Shared presentation snapshot'
-require_text "$LOCK_SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' 'secure shell does not normalize monitor presentation overrides'
+require_text "$LOCK_SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' 'secure shell does not normalize per-display presentation profiles'
+require_text "$LOCK_SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' 'secure shell does not normalize the last-edited fallback profile'
 require_text "$SURFACE" 'wallpaperFit: root.profile.lockscreen_wallpaper_fit' 'secure scene does not receive profile wallpaper fit'
 require_text "$SURFACE" 'wallpaperFocalX: root.profile.lockscreen_wallpaper_focal_x' 'secure scene does not receive profile focal x'
 require_text "$SURFACE" 'wallpaperFocalY: root.profile.lockscreen_wallpaper_focal_y' 'secure scene does not receive profile focal y'
