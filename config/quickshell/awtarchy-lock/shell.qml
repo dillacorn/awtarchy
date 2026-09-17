@@ -12,6 +12,8 @@ ShellRoot {
     id: root
 
     property bool unlockRequested: false
+    property var lockSharedProfile: LockscreenPresentationState.sharedProfile(({}))
+    property var lockMonitorOverrides: ({})
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
@@ -445,6 +447,8 @@ ShellRoot {
     }
 
     function resetPreferences() {
+        lockSharedProfile = LockscreenPresentationState.sharedProfile(({}));
+        lockMonitorOverrides = ({});
         lockAnimationPreference = "split";
         lockEntryTransition = "fade";
         lockEntryTransitionDuration = 1800;
@@ -470,6 +474,7 @@ ShellRoot {
         lockBlurStyle = "pixelated";
         lockWeatherLocation = "";
         lockWeatherUnits = "auto";
+        lockWeatherUnits = "auto";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
         lockTimezoneClocks = [];
@@ -492,6 +497,9 @@ ShellRoot {
                 resetPreferences();
                 return;
             }
+
+            lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);
+            lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
             lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
@@ -519,6 +527,7 @@ ShellRoot {
             lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
             lockWeatherUnits = normalizedWeatherUnits(parsed.lockscreen_weather_units);
+            lockWeatherUnits = normalizedWeatherUnits(parsed.lockscreen_weather_units);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
             lockTimezoneClocks = normalizedTimezoneClocks(parsed.lockscreen_timezone_clocks);
@@ -533,14 +542,7 @@ ShellRoot {
     Component.onCompleted: {
         Quickshell.watchFiles = false;
         root.loadPreferences();
-        Qt.callLater(root.refreshTimezoneValues);
     }
-
-    Process {
-        id: timezoneProcess
-        stdout: SplitParser { onRead: line => root.applyTimezoneValues(line) }
-    }
-    Timer { interval: 15000; repeat: true; running: root.lockTimezoneClocks.length > 0; triggeredOnStart: true; onTriggered: root.refreshTimezoneValues() }
 
     FileView {
         id: stateFile
@@ -565,27 +567,6 @@ ShellRoot {
         }
     }
 
-    LockWeatherCache {
-        id: lockWeatherCache
-        enabled: root.lockShowWeather
-        units: root.lockWeatherUnits
-    }
-
-    LockWallpaperState {
-        id: lockWallpaperState
-        path: root.lockWallpaperPath
-    }
-
-    LockContrastCache {
-        id: lockContrastCache
-    }
-
-    LockAudioAnalyzer {
-        id: lockAudioAnalyzer
-        enabled: root.lockVisualizer.enabled
-        performanceMode: root.lockVisualizer.performance
-    }
-
     WlSessionLock {
         id: sessionLock
         locked: true
@@ -595,40 +576,11 @@ ShellRoot {
                 auth: lockAuth
                 theme: lockTheme
                 unlocking: root.unlockRequested
-                animationPreference: root.lockAnimationPreference
-                entryTransition: root.lockEntryTransition
-                entryTransitionDuration: root.lockEntryTransitionDuration
+                sharedProfile: root.lockSharedProfile
+                monitorOverrides: root.lockMonitorOverrides
                 randomFormationMode: root.randomFormationMode
                 logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive
-                showLogo: root.lockShowLogo
-                showTime: root.lockShowTime
-                showDate: root.lockShowDate
-                showUsername: root.lockShowUsername
-                showWeather: root.lockShowWeather
-                weatherText: lockWeatherCache.summary
-                backgroundMode: root.lockBackground
-                wallpaperSource: lockWallpaperState.source
-                backgroundColor: root.lockBackgroundColor
-                wallpaperFit: root.wallpaperFit
-                wallpaperFocalX: root.wallpaperFocalX
-                wallpaperFocalY: root.wallpaperFocalY
-                overlayMode: root.overlayMode
-                overlayStrength: root.overlayStrength
-                wallpaperBlur: root.wallpaperBlur
-                blurStyle: root.blurStyle
-                autoAccents: lockContrastCache.colors
-                layout: root.lockLayout
-                customImages: root.lockCustomImages
-                timezoneClocks: root.lockTimezoneClocks
-                timezoneValues: root.lockTimezoneValues
-                customTexts: root.lockCustomTexts
-                visualizer: root.lockVisualizer
-                audioBands: lockAudioAnalyzer.bands
-                backgroundOpacity: root.lockBackgroundOpacity
-                passwordMaskMode: root.lockPasswordMaskMode
-                passwordMaskCharacter: root.lockPasswordMaskCharacter
-                clockFormat: root.lockClockFormat
                 captureDirectory: root.captureDirectory
             }
         }

@@ -3,6 +3,7 @@ import QtQuick.Effects
 import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
+import "LockscreenPresentationState.js" as LockscreenPresentationState
 
 WlSessionLockSurface {
     id: root
@@ -10,46 +11,20 @@ WlSessionLockSurface {
     required property var auth
     required property var theme
     required property bool unlocking
-    required property string animationPreference
-    required property string entryTransition
-    required property int entryTransitionDuration
+    required property var sharedProfile
+    required property var monitorOverrides
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
-    required property bool showLogo
-    required property bool showTime
-    required property bool showDate
-    required property bool showUsername
-    required property bool showWeather
-    required property string weatherText
-    required property string backgroundMode
-    required property string wallpaperSource
-    required property color backgroundColor
-    required property string wallpaperFit
-    required property real wallpaperFocalX
-    required property real wallpaperFocalY
-    required property string overlayMode
-    required property real overlayStrength
-    required property real wallpaperBlur
-    required property string blurStyle
-    required property var autoAccents
-    required property var layout
-    required property var customImages
-    required property var timezoneClocks
-    required property var timezoneValues
-    required property var customTexts
-    required property var visualizer
-    required property var audioBands
-    required property int backgroundOpacity
-    required property string passwordMaskMode
-    required property string passwordMaskCharacter
-    required property string clockFormat
     required property string captureDirectory
 
     color: "#000000"
 
-    readonly property string captureOutputName: root.screen && root.screen.name
+    readonly property string monitorName: root.screen && root.screen.name
         ? String(root.screen.name) : ""
+    readonly property var profile: LockscreenPresentationState.profileForMonitor(
+        root.sharedProfile, root.monitorOverrides, root.monitorName)
+    readonly property string captureOutputName: root.monitorName
     readonly property string captureSource: root.captureDirectory.length > 0
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
         ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".png"
@@ -78,8 +53,30 @@ WlSessionLockSurface {
     readonly property string timezoneBackend: configHome
         + "/hypr/scripts/quickshell_lockscreen_timezones.sh"
 
+    LockWallpaperState {
+        id: lockWallpaperState
+        path: root.profile.lockscreen_wallpaper_path
+    }
+
+    LockContrastCache {
+        id: lockContrastCache
+        monitorName: root.monitorName
+    }
+
+    LockWeatherCache {
+        id: lockWeatherCache
+        enabled: root.profile.lockscreen_show_weather
+        units: root.profile.lockscreen_weather_units
+    }
+
+    LockAudioAnalyzer {
+        id: lockAudioAnalyzer
+        enabled: root.profile.lockscreen_visualizer.enabled
+        performanceMode: root.profile.lockscreen_visualizer.performance
+    }
+
     function refreshTimezoneValues() {
-        const clocks = root.timezoneClocks || [];
+        const clocks = root.profile.lockscreen_timezone_clocks || [];
         if (!Array.isArray(clocks) || clocks.length === 0) {
             root.localTimezoneValues = ({});
             return;
@@ -150,12 +147,13 @@ WlSessionLockSurface {
     Timer {
         interval: 15000
         repeat: true
-        running: Array.isArray(root.timezoneClocks) && root.timezoneClocks.length > 0
+        running: Array.isArray(root.profile.lockscreen_timezone_clocks)
+            && root.profile.lockscreen_timezone_clocks.length > 0
         triggeredOnStart: true
         onTriggered: root.refreshTimezoneValues()
     }
 
-    onTimezoneClocksChanged: Qt.callLater(() => root.refreshTimezoneValues())
+    onProfileChanged: Qt.callLater(() => root.refreshTimezoneValues())
 
     PinchHandler {
         target: null
@@ -222,38 +220,38 @@ WlSessionLockSurface {
             anchors.fill: parent
             theme: root.theme
             unlocking: root.unlocking
-            animationPreference: root.animationPreference
+            animationPreference: root.profile.lockscreen_animation
             randomFormationMode: root.randomFormationMode
             logoPhysicsHz: root.logoPhysicsHz
             mouseInteractive: root.mouseInteractive && root.transitionComplete
-            showLogo: root.showLogo
-            showTime: root.showTime
-            showDate: root.showDate
-            showUsername: root.showUsername
-            showWeather: root.showWeather
-            weatherText: root.weatherText
-            backgroundMode: root.backgroundMode
-            wallpaperSource: root.wallpaperSource
-            backgroundColor: root.backgroundColor
-            wallpaperFit: root.wallpaperFit
-            wallpaperFocalX: root.wallpaperFocalX
-            wallpaperFocalY: root.wallpaperFocalY
-            overlayMode: root.overlayMode
-            overlayStrength: root.overlayStrength
-            wallpaperBlur: root.wallpaperBlur
-            blurStyle: root.blurStyle
-            autoAccents: root.autoAccents
-            layout: root.layout
-            customImages: root.customImages
-            timezoneClocks: root.timezoneClocks
+            showLogo: root.profile.lockscreen_show_logo
+            showTime: root.profile.lockscreen_show_time
+            showDate: root.profile.lockscreen_show_date
+            showUsername: root.profile.lockscreen_show_username
+            showWeather: root.profile.lockscreen_show_weather
+            weatherText: lockWeatherCache.summary
+            backgroundMode: root.profile.lockscreen_background
+            wallpaperSource: lockWallpaperState.source
+            backgroundColor: root.profile.lockscreen_background_color
+            wallpaperFit: root.profile.lockscreen_wallpaper_fit
+            wallpaperFocalX: root.profile.lockscreen_wallpaper_focal_x
+            wallpaperFocalY: root.profile.lockscreen_wallpaper_focal_y
+            overlayMode: root.profile.lockscreen_overlay_mode
+            overlayStrength: root.profile.lockscreen_overlay_strength
+            wallpaperBlur: root.profile.lockscreen_wallpaper_blur
+            blurStyle: root.profile.lockscreen_blur_style
+            autoAccents: lockContrastCache.colors
+            layout: root.profile.lockscreen_layout
+            customImages: root.profile.lockscreen_custom_images
+            timezoneClocks: root.profile.lockscreen_timezone_clocks
             timezoneValues: root.localTimezoneValues
-            customTexts: root.customTexts
-            visualizer: root.visualizer
-            audioBands: root.audioBands
-            backgroundOpacity: root.backgroundOpacity
-            passwordMaskMode: root.passwordMaskMode
-            passwordMaskCharacter: root.passwordMaskCharacter
-            clockFormat: root.clockFormat
+            customTexts: root.profile.lockscreen_custom_texts
+            visualizer: root.profile.lockscreen_visualizer
+            audioBands: lockAudioAnalyzer.bands
+            backgroundOpacity: root.profile.lockscreen_background_opacity
+            passwordMaskMode: root.profile.lockscreen_password_mask_mode
+            passwordMaskCharacter: root.profile.lockscreen_password_mask_character
+            clockFormat: root.profile.lockscreen_clock_format
             desktopBackingSource: desktopBacking
             previewMode: false
             externalEntryTransitionRunning: transitionLayer.running
@@ -316,8 +314,8 @@ WlSessionLockSurface {
         z: 1000
         startSource: transitionBacking
         endSource: securePresentation
-        mode: root.entryTransition
-        duration: root.entryTransitionDuration
+        mode: root.profile.lockscreen_entry_transition
+        duration: root.profile.lockscreen_entry_transition_duration
         replayToken: 0
         autoStart: false
 

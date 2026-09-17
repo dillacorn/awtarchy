@@ -256,12 +256,12 @@ require_text "$WEATHER_HELPER" '--max-time' \
 require_text "$WEATHER_HELPER" 'expires_at' \
     'weather helper does not write explicit cache expiry metadata'
 
-require_text "$DESKTOP_WEATHER" 'BarState.lockscreenShowWeather()' \
-    'unlocked weather refresh service is not gated by the Weather toggle'
+require_text "$DESKTOP_WEATHER" 'profile.lockscreen_show_weather === true' \
+    'unlocked weather refresh service is not gated by each profile Weather toggle'
 reject_text "$DESKTOP_WEATHER" '&& configuredLocation.length > 0' \
     'unlocked weather refresh still requires manual location configuration'
-require_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location, units])' \
-    'unlocked weather refresh does not pass location and units through to the helper'
+require_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh-set", location, JSON.stringify(modes)])' \
+    'unlocked weather refresh does not pass the profile unit set through to the helper'
 
 for token in LockScene LockscreenEditor lockscreen_layout lockscreen_background \
     lockscreen_weather_location wallpaperSource weatherLocation; do

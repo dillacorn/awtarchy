@@ -178,16 +178,18 @@ require_text "$SCENE" 'z: 4' \
     'custom images are not pinned below built-in/password presentation'
 cmp -s "$SCENE" "$PREVIEW_SCENE" || fail 'secure/editor lockscreen scene parity drifted'
 
-require_text "$SURFACE" 'required property var customImages' \
-    'secure lock surface does not pass custom images presentation-only'
-require_text "$LOCK_SHELL" 'property var lockCustomImages: []' \
-    'secure shell has no safe custom-image default'
-require_text "$LOCK_SHELL" 'function normalizedCustomImages(value)' \
-    'secure shell does not re-normalize persisted custom images'
-require_text "$LOCK_SHELL" 'scale > 100.00' \
-    'secure shell still uses an old scale ceiling'
-require_text "$LOCK_SHELL" 'customImages: root.lockCustomImages' \
-    'secure shell does not pass normalized images to the surface'
+require_text "$SURFACE" 'required property var sharedProfile' \
+    'secure lock surface has no Shared presentation snapshot'
+require_text "$SURFACE" 'required property var monitorOverrides' \
+    'secure lock surface has no monitor override snapshot'
+require_text "$SURFACE" 'readonly property var profile: LockscreenPresentationState.profileForMonitor(' \
+    'secure lock surface does not resolve a normalized monitor profile'
+require_text "$SURFACE" 'customImages: root.profile.lockscreen_custom_images' \
+    'secure lock surface does not use profile-normalized custom media'
+require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' \
+    'secure shell does not normalize the Shared presentation snapshot'
+require_text "$LOCK_SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' \
+    'secure shell does not normalize monitor presentation overrides'
 reject_text "$LOCK_AUTH" 'customImages' \
     'custom images leaked into PAM/authentication owner'
 reject_text "$LOCK_AUTH" 'opacity' \
