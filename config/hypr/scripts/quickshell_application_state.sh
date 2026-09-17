@@ -638,6 +638,21 @@ validate_lockscreen_profile_layout_section() {
 normalize_lockscreen_profile_json() {
     local value="$1" normalized wallpaper count index path resolved zone
 
+    if ! value="$(jq -ce '
+        if type != "object" then error("invalid lockscreen profile")
+        elif has("lockscreen_password_feedback_mode") then
+            del(.lockscreen_password_mask_mode)
+        elif has("lockscreen_password_mask_mode") then
+            .lockscreen_password_feedback_mode = .lockscreen_password_mask_mode
+            | del(.lockscreen_password_mask_mode)
+        else
+            .lockscreen_password_feedback_mode = "squares"
+        end
+    ' <<<"$value" 2>/dev/null)"; then
+        printf 'invalid lockscreen profile: schema\n' >&2
+        return 2
+    fi
+
     if ! validate_lockscreen_profile_layout_section "$value"; then
         printf 'invalid lockscreen profile: layout\n' >&2
         return 2
@@ -660,7 +675,7 @@ normalize_lockscreen_profile_json() {
             "lockscreen_overlay_mode",
             "lockscreen_overlay_strength",
             "lockscreen_password_mask_character",
-            "lockscreen_password_mask_mode",
+            "lockscreen_password_feedback_mode",
             "lockscreen_show_date",
             "lockscreen_show_logo",
             "lockscreen_show_time",
@@ -827,7 +842,7 @@ normalize_lockscreen_profile_json() {
             and ($candidate.lockscreen_entry_transition_duration | type) == "number"
             and ($candidate.lockscreen_entry_transition_duration | floor) == $candidate.lockscreen_entry_transition_duration
             and $candidate.lockscreen_entry_transition_duration >= 800 and $candidate.lockscreen_entry_transition_duration <= 6000
-            and (["squares", "dots", "custom"] | index($candidate.lockscreen_password_mask_mode) != null)
+            and (["squares", "dots", "custom", "sparks", "mini-flash", "hidden"] | index($candidate.lockscreen_password_feedback_mode) != null)
             and ($candidate.lockscreen_password_mask_character | type) == "string"
             and (($candidate.lockscreen_password_mask_character | explode | length) == 1)
             and (($candidate.lockscreen_password_mask_character | explode | .[0]) > 32)
@@ -972,7 +987,7 @@ save_lockscreen_editor_profiles() {
             | .lockscreen_monitor_profiles = $monitor_profiles
             | .lockscreen_last_edited_profile = $last_edited
             | .lockscreen_saved_profiles = $saved_profiles
-            | del(.lockscreen_monitor_overrides)
+            | del(.lockscreen_monitor_overrides, .lockscreen_password_mask_mode)
         ' "$STATE_FILE" >"$TMP_FILE"
     else
         jq --argjson monitor_profiles "$monitor_profiles" \
@@ -980,7 +995,7 @@ save_lockscreen_editor_profiles() {
             . + $last_edited
             | .lockscreen_monitor_profiles = $monitor_profiles
             | .lockscreen_last_edited_profile = $last_edited
-            | del(.lockscreen_monitor_overrides)
+            | del(.lockscreen_monitor_overrides, .lockscreen_password_mask_mode)
         ' "$STATE_FILE" >"$TMP_FILE"
     fi
     commit_tmp
