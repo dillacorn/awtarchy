@@ -697,7 +697,7 @@ normalize_lockscreen_profile_json() {
             and ($value.scale >= 0.5 and $value.scale <= 100)
             and ($value.stretch_x >= 0.25 and $value.stretch_x <= 4)
             and ($value.stretch_y >= 0.25 and $value.stretch_y <= 4)
-            and ($value.opacity >= (if $password then 20 else 0 end) and $value.opacity <= 100)
+            and ($value.opacity >= 5 and $value.opacity <= 100)
             and ($value.rotation >= -180 and $value.rotation <= 180);
         def no_controls($value):
             ($value | explode | all(. >= 32 and (. < 127 or . > 159)));
