@@ -472,16 +472,6 @@ Singleton {
         }
     }
 
-    function lockscreenSharedProfile() {
-        const dependency = revision;
-        return LockscreenPresentationState.sharedProfile(data());
-    }
-
-    function lockscreenMonitorOverrides() {
-        const dependency = revision;
-        return LockscreenPresentationState.monitorOverrides(data());
-    }
-
     function lockscreenMonitorProfiles() {
         const dependency = revision;
         return LockscreenPresentationState.migratedMonitorProfiles(data());
