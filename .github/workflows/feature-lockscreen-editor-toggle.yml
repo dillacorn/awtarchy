@@ -20,6 +20,8 @@ jobs:
         run: |
           node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
           cmp -s config/quickshell/awtarchy/LockscreenPresentationState.js config/quickshell/awtarchy-lock/LockscreenPresentationState.js
+      - name: Monitor profile state regression
+        run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
       - name: Verify existing toggle and transition contracts
         run: |
           sudo apt-get update -qq
