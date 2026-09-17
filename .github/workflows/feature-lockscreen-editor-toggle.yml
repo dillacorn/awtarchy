@@ -14,6 +14,8 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 0
+      - name: Profile resolver regression
+        run: node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
       - name: Apply toggle and noalt patch
         run: |
           python3 - <<'PY'
