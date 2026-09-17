@@ -699,12 +699,14 @@ normalize_lockscreen_profile_json() {
             and ($value.stretch_y >= 0.25 and $value.stretch_y <= 4)
             and ($value.opacity >= (if $password then 20 else 0 end) and $value.opacity <= 100)
             and ($value.rotation >= -180 and $value.rotation <= 180);
+        def no_controls($value):
+            ($value | explode | all(. >= 32 and (. < 127 or . > 159)));
         def valid_optional_path($value):
             ($value | type) == "string"
             and ($value == "" or (
                 ($value | startswith("/"))
                 and ($value | contains("://") | not)
-                and ($value | test("[\\u0000-\\u001f\\u007f-\\u009f]") | not)
+                and no_controls($value)
             ));
         def valid_custom_images($items):
             ($items | type) == "array"
