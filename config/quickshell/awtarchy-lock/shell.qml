@@ -526,7 +526,7 @@ ShellRoot {
             lockShowDate = normalizedBoolean(parsed.lockscreen_show_date, false);
             lockShowUsername = normalizedBoolean(parsed.lockscreen_show_username, false);
             lockShowWeather = normalizedBoolean(parsed.lockscreen_show_weather, false);
-            lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_mask_mode);
+            lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_feedback_mode);
             lockPasswordMaskCharacter = normalizedPasswordMaskCharacter(parsed.lockscreen_password_mask_character);
             lockClockFormat = normalizedClockFormat(parsed.lockscreen_clock_format);
             lockBackground = normalizedBackground(parsed.lockscreen_background);
