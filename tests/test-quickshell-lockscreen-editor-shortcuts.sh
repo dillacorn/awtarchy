@@ -3,6 +3,9 @@ set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 EDITOR="${ROOT}/config/quickshell/awtarchy/LockscreenEditor.qml"
+SHELL_QML="${ROOT}/config/quickshell/awtarchy/shell.qml"
+HYPRLAND="${ROOT}/config/hypr/hyprland.lua"
+EDITOR_LAUNCHER="${ROOT}/config/hypr/scripts/quickshell_lockscreen_editor.sh"
 
 fail() {
     printf 'FAIL: %s\n' "$*" >&2
@@ -10,25 +13,36 @@ fail() {
 }
 
 require_text() {
-    local text="$1" message="$2"
-    grep -Fq -- "$text" "$EDITOR" || fail "$message"
+    local file="$1" text="$2" message="$3"
+    grep -Fq -- "$text" "$file" || fail "$message"
 }
 
 reject_text() {
-    local text="$1" message="$2"
-    if grep -Fq -- "$text" "$EDITOR"; then
+    local file="$1" text="$2" message="$3"
+    if grep -Fq -- "$text" "$file"; then
         fail "$message"
     fi
 }
 
-require_text 'Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }' \
+require_text "$EDITOR" 'Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }' \
     'Ctrl+S save is not owned by the focused editor window'
-require_text 'Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }' \
+require_text "$EDITOR" 'Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }' \
     'Escape cancel is not owned by the focused editor window'
-reject_text 'Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut' \
+reject_text "$EDITOR" 'Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut' \
     'Ctrl+S still relies on a singleton-level application shortcut'
-reject_text 'Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut' \
+reject_text "$EDITOR" 'Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut' \
     'Escape still relies on a singleton-level application shortcut'
+
+require_text "$SHELL_QML" 'function toggleLockscreenEditor(): void { if (LockscreenEditor.open) LockscreenEditor.close(); else LockscreenEditor.openFocused(); }' \
+    'lockscreen editor IPC action is not a toggle'
+reject_text "$SHELL_QML" 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' \
+    'lockscreen editor IPC action is still open-only'
+require_text "$EDITOR_LAUNCHER" 'ipc call control toggleLockscreenEditor' \
+    'lockscreen editor launcher does not call toggleLockscreenEditor'
+reject_text "$EDITOR_LAUNCHER" 'ipc call control openLockscreenEditor' \
+    'lockscreen editor launcher still calls openLockscreenEditor'
+[[ "$(grep -Fc -- 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' "$HYPRLAND")" -eq 2 ]] \
+    || fail 'Super+Alt+E is not bound in both default and noalt modes'
 
 python3 - "$EDITOR" <<'PY'
 from pathlib import Path
@@ -45,4 +59,4 @@ if not (window < save < focus and window < cancel < focus):
     raise SystemExit("FAIL: save/cancel shortcuts are not children of the editor PanelWindow")
 PY
 
-printf 'PASS: lockscreen editor save/cancel shortcuts are window-owned\n'
+printf 'PASS: lockscreen editor shortcuts and toggle routing are correct\n'
