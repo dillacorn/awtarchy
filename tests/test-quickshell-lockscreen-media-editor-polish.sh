@@ -57,6 +57,18 @@ require_text "$EDITOR" 'Ctrl+S Save' \
     'editor does not advertise its save shortcut'
 require_text "$EDITOR" 'Esc Cancel' \
     'editor does not advertise its cancel shortcut'
+[[ "$(grep -Fc -- 'readonly property real dragActivationThresholdPx: 5' "$EDITOR")" -eq 1 ]] \
+    || fail 'editor drag activation threshold is declared more than once'
+[[ "$(grep -Fc -- 'sequence: "Ctrl+S"' "$EDITOR")" -eq 1 ]] \
+    || fail 'editor Ctrl+S save shortcut is declared more than once'
+[[ "$(grep -Fc -- 'Ctrl+S Save  •  Esc Cancel' "$EDITOR")" -eq 1 ]] \
+    || fail 'editor shortcut hint is rendered more than once'
+require_text "$EDITOR" 'return "Media " + (customImageIndex(name) + 1)' \
+    'custom media elements still use Image as their visible editor label'
+require_text "$EDITOR" 'Media spawn animation updated. Use Play Spawn to preview.' \
+    'custom media spawn-animation status still uses Image wording'
+require_text "$EDITOR" 'Media spawn timing updated. Use Play Spawn to preview.' \
+    'custom media spawn-timing status still uses Image wording'
 
 require_text "$SHELL_QML" 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' \
     'desktop shell has no focused lockscreen-editor IPC action'
@@ -71,6 +83,14 @@ require_text "$QUICK_SETTINGS" 'label: "Edit Layout"' \
     'Quick Settings lost the lockscreen Edit Layout control'
 require_text "$QUICK_SETTINGS" 'text: "Super + Alt + E"' \
     'Quick Settings does not advertise the direct editor shortcut'
+[[ "$(grep -Fc -- 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' "$SHELL_QML")" -eq 1 ]] \
+    || fail 'desktop shell lockscreen-editor IPC action is duplicated'
+[[ "$(grep -Fc -- 'text: "Super + Alt + E"' "$QUICK_SETTINGS")" -eq 1 ]] \
+    || fail 'Quick Settings lockscreen-editor shortcut hint is duplicated'
+[[ "$(grep -Fc -- 'local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"' "$HYPRLAND")" -eq 1 ]] \
+    || fail 'Hyprland lockscreen-editor launcher variable is duplicated'
+[[ "$(grep -Fc -- 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' "$HYPRLAND")" -eq 1 ]] \
+    || fail 'Super+Alt+E lockscreen-editor bind is duplicated'
 
 require_text "$PICKER" '--select-only --type all --resume' \
     'Awtwall lockscreen selection is still restricted to still images'

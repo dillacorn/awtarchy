@@ -793,14 +793,14 @@ Singleton {
         next[index].spawn_animation = key;
         draftCustomImages = next;
         selectElement(name, false);
-        statusMessage = "Image spawn animation updated. Use Play Spawn to preview.";
+        statusMessage = "Media spawn animation updated. Use Play Spawn to preview.";
     }
 
     function setDraftCustomImageSpawnTiming(name, value) {
         const index = customImageIndex(name); if (index < 0) return;
         const timing = normalizedCustomImageSpawnTiming(value); if (draftCustomImages[index].spawn_timing === timing) return;
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next[index].spawn_timing = timing; draftCustomImages = next;
-        selectElement(name, false); statusMessage = "Image spawn timing updated. Use Play Spawn to preview.";
+        selectElement(name, false); statusMessage = "Media spawn timing updated. Use Play Spawn to preview.";
     }
 
     function replaySelectedImageSpawn() {
@@ -1784,7 +1784,7 @@ Singleton {
             String(draftLogoSpawnAnimation), String(draftPasswordMaskMode), String(draftPasswordMaskCharacter), String(draftClockFormat), JSON.stringify(draftTimezoneClocks), JSON.stringify(draftCustomTexts)]);
     }
 
-    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
+    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Media " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
 
     Process {
         id: saveProcess
