@@ -85,6 +85,10 @@ function normalizeCustomImages(value) {
                 || !path.startsWith("/") || path.indexOf("://") >= 0)
             continue;
         const normalized = normalizedElement(raw, 0.50, 0.50, 0);
+        // Custom media is not tintable. Keep its persisted schema free of the
+        // generic element color field so resolver output round-trips through
+        // the authoritative profile backend unchanged.
+        delete normalized.color;
         normalized.id = id;
         normalized.path = path;
         normalized.spawn_animation = normalizeSpawnAnimation(raw.spawn_animation);
