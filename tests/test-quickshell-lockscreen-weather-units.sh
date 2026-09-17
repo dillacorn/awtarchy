@@ -26,11 +26,16 @@ require_text "$STATE" '.lockscreen_weather_units = $weather_units' 'atomic edito
 require_text "$BAR" 'function lockscreenWeatherUnits()' 'BarState has no weather-unit getter'
 require_text "$BAR" '["auto", "fahrenheit", "celsius"]' 'BarState does not validate weather-unit values'
 
-# The unlocked refresh service invalidates its throttle identity when units change.
-require_text "$WEATHER" 'readonly property string configuredUnits:' 'weather service does not read configured units'
+# The unlocked refresh service derives every weather-enabled profile's unit mode,
+# deduplicates it, and includes the full set in the throttle identity.
+require_text "$WEATHER" 'readonly property var configuredUnitModes: requiredUnitModes()' 'weather service does not derive configured unit modes'
+require_text "$WEATHER" 'function requiredUnitModes()' 'weather service has no profile unit-mode collector'
+require_text "$WEATHER" 'addProfile(BarState.lockscreenSharedProfile());' 'weather service does not include the Shared profile'
+require_text "$WEATHER" 'const overrides = BarState.lockscreenMonitorOverrides();' 'weather service does not include per-monitor overrides'
+require_text "$WEATHER" 'profile.lockscreen_show_weather === true' 'weather service refreshes units for profiles that hide weather'
 require_text "$WEATHER" 'property string lastRequestIdentity: ""' 'weather service has no request identity'
-require_text "$WEATHER" 'const requestIdentity = location + "|" + units;' 'weather service identity omits units'
-require_text "$WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location, units]);' 'weather service does not pass units to helper'
+require_text "$WEATHER" 'const requestIdentity = location + "|" + sortedModes.join(",");' 'weather service identity omits the profile unit set'
+require_text "$WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh-set", location, JSON.stringify(modes)]);' 'weather service does not pass the profile unit set to helper'
 
 # Editor units are profile draft state, so Cancel cannot accidentally persist them.
 require_text "$EDITOR" 'property string draftWeatherUnits: "auto"' 'editor has no weather-unit draft'
