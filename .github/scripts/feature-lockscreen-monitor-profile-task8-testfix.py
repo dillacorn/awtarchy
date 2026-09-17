@@ -52,3 +52,20 @@ if old in text:
 elif new not in text:
     raise SystemExit("background composition monitor-profile migration anchor missing")
 path.write_text(text, encoding="utf-8")
+
+path = Path("tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh")
+text = path.read_text(encoding="utf-8")
+old = '''require_text "$EDITOR" 'String(draftBlurStyle)' 'editor save payload does not include blur style'\n'''
+new = '''require_text "$EDITOR" 'lockscreen_blur_style: draftBlurStyle' 'profile-based editor save does not include blur style'\n'''
+if old in text:
+    text = text.replace(old, new, 1)
+elif new not in text:
+    raise SystemExit("blur style editor-save migration anchor missing")
+
+old = '''# Secure runtime passes the frozen desktop into the same final composition as\n# the configured background. Smooth/Pixelated consume that final composition.\nrequire_text "$LOCK_SHELL" 'readonly property string blurStyle:' 'secure shell does not normalize blur style'\nrequire_text "$LOCK_SHELL" 'blurStyle: root.blurStyle' 'secure surface does not receive blur style'\nrequire_text "$SURFACE" 'required property string blurStyle' 'secure surface has no blur-style input'\nrequire_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not passed into final composition'\n'''
+new = '''# Secure runtime passes the frozen desktop into the same final composition as\n# the configured background. Smooth/Pixelated are profile-local per monitor.\nrequire_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' 'secure shell does not normalize the Shared presentation snapshot'\nrequire_text "$SURFACE" 'blurStyle: root.profile.lockscreen_blur_style' 'secure surface does not receive profile-local blur style'\nrequire_text "$SURFACE" 'desktopBackingSource: desktopBacking' 'secure frozen desktop is not passed into final composition'\n'''
+if old in text:
+    text = text.replace(old, new, 1)
+elif new not in text:
+    raise SystemExit("blur style secure monitor-profile migration anchor missing")
+path.write_text(text, encoding="utf-8")
