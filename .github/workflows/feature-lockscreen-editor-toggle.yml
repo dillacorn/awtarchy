@@ -1,4 +1,4 @@
-name: Feature lockscreen editor toggle
+name: Feature lockscreen final validation
 
 on:
   push:
@@ -8,79 +8,53 @@ permissions:
   contents: write
 
 jobs:
-  toggle-regression:
+  final-lockscreen-validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 0
-      - name: Apply monitor profile resolver
-        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task2.py
-      - name: Profile resolver regression
+      - name: Prove managed-history RED
         run: |
-          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
-          cmp -s config/quickshell/awtarchy/LockscreenPresentationState.js config/quickshell/awtarchy-lock/LockscreenPresentationState.js
-      - name: Apply monitor profile persistence
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task8.py coverage
+          if bash tests/test-quickshell-lockscreen-interactive-managed-history.sh > /tmp/managed-red.log 2>&1; then
+            cat /tmp/managed-red.log
+            echo "Managed-history regression unexpectedly passed before hash refresh." >&2
+            exit 1
+          fi
+          cat /tmp/managed-red.log
+      - name: Refresh managed history
         run: |
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task3-fix.py
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task3.py
-      - name: Monitor profile state regression
-        run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
-      - name: Apply multi-monitor editor session
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task8.py history
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+      - name: Remove temporary feature tooling from final tree
         run: |
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task4-fix.py
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task4.py
-      - name: Multi-monitor editor regression
-        run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
-      - name: Apply per-monitor contrast
-        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task5.py
-      - name: Monitor contrast regression
-        run: bash tests/test-quickshell-lockscreen-monitor-contrast.sh
-      - name: Apply per-monitor weather and timezones
-        run: |
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task6.py
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task6-fix.py
-      - name: Monitor weather regression
-        run: bash tests/test-quickshell-lockscreen-monitor-weather.sh
-      - name: Apply secure per-monitor presentation
-        run: |
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task7.py
-          python3 .github/scripts/feature-lockscreen-monitor-profile-task7-testfix.py
-      - name: Secure monitor profile regression
-        run: bash tests/test-quickshell-lockscreen-secure-monitor-profiles.sh
-      - name: Verify secure runtime and existing contracts
+          git rm -f .github/workflows/feature-lockscreen-editor-toggle.yml
+          git rm -f .github/scripts/feature-lockscreen-monitor-profile-task*.py
+      - name: Complete focused lockscreen validation
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.4
-          bash tests/test-quickshell-lockscreen-animated-contrast.sh
-          bash tests/test-quickshell-lockscreen-runtime-polish.sh
-          bash tests/test-quickshell-lockscreen-runtime-acceptance-187.sh
-          bash tests/test-quickshell-lockscreen-element-system.sh
-          bash tests/test-quickshell-lockscreen-background-save-dispatch.sh
-          bash tests/test-quickshell-lockscreen-weather.sh
-          bash tests/test-quickshell-lockscreen-weather-units.sh
-          bash tests/test-quickshell-lockscreen-timezones-text.sh
-          bash tests/test-quickshell-lockscreen-editor-shortcuts.sh
-          bash tests/test-quickshell-lockscreen-media-editor-polish.sh
-          bash tests/test-quickshell-lockscreen-media-preroll.sh
-          bash tests/test-quickshell-lockscreen-selector-flyout.sh
-          bash tests/test-quickshell-lockscreen-editor.sh
+          for test in tests/test-quickshell-lockscreen-*.sh; do
+            echo "=== $test ==="
+            bash "$test"
+          done
+          node tests/test-quickshell-lockscreen-efficiency.mjs
+          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
           bash tests/test-lua-validation.sh
-          bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
-          bash -n config/hypr/scripts/quickshell_lockscreen_timezones.sh
-          bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          bash tests/test-quickshell-production-readiness.sh
           bash -n config/hypr/scripts/quickshell_application_state.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
           git diff --check
-      - name: Commit secure per-monitor production patch
+      - name: Commit final feature tree
         run: |
-          if git diff --quiet -- config/quickshell/awtarchy-lock/LockSurface.qml config/quickshell/awtarchy-lock/shell.qml tests/test-quickshell-lockscreen-runtime-acceptance-187.sh tests/test-quickshell-lockscreen-element-system.sh tests/test-quickshell-lockscreen-editor.sh; then
-            echo "Secure per-monitor patch already present."
-            exit 0
-          fi
           git config user.name "dillacorn"
           git config user.email "28743863+dillacorn@users.noreply.github.com"
-          git add config/quickshell/awtarchy-lock/LockSurface.qml config/quickshell/awtarchy-lock/shell.qml tests/test-quickshell-lockscreen-runtime-acceptance-187.sh tests/test-quickshell-lockscreen-element-system.sh tests/test-quickshell-lockscreen-editor.sh
-          git commit -m "Resolve secure lockscreen per monitor"
+          git add tests/test-quickshell-lockscreen-interactive-managed-history.sh local/share/awtarchy/quickshell-managed-history.sha256
+          git add -u .github
+          git diff --cached --check
+          git commit -m "Finalize lockscreen multi-monitor editor"
           git push origin HEAD:feature/lockscreen-media-editor-polish
