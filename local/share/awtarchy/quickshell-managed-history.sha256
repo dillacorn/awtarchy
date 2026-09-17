@@ -1370,3 +1370,6 @@ e85fe4622a81ad93ee42782728c9567c46caa1868d9fad51d3c24529aa6d22f5	.config/quicksh
 77b92019f4c89724a05825440fdf028cfed6b81958abe2d7f736d49cf91fe2d3	.config/quickshell/awtarchy-lock/LockSurface.qml
 e85fe4622a81ad93ee42782728c9567c46caa1868d9fad51d3c24529aa6d22f5	.config/quickshell/awtarchy-lock/LockScene.qml
 9d83e1732aa8917c6ce76caca958067cd9943cc8e9d64876b07a60c233e954c8	.config/quickshell/awtarchy-lock/LockMedia.qml
+
+# 2026-09-16 lockscreen editor window-owned save/cancel shortcuts.
+85e2fc6e3d47dd8b714daef7be8451e2735949ba6d6e91a135d54264badb42fd	.config/quickshell/awtarchy/LockscreenEditor.qml

@@ -1842,14 +1842,13 @@ Singleton {
         onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom media picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom media picker…") root.statusMessage = "No media selected."; root.resumeAfterWallpaperPicker(); }
     }
 
-    Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
-    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
-
     LockPreviewAudioAnalyzer { id: previewAudioAnalyzer; enabled: root.editingActive && !root.pickerSuspended && root.draftVisualizer.enabled; performanceMode: root.draftVisualizer.performance }
 
     PanelWindow {
         id: editorWindow
         Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; onActivated: root.selectAllElements() }
+        Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
+        Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
         visible: false; color: "transparent"; WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive; aboveWindows: true; exclusionMode: ExclusionMode.Ignore
         anchors.top: true; anchors.left: true; implicitWidth: Math.max(1, screen ? screen.width : 1920); implicitHeight: Math.max(1, screen ? screen.height : 1080)
