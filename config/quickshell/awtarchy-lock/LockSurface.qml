@@ -249,7 +249,7 @@ WlSessionLockSurface {
             visualizer: root.profile.lockscreen_visualizer
             audioBands: lockAudioAnalyzer.bands
             backgroundOpacity: root.profile.lockscreen_background_opacity
-            passwordMaskMode: root.profile.lockscreen_password_mask_mode
+            passwordMaskMode: root.profile.lockscreen_password_feedback_mode
             passwordMaskCharacter: root.profile.lockscreen_password_mask_character
             clockFormat: root.profile.lockscreen_clock_format
             desktopBackingSource: desktopBacking
