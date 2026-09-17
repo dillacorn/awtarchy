@@ -119,6 +119,7 @@ Singleton {
     property string draftPasswordMaskCharacter: "•"
     property string draftClockFormat: "24h"
     property int entryTransitionReplayToken: 0
+    property int previewPasswordFeedbackEpoch: 0
     property string previewIndividualImageReplayId: ""
     property int previewIndividualImageReplayEpoch: 0
     property real editorEntranceOpacity: 1.0
@@ -2701,7 +2702,7 @@ Singleton {
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
                 wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY; overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
                 blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; timezoneClocks: root.draftTimezoneClocks; timezoneValues: root.previewTimezoneValues; customTexts: root.draftCustomTexts; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordFeedbackMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat
+                passwordMaskMode: root.draftPasswordFeedbackMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; passwordFeedbackEpoch: root.previewPasswordFeedbackEpoch; clockFormat: root.draftClockFormat
                 desktopBackingSource: editorTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility; editorHeldElement: root.heldElement; editorHoldScale: root.heldScaleBoost
             }
             LockPreviewTransitionLayer { id: editorTransitionLayer; anchors.fill: parent; z: 160; startSource: editorTransitionStart; endSource: previewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
@@ -3068,6 +3069,13 @@ Singleton {
                             model: root.passwordFeedbackPresets
                             currentIndex: root.passwordFeedbackIndex(root.draftPasswordFeedbackMode)
                             onActivated: index => root.setDraftPasswordFeedbackMode(root.passwordFeedbackPresets[index].key)
+                        }
+                        SettingsButton {
+                            visible: root.draftPasswordFeedbackMode === "sparks"
+                                || root.draftPasswordFeedbackMode === "mini-flash"
+                            label: "Preview Feedback"
+                            textSize: 9
+                            onClicked: root.previewPasswordFeedbackEpoch += 1
                         }
                         Text { visible: root.draftPasswordFeedbackMode === "custom"; text: "Character"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
