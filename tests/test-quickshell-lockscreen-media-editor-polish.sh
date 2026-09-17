@@ -70,27 +70,29 @@ require_text "$EDITOR" 'Media spawn animation updated. Use Play Spawn to preview
 require_text "$EDITOR" 'Media spawn timing updated. Use Play Spawn to preview.' \
     'custom media spawn-timing status still uses Image wording'
 
-require_text "$SHELL_QML" 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' \
-    'desktop shell has no focused lockscreen-editor IPC action'
+require_text "$SHELL_QML" 'function toggleLockscreenEditor(): void { if (LockscreenEditor.open) LockscreenEditor.close(); else LockscreenEditor.openFocused(); }' \
+    'desktop shell lockscreen-editor IPC action is not a real toggle'
+reject_text "$SHELL_QML" 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' \
+    'desktop shell still exposes open-only lockscreen-editor IPC behavior'
 require_file "$EDITOR_LAUNCHER" 'lockscreen editor launcher helper is missing'
-require_text "$EDITOR_LAUNCHER" 'ipc call control openLockscreenEditor' \
-    'lockscreen editor launcher does not call the focused IPC action'
+require_text "$EDITOR_LAUNCHER" 'ipc call control toggleLockscreenEditor' \
+    'lockscreen editor launcher does not call the toggle IPC action'
+reject_text "$EDITOR_LAUNCHER" 'ipc call control openLockscreenEditor' \
+    'lockscreen editor launcher still calls open-only IPC action'
 require_text "$HYPRLAND" 'local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"' \
     'Hyprland does not define the lockscreen editor launcher'
-require_text "$HYPRLAND" 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' \
-    'Super+Alt+E is not bound to the lockscreen editor'
+[[ "$(grep -Fc -- 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' "$HYPRLAND")" -eq 2 ]] \
+    || fail 'Super+Alt+E must be bound once in default mode and once in noalt'
 require_text "$QUICK_SETTINGS" 'label: "Edit Layout"' \
     'Quick Settings lost the lockscreen Edit Layout control'
 require_text "$QUICK_SETTINGS" 'text: "Super + Alt + E"' \
     'Quick Settings does not advertise the direct editor shortcut'
-[[ "$(grep -Fc -- 'function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }' "$SHELL_QML")" -eq 1 ]] \
-    || fail 'desktop shell lockscreen-editor IPC action is duplicated'
+[[ "$(grep -Fc -- 'function toggleLockscreenEditor(): void { if (LockscreenEditor.open) LockscreenEditor.close(); else LockscreenEditor.openFocused(); }' "$SHELL_QML")" -eq 1 ]] \
+    || fail 'desktop shell lockscreen-editor toggle IPC action is duplicated'
 [[ "$(grep -Fc -- 'text: "Super + Alt + E"' "$QUICK_SETTINGS")" -eq 1 ]] \
     || fail 'Quick Settings lockscreen-editor shortcut hint is duplicated'
 [[ "$(grep -Fc -- 'local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"' "$HYPRLAND")" -eq 1 ]] \
     || fail 'Hyprland lockscreen-editor launcher variable is duplicated'
-[[ "$(grep -Fc -- 'hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})' "$HYPRLAND")" -eq 1 ]] \
-    || fail 'Super+Alt+E lockscreen-editor bind is duplicated'
 
 require_text "$PICKER" '--select-only --type all --resume' \
     'Awtwall lockscreen selection is still restricted to still images'
