@@ -12,16 +12,16 @@ ShellRoot {
     id: root
 
     property bool unlockRequested: false
-    property var lockSharedProfile: LockscreenPresentationState.sharedProfile(({}))
-    property var lockMonitorOverrides: ({})
+    property var lockMonitorProfiles: ({})
+    property var lockLastEditedProfile: LockscreenPresentationState.sharedProfile(({}))
     readonly property int captureCleanupTransitionDuration: {
-        let maximum = Number(root.lockSharedProfile.lockscreen_entry_transition_duration);
+        let maximum = Number(root.lockLastEditedProfile.lockscreen_entry_transition_duration);
         if (!Number.isFinite(maximum))
             maximum = 1800;
-        const overrides = root.lockMonitorOverrides;
-        if (overrides && typeof overrides === "object" && !Array.isArray(overrides)) {
-            for (const name of Object.keys(overrides)) {
-                const profile = overrides[name];
+        const profiles = root.lockMonitorProfiles;
+        if (profiles && typeof profiles === "object" && !Array.isArray(profiles)) {
+            for (const name of Object.keys(profiles)) {
+                const profile = profiles[name];
                 if (profile && typeof profile === "object" && !Array.isArray(profile))
                     maximum = Math.max(maximum, Number(profile.lockscreen_entry_transition_duration));
             }
@@ -461,8 +461,8 @@ ShellRoot {
     }
 
     function resetPreferences() {
-        lockSharedProfile = LockscreenPresentationState.sharedProfile(({}));
-        lockMonitorOverrides = ({});
+        lockMonitorProfiles = ({});
+        lockLastEditedProfile = LockscreenPresentationState.sharedProfile(({}));
         lockAnimationPreference = "split";
         lockEntryTransition = "fade";
         lockEntryTransitionDuration = 1800;
@@ -512,8 +512,8 @@ ShellRoot {
                 return;
             }
 
-            lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);
-            lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);
+            lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);
+            lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);
 
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
             lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
@@ -590,8 +590,8 @@ ShellRoot {
                 auth: lockAuth
                 theme: lockTheme
                 unlocking: root.unlockRequested
-                sharedProfile: root.lockSharedProfile
-                monitorOverrides: root.lockMonitorOverrides
+                monitorProfiles: root.lockMonitorProfiles
+                lastEditedProfile: root.lockLastEditedProfile
                 randomFormationMode: root.randomFormationMode
                 logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive
