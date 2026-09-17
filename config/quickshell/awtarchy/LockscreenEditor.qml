@@ -143,6 +143,8 @@ Singleton {
     property var draftMonitorAutoAccents: ({})
     property var settledSharedProfile: ({})
     property bool sharedPreviewHoldActive: false
+    property bool sharedSwitchConfirmOpen: false
+    property string sharedSwitchMonitorName: ""
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
@@ -626,23 +628,84 @@ Singleton {
     }
 
     function useSharedConfiguration() {
-        if (activeMonitorName.length === 0 || !hasIndividualConfiguration(activeMonitorName))
+        if (activeMonitorName.length === 0 || !hasIndividualConfiguration(activeMonitorName)
+                || sharedSwitchConfirmOpen)
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
+        settleSharedPreviewHold();
         stashHistoryForActiveProfile();
         stashAutoAccentsForActiveProfile();
         flushActiveProfile();
+        sharedSwitchMonitorName = activeMonitorName;
+        sharedSwitchConfirmOpen = true;
+        statusMessage = "Choose which configuration should become Shared";
+    }
+
+    function confirmUseExistingShared() {
+        const targetName = sharedSwitchMonitorName;
+        if (targetName.length === 0 || !hasIndividualConfiguration(targetName)) {
+            cancelUseSharedConfiguration();
+            return;
+        }
         const next = Object.assign({}, draftMonitorOverrides);
-        delete next[activeMonitorName];
+        delete next[targetName];
         draftMonitorOverrides = next;
         const nextAccents = Object.assign({}, draftMonitorAutoAccents);
-        delete nextAccents[activeMonitorName];
+        delete nextAccents[targetName];
         draftMonitorAutoAccents = nextAccents;
-        loadProfileIntoDraft(draftSharedProfile);
+        settledSharedProfile = cloneSnapshot(draftSharedProfile) || ({});
+        sharedSwitchConfirmOpen = false;
+        sharedSwitchMonitorName = "";
+        if (activeMonitorName === targetName) {
+            loadProfileIntoDraft(draftSharedProfile);
+            loadAutoAccentsForActiveProfile();
+            restoreHistoryForActiveProfile();
+        }
+        statusMessage = targetName + " now uses the existing Shared configuration";
+    }
+
+    function confirmPromoteIndividualToShared() {
+        const targetName = sharedSwitchMonitorName;
+        if (targetName.length === 0 || targetName !== activeMonitorName
+                || !hasIndividualConfiguration(targetName)) {
+            cancelUseSharedConfiguration();
+            return;
+        }
+        const promoted = cloneSnapshot(profileFromDraftScalars());
+        if (!promoted) {
+            cancelUseSharedConfiguration();
+            statusMessage = "Could not promote this display configuration";
+            return;
+        }
+        const monitorHistoryKey = "monitor:" + targetName;
+        const nextUndo = Object.assign({}, profileUndoStacks);
+        const nextRedo = Object.assign({}, profileRedoStacks);
+        nextUndo.shared = cloneSnapshot(nextUndo[monitorHistoryKey]) || cloneSnapshot(undoStack) || [];
+        nextRedo.shared = cloneSnapshot(nextRedo[monitorHistoryKey]) || cloneSnapshot(redoStack) || [];
+        profileUndoStacks = nextUndo;
+        profileRedoStacks = nextRedo;
+        draftSharedProfile = promoted;
+        settledSharedProfile = cloneSnapshot(promoted) || ({});
+        draftSharedAutoAccents = cloneAutoAccents(draftAutoAccents);
+        const next = Object.assign({}, draftMonitorOverrides);
+        delete next[targetName];
+        draftMonitorOverrides = next;
+        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
+        delete nextAccents[targetName];
+        draftMonitorAutoAccents = nextAccents;
+        sharedSwitchConfirmOpen = false;
+        sharedSwitchMonitorName = "";
+        loadProfileIntoDraft(promoted);
         loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
-        statusMessage = activeMonitorName + " now uses Shared configuration";
+        statusMessage = targetName + " configuration is now the Shared configuration";
+    }
+
+    function cancelUseSharedConfiguration() {
+        sharedSwitchConfirmOpen = false;
+        sharedSwitchMonitorName = "";
+        statusMessage = "Shared configuration switch cancelled";
     }
 
     function copyConfigurationTo(name) {
@@ -2153,6 +2216,7 @@ Singleton {
 
     function close() {
         elementOpacityBeforeOpaque = ({});
+        sharedSwitchConfirmOpen = false; sharedSwitchMonitorName = "";
         lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
         const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview);
@@ -2252,6 +2316,71 @@ Singleton {
         Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
         Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
         Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+
+        Rectangle {
+            id: sharedSwitchDialogLayer
+            anchors.fill: parent
+            visible: root.sharedSwitchConfirmOpen
+            color: "#99000000"
+            z: 10000
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 620)
+                height: 230
+                radius: 10
+                color: Theme.popupBackground
+                border.width: 1
+                border.color: Theme.active
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 12
+
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Switch to Shared Configuration?"
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: "Individual configuration will be removed for " + root.sharedSwitchMonitorName
+                            + ". Choose which configuration should become the Shared starting point."
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+                    Item { Layout.fillHeight: true }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Item { Layout.fillWidth: true }
+                        SettingsButton {
+                            label: "Cancel"
+                            textSize: 9
+                            onClicked: root.cancelUseSharedConfiguration()
+                        }
+                        SettingsButton {
+                            label: "Use Existing Shared"
+                            textSize: 9
+                            onClicked: root.confirmUseExistingShared()
+                        }
+                        SettingsButton {
+                            label: "Use This Display as Shared"
+                            textSize: 9
+                            onClicked: root.confirmPromoteIndividualToShared()
+                        }
+                    }
+                }
+            }
+        }
 
         Rectangle {
             id: editorFocus; anchors.fill: parent; color: "transparent"; focus: true; opacity: root.editorEntranceOpacity
