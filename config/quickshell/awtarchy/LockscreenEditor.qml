@@ -141,6 +141,8 @@ Singleton {
     property var profileRedoStacks: ({})
     property var draftSharedAutoAccents: defaultAutoAccents()
     property var draftMonitorAutoAccents: ({})
+    property var settledSharedProfile: ({})
+    property bool sharedPreviewHoldActive: false
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
@@ -528,6 +530,23 @@ Singleton {
         return cloneAutoAccents(draftSharedAutoAccents);
     }
 
+    function beginSharedPreviewHold() {
+        if (hasIndividualConfiguration(activeMonitorName) || sharedPreviewHoldActive)
+            return;
+        settledSharedProfile = cloneSnapshot(profileFromDraftScalars())
+            || cloneSnapshot(draftSharedProfile) || ({});
+        sharedPreviewHoldActive = true;
+    }
+
+    function settleSharedPreviewHold() {
+        if (!sharedPreviewHoldActive)
+            return;
+        sharedPreviewHoldActive = false;
+        if (!hasIndividualConfiguration(activeMonitorName))
+            settledSharedProfile = cloneSnapshot(profileFromDraftScalars())
+                || cloneSnapshot(draftSharedProfile) || ({});
+    }
+
     function activeProfileKey() {
         return hasIndividualConfiguration(activeMonitorName)
             ? "monitor:" + activeMonitorName : "shared";
@@ -570,8 +589,11 @@ Singleton {
             return profileFromDraftScalars();
         if (hasIndividualConfiguration(key))
             return cloneSnapshot(draftMonitorOverrides[key]);
-        if (!hasIndividualConfiguration(activeMonitorName))
+        if (!hasIndividualConfiguration(activeMonitorName)) {
+            if (sharedPreviewHoldActive)
+                return cloneSnapshot(settledSharedProfile);
             return profileFromDraftScalars();
+        }
         return cloneSnapshot(draftSharedProfile);
     }
 
@@ -1154,6 +1176,7 @@ Singleton {
             Number(sceneX) - rotationCenterX) * 180 / Math.PI;
         rotationStartValue = elementRotation(name);
         beginHistoryTransaction();
+        beginSharedPreviewHold();
     }
 
     function updateRotateElement(sceneX, sceneY) {
@@ -1174,6 +1197,7 @@ Singleton {
             return;
         rotationElementName = "";
         commitHistoryTransaction();
+        settleSharedPreviewHold();
         scheduleContrastRefresh();
     }
 
@@ -1233,6 +1257,7 @@ Singleton {
 
     function beginResizeElement(name, sceneX, sceneY) {
         if (!elementExists(name) || editorFocus.width<=0 || editorFocus.height<=0) return;
+        beginSharedPreviewHold();
         if (selectedContains(name) && selectedElements.length>1 && beginGroupResize(sceneX,sceneY)) return;
         selectElement(name,false); resizeGroupSnapshot=[];
         const point=elementPoint(name); resizeElementName=name;
@@ -1251,6 +1276,7 @@ Singleton {
     function endResizeElement() {
         if (resizeElementName.length===0) return;
         resizeElementName=""; resizeGroupSnapshot=[]; commitHistoryTransaction();
+        settleSharedPreviewHold();
     }
 
     function setDraftVisualizerWidth(percentValue) {
@@ -1277,6 +1303,7 @@ Singleton {
         visualizerWidthStartStretch = elementStretchX("visualizer");
         visualizerWidthResizeActive = true;
         beginHistoryTransaction();
+        beginSharedPreviewHold();
     }
 
     function updateVisualizerWidthResize(sceneX) {
@@ -1294,6 +1321,7 @@ Singleton {
             return;
         visualizerWidthResizeActive = false;
         commitHistoryTransaction();
+        settleSharedPreviewHold();
         scheduleContrastRefresh();
     }
 
@@ -2031,6 +2059,8 @@ Singleton {
         const shared = BarState.lockscreenSharedProfile();
         const overrides = BarState.lockscreenMonitorOverrides();
         draftSharedProfile = cloneSnapshot(shared) || ({});
+        settledSharedProfile = cloneSnapshot(draftSharedProfile) || ({});
+        sharedPreviewHoldActive = false;
         draftMonitorOverrides = cloneSnapshot(overrides) || ({});
         draftSharedAutoAccents = cloneAutoAccents(LockscreenContrast.accents);
         const persistedMonitorAccents = ({});
@@ -2133,6 +2163,7 @@ Singleton {
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
+        settleSharedPreviewHold();
         stashHistoryForActiveProfile();
         flushActiveProfile();
         saveErrorMessage = "";
@@ -2286,6 +2317,7 @@ Singleton {
                             if (root.inertiaOwner.length > 0) {
                                 root.inertiaOwner = "";
                                 root.commitHistoryTransaction();
+                                root.settleSharedPreviewHold();
                             }
                             parent.inertiaActive = false;
                             parent.flickVelocityX = 0;
@@ -2316,6 +2348,7 @@ Singleton {
                                     return;
                                 dragActivated = true;
                                 root.beginHistoryTransaction();
+                                root.beginSharedPreviewHold();
                                 const startPoint = root.elementPoint(parent.elementName);
                                 parent.lastSampleX = Number(startPoint.x);
                                 parent.lastSampleY = Number(startPoint.y);
@@ -2370,6 +2403,7 @@ Singleton {
                                 parent.flickVelocityY = 0;
                                 parent.inertiaActive = false;
                                 root.commitHistoryTransaction();
+                                root.settleSharedPreviewHold();
                             }
                             dragActivated = false;
                         }
@@ -2383,6 +2417,7 @@ Singleton {
                             if (dragActivated) {
                                 root.endEditorHold(parent.elementName);
                                 root.commitHistoryTransaction();
+                                root.settleSharedPreviewHold();
                             }
                             dragActivated = false;
                             root.clearGuides();
@@ -2401,7 +2436,7 @@ Singleton {
                     }
                     Timer { id: inertiaTimer; interval: 16; repeat: true; running: root.open && !root.pickerSuspended && parent.inertiaActive && root.inertiaOwner === parent.elementName
                         onRunningChanged: { if (!root.open && !running) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; } }
-                        onTriggered: { const point = root.elementPoint(parent.elementName); const dt = interval / 1000; if (root.selectedElements.length <= 1) { const proposedX = Number(point.x) + parent.flickVelocityX * dt; const proposedY = Number(point.y) + parent.flickVelocityY * dt; const clamped = root.clampPoint(parent.elementName, proposedX, proposedY); if (Math.abs(clamped.x - proposedX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(clamped.y - proposedY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y); } else { const proposedDX = parent.flickVelocityX * dt; const proposedDY = parent.flickVelocityY * dt; const moved = root.translateSelectedElements(proposedDX, proposedDY, false); if (Math.abs(moved.x - proposedDX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(moved.y - proposedDY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; } parent.flickVelocityX *= root.flickFriction; parent.flickVelocityY *= root.flickFriction; if (Math.sqrt(parent.flickVelocityX * parent.flickVelocityX + parent.flickVelocityY * parent.flickVelocityY) < root.flickStopSpeed) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); } }
+                        onTriggered: { const point = root.elementPoint(parent.elementName); const dt = interval / 1000; if (root.selectedElements.length <= 1) { const proposedX = Number(point.x) + parent.flickVelocityX * dt; const proposedY = Number(point.y) + parent.flickVelocityY * dt; const clamped = root.clampPoint(parent.elementName, proposedX, proposedY); if (Math.abs(clamped.x - proposedX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(clamped.y - proposedY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y); } else { const proposedDX = parent.flickVelocityX * dt; const proposedDY = parent.flickVelocityY * dt; const moved = root.translateSelectedElements(proposedDX, proposedDY, false); if (Math.abs(moved.x - proposedDX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(moved.y - proposedDY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; } parent.flickVelocityX *= root.flickFriction; parent.flickVelocityY *= root.flickFriction; if (Math.sqrt(parent.flickVelocityX * parent.flickVelocityX + parent.flickVelocityY * parent.flickVelocityY) < root.flickStopSpeed) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); root.settleSharedPreviewHold(); } }
                     }
                 }
             }
