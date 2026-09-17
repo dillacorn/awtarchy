@@ -65,16 +65,29 @@ require_text "$SHELL_QML" 'property bool lockMouseInteractive: true' \
     'secure lock shell has no mouse-interaction preference'
 require_text "$SHELL_QML" 'lockLogoPhysicsHz = normalizedLogoPhysicsHz(parsed.lockscreen_logo_physics_hz);' \
     'secure lock shell does not load the persisted logo physics rate'
-require_text "$SHELL_QML" 'LockAudioAnalyzer {' \
-    'secure lock has no shared analyzer for the standalone visualizer'
-require_text "$SHELL_QML" 'enabled: root.lockVisualizer.enabled' \
-    'standalone visualizer does not gate secure analyzer lifecycle'
-require_text "$SHELL_QML" 'LockWeatherCache {' \
-    'secure lock shell lost its cache-only weather reader'
 require_text "$SHELL_QML" 'logoPhysicsHz: root.lockLogoPhysicsHz' \
     'secure lock surfaces do not receive logo physics rate'
 require_text "$SHELL_QML" 'mouseInteractive: root.lockMouseInteractive' \
     'secure lock surfaces do not receive mouse interaction state'
+
+# Optional presentation services are per-monitor so Individual profiles do not
+# leak visualizer or weather state across lock surfaces.
+require_text "$SURFACE_QML" 'LockAudioAnalyzer {' \
+    'secure lock surface has no per-monitor analyzer for the standalone visualizer'
+require_text "$SURFACE_QML" 'enabled: root.profile.lockscreen_visualizer.enabled' \
+    'per-monitor visualizer preference does not gate analyzer lifecycle'
+require_text "$SURFACE_QML" 'performanceMode: root.profile.lockscreen_visualizer.performance' \
+    'per-monitor visualizer performance mode is not applied to the analyzer'
+require_text "$SURFACE_QML" 'audioBands: lockAudioAnalyzer.bands' \
+    'secure lock scene does not consume the local analyzer bands'
+require_text "$SURFACE_QML" 'LockWeatherCache {' \
+    'secure lock surface lost its per-monitor cache-only weather reader'
+require_text "$SURFACE_QML" 'enabled: root.profile.lockscreen_show_weather' \
+    'per-monitor weather visibility does not gate the secure weather reader'
+require_text "$SURFACE_QML" 'units: root.profile.lockscreen_weather_units' \
+    'secure weather reader does not use the effective monitor profile units'
+require_text "$SURFACE_QML" 'weatherText: lockWeatherCache.summary' \
+    'secure lock scene does not consume the local weather cache summary'
 
 require_text "$SURFACE_QML" 'cursorShape: Qt.BlankCursor' \
     'lockscreen exposes the real pointer'
