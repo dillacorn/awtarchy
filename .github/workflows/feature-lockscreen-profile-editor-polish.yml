@@ -34,6 +34,9 @@ jobs:
           git add config/quickshell/awtarchy/LockscreenPresentationState.js \
                   config/quickshell/awtarchy-lock/LockscreenPresentationState.js \
                   config/hypr/scripts/quickshell_application_state.sh
-          git diff --cached --quiet && exit 0
-          git commit -m "Fix lockscreen profile save parity"
-          git push origin HEAD:feature/lockscreen-media-editor-polish
+          git diff --cached --quiet || {
+            git commit -m "Fix lockscreen profile save parity"
+            git push origin HEAD:feature/lockscreen-media-editor-polish
+          }
+      - name: Task 2 RED
+        run: bash tests/test-quickshell-lockscreen-shared-preview-settle.sh
