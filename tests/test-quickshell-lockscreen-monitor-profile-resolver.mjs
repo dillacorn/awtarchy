@@ -139,7 +139,7 @@ for (const file of copies) {
       "lockscreen_overlay_mode",
       "lockscreen_overlay_strength",
       "lockscreen_password_mask_character",
-      "lockscreen_password_mask_mode",
+      "lockscreen_password_feedback_mode",
       "lockscreen_show_date",
       "lockscreen_show_logo",
       "lockscreen_show_time",
