@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 
-# Migrate runtime acceptance assertions whose old shell->surface scalar API is
+# Migrate assertions whose old shell/editor singleton presentation API is
 # intentionally replaced by complete per-monitor presentation profiles.
 
 path = Path("tests/test-quickshell-lockscreen-runtime-acceptance-187.sh")
@@ -33,4 +33,20 @@ if old in text:
     text = text.replace(old, new, 1)
 elif new not in text:
     raise SystemExit("Task 7 element-system migration anchor missing")
+path.write_text(text, encoding="utf-8")
+
+path = Path("tests/test-quickshell-lockscreen-editor.sh")
+text = path.read_text(encoding="utf-8")
+old = '''require_text "$DESKTOP_WEATHER" 'BarState.lockscreenShowWeather()' \\
+    'unlocked weather refresh service is not gated by the Weather toggle'\nreject_text "$DESKTOP_WEATHER" '&& configuredLocation.length > 0' \\
+    'unlocked weather refresh still requires manual location configuration'\nrequire_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location, units])' \\
+    'unlocked weather refresh does not pass location and units through to the helper'\n'''
+new = '''require_text "$DESKTOP_WEATHER" 'profile.lockscreen_show_weather === true' \\
+    'unlocked weather refresh service is not gated by each profile Weather toggle'\nreject_text "$DESKTOP_WEATHER" '&& configuredLocation.length > 0' \\
+    'unlocked weather refresh still requires manual location configuration'\nrequire_text "$DESKTOP_WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh-set", location, JSON.stringify(modes)])' \\
+    'unlocked weather refresh does not pass the profile unit set through to the helper'\n'''
+if old in text:
+    text = text.replace(old, new, 1)
+elif new not in text:
+    raise SystemExit("Task 7 editor weather migration anchor missing")
 path.write_text(text, encoding="utf-8")
