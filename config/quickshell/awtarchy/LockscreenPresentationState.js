@@ -109,6 +109,7 @@ function normalizeTimezoneClocks(value) {
         normalized.id = id;
         normalized.timezone = String(raw.timezone || "UTC");
         normalized.format = String(raw.format || "24h").toLowerCase() === "12h" ? "12h" : "24h";
+        normalized.show_label = raw.show_label !== false;
         normalized.visible = raw.visible !== false;
         result.push(normalized);
         ids[id] = true;
@@ -173,4 +174,123 @@ function textForPresentation(item, epoch) {
         return item ? String(item.text || "") : "";
     const index = stableHash(String(item.id || "") + ":" + String(epoch || 0)) % item.variants.length;
     return String(item.variants[index]);
+}
+
+
+function normalizedBoolean(value, fallback) {
+    return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizedEnum(value, allowed, fallback) {
+    const key = String(value === undefined || value === null ? "" : value);
+    return allowed.indexOf(key) >= 0 ? key : fallback;
+}
+
+function normalizedHex(value, fallback) {
+    const color = String(value === undefined || value === null ? fallback : value).toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(color) ? color : fallback;
+}
+
+function normalizedInteger(value, fallback, minimum, maximum) {
+    const number = Math.round(Number(value));
+    return Number.isFinite(number)
+        ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+
+function normalizedWallpaperPath(value) {
+    const path = typeof value === "string" ? value : "";
+    if (!path.startsWith("/") || path.indexOf("://") >= 0
+            || /[\u0000-\u001f\u007f-\u009f]/.test(path))
+        return "";
+    return path;
+}
+
+function normalizedPasswordMaskCharacter(value) {
+    const text = String(value === undefined || value === null ? "" : value);
+    const points = Array.from(text);
+    if (points.length !== 1 || /[\u0000-\u0020\u007f-\u009f]/.test(text))
+        return "•";
+    return points[0];
+}
+
+function normalizedProfile(value) {
+    const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
+    return ({
+        lockscreen_layout: normalizeLayout(raw.lockscreen_layout),
+        lockscreen_show_logo: normalizedBoolean(raw.lockscreen_show_logo, true),
+        lockscreen_show_time: normalizedBoolean(raw.lockscreen_show_time, false),
+        lockscreen_show_date: normalizedBoolean(raw.lockscreen_show_date, false),
+        lockscreen_show_username: normalizedBoolean(raw.lockscreen_show_username, false),
+        lockscreen_show_weather: normalizedBoolean(raw.lockscreen_show_weather, false),
+        lockscreen_custom_images: normalizeCustomImages(raw.lockscreen_custom_images),
+        lockscreen_timezone_clocks: normalizeTimezoneClocks(raw.lockscreen_timezone_clocks),
+        lockscreen_custom_texts: normalizeCustomTexts(raw.lockscreen_custom_texts),
+        lockscreen_visualizer: normalizeVisualizer(raw.lockscreen_visualizer),
+        lockscreen_background: normalizedEnum(raw.lockscreen_background,
+            ["black", "wallpaper", "color"], "black"),
+        lockscreen_background_color: normalizedHex(raw.lockscreen_background_color, "#000000"),
+        lockscreen_wallpaper_path: normalizedWallpaperPath(raw.lockscreen_wallpaper_path),
+        lockscreen_wallpaper_fit: normalizedEnum(raw.lockscreen_wallpaper_fit,
+            ["cover", "contain"], "cover"),
+        lockscreen_wallpaper_focal_x: clampNumber(raw.lockscreen_wallpaper_focal_x, 0.5, 0, 1),
+        lockscreen_wallpaper_focal_y: clampNumber(raw.lockscreen_wallpaper_focal_y, 0.5, 0, 1),
+        lockscreen_background_opacity: normalizedInteger(raw.lockscreen_background_opacity, 100, 0, 100),
+        lockscreen_background_opacity_previous: normalizedInteger(raw.lockscreen_background_opacity_previous, 100, 0, 100),
+        lockscreen_overlay_mode: normalizedEnum(raw.lockscreen_overlay_mode,
+            ["none", "dark", "light"], "none"),
+        lockscreen_overlay_strength: normalizedInteger(raw.lockscreen_overlay_strength, 0, 0, 100),
+        lockscreen_wallpaper_blur: normalizedInteger(raw.lockscreen_wallpaper_blur, 10, 0, 200),
+        lockscreen_blur_style: normalizedEnum(raw.lockscreen_blur_style,
+            ["smooth", "pixelated"], "pixelated"),
+        lockscreen_weather_units: normalizedEnum(raw.lockscreen_weather_units,
+            ["auto", "fahrenheit", "celsius"], "auto"),
+        lockscreen_animation: normalizedEnum(raw.lockscreen_animation,
+            ["random", "swarm", "edges", "center", "split", "off"], "split"),
+        lockscreen_entry_transition: normalizedEnum(raw.lockscreen_entry_transition,
+            ["fade", "pixel", "edges", "wipe"], "fade"),
+        lockscreen_entry_transition_duration: normalizedInteger(raw.lockscreen_entry_transition_duration,
+            1800, 800, 6000),
+        lockscreen_password_mask_mode: normalizedEnum(raw.lockscreen_password_mask_mode,
+            ["squares", "dots", "custom"], "squares"),
+        lockscreen_password_mask_character: normalizedPasswordMaskCharacter(
+            raw.lockscreen_password_mask_character),
+        lockscreen_clock_format: normalizedEnum(raw.lockscreen_clock_format,
+            ["24h", "12h"], "24h")
+    });
+}
+
+function cloneProfile(profile) {
+    return JSON.parse(JSON.stringify(normalizedProfile(profile)));
+}
+
+function sharedProfile(state) {
+    return normalizedProfile(state);
+}
+
+function monitorOverrides(state) {
+    const source = state && typeof state === "object" && !Array.isArray(state)
+        ? state.lockscreen_monitor_overrides : null;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+        return ({});
+
+    const result = ({});
+    const names = Object.keys(source);
+    for (let i = 0; i < names.length; ++i) {
+        const name = String(names[i] || "");
+        const candidate = source[name];
+        if (Array.from(name).length < 1 || Array.from(name).length > 128
+                || /[\u0000-\u001f\u007f-\u009f]/.test(name)
+                || !candidate || typeof candidate !== "object" || Array.isArray(candidate))
+            continue;
+        result[name] = normalizedProfile(candidate);
+    }
+    return result;
+}
+
+function profileForMonitor(shared, overrides, monitorName) {
+    const name = String(monitorName || "");
+    if (overrides && typeof overrides === "object" && !Array.isArray(overrides)
+            && Object.prototype.hasOwnProperty.call(overrides, name))
+        return overrides[name];
+    return shared;
 }
