@@ -133,8 +133,8 @@ Singleton {
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
-    property var draftSharedProfile: ({})
-    property var draftMonitorOverrides: ({})
+    property var draftMonitorProfiles: ({})
+    property var draftLastEditedProfile: ({})
     property var draftSavedProfiles: []
     property string selectedSavedConfigurationId: ""
     property string savedConfigurationNameDialogMode: ""
@@ -144,12 +144,7 @@ Singleton {
     property bool profileLoadActive: false
     property var profileUndoStacks: ({})
     property var profileRedoStacks: ({})
-    property var draftSharedAutoAccents: defaultAutoAccents()
     property var draftMonitorAutoAccents: ({})
-    property var settledSharedProfile: ({})
-    property bool sharedPreviewHoldActive: false
-    property bool sharedSwitchConfirmOpen: false
-    property string sharedSwitchMonitorName: ""
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
@@ -497,66 +492,37 @@ Singleton {
         scheduleContrastRefresh();
     }
 
-    function hasIndividualConfiguration(name) {
-        const key = String(name || "");
-        return key.length > 0 && draftMonitorOverrides
-            && typeof draftMonitorOverrides === "object"
-            && Object.prototype.hasOwnProperty.call(draftMonitorOverrides, key);
-    }
-
+    
     function stashAutoAccentsForActiveProfile() {
-        const accents = cloneAutoAccents(draftAutoAccents);
-        if (hasIndividualConfiguration(activeMonitorName)) {
-            const next = Object.assign({}, draftMonitorAutoAccents);
-            next[activeMonitorName] = accents;
-            draftMonitorAutoAccents = next;
-        } else {
-            draftSharedAutoAccents = accents;
-        }
+        if (activeMonitorName.length === 0)
+            return;
+        const next = Object.assign({}, draftMonitorAutoAccents);
+        next[activeMonitorName] = cloneAutoAccents(draftAutoAccents);
+        draftMonitorAutoAccents = next;
     }
 
     function loadAutoAccentsForActiveProfile() {
-        if (hasIndividualConfiguration(activeMonitorName)) {
-            const stored = draftMonitorAutoAccents[activeMonitorName];
-            draftAutoAccents = cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(activeMonitorName));
-        } else {
-            draftAutoAccents = cloneAutoAccents(draftSharedAutoAccents);
+        if (activeMonitorName.length === 0) {
+            draftAutoAccents = defaultAutoAccents();
+            return;
         }
+        const stored = draftMonitorAutoAccents[activeMonitorName];
+        draftAutoAccents = cloneAutoAccents(
+            stored || LockscreenContrast.colorsForMonitor(activeMonitorName));
     }
 
     function autoAccentsForMonitor(name) {
         const key = String(name || "");
         if (key === activeMonitorName)
             return cloneAutoAccents(draftAutoAccents);
-        if (hasIndividualConfiguration(key)) {
-            const stored = draftMonitorAutoAccents[key];
-            return cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(key));
-        }
-        if (!hasIndividualConfiguration(activeMonitorName))
-            return cloneAutoAccents(draftAutoAccents);
-        return cloneAutoAccents(draftSharedAutoAccents);
+        const stored = draftMonitorAutoAccents[key];
+        return cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(key));
     }
 
-    function beginSharedPreviewHold() {
-        if (hasIndividualConfiguration(activeMonitorName) || sharedPreviewHoldActive)
-            return;
-        settledSharedProfile = cloneSnapshot(profileFromDraftScalars())
-            || cloneSnapshot(draftSharedProfile) || ({});
-        sharedPreviewHoldActive = true;
-    }
-
-    function settleSharedPreviewHold() {
-        if (!sharedPreviewHoldActive)
-            return;
-        sharedPreviewHoldActive = false;
-        if (!hasIndividualConfiguration(activeMonitorName))
-            settledSharedProfile = cloneSnapshot(profileFromDraftScalars())
-                || cloneSnapshot(draftSharedProfile) || ({});
-    }
-
+    
+    
     function activeProfileKey() {
-        return hasIndividualConfiguration(activeMonitorName)
-            ? "monitor:" + activeMonitorName : "shared";
+        return "monitor:" + activeMonitorName;
     }
 
     function stashHistoryForActiveProfile() {
@@ -578,30 +544,42 @@ Singleton {
     }
 
     function flushActiveProfile() {
+        if (activeMonitorName.length === 0)
+            return;
         const profile = cloneSnapshot(profileFromDraftScalars());
         if (!profile)
             return;
-        if (hasIndividualConfiguration(activeMonitorName)) {
-            const next = Object.assign({}, draftMonitorOverrides);
-            next[activeMonitorName] = profile;
-            draftMonitorOverrides = next;
-        } else {
-            draftSharedProfile = profile;
-        }
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[activeMonitorName] = profile;
+        draftMonitorProfiles = next;
+        draftLastEditedProfile = cloneSnapshot(profile) || ({});
     }
 
     function effectiveProfileForMonitor(name) {
         const key = String(name || "");
         if (key === activeMonitorName)
             return profileFromDraftScalars();
-        if (hasIndividualConfiguration(key))
-            return cloneSnapshot(draftMonitorOverrides[key]);
-        if (!hasIndividualConfiguration(activeMonitorName)) {
-            if (sharedPreviewHoldActive)
-                return cloneSnapshot(settledSharedProfile);
-            return profileFromDraftScalars();
-        }
-        return cloneSnapshot(draftSharedProfile);
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, key))
+            return cloneSnapshot(draftMonitorProfiles[key]);
+        return cloneSnapshot(draftLastEditedProfile) || profileFromDraftScalars();
+    }
+
+    function ensureMonitorProfile(name) {
+        const key = String(name || "");
+        if (key.length === 0)
+            return null;
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, key))
+            return cloneSnapshot(draftMonitorProfiles[key]);
+        const profile = cloneSnapshot(draftLastEditedProfile)
+            || cloneSnapshot(profileFromDraftScalars());
+        if (!profile)
+            return null;
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[key] = cloneSnapshot(profile);
+        draftMonitorProfiles = next;
+        return profile;
     }
 
     function connectedScreenByName(name) {
@@ -614,105 +592,11 @@ Singleton {
         return null;
     }
 
-    function useIndividualConfiguration() {
-        if (activeMonitorName.length === 0 || hasIndividualConfiguration(activeMonitorName))
-            return;
-        if (historyTransactionActive)
-            commitHistoryTransaction();
-        stashHistoryForActiveProfile();
-        stashAutoAccentsForActiveProfile();
-        flushActiveProfile();
-        const next = Object.assign({}, draftMonitorOverrides);
-        next[activeMonitorName] = cloneSnapshot(profileFromDraftScalars());
-        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
-        nextAccents[activeMonitorName] = cloneAutoAccents(draftAutoAccents);
-        draftMonitorAutoAccents = nextAccents;
-        draftMonitorOverrides = next;
-        restoreHistoryForActiveProfile();
-        statusMessage = activeMonitorName + " now uses an Individual configuration";
-    }
-
-    function useSharedConfiguration() {
-        if (activeMonitorName.length === 0 || !hasIndividualConfiguration(activeMonitorName)
-                || sharedSwitchConfirmOpen)
-            return;
-        if (historyTransactionActive)
-            commitHistoryTransaction();
-        settleSharedPreviewHold();
-        stashHistoryForActiveProfile();
-        stashAutoAccentsForActiveProfile();
-        flushActiveProfile();
-        sharedSwitchMonitorName = activeMonitorName;
-        sharedSwitchConfirmOpen = true;
-        statusMessage = "Choose which configuration should become Shared";
-    }
-
-    function confirmUseExistingShared() {
-        const targetName = sharedSwitchMonitorName;
-        if (targetName.length === 0 || !hasIndividualConfiguration(targetName)) {
-            cancelUseSharedConfiguration();
-            return;
-        }
-        const next = Object.assign({}, draftMonitorOverrides);
-        delete next[targetName];
-        draftMonitorOverrides = next;
-        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
-        delete nextAccents[targetName];
-        draftMonitorAutoAccents = nextAccents;
-        settledSharedProfile = cloneSnapshot(draftSharedProfile) || ({});
-        sharedSwitchConfirmOpen = false;
-        sharedSwitchMonitorName = "";
-        if (activeMonitorName === targetName) {
-            loadProfileIntoDraft(draftSharedProfile);
-            loadAutoAccentsForActiveProfile();
-            restoreHistoryForActiveProfile();
-        }
-        statusMessage = targetName + " now uses the existing Shared configuration";
-    }
-
-    function confirmPromoteIndividualToShared() {
-        const targetName = sharedSwitchMonitorName;
-        if (targetName.length === 0 || targetName !== activeMonitorName
-                || !hasIndividualConfiguration(targetName)) {
-            cancelUseSharedConfiguration();
-            return;
-        }
-        const promoted = cloneSnapshot(profileFromDraftScalars());
-        if (!promoted) {
-            cancelUseSharedConfiguration();
-            statusMessage = "Could not promote this display configuration";
-            return;
-        }
-        const monitorHistoryKey = "monitor:" + targetName;
-        const nextUndo = Object.assign({}, profileUndoStacks);
-        const nextRedo = Object.assign({}, profileRedoStacks);
-        nextUndo.shared = cloneSnapshot(nextUndo[monitorHistoryKey]) || cloneSnapshot(undoStack) || [];
-        nextRedo.shared = cloneSnapshot(nextRedo[monitorHistoryKey]) || cloneSnapshot(redoStack) || [];
-        profileUndoStacks = nextUndo;
-        profileRedoStacks = nextRedo;
-        draftSharedProfile = promoted;
-        settledSharedProfile = cloneSnapshot(promoted) || ({});
-        draftSharedAutoAccents = cloneAutoAccents(draftAutoAccents);
-        const next = Object.assign({}, draftMonitorOverrides);
-        delete next[targetName];
-        draftMonitorOverrides = next;
-        const nextAccents = Object.assign({}, draftMonitorAutoAccents);
-        delete nextAccents[targetName];
-        draftMonitorAutoAccents = nextAccents;
-        sharedSwitchConfirmOpen = false;
-        sharedSwitchMonitorName = "";
-        loadProfileIntoDraft(promoted);
-        loadAutoAccentsForActiveProfile();
-        restoreHistoryForActiveProfile();
-        statusMessage = targetName + " configuration is now the Shared configuration";
-    }
-
-    function cancelUseSharedConfiguration() {
-        sharedSwitchConfirmOpen = false;
-        sharedSwitchMonitorName = "";
-        statusMessage = "Shared configuration switch cancelled";
-    }
-
+    
+    
+    
+    
+    
     function savedConfigurationIndex(id) {
         const key = String(id || "");
         for (let i = 0; i < draftSavedProfiles.length; ++i) {
@@ -906,18 +790,16 @@ Singleton {
             commitHistoryTransaction();
 
         const targetIsActive = targetName === activeMonitorName;
-        const targetWasIndividual = hasIndividualConfiguration(targetName);
-        let before = null;
+        const before = targetIsActive ? editorSnapshot() : null;
         if (targetIsActive) {
-            before = editorSnapshot();
             stashHistoryForActiveProfile();
             stashAutoAccentsForActiveProfile();
         }
         flushActiveProfile();
 
-        const next = Object.assign({}, draftMonitorOverrides);
+        const next = Object.assign({}, draftMonitorProfiles);
         next[targetName] = cloneSnapshot(profile);
-        draftMonitorOverrides = next;
+        draftMonitorProfiles = next;
 
         const accents = Object.assign({}, draftMonitorAutoAccents);
         delete accents[targetName];
@@ -927,9 +809,7 @@ Singleton {
         const redo = Object.assign({}, profileRedoStacks);
         const historyKey = "monitor:" + targetName;
         if (targetIsActive) {
-            const targetUndo = targetWasIndividual
-                ? (cloneSnapshot(undo[historyKey]) || []) : [];
-            undo[historyKey] = appendHistory(targetUndo, before);
+            undo[historyKey] = appendHistory(cloneSnapshot(undo[historyKey]) || [], before);
             redo[historyKey] = [];
         } else {
             delete undo[historyKey];
@@ -939,13 +819,15 @@ Singleton {
         profileRedoStacks = redo;
 
         if (targetIsActive) {
+            draftLastEditedProfile = cloneSnapshot(profile) || ({});
             loadProfileIntoDraft(profile);
+            loadAutoAccentsForActiveProfile();
             restoreHistoryForActiveProfile();
         }
         statusMessage = "Applied saved configuration to " + targetName + ". Ctrl+S to persist.";
     }
 
-    function applySavedConfigurationToShared(id) {
+    function applySavedConfigurationToAllOthers(id) {
         const index = savedConfigurationIndex(id);
         if (index < 0)
             return;
@@ -954,56 +836,60 @@ Singleton {
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
+        flushActiveProfile();
 
-        const activeUsesShared = !hasIndividualConfiguration(activeMonitorName);
-        const before = activeUsesShared ? editorSnapshot() : null;
-        if (!activeUsesShared)
-            flushActiveProfile();
-
-        draftSharedProfile = cloneSnapshot(profile);
-        settledSharedProfile = cloneSnapshot(profile);
-        draftSharedAutoAccents = defaultAutoAccents();
-
+        const next = Object.assign({}, draftMonitorProfiles);
+        const accents = Object.assign({}, draftMonitorAutoAccents);
         const undo = Object.assign({}, profileUndoStacks);
         const redo = Object.assign({}, profileRedoStacks);
-        if (activeUsesShared) {
-            undo.shared = appendHistory(cloneSnapshot(undoStack) || [], before);
-            redo.shared = [];
-        } else {
-            delete undo.shared;
-            delete redo.shared;
+        const screens = Quickshell.screens || [];
+        let applied = 0;
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length === 0 || name === activeMonitorName)
+                continue;
+            next[name] = cloneSnapshot(profile);
+            delete accents[name];
+            delete undo["monitor:" + name];
+            delete redo["monitor:" + name];
+            applied++;
         }
+        draftMonitorProfiles = next;
+        draftMonitorAutoAccents = accents;
         profileUndoStacks = undo;
         profileRedoStacks = redo;
-
-        if (activeUsesShared) {
-            loadProfileIntoDraft(profile);
-            restoreHistoryForActiveProfile();
-        }
-        statusMessage = "Applied saved configuration to Shared. Ctrl+S to persist.";
+        statusMessage = applied > 0
+            ? "Applied saved configuration to all other displays. Ctrl+S to persist."
+            : "No other displays connected";
     }
 
+    
     function copyConfigurationTo(name) {
         const targetName = String(name || "");
-        if (targetName.length === 0 || targetName === activeMonitorName || !connectedScreenByName(targetName))
+        if (targetName.length === 0 || targetName === activeMonitorName
+                || !connectedScreenByName(targetName))
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
         flushActiveProfile();
         const source = cloneSnapshot(profileFromDraftScalars());
-        const next = Object.assign({}, draftMonitorOverrides);
+        if (!source)
+            return;
+        const next = Object.assign({}, draftMonitorProfiles);
         next[targetName] = cloneSnapshot(source);
-        draftMonitorOverrides = next;
+        draftMonitorProfiles = next;
+
         const accentCopies = Object.assign({}, draftMonitorAutoAccents);
         accentCopies[targetName] = cloneAutoAccents(draftAutoAccents);
         draftMonitorAutoAccents = accentCopies;
+
         const undo = Object.assign({}, profileUndoStacks);
         const redo = Object.assign({}, profileRedoStacks);
         delete undo["monitor:" + targetName];
         delete redo["monitor:" + targetName];
         profileUndoStacks = undo;
         profileRedoStacks = redo;
-        statusMessage = "Copied configuration to " + targetName;
+        statusMessage = "Copied configuration to " + targetName + ". Ctrl+S to persist.";
     }
 
     function copyConfigurationToAllOthers() {
@@ -1011,7 +897,10 @@ Singleton {
             commitHistoryTransaction();
         flushActiveProfile();
         const source = cloneSnapshot(profileFromDraftScalars());
-        const next = Object.assign({}, draftMonitorOverrides);
+        if (!source)
+            return;
+        const next = Object.assign({}, draftMonitorProfiles);
+        const accents = Object.assign({}, draftMonitorAutoAccents);
         const undo = Object.assign({}, profileUndoStacks);
         const redo = Object.assign({}, profileRedoStacks);
         const screens = Quickshell.screens || [];
@@ -1021,17 +910,18 @@ Singleton {
             if (name.length === 0 || name === activeMonitorName)
                 continue;
             next[name] = cloneSnapshot(source);
-            const accentCopies = Object.assign({}, draftMonitorAutoAccents);
-            accentCopies[name] = cloneAutoAccents(draftAutoAccents);
-            draftMonitorAutoAccents = accentCopies;
+            accents[name] = cloneAutoAccents(draftAutoAccents);
             delete undo["monitor:" + name];
             delete redo["monitor:" + name];
             copied++;
         }
-        draftMonitorOverrides = next;
+        draftMonitorProfiles = next;
+        draftMonitorAutoAccents = accents;
         profileUndoStacks = undo;
         profileRedoStacks = redo;
-        statusMessage = copied > 0 ? "Copied configuration to all other displays" : "No other displays connected";
+        statusMessage = copied > 0
+            ? "Copied configuration to all other displays. Ctrl+S to persist."
+            : "No other displays connected";
     }
 
     function switchActiveMonitor(name) {
@@ -1045,8 +935,8 @@ Singleton {
         flushActiveProfile();
         activeMonitorName = String(name);
         editorWindow.screen = target;
-        const profile = hasIndividualConfiguration(activeMonitorName)
-            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+        const profile = ensureMonitorProfile(activeMonitorName)
+            || cloneSnapshot(draftLastEditedProfile);
         loadProfileIntoDraft(profile);
         loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
@@ -1055,20 +945,32 @@ Singleton {
     }
 
     function reconcileActiveMonitor() {
-        if (!open || connectedScreenByName(activeMonitorName))
+        if (!open)
             return;
+
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length > 0)
+                ensureMonitorProfile(name);
+        }
+
+        if (connectedScreenByName(activeMonitorName))
+            return;
+
         if (historyTransactionActive)
             commitHistoryTransaction();
         stashHistoryForActiveProfile();
         stashAutoAccentsForActiveProfile();
         flushActiveProfile();
+
         const target = focusedScreen();
         if (!target)
             return;
         activeMonitorName = String(target.name || "");
         editorWindow.screen = target;
-        const profile = hasIndividualConfiguration(activeMonitorName)
-            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+        const profile = ensureMonitorProfile(activeMonitorName)
+            || cloneSnapshot(draftLastEditedProfile);
         loadProfileIntoDraft(profile);
         loadAutoAccentsForActiveProfile();
         restoreHistoryForActiveProfile();
@@ -1514,7 +1416,6 @@ Singleton {
             Number(sceneX) - rotationCenterX) * 180 / Math.PI;
         rotationStartValue = elementRotation(name);
         beginHistoryTransaction();
-        beginSharedPreviewHold();
     }
 
     function updateRotateElement(sceneX, sceneY) {
@@ -1535,7 +1436,6 @@ Singleton {
             return;
         rotationElementName = "";
         commitHistoryTransaction();
-        settleSharedPreviewHold();
         scheduleContrastRefresh();
     }
 
@@ -1595,7 +1495,6 @@ Singleton {
 
     function beginResizeElement(name, sceneX, sceneY) {
         if (!elementExists(name) || editorFocus.width<=0 || editorFocus.height<=0) return;
-        beginSharedPreviewHold();
         if (selectedContains(name) && selectedElements.length>1 && beginGroupResize(sceneX,sceneY)) return;
         selectElement(name,false); resizeGroupSnapshot=[];
         const point=elementPoint(name); resizeElementName=name;
@@ -1614,7 +1513,6 @@ Singleton {
     function endResizeElement() {
         if (resizeElementName.length===0) return;
         resizeElementName=""; resizeGroupSnapshot=[]; commitHistoryTransaction();
-        settleSharedPreviewHold();
     }
 
     function setDraftVisualizerWidth(percentValue) {
@@ -1641,7 +1539,6 @@ Singleton {
         visualizerWidthStartStretch = elementStretchX("visualizer");
         visualizerWidthResizeActive = true;
         beginHistoryTransaction();
-        beginSharedPreviewHold();
     }
 
     function updateVisualizerWidthResize(sceneX) {
@@ -1659,7 +1556,6 @@ Singleton {
             return;
         visualizerWidthResizeActive = false;
         commitHistoryTransaction();
-        settleSharedPreviewHold();
         scheduleContrastRefresh();
     }
 
@@ -2394,30 +2290,40 @@ Singleton {
     }
 
     function loadPersistedDraft() {
-        const shared = BarState.lockscreenSharedProfile();
-        const overrides = BarState.lockscreenMonitorOverrides();
+        const profiles = BarState.lockscreenMonitorProfiles();
+        const lastEdited = BarState.lockscreenLastEditedProfile();
         const savedProfiles = BarState.lockscreenSavedProfiles();
+
+        draftMonitorProfiles = cloneSnapshot(profiles) || ({});
+        draftLastEditedProfile = cloneSnapshot(lastEdited) || ({});
         draftSavedProfiles = cloneSnapshot(savedProfiles) || [];
         selectedSavedConfigurationId = draftSavedProfiles.length > 0
             ? String(draftSavedProfiles[0].id || "") : "";
         savedConfigurationNameDialogMode = "";
         savedConfigurationNameDraft = "";
         savedConfigurationConfirmMode = "";
-        draftSharedProfile = cloneSnapshot(shared) || ({});
-        settledSharedProfile = cloneSnapshot(draftSharedProfile) || ({});
-        sharedPreviewHoldActive = false;
-        draftMonitorOverrides = cloneSnapshot(overrides) || ({});
-        draftSharedAutoAccents = cloneAutoAccents(LockscreenContrast.accents);
-        const persistedMonitorAccents = ({});
-        for (const name of Object.keys(draftMonitorOverrides))
-            persistedMonitorAccents[name] = cloneAutoAccents(LockscreenContrast.colorsForMonitor(name));
-        draftMonitorAutoAccents = persistedMonitorAccents;
+
         if (activeMonitorName.length === 0 && editorWindow.screen && editorWindow.screen.name)
             activeMonitorName = String(editorWindow.screen.name);
-        const profile = hasIndividualConfiguration(activeMonitorName)
-            ? draftMonitorOverrides[activeMonitorName] : draftSharedProfile;
+
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length > 0)
+                ensureMonitorProfile(name);
+        }
+
+        const persistedMonitorAccents = ({});
+        for (const name of Object.keys(draftMonitorProfiles))
+            persistedMonitorAccents[name] = cloneAutoAccents(
+                LockscreenContrast.colorsForMonitor(name));
+        draftMonitorAutoAccents = persistedMonitorAccents;
+
+        const profile = ensureMonitorProfile(activeMonitorName)
+            || cloneSnapshot(draftLastEditedProfile);
         loadProfileIntoDraft(profile);
         loadAutoAccentsForActiveProfile();
+
         profileUndoStacks = ({});
         profileRedoStacks = ({});
         undoStack = [];
@@ -2498,7 +2404,6 @@ Singleton {
 
     function close() {
         elementOpacityBeforeOpaque = ({});
-        sharedSwitchConfirmOpen = false; sharedSwitchMonitorName = "";
         lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
         const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview);
@@ -2509,13 +2414,12 @@ Singleton {
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
-        settleSharedPreviewHold();
         stashHistoryForActiveProfile();
         flushActiveProfile();
         saveErrorMessage = "";
         statusMessage = "Saving…";
         saveProcess.exec(["bash", editorSaveBackend, "--profiles",
-            JSON.stringify(draftSharedProfile), JSON.stringify(draftMonitorOverrides),
+            JSON.stringify(draftMonitorProfiles), JSON.stringify(draftLastEditedProfile),
             JSON.stringify(draftSavedProfiles)]);
     }
 
@@ -2599,71 +2503,6 @@ Singleton {
         Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
         Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
         Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
-
-        Rectangle {
-            id: sharedSwitchDialogLayer
-            anchors.fill: parent
-            visible: root.sharedSwitchConfirmOpen
-            color: "#99000000"
-            z: 10000
-
-            MouseArea { anchors.fill: parent }
-
-            Rectangle {
-                anchors.centerIn: parent
-                width: Math.min(parent.width - 40, 620)
-                height: 230
-                radius: 10
-                color: Theme.popupBackground
-                border.width: 1
-                border.color: Theme.active
-
-                ColumnLayout {
-                    anchors.fill: parent
-                    anchors.margins: 18
-                    spacing: 12
-
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Switch to Shared Configuration?"
-                        color: Theme.foreground
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 15
-                        font.bold: true
-                    }
-                    Text {
-                        Layout.fillWidth: true
-                        text: "Individual configuration will be removed for " + root.sharedSwitchMonitorName
-                            + ". Choose which configuration should become the Shared starting point."
-                        color: Theme.muted
-                        font.family: Theme.fontFamily
-                        font.pixelSize: 10
-                        wrapMode: Text.WordWrap
-                    }
-                    Item { Layout.fillHeight: true }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        spacing: 8
-                        Item { Layout.fillWidth: true }
-                        SettingsButton {
-                            label: "Cancel"
-                            textSize: 9
-                            onClicked: root.cancelUseSharedConfiguration()
-                        }
-                        SettingsButton {
-                            label: "Use Existing Shared"
-                            textSize: 9
-                            onClicked: root.confirmUseExistingShared()
-                        }
-                        SettingsButton {
-                            label: "Use This Display as Shared"
-                            textSize: 9
-                            onClicked: root.confirmPromoteIndividualToShared()
-                        }
-                    }
-                }
-            }
-        }
 
         Rectangle {
             id: savedConfigurationNameDialogLayer
@@ -2861,7 +2700,6 @@ Singleton {
                             if (root.inertiaOwner.length > 0) {
                                 root.inertiaOwner = "";
                                 root.commitHistoryTransaction();
-                                root.settleSharedPreviewHold();
                             }
                             parent.inertiaActive = false;
                             parent.flickVelocityX = 0;
@@ -2892,7 +2730,6 @@ Singleton {
                                     return;
                                 dragActivated = true;
                                 root.beginHistoryTransaction();
-                                root.beginSharedPreviewHold();
                                 const startPoint = root.elementPoint(parent.elementName);
                                 parent.lastSampleX = Number(startPoint.x);
                                 parent.lastSampleY = Number(startPoint.y);
@@ -2947,7 +2784,6 @@ Singleton {
                                 parent.flickVelocityY = 0;
                                 parent.inertiaActive = false;
                                 root.commitHistoryTransaction();
-                                root.settleSharedPreviewHold();
                             }
                             dragActivated = false;
                         }
@@ -2961,7 +2797,6 @@ Singleton {
                             if (dragActivated) {
                                 root.endEditorHold(parent.elementName);
                                 root.commitHistoryTransaction();
-                                root.settleSharedPreviewHold();
                             }
                             dragActivated = false;
                             root.clearGuides();
@@ -2980,7 +2815,7 @@ Singleton {
                     }
                     Timer { id: inertiaTimer; interval: 16; repeat: true; running: root.open && !root.pickerSuspended && parent.inertiaActive && root.inertiaOwner === parent.elementName
                         onRunningChanged: { if (!root.open && !running) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; } }
-                        onTriggered: { const point = root.elementPoint(parent.elementName); const dt = interval / 1000; if (root.selectedElements.length <= 1) { const proposedX = Number(point.x) + parent.flickVelocityX * dt; const proposedY = Number(point.y) + parent.flickVelocityY * dt; const clamped = root.clampPoint(parent.elementName, proposedX, proposedY); if (Math.abs(clamped.x - proposedX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(clamped.y - proposedY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y); } else { const proposedDX = parent.flickVelocityX * dt; const proposedDY = parent.flickVelocityY * dt; const moved = root.translateSelectedElements(proposedDX, proposedDY, false); if (Math.abs(moved.x - proposedDX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(moved.y - proposedDY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; } parent.flickVelocityX *= root.flickFriction; parent.flickVelocityY *= root.flickFriction; if (Math.sqrt(parent.flickVelocityX * parent.flickVelocityX + parent.flickVelocityY * parent.flickVelocityY) < root.flickStopSpeed) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); root.settleSharedPreviewHold(); } }
+                        onTriggered: { const point = root.elementPoint(parent.elementName); const dt = interval / 1000; if (root.selectedElements.length <= 1) { const proposedX = Number(point.x) + parent.flickVelocityX * dt; const proposedY = Number(point.y) + parent.flickVelocityY * dt; const clamped = root.clampPoint(parent.elementName, proposedX, proposedY); if (Math.abs(clamped.x - proposedX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(clamped.y - proposedY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; root.setDraftPointSilently(parent.elementName, clamped.x, clamped.y); } else { const proposedDX = parent.flickVelocityX * dt; const proposedDY = parent.flickVelocityY * dt; const moved = root.translateSelectedElements(proposedDX, proposedDY, false); if (Math.abs(moved.x - proposedDX) > 0.000001) parent.flickVelocityX = -parent.flickVelocityX * root.flickBounceDamping; if (Math.abs(moved.y - proposedDY) > 0.000001) parent.flickVelocityY = -parent.flickVelocityY * root.flickBounceDamping; } parent.flickVelocityX *= root.flickFriction; parent.flickVelocityY *= root.flickFriction; if (Math.sqrt(parent.flickVelocityX * parent.flickVelocityX + parent.flickVelocityY * parent.flickVelocityY) < root.flickStopSpeed) { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.commitHistoryTransaction(); } }
                     }
                 }
             }
@@ -3026,8 +2861,6 @@ Singleton {
                             model: Quickshell.screens
                             SettingsButton { required property var modelData; label: String(modelData.name); active: root.activeMonitorName === String(modelData.name); textSize: 9; onClicked: root.switchActiveMonitor(String(modelData.name)) }
                         }
-                        Text { text: root.hasIndividualConfiguration(root.activeMonitorName) ? "Individual" : "Shared"; color: root.hasIndividualConfiguration(root.activeMonitorName) ? Theme.focus : Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 9; font.bold: true }
-                        SettingsButton { label: root.hasIndividualConfiguration(root.activeMonitorName) ? "Use Shared Configuration" : "Use Individual Configuration"; textSize: 9; onClicked: { if (root.hasIndividualConfiguration(root.activeMonitorName)) root.useSharedConfiguration(); else root.useIndividualConfiguration(); } }
                         Item { Layout.fillWidth: true }
                     }
                     RowLayout {
@@ -3312,7 +3145,6 @@ Singleton {
 
                     RowLayout { Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "layout" && root.selectedSavedConfigurationIndex() >= 0
                         Text { text: "Apply To"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        SettingsButton { label: "Shared Configuration"; textSize: 9; onClicked: root.applySavedConfigurationToShared(root.selectedSavedConfigurationId) }
                         Repeater {
                             model: Quickshell.screens
                             SettingsButton {
@@ -3322,8 +3154,9 @@ Singleton {
                                 onClicked: root.applySavedConfigurationToMonitor(root.selectedSavedConfigurationId, String(modelData.name || ""))
                             }
                         }
+                        SettingsButton { label: "All Other Displays"; textSize: 9; available: (Quickshell.screens || []).length > 1; onClicked: root.applySavedConfigurationToAllOthers(root.selectedSavedConfigurationId) }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Applying to a display creates or replaces its Individual configuration."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { text: "Applying replaces the selected display configuration when you save."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout { Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "background"
