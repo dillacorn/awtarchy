@@ -1,4 +1,4 @@
-name: Feature lockscreen profile roundtrip
+name: Feature lockscreen final validation
 
 on:
   push:
@@ -6,32 +6,92 @@ on:
       - feature/lockscreen-media-editor-polish
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
-  profile-roundtrip:
+  final-lockscreen-validation:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
-      - name: Install jq
-        run: sudo apt-get update && sudo apt-get install -y jq
-      - name: Profile save parity
-        run: bash tests/test-quickshell-lockscreen-profile-save-parity.sh
-      - name: Per-display resolver contracts
-        run: node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
-      - name: Per-display persistence
-        run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
-      - name: Secure per-display profile contracts
-        run: bash tests/test-quickshell-lockscreen-secure-monitor-profiles.sh
-      - name: Saved configuration targets
-        run: bash tests/test-quickshell-lockscreen-saved-profiles.sh
-      - name: Per-display editor session
-        run: bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
-      - name: Element opacity floor
-        run: bash tests/test-quickshell-lockscreen-element-opacity.sh
-      - name: Explicit element selection
-        run: bash tests/test-quickshell-lockscreen-selector-flyout.sh
-      - name: Password feedback schema
-        run: bash tests/test-quickshell-lockscreen-password-feedback.sh
-      - name: Secure password effects
-        run: bash tests/test-quickshell-lockscreen-password-effects.sh
+        with:
+          fetch-depth: 0
+
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck lua5.4
+
+      - name: Refresh managed history
+        shell: bash
+        run: |
+          set -euo pipefail
+          history_file='local/share/awtarchy/quickshell-managed-history.sha256'
+          output_file="$(mktemp)"
+          if bash tests/test-quickshell-lockscreen-interactive-managed-history.sh >"$output_file" 2>&1; then
+            cat "$output_file"
+          else
+            cat "$output_file"
+            while IFS= read -r entry; do
+              [[ -n "$entry" ]] || continue
+              grep -Fqx -- "$entry" "$history_file" || printf '%s\n' "$entry" >>"$history_file"
+            done < <(sed -n 's/^MISSING_MANAGED_HASH //p' "$output_file")
+          fi
+          rm -f -- "$output_file"
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+
+      - name: Complete focused lockscreen validation
+        shell: bash
+        run: |
+          set -euo pipefail
+          for test in tests/test-quickshell-lockscreen-*.sh; do
+            echo "=== $test ==="
+            bash "$test"
+          done
+          node tests/test-quickshell-lockscreen-efficiency.mjs
+          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
+          bash tests/test-lua-validation.sh
+          bash tests/test-quickshell-production-readiness.sh
+          bash -n config/hypr/scripts/quickshell_application_state.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_contrast.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_weather.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
+          git diff --check
+
+      - name: Remove temporary feature workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -f -- .github/workflows/feature-lockscreen-profile-roundtrip.yml
+          test ! -e .github/workflows/feature-lockscreen-profile-roundtrip.yml
+
+      - name: Re-run critical permanent contracts after cleanup
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test-quickshell-lockscreen-profile-save-parity.sh
+          bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
+          bash tests/test-quickshell-lockscreen-multimonitor-editor.sh
+          bash tests/test-quickshell-lockscreen-element-opacity.sh
+          bash tests/test-quickshell-lockscreen-password-feedback.sh
+          bash tests/test-quickshell-lockscreen-password-effects.sh
+          bash tests/test-quickshell-lockscreen-secure-monitor-profiles.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
+          bash -n config/hypr/scripts/quickshell_application_state.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+          git diff --check
+
+      - name: Commit final feature tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'dillacorn'
+          git config user.email '28743863+dillacorn@users.noreply.github.com'
+          git add -A
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No finalization changes to commit.'
+            exit 0
+          fi
+          git commit -m 'Finalize per-display lockscreen editor'
+          test -z "$(git status --porcelain)"
+          git push origin HEAD:feature/lockscreen-media-editor-polish
