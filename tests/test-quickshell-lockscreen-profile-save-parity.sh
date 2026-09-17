@@ -58,4 +58,15 @@ jq -e '
   and .lockscreen_entry_transition_duration == 1800
 ' "$saved" >/dev/null
 
+invalid_layout="$(jq -c '.lockscreen_layout.password.opacity = 0' <<<"$profile")"
+if bash "$BACKEND" save-lockscreen-editor-profiles "$invalid_layout" '{}' 2>"$TMP/error"; then
+    printf '%s\n' 'FAIL: invalid layout profile unexpectedly saved' >&2
+    exit 1
+fi
+grep -Fq 'invalid lockscreen profile: layout' "$TMP/error" || {
+    printf '%s\n' 'FAIL: invalid layout did not identify the failing profile section' >&2
+    cat "$TMP/error" >&2
+    exit 1
+}
+
 printf '%s\n' 'PASS: resolver-normalized lockscreen profiles are backend-saveable'
