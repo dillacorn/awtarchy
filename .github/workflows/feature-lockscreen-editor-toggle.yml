@@ -14,47 +14,157 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 0
-      - name: Profile resolver regression
-        run: node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
-      - name: Apply toggle and noalt patch
+      - name: Apply monitor profile resolver
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          shell = Path("config/quickshell/awtarchy/shell.qml")
-          text = shell.read_text(encoding="utf-8")
-          old = '        function openLockscreenEditor(): void { LockscreenEditor.openFocused(); }'
-          new = '        function toggleLockscreenEditor(): void { if (LockscreenEditor.open) LockscreenEditor.close(); else LockscreenEditor.openFocused(); }'
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit("shell IPC anchor missing")
-          shell.write_text(text, encoding="utf-8")
+          paths = [
+              Path("config/quickshell/awtarchy/LockscreenPresentationState.js"),
+              Path("config/quickshell/awtarchy-lock/LockscreenPresentationState.js"),
+          ]
+          original = paths[0].read_text(encoding="utf-8")
+          if paths[1].read_text(encoding="utf-8") != original:
+              raise SystemExit("presentation-state copies diverged before Task 2")
 
-          launcher = Path("config/hypr/scripts/quickshell_lockscreen_editor.sh")
-          text = launcher.read_text(encoding="utf-8")
-          text = text.replace("# Open the native Awtarchy lockscreen layout editor.", "# Toggle the native Awtarchy lockscreen layout editor.", 1)
-          old = "exec qs -c awtarchy ipc call control openLockscreenEditor"
-          new = "exec qs -c awtarchy ipc call control toggleLockscreenEditor"
-          if old in text:
-              text = text.replace(old, new, 1)
-          elif new not in text:
-              raise SystemExit("editor launcher IPC anchor missing")
-          launcher.write_text(text, encoding="utf-8")
+          text = original
+          show_label_anchor = '        normalized.format = String(raw.format || "24h").toLowerCase() === "12h" ? "12h" : "24h";\n        normalized.visible = raw.visible !== false;'
+          show_label_replacement = '        normalized.format = String(raw.format || "24h").toLowerCase() === "12h" ? "12h" : "24h";\n        normalized.show_label = raw.show_label !== false;\n        normalized.visible = raw.visible !== false;'
+          if 'normalized.show_label = raw.show_label !== false;' not in text:
+              if show_label_anchor not in text:
+                  raise SystemExit("timezone show_label anchor missing")
+              text = text.replace(show_label_anchor, show_label_replacement, 1)
 
-          hypr = Path("config/hypr/hyprland.lua")
-          text = hypr.read_text(encoding="utf-8")
-          bind = '    hl.bind("SUPER + ALT + e", hl.dsp.exec_cmd(lockscreen_editor), {})'
-          if text.count(bind) == 0:
-              anchor = '    hl.bind("SUPER + ALT + backspace", hl.dsp.exec_cmd(hypr_quicksettings), {})\n'
-              if anchor not in text:
-                  raise SystemExit("noalt brightness anchor missing")
-              text = text.replace(anchor, anchor + bind + "\n", 1)
-          elif text.count(bind) > 1:
-              raise SystemExit("unexpected duplicate noalt editor bind")
-          hypr.write_text(text, encoding="utf-8")
+          if 'function sharedProfile(state)' not in text:
+              text += r'''
+
+function normalizedBoolean(value, fallback) {
+    return typeof value === "boolean" ? value : fallback;
+}
+
+function normalizedEnum(value, allowed, fallback) {
+    const key = String(value === undefined || value === null ? "" : value);
+    return allowed.indexOf(key) >= 0 ? key : fallback;
+}
+
+function normalizedHex(value, fallback) {
+    const color = String(value === undefined || value === null ? fallback : value).toLowerCase();
+    return /^#[0-9a-f]{6}$/.test(color) ? color : fallback;
+}
+
+function normalizedInteger(value, fallback, minimum, maximum) {
+    const number = Math.round(Number(value));
+    return Number.isFinite(number)
+        ? Math.max(minimum, Math.min(maximum, number)) : fallback;
+}
+
+function normalizedWallpaperPath(value) {
+    const path = typeof value === "string" ? value : "";
+    if (!path.startsWith("/") || path.indexOf("://") >= 0
+            || /[\u0000-\u001f\u007f-\u009f]/.test(path))
+        return "";
+    return path;
+}
+
+function normalizedPasswordMaskCharacter(value) {
+    const text = String(value === undefined || value === null ? "" : value);
+    const points = Array.from(text);
+    if (points.length !== 1 || /[\u0000-\u0020\u007f-\u009f]/.test(text))
+        return "•";
+    return points[0];
+}
+
+function normalizedProfile(value) {
+    const raw = value && typeof value === "object" && !Array.isArray(value) ? value : ({});
+    return ({
+        lockscreen_layout: normalizeLayout(raw.lockscreen_layout),
+        lockscreen_show_logo: normalizedBoolean(raw.lockscreen_show_logo, true),
+        lockscreen_show_time: normalizedBoolean(raw.lockscreen_show_time, false),
+        lockscreen_show_date: normalizedBoolean(raw.lockscreen_show_date, false),
+        lockscreen_show_username: normalizedBoolean(raw.lockscreen_show_username, false),
+        lockscreen_show_weather: normalizedBoolean(raw.lockscreen_show_weather, false),
+        lockscreen_custom_images: normalizeCustomImages(raw.lockscreen_custom_images),
+        lockscreen_timezone_clocks: normalizeTimezoneClocks(raw.lockscreen_timezone_clocks),
+        lockscreen_custom_texts: normalizeCustomTexts(raw.lockscreen_custom_texts),
+        lockscreen_visualizer: normalizeVisualizer(raw.lockscreen_visualizer),
+        lockscreen_background: normalizedEnum(raw.lockscreen_background,
+            ["black", "wallpaper", "color"], "black"),
+        lockscreen_background_color: normalizedHex(raw.lockscreen_background_color, "#000000"),
+        lockscreen_wallpaper_path: normalizedWallpaperPath(raw.lockscreen_wallpaper_path),
+        lockscreen_wallpaper_fit: normalizedEnum(raw.lockscreen_wallpaper_fit,
+            ["cover", "contain"], "cover"),
+        lockscreen_wallpaper_focal_x: clampNumber(raw.lockscreen_wallpaper_focal_x, 0.5, 0, 1),
+        lockscreen_wallpaper_focal_y: clampNumber(raw.lockscreen_wallpaper_focal_y, 0.5, 0, 1),
+        lockscreen_background_opacity: normalizedInteger(raw.lockscreen_background_opacity, 100, 0, 100),
+        lockscreen_background_opacity_previous: normalizedInteger(raw.lockscreen_background_opacity_previous, 100, 0, 100),
+        lockscreen_overlay_mode: normalizedEnum(raw.lockscreen_overlay_mode,
+            ["none", "dark", "light"], "none"),
+        lockscreen_overlay_strength: normalizedInteger(raw.lockscreen_overlay_strength, 0, 0, 100),
+        lockscreen_wallpaper_blur: normalizedInteger(raw.lockscreen_wallpaper_blur, 10, 0, 200),
+        lockscreen_blur_style: normalizedEnum(raw.lockscreen_blur_style,
+            ["smooth", "pixelated"], "pixelated"),
+        lockscreen_weather_units: normalizedEnum(raw.lockscreen_weather_units,
+            ["auto", "fahrenheit", "celsius"], "auto"),
+        lockscreen_animation: normalizedEnum(raw.lockscreen_animation,
+            ["random", "swarm", "edges", "center", "split", "off"], "split"),
+        lockscreen_entry_transition: normalizedEnum(raw.lockscreen_entry_transition,
+            ["fade", "pixel", "edges", "wipe"], "fade"),
+        lockscreen_entry_transition_duration: normalizedInteger(raw.lockscreen_entry_transition_duration,
+            1800, 800, 6000),
+        lockscreen_password_mask_mode: normalizedEnum(raw.lockscreen_password_mask_mode,
+            ["squares", "dots", "custom"], "squares"),
+        lockscreen_password_mask_character: normalizedPasswordMaskCharacter(
+            raw.lockscreen_password_mask_character),
+        lockscreen_clock_format: normalizedEnum(raw.lockscreen_clock_format,
+            ["24h", "12h"], "24h")
+    });
+}
+
+function cloneProfile(profile) {
+    return JSON.parse(JSON.stringify(normalizedProfile(profile)));
+}
+
+function sharedProfile(state) {
+    return normalizedProfile(state);
+}
+
+function monitorOverrides(state) {
+    const source = state && typeof state === "object" && !Array.isArray(state)
+        ? state.lockscreen_monitor_overrides : null;
+    if (!source || typeof source !== "object" || Array.isArray(source))
+        return ({});
+
+    const result = ({});
+    const names = Object.keys(source);
+    for (let i = 0; i < names.length; ++i) {
+        const name = String(names[i] || "");
+        const candidate = source[name];
+        if (Array.from(name).length < 1 || Array.from(name).length > 128
+                || /[\u0000-\u001f\u007f-\u009f]/.test(name)
+                || !candidate || typeof candidate !== "object" || Array.isArray(candidate))
+            continue;
+        result[name] = normalizedProfile(candidate);
+    }
+    return result;
+}
+
+function profileForMonitor(shared, overrides, monitorName) {
+    const name = String(monitorName || "");
+    if (overrides && typeof overrides === "object" && !Array.isArray(overrides)
+            && Object.prototype.hasOwnProperty.call(overrides, name))
+        return overrides[name];
+    return shared;
+}
+'''
+
+          for path in paths:
+              path.write_text(text, encoding="utf-8")
           PY
-      - name: Verify toggle and transition contracts
+      - name: Profile resolver regression
+        run: |
+          node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
+          cmp -s config/quickshell/awtarchy/LockscreenPresentationState.js config/quickshell/awtarchy-lock/LockscreenPresentationState.js
+      - name: Verify existing toggle and transition contracts
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq lua5.4
@@ -64,14 +174,14 @@ jobs:
           bash tests/test-lua-validation.sh
           bash -n config/hypr/scripts/quickshell_lockscreen_editor.sh
           git diff --check
-      - name: Commit production patch
+      - name: Commit resolver production patch
         run: |
-          if git diff --quiet -- config/quickshell/awtarchy/shell.qml config/hypr/scripts/quickshell_lockscreen_editor.sh config/hypr/hyprland.lua; then
-            echo "Production toggle patch already present."
+          if git diff --quiet -- config/quickshell/awtarchy/LockscreenPresentationState.js config/quickshell/awtarchy-lock/LockscreenPresentationState.js; then
+            echo "Monitor profile resolver already present."
             exit 0
           fi
           git config user.name "dillacorn"
           git config user.email "28743863+dillacorn@users.noreply.github.com"
-          git add config/quickshell/awtarchy/shell.qml config/hypr/scripts/quickshell_lockscreen_editor.sh config/hypr/hyprland.lua
-          git commit -m "Toggle lockscreen editor shortcut"
+          git add config/quickshell/awtarchy/LockscreenPresentationState.js config/quickshell/awtarchy-lock/LockscreenPresentationState.js
+          git commit -m "Add lockscreen monitor profile resolver"
           git push origin HEAD:feature/lockscreen-media-editor-polish
