@@ -32,16 +32,17 @@ require_text "$WEATHER" 'property string lastRequestIdentity: ""' 'weather servi
 require_text "$WEATHER" 'const requestIdentity = location + "|" + units;' 'weather service identity omits units'
 require_text "$WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh", location, units]);' 'weather service does not pass units to helper'
 
-# Editor units are draft state, so Cancel cannot accidentally persist them.
+# Editor units are profile draft state, so Cancel cannot accidentally persist them.
 require_text "$EDITOR" 'property string draftWeatherUnits: "auto"' 'editor has no weather-unit draft'
 require_text "$EDITOR" 'weatherUnits: draftWeatherUnits' 'editor history omits weather units'
-require_text "$EDITOR" 'draftWeatherUnits = BarState.lockscreenWeatherUnits();' 'editor does not load persisted weather units'
+require_text "$EDITOR" 'const shared = BarState.lockscreenSharedProfile();' 'editor does not load the persisted Shared profile'
+require_text "$EDITOR" 'draftWeatherUnits = String(profile.lockscreen_weather_units || "auto");' 'editor does not load persisted profile weather units'
 require_text "$EDITOR" 'draftWeatherUnits = "auto";' 'editor reset does not restore Auto weather units'
 require_text "$EDITOR" 'function setDraftWeatherUnits(value)' 'editor has no weather-unit setter'
 require_text "$EDITOR" 'label: "Auto"' 'Auto weather-unit control is missing'
 require_text "$EDITOR" 'label: "°F"' 'Fahrenheit weather-unit control is missing'
 require_text "$EDITOR" 'label: "°C"' 'Celsius weather-unit control is missing'
-require_text "$EDITOR" 'draftWeatherUnits' 'editor save does not include weather units'
+require_text "$EDITOR" 'lockscreen_weather_units: draftWeatherUnits' 'profile-based editor save does not include weather units'
 
 # Helper resolves Auto from locale and requests an explicit Open-Meteo unit.
 require_text "$HELPER" 'resolve_units()' 'weather helper has no unit resolver'
