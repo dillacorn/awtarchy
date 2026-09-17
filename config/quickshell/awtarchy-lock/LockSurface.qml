@@ -11,8 +11,8 @@ WlSessionLockSurface {
     required property var auth
     required property var theme
     required property bool unlocking
-    required property var sharedProfile
-    required property var monitorOverrides
+    required property var monitorProfiles
+    required property var lastEditedProfile
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
@@ -23,7 +23,7 @@ WlSessionLockSurface {
     readonly property string monitorName: root.screen && root.screen.name
         ? String(root.screen.name) : ""
     readonly property var profile: LockscreenPresentationState.profileForMonitor(
-        root.sharedProfile, root.monitorOverrides, root.monitorName)
+        root.monitorProfiles, root.lastEditedProfile, root.monitorName)
     readonly property string captureOutputName: root.monitorName
     readonly property string captureSource: root.captureDirectory.length > 0
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
