@@ -14,10 +14,14 @@ jobs:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
         with:
           fetch-depth: 0
+      - name: Apply monitor-safe transition capture cleanup
+        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task8-transition-fix.py
       - name: Monitor transition cleanup regression
         run: bash tests/test-quickshell-lockscreen-monitor-transition-cleanup.sh
       - name: Migrate profile-aware legacy contracts
-        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task8-testfix.py
+        run: |
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task8-testfix.py
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task8-entry-testfix.py
       - name: Prove managed-history RED
         run: |
           python3 .github/scripts/feature-lockscreen-monitor-profile-task8.py coverage
@@ -57,7 +61,7 @@ jobs:
         run: |
           git config user.name "dillacorn"
           git config user.email "28743863+dillacorn@users.noreply.github.com"
-          git add tests/test-quickshell-lockscreen-interactive-managed-history.sh tests/test-quickshell-lockscreen-animation-preference.sh tests/test-quickshell-lockscreen-background-composition.sh tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh tests/test-quickshell-lockscreen-monitor-transition-cleanup.sh local/share/awtarchy/quickshell-managed-history.sha256
+          git add config/quickshell/awtarchy-lock/shell.qml tests/test-quickshell-lockscreen-interactive-managed-history.sh tests/test-quickshell-lockscreen-animation-preference.sh tests/test-quickshell-lockscreen-background-composition.sh tests/test-quickshell-lockscreen-blur-iris-editor-controls.sh tests/test-quickshell-lockscreen-entry-transitions.sh tests/test-quickshell-lockscreen-monitor-transition-cleanup.sh local/share/awtarchy/quickshell-managed-history.sha256
           git add -u .github
           git diff --cached --check
           git commit -m "Finalize lockscreen multi-monitor editor"
