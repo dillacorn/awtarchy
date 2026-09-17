@@ -19,3 +19,5 @@ jobs:
         run: bash tests/test-quickshell-lockscreen-profile-save-parity.sh
       - name: Per-display resolver contracts
         run: node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
+      - name: Per-display persistence
+        run: bash tests/test-quickshell-lockscreen-monitor-profile-state.sh
