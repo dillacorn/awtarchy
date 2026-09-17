@@ -245,7 +245,7 @@ Singleton {
             scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : defaults.scale)),
             stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : defaults.stretch_x)),
             stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : defaults.stretch_y)),
-            opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
+            opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
             rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : defaults.rotation),
             color: color,
             bands: Number.isInteger(bands) ? Math.max(4, Math.min(64, bands)) : defaults.bands,
@@ -2063,7 +2063,7 @@ Singleton {
                 scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
-                opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0),
                 spawn_animation: normalizedCustomImageSpawn(raw.spawn_animation),
                 spawn_timing: normalizedCustomImageSpawnTiming(raw.spawn_timing),
@@ -2083,7 +2083,7 @@ Singleton {
             result.push(({id:id, timezone:timezone, format:normalizedClockFormat(raw.format), show_label: raw.show_label !== false, x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),
                 y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.6)), scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),
                 stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)), stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),
-                opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
+                opacity:Math.max(5,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
                 color:color==="auto"||validHex(color)?color:"auto", visible:typeof raw.visible==="boolean"?raw.visible:true}));
         }
         return result;
@@ -2101,7 +2101,7 @@ Singleton {
                 alignment:["left","center","right"].indexOf(String(raw.alignment))>=0?String(raw.alignment):"center",
                 x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.55)),
                 scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)),
-                stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)),
+                stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),opacity:Math.max(5,Math.min(100,Number.isFinite(opacity)?opacity:100)),
                 rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),color:color==="auto"||validHex(color)?color:"auto",visible:typeof raw.visible==="boolean"?raw.visible:true}));
         }
         return result;
@@ -2114,6 +2114,31 @@ Singleton {
     function isTimezoneClock(name) { return timezoneClockIndex(name) >= 0; }
     function isCustomText(name) { return customTextIndex(name) >= 0; }
     function editableElementNames() { const names = elementNames.slice(); names.push("visualizer"); for (const image of draftCustomImages) names.push(String(image.id)); for(const clock of draftTimezoneClocks) names.push("timezone:"+String(clock.id)); for(const item of draftCustomTexts) names.push("text:"+String(item.id)); return names; }
+    function elementSelectorModel() {
+        const result = [];
+        for (const name of editableElementNames()) {
+            if (elementExists(name))
+                result.push(({ key: String(name), label: elementLabel(name) }));
+        }
+        return result;
+    }
+    function elementSelectorIndex() {
+        const model = elementSelectorModel();
+        for (let i = 0; i < model.length; ++i) {
+            if (String(model[i].key) === selectedElement)
+                return i;
+        }
+        return 0;
+    }
+    function selectElementByName(name) {
+        const key = String(name || "");
+        if (!elementExists(key))
+            return;
+        selectElement(key, false);
+        activeDrawer = "element";
+        elementPaletteOpen = false;
+        statusMessage = "Selected " + elementLabel(key);
+    }
     function elementExists(name) { return name === "visualizer" || elementNames.indexOf(name) >= 0 || isCustomImage(name) || isTimezoneClock(name) || isCustomText(name); }
     function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
 
@@ -2149,7 +2174,7 @@ Singleton {
                 scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
-                opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0), color: color });
         }
         return result;
@@ -2183,7 +2208,7 @@ Singleton {
     function elementScale(name) { const point = elementPoint(name); const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1; return Number.isFinite(value) ? Math.max(0.50, Math.min(elementScaleMaximum, value)) : 1; }
     function elementStretchX(name) { const point = elementPoint(name); const value = point ? Number(point.stretch_x === undefined ? 1 : point.stretch_x) : 1; return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1; }
     function elementStretchY(name) { const point = elementPoint(name); const value = point ? Number(point.stretch_y === undefined ? 1 : point.stretch_y) : 1; return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1; }
-    function elementOpacity(name) { const point = elementPoint(name); const minimum = name === "password" ? 20 : 0; const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100; return Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100; }
+    function elementOpacity(name) { const point = elementPoint(name); const minimum = 5; const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100; return Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100; }
     function elementColor(name) { if (isCustomImage(name)) return "auto"; const point = elementPoint(name); const value = point ? String(point.color === undefined ? "auto" : point.color) : "auto"; return value === "auto" || /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "auto"; }
 
     function setDraftColor(name, colorValue) {
@@ -2197,7 +2222,7 @@ Singleton {
 
     function setDraftOpacitySilently(name, opacity) {
         if (!elementExists(name)) return; const numeric = Number(opacity); if (!Number.isFinite(numeric)) return;
-        const minimum = name === "password" ? 20 : 0; const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
+        const minimum = 5; const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.opacity = value; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].opacity = value; draftCustomImages = next; }
         else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].opacity=value;draftTimezoneClocks=next;}
@@ -2230,14 +2255,14 @@ Singleton {
             return;
         }
         const previous = Number(root.elementOpacityBeforeOpaque[name]);
-        const minimum = name === "password" ? 20 : 0;
+        const minimum = 5;
         if (Number.isFinite(previous) && previous >= minimum && previous < 100)
             root.setDraftOpacity(name, previous);
     }
 
     function setElementOpacityFromPointer(name, pointerX, trackWidth) {
         const width = Number(trackWidth); if (!elementExists(name) || !Number.isFinite(width) || width <= 0) return;
-        const minimum = name === "password" ? 20 : 0;
+        const minimum = 5;
         const ratio = Math.max(0, Math.min(1, Number(pointerX) / width));
         const value = minimum + ratio * (100 - minimum);
         root.setDraftOpacitySilently(name, value);
@@ -2923,6 +2948,22 @@ Singleton {
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
+                        Text { text: "Select Element"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        LockscreenCompactSelector {
+                            popupBoundary: editorFocus
+                            Layout.preferredWidth: 220
+                            model: root.elementSelectorModel()
+                            currentIndex: root.elementSelectorIndex()
+                            onActivated: index => {
+                                if (index >= 0 && index < root.elementSelectorModel().length)
+                                    root.selectElementByName(root.elementSelectorModel()[index].key)
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
                         SettingsButton { label: "Add Media"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
                         SettingsButton { label: "Add timezone clock"; textSize: 9; available: root.draftTimezoneClocks.length < root.timezoneClockMaximum; onClicked: root.addTimezoneClock() }
                         SettingsButton { label: "Add custom text"; textSize: 9; available: root.draftCustomTexts.length < root.customTextMaximum; onClicked: root.addCustomText() }
@@ -2930,8 +2971,8 @@ Singleton {
                         SettingsButton { label: "Remove clock"; textSize: 9; visible: root.isTimezoneClock(root.selectedElement); available: visible; onClicked: root.removeTimezoneClock(root.selectedElement) }
                         SettingsButton { label: "Remove text"; textSize: 9; visible: root.isCustomText(root.selectedElement); available: visible; onClicked: root.removeCustomText(root.selectedElement) }
                         Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0); onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
-                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > 5; onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
+                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: 5; top: 100 }
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementOpacity(root.selectedElement) < 100; onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) + 5) }
                         Text { text: "Stretch X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
@@ -2951,7 +2992,7 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isCustomImage(root.selectedElement)
                         Text { text: "Media Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 0; top: 100 }
+                        TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 5; top: 100 }
                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }
                         SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }
