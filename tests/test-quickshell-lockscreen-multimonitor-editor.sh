@@ -45,6 +45,24 @@ for needle in required:
     if needle not in text:
         raise SystemExit(f"FAIL: missing multi-monitor editor contract: {needle}")
 
+# QML rejects duplicate property declarations while constructing the singleton.
+# Keep the session/profile state single-owned so the desktop shell can start.
+singleton_properties = [
+    'property var draftSharedProfile:',
+    'property var draftMonitorOverrides:',
+    'property string activeMonitorName:',
+    'property bool profileLoadActive:',
+    'property var profileUndoStacks:',
+    'property var profileRedoStacks:',
+]
+for declaration in singleton_properties:
+    count = text.count(declaration)
+    if count != 1:
+        raise SystemExit(
+            f'FAIL: lockscreen editor property must be declared exactly once: '
+            f'{declaration} (found {count})'
+        )
+
 # Monitor switching must operate only on the in-memory session and never reload
 # persisted state. Persisted state is loaded when the editor session opens.
 switch = re.search(r'function switchActiveMonitor\(name\)\s*\{(.*?)\n\s*\}', text, re.S)
