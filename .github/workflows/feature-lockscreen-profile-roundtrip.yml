@@ -17,3 +17,5 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y jq
       - name: Profile save parity
         run: bash tests/test-quickshell-lockscreen-profile-save-parity.sh
+      - name: Per-display resolver contracts
+        run: node tests/test-quickshell-lockscreen-monitor-profile-resolver.mjs
