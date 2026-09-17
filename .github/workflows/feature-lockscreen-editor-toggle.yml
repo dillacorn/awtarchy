@@ -37,7 +37,9 @@ jobs:
       - name: Monitor contrast regression
         run: bash tests/test-quickshell-lockscreen-monitor-contrast.sh
       - name: Apply per-monitor weather and timezones
-        run: python3 .github/scripts/feature-lockscreen-monitor-profile-task6.py
+        run: |
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task6.py
+          python3 .github/scripts/feature-lockscreen-monitor-profile-task6-fix.py
       - name: Monitor weather regression
         run: bash tests/test-quickshell-lockscreen-monitor-weather.sh
       - name: Verify weather, contrast, and existing contracts
