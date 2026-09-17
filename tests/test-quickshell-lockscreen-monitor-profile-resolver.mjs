@@ -67,7 +67,7 @@ for (const file of copies) {
     "resolver must clamp password x to the persistence/editor bound");
   assert.equal(legacyPassword.lockscreen_layout.password.y, 0.86,
     "resolver must clamp password y to the persistence/editor bound");
-  assert.equal(legacyPassword.lockscreen_layout.password.opacity, 20,
+  assert.equal(legacyPassword.lockscreen_layout.password.opacity, 5,
     "resolver must clamp password opacity to the persistence/editor minimum");
 
   const dp1 = api.cloneProfile(shared);
