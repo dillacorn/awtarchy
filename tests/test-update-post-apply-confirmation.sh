@@ -13,7 +13,6 @@ bash -n "$RUNTIME"
 
 python3 - "$RUNTIME" <<'PY'
 from pathlib import Path
-import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -64,6 +63,7 @@ PY
 
 python3 - "$ROOT/local/bin/awtarchy" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
