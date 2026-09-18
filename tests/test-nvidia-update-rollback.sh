@@ -26,6 +26,18 @@ grep -Fq 'awtarchy nvidia-rollback' "$LAUNCHER" \
   || fail 'launcher does not expose the NVIDIA rollback command'
 grep -Fq 'Rollback last NVIDIA driver update' "$LAUNCHER" \
   || fail 'maintenance menu does not expose NVIDIA rollback'
+grep -Fq 'NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"' "$RECONCILER" \
+  || fail 'production NVIDIA rollback state is not rooted under /var/lib/awtarchy'
+grep -Fq 'validate_nvidia_rollback_storage' "$RECONCILER" \
+  || fail 'NVIDIA rollback does not validate privileged restore state'
+grep -Fq 'root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages/$archive_name"' "$RECONCILER" \
+  || fail 'NVIDIA rollback archives are not revalidated before pacman -U'
+grep -Fq 'trusted_nvidia_cache_archive "$candidate"' "$RECONCILER" \
+  || fail 'NVIDIA rollback snapshot accepts untrusted cache archives'
+if grep -Fq 'AWTARCHY_NVIDIA_ROLLBACK_DIR' "$RECONCILER" \
+  || grep -Fq 'AWTARCHY_YAY_CACHE_HOME' "$RECONCILER"; then
+  fail 'production rollback path still accepts user-controlled privileged package sources'
+fi
 
 python3 - "$RECONCILER" <<'PY'
 from pathlib import Path
@@ -50,13 +62,35 @@ if "apply_nvidia_rollback 1\n      return 20" not in text:
 print('NVIDIA upgrade gate ordering OK')
 PY
 
-rollback="$TMP/rollback"
-cache="$TMP/cache"
+rollback_root="$TMP/nvidia-root"
+rollback="$rollback_root/nvidia-driver-rollback"
+test_reconciler="$TMP/awtarchy-package-reconcile.test.sh"
 fakebin="$TMP/bin"
 state="$TMP/pacman-state"
 runtime="$TMP/runtime.sh"
-mkdir -p "$rollback/packages" "$cache" "$fakebin" "$TMP/home"
+mkdir -p "$rollback/packages" "$fakebin" "$TMP/home"
 : >"$runtime"
+
+python3 - "$RECONCILER" "$test_reconciler" "$rollback_root" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+out = Path(sys.argv[2])
+rollback_root = sys.argv[3]
+
+source = source.replace(
+    'NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"',
+    f'NVIDIA_ROLLBACK_ROOT="{rollback_root}"',
+    1,
+)
+start = source.index("root_owned_nonwritable_path() {")
+end = source.index("\n}\n\ntrusted_nvidia_cache_archive()", start)
+source = source[:start] + "root_owned_nonwritable_path() {\n  return 0\n}" + source[end + 2:]
+out.write_text(source, encoding="utf-8")
+PY
+chmod +x "$test_reconciler"
+bash -n "$test_reconciler"
 
 cat >"$rollback/metadata" <<'EOF'
 status=available
@@ -144,9 +178,8 @@ if ! PATH="$fakebin:/usr/bin:/bin" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
-  AWTARCHY_NVIDIA_ROLLBACK_DIR="$rollback" \
   FAKE_PACMAN_STATE="$state" \
-  "$RECONCILER" --nvidia-rollback >/dev/null
+  "$test_reconciler" --nvidia-rollback >/dev/null
 then
   fail 'saved NVIDIA rollback command failed'
 fi
@@ -166,9 +199,8 @@ if PATH="$fakebin:/usr/bin:/bin" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
-  AWTARCHY_NVIDIA_ROLLBACK_DIR="$rollback" \
   FAKE_PACMAN_STATE="$state" \
-  "$RECONCILER" --nvidia-rollback >/dev/null 2>&1
+  "$test_reconciler" --nvidia-rollback >/dev/null 2>&1
 then
   fail 'stale NVIDIA rollback point was accepted after later package changes'
 fi
