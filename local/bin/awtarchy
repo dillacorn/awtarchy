@@ -710,6 +710,23 @@ ensure_latest_updater() {
   fi
 }
 
+refresh_menu_updater_if_available() {
+  [[ ${AWTARCHY_SKIP_UPDATE_CHECK:-0} == 1 ]] && return 0
+
+  local installed remote=""
+  installed="$(installed_updater_commit)"
+  remote="$(updater_branch_head 2>/dev/null || true)"
+  if [[ -z $remote ]]; then
+    printf 'WARN: Could not check Awtarchy main for maintenance-command updates; opening the installed menu.\n' >&2
+    return 0
+  fi
+
+  [[ $installed == "$remote" ]] && return 0
+
+  self_update "$remote"
+  AWTARCHY_SKIP_UPDATE_CHECK=1 exec "${TARGET_HOME}/.local/bin/awtarchy"
+}
+
 print_version_status() {
   local installed remote="" updater_status="Remote main unavailable"
   local config latest="" config_status="Latest release unavailable"
@@ -1507,6 +1524,7 @@ main() {
       die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
       ;;
     "")
+      refresh_menu_updater_if_available
       local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
       if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
         bash "$report_helper" prompt-pending || true
