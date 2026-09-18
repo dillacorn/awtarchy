@@ -81,6 +81,7 @@ jobs:
           bash -n tests/test-aur-helper-policy.sh
           bash -n tests/test-aur-scanner-docs.sh
           bash -n tests/test-awtarchy-tips-content.sh
+          bash -n tests/test-yazi-clipboard.sh
           bash -n tests/test-aur-scanner-retirement.sh
           bash -n tests/test-package-reconciler.sh
           bash -n tests/test-package-reconciler-alternatives.sh
@@ -197,6 +198,7 @@ jobs:
             tests/test-aur-scanner-updater-migration.sh \
             tests/test-aur-helper-policy.sh \
             tests/test-aur-scanner-docs.sh \
+            tests/test-yazi-clipboard.sh \
             tests/test-aur-scanner-retirement.sh \
             tests/test-package-reconciler.sh \
             tests/test-package-reconciler-alternatives.sh \
@@ -290,6 +292,7 @@ jobs:
           bash tests/test-aur-helper-policy.sh
           bash tests/test-aur-scanner-docs.sh
           bash tests/test-awtarchy-tips-content.sh
+          bash tests/test-yazi-clipboard.sh
           bash tests/test-aur-scanner-retirement.sh
           bash tests/test-package-reconciler.sh
           bash tests/test-package-reconciler-alternatives.sh
