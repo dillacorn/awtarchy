@@ -616,6 +616,7 @@ installed_nvidia_package_names() {
 
 current_kernel_package_names() {
   local pkgbase_file pkg
+
   if [[ -n "${AWTARCHY_KERNEL_PKGBASES:-}" ]]; then
     tr ' ' '\n' <<<"$AWTARCHY_KERNEL_PKGBASES" | sed '/^$/d' | LC_ALL=C sort -u
     return 0
@@ -676,7 +677,7 @@ prepare_nvidia_rollback_snapshot() {
   mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
   (( ${#candidates[@]} )) || return 2
 
-  NVIDIA_ROLLBACK_PENDING="${STATE_DIR}/.nvidia-driver-rollback.pending.$"
+  NVIDIA_ROLLBACK_PENDING="${STATE_DIR}/.nvidia-driver-rollback.pending.$$"
   rm -rf -- "$NVIDIA_ROLLBACK_PENDING"
   mkdir -p -- "$NVIDIA_ROLLBACK_PENDING/packages"
   : >"$NVIDIA_ROLLBACK_PENDING/before.tsv"
@@ -714,12 +715,184 @@ prepare_nvidia_rollback_snapshot() {
 finalize_nvidia_rollback_snapshot() {
   local pkg old_version archive_name current_version complete=1 changed=0
   local changes_file=""
+
   [[ -n "$NVIDIA_ROLLBACK_PENDING" && -d "$NVIDIA_ROLLBACK_PENDING" ]] || return 1
 
   changes_file="$NVIDIA_ROLLBACK_PENDING/changes.tsv"
   : >"$changes_file"
 
-  while IFS=choose_ly_action() {
+  while IFS=$'\t' read -r pkg old_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    [[ "$current_version" != "$old_version" ]] || continue
+
+    changed=1
+    if [[ -z "$archive_name" || ! -f "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" ]]; then
+      complete=0
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$pkg" "$old_version" "$current_version" "$archive_name" >>"$changes_file"
+  done <"$NVIDIA_ROLLBACK_PENDING/before.tsv"
+
+  if (( changed == 0 )); then
+    rm -rf -- "$NVIDIA_ROLLBACK_PENDING"
+    NVIDIA_ROLLBACK_PENDING=""
+    NVIDIA_ROLLBACK_CHANGED=0
+    NVIDIA_ROLLBACK_COMPLETE=0
+    return 1
+  fi
+
+  NVIDIA_ROLLBACK_CHANGED=1
+  NVIDIA_ROLLBACK_COMPLETE="$complete"
+  {
+    printf 'status=available\n'
+    printf 'finalized_at=%s\n' "$(date -Iseconds)"
+    printf 'rollback_complete=%s\n' "$complete"
+  } >>"$NVIDIA_ROLLBACK_PENDING/metadata"
+
+  rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"
+  if [[ -e "$NVIDIA_ROLLBACK_DIR" ]]; then
+    mv -- "$NVIDIA_ROLLBACK_DIR" "${NVIDIA_ROLLBACK_DIR}.previous"
+  fi
+  if ! mv -- "$NVIDIA_ROLLBACK_PENDING" "$NVIDIA_ROLLBACK_DIR"; then
+    [[ -e "${NVIDIA_ROLLBACK_DIR}.previous" ]] \
+      && mv -- "${NVIDIA_ROLLBACK_DIR}.previous" "$NVIDIA_ROLLBACK_DIR"
+    die "Could not save the NVIDIA rollback point."
+  fi
+  rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"
+  NVIDIA_ROLLBACK_PENDING=""
+  return 0
+}
+
+print_nvidia_rollback_changes() {
+  local pkg old_version current_version archive_name
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] || return 1
+  printf '%s\n' 'NVIDIA/kernel packages changed:' >/dev/tty
+  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+    [[ -n "$pkg" ]] || continue
+    printf '  %s: %s -> %s\n' "$pkg" "$old_version" "$current_version" >/dev/tty
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+}
+
+apply_nvidia_rollback() {
+  local assume_yes="${1:-0}" complete="" pkg old_version current_version archive_name
+  local -a archives=()
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
+    || die "No saved NVIDIA rollback point is available."
+
+  complete="$(sed -n 's/^rollback_complete=//p' "$NVIDIA_ROLLBACK_DIR/metadata" | tail -n1)"
+  [[ "$complete" == 1 ]] \
+    || die "The saved NVIDIA rollback point is incomplete; refusing an automatic partial driver rollback."
+
+  print_nvidia_rollback_changes
+  printf '\nRollback restores the saved NVIDIA packages and any kernel packages that changed with them.\n' >/dev/tty
+  printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no 'Restore the saved NVIDIA/kernel package versions now?' 0 \
+      || { log 'NVIDIA rollback canceled.'; return 0; }
+  fi
+
+  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    [[ "$(package_version "$pkg" || true)" != "$old_version" ]] || continue
+    [[ -n "$archive_name" && -f "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" ]] \
+      || die "Rollback archive is missing for ${pkg} ${old_version}."
+    archives+=("$NVIDIA_ROLLBACK_DIR/packages/$archive_name")
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  if (( ${#archives[@]} == 0 )); then
+    log 'Saved NVIDIA/kernel versions are already restored.'
+    return 0
+  fi
+
+  as_root pacman -U --needed --noconfirm "${archives[@]}"
+
+  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    if [[ "$(package_version "$pkg" || true)" != "$old_version" ]]; then
+      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  {
+    printf 'restored_at=%s\n' "$(date -Iseconds)"
+    printf 'status=restored\n'
+  } >>"$NVIDIA_ROLLACK_DIR/metadata"
+
+  log 'NVIDIA/kernel rollback completed. Reboot before judging the restored driver.'
+}
+
+confirm_nvidia_system_upgrade() {
+  local snapshot_rc=0
+  local -a nvidia_packages=()
+
+  mapfile -t nvidia_packages < <(installed_nvidia_package_names)
+  (( ${#nvidia_packages[@]} )) || return 0
+
+  printf '\nNVIDIA drivers are installed on this system.\n' >/dev/tty
+  printf 'This package plan requires a full system upgrade, which may update the NVIDIA driver and kernel.\n' >/dev/tty
+  printf 'Awtarchy will save the currently cached driver/kernel packages first so they can be restored later.\n\n' >/dev/tty
+  printf 'Current NVIDIA packages:\n' >/dev/tty
+  pacman -Q "${nvidia_packages[@]}" 2>/dev/null | sed 's/^/  /' >/dev/tty || true
+  printf '\n' >/dev/tty
+
+  confirm_yes_no 'Allow the full system upgrade, including any available NVIDIA update?' 0 \
+    || { log 'Package reconciliation canceled before NVIDIA/system upgrade.'; return 1; }
+
+  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      log 'Saved a complete pre-upgrade NVIDIA/kernel rollback snapshot.'
+      ;;
+    1)
+      printf '\nAwtarchy could not cache every currently installed NVIDIA/kernel package.\n' >/dev/tty
+      printf 'A one-command rollback may be unavailable if one of those uncached packages changes.\n' >/dev/tty
+      confirm_yes_no 'Continue with the NVIDIA/system upgrade anyway?' 0 \
+        || {
+          rm -rf -- "$NVIDIA_ROLLBACK_PENDING"
+          NVIDIA_ROLLBACK_PENDING=""
+          log 'Package reconciliation canceled because a complete rollback point was unavailable.'
+          return 1
+        }
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      ;;
+    *)
+      die 'Could not prepare the NVIDIA rollback point.'
+      ;;
+  esac
+  return 0
+}
+
+offer_nvidia_post_upgrade_choice() {
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" ]] || return 0
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    log 'NVIDIA/kernel package versions did not change during the system upgrade.'
+    return 0
+  fi
+
+  printf '\n' >/dev/tty
+  print_nvidia_rollback_changes
+  printf '\n' >/dev/tty
+
+  if (( NVIDIA_ROLLACK_COMPLETE == 1 )); then
+    printf 'Rollback point saved. If a problem appears after reboot, run: awtarchy nvidia-rollback\n' >/dev/tty
+    printf 'Some NVIDIA problems only appear after reboot or when launching a game.\n' >/dev/tty
+    if ! confirm_yes_no 'Keep the new NVIDIA/kernel versions for now?' 1; then
+      apply_nvidia_rollback 1
+    fi
+  else
+    warn 'NVIDIA/kernel packages changed, but the saved rollback point is incomplete.'
+    warn 'Awtarchy will not attempt an unsafe partial automatic rollback.'
+  fi
+}
+
+choose_ly_action() {
   install_ly=0
   enable_ly=0
 
