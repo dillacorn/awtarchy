@@ -430,12 +430,12 @@ hl.config({
 -- Fast sens:             47             -- eDPI: ~855
 -- Accel ratio:           47/35 = 1.34   -- fast/base = OutputCap
 
--- maccel setup:
+-- maccel dillacorns setup:
 --   - Mode:              Linear
 --   - SENS_MULT:         0.40
---   - Y/X Ratio:         1.00
+--   - Y/X Ratio:         1.18
 --   - INPUT_DPI:         1600
---   - Angle Rotation:    0.0
+--   - Angle Rotation:    -0.8
 --   - Accel:             1000
 --   - Offset:            15
 --   - OutputCap:         1.34
@@ -449,10 +449,15 @@ hl.config({
 --   Simple formula:
 --     Y/X Ratio = display width / stretched resolution width
 --
---   Common values:
+--   Common default guide values:
 --   - 16:9 native:       1.00     -- 1920x1080
 --   - 16:10 stretched:   1.11     -- 1728x1080 stretched to 1920x1080
 --   - 4:3 stretched:     1.33     -- 1440x1080 stretched to 1920x1080
+--
+--   dillacorn's preferred 1.18 baseline:
+--   - 16:9 native:       1.18     -- 1920x1080
+--   - 16:10 stretched:   1.31     -- 1728x1080 stretched to 1920x1080
+--   - 4:3 stretched:     1.57     -- 1440x1080 stretched to 1920x1080
 --
 --   4:3 stretched example:
 --     1920 / 1440 = 1.33
