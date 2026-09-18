@@ -785,6 +785,13 @@ Singleton {
         statusMessage = "Saved configuration overwritten. Ctrl+S to persist.";
     }
 
+    function confirmSavedConfigurationConfirmDialog() {
+        if (savedConfigurationConfirmMode === "delete")
+            confirmDeleteSavedConfiguration();
+        else if (savedConfigurationConfirmMode === "overwrite")
+            confirmOverwriteSavedConfiguration();
+    }
+
     function cancelSavedConfigurationConfirm() {
         savedConfigurationConfirmMode = "";
     }
@@ -2604,6 +2611,8 @@ Singleton {
         id: editorWindow
         Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; onActivated: root.selectAllElements() }
         Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
+        Shortcut { id: savedConfigurationConfirmReturnShortcut; sequence: "Return"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
+        Shortcut { id: savedConfigurationConfirmEnterShortcut; sequence: "Enter"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
         Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
         visible: false; color: "transparent"; WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive; aboveWindows: true; exclusionMode: ExclusionMode.Ignore
@@ -2729,12 +2738,7 @@ Singleton {
                         SettingsButton {
                             label: root.savedConfigurationConfirmMode === "delete" ? "Delete" : "Overwrite"
                             textSize: 9
-                            onClicked: {
-                                if (root.savedConfigurationConfirmMode === "delete")
-                                    root.confirmDeleteSavedConfiguration();
-                                else
-                                    root.confirmOverwriteSavedConfiguration();
-                            }
+                            onClicked: root.confirmSavedConfigurationConfirmDialog()
                         }
                     }
                 }

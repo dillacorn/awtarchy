@@ -36,6 +36,12 @@ require_text "$EDITOR" 'if (savedConfigurationConfirmMode.length > 0) {' \
     'Escape does not cancel saved-configuration confirmations first'
 require_text "$EDITOR" 'onAccepted: root.confirmSavedConfigurationNameDialog()' \
     'Enter does not submit the saved-configuration naming field'
+require_text "$EDITOR" 'Shortcut { id: savedConfigurationConfirmReturnShortcut; sequence: "Return"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }' \
+    'Return does not confirm saved-configuration delete/overwrite dialogs'
+require_text "$EDITOR" 'Shortcut { id: savedConfigurationConfirmEnterShortcut; sequence: "Enter"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }' \
+    'Enter does not confirm saved-configuration delete/overwrite dialogs'
+require_text "$EDITOR" 'function confirmSavedConfigurationConfirmDialog() {' \
+    'saved-configuration confirmation dialogs have no shared keyboard-confirm action'
 reject_text "$EDITOR" 'Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut' \
     'Ctrl+S still relies on a singleton-level application shortcut'
 reject_text "$EDITOR" 'Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut' \
@@ -59,12 +65,15 @@ import sys
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 window = text.find("    PanelWindow {\n        id: editorWindow")
 save = text.find("Shortcut { id: editorSaveShortcut;")
+confirm_return = text.find("Shortcut { id: savedConfigurationConfirmReturnShortcut;")
+confirm_enter = text.find("Shortcut { id: savedConfigurationConfirmEnterShortcut;")
 cancel = text.find("Shortcut { id: editorCancelShortcut;")
 focus = text.find("        Rectangle {\n            id: editorFocus", window)
-if min(window, save, cancel, focus) < 0:
+if min(window, save, confirm_return, confirm_enter, cancel, focus) < 0:
     raise SystemExit("FAIL: could not locate editor window shortcut structure")
-if not (window < save < focus and window < cancel < focus):
-    raise SystemExit("FAIL: save/cancel shortcuts are not children of the editor PanelWindow")
+if not (window < save < focus and window < confirm_return < focus
+        and window < confirm_enter < focus and window < cancel < focus):
+    raise SystemExit("FAIL: editor/modal shortcuts are not children of the editor PanelWindow")
 PY
 
 printf 'PASS: lockscreen editor shortcuts and toggle routing are correct\n'
