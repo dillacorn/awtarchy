@@ -93,10 +93,10 @@ jq -e '
 # Unlocked refresh aggregates only profiles that actually show weather.
 require_text "$WEATHER" 'function requiredUnitModes()' \
     'unlocked weather service has no per-profile unit aggregation'
-require_text "$WEATHER" 'BarState.lockscreenSharedProfile()' \
-    'unlocked weather service does not inspect Shared lockscreen state'
-require_text "$WEATHER" 'BarState.lockscreenMonitorOverrides()' \
-    'unlocked weather service does not inspect monitor overrides'
+require_text "$WEATHER" 'BarState.lockscreenLastEditedProfile()' \
+    'unlocked weather service does not inspect the last-edited fallback profile'
+require_text "$WEATHER" 'BarState.lockscreenMonitorProfiles()' \
+    'unlocked weather service does not inspect per-display profiles'
 require_text "$WEATHER" 'profile.lockscreen_show_weather === true' \
     'unlocked weather service refreshes units for profiles that hide weather'
 require_text "$WEATHER" '"refresh-set"' \
