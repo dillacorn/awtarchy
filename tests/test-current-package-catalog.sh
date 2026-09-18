@@ -37,7 +37,11 @@ for stale in bridge-utils cheese termdown xcursor-comix qemu-guest-agent; do
     fi
 done
 
-grep -Eq '^[[:space:]]+termdown[[:space:]]*
+grep -Eq '^[[:space:]]+termdown[[:space:]]*$' "$RECONCILER" \
+    || fail "termdown is not tracked as a retired package"
+grep -Eq '^[[:space:]]+qemu-guest-agent[[:space:]]*$' "$RECONCILER" \
+    || fail "qemu-guest-agent is not tracked as retired from the bare-metal default catalog"
+
 for pkg in moonlight-qt mousai gamemode gamescope virt-manager qemu qemu-hw-usb-host virt-viewer vde2 libguestfs swtpm; do
     contains_token "$pkg" "$optional_arch" \
         || fail "${pkg} is not in the optional Arch package catalog"
