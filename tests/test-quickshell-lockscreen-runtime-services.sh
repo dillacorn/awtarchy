@@ -46,10 +46,10 @@ require_text "$WEATHER" 'quickshell_lockscreen_weather.sh' \
     'LockscreenWeather does not use the dedicated weather helper'
 require_text "$WEATHER" 'if (profile.lockscreen_show_weather === true)' \
     'LockscreenWeather does not honor per-profile Weather visibility'
-require_text "$WEATHER" 'addProfile(BarState.lockscreenSharedProfile());' \
-    'LockscreenWeather does not include the Shared profile when deriving refresh modes'
-require_text "$WEATHER" 'BarState.lockscreenMonitorOverrides()' \
-    'LockscreenWeather does not include Individual monitor profiles when deriving refresh modes'
+require_text "$WEATHER" 'addProfile(BarState.lockscreenLastEditedProfile());' \
+    'LockscreenWeather does not include the last-edited fallback profile when deriving refresh modes'
+require_text "$WEATHER" 'BarState.lockscreenMonitorProfiles()' \
+    'LockscreenWeather does not include per-display profiles when deriving refresh modes'
 require_text "$WEATHER" 'BarState.lockscreenWeatherLocation()' \
     'LockscreenWeather does not use the explicit saved location'
 require_text "$WEATHER" 'interval: 1200000' \
@@ -77,10 +77,10 @@ require_text "$APP_STATE" 'normalize_lockscreen_wallpaper_path()' \
     'application state does not validate the dedicated lockscreen wallpaper path'
 require_text "$LOCK_SHELL" '/awtarchy/quickshell-state.json' \
     'secure lock shell does not read the local persisted Quickshell state cache'
-require_text "$LOCK_SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' \
-    'secure lock shell does not load the Shared presentation profile from persisted state'
-require_text "$LOCK_SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' \
-    'secure lock shell does not load Individual monitor presentation profiles from persisted state'
+require_text "$LOCK_SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure lock shell does not load per-display presentation profiles from persisted state'
+require_text "$LOCK_SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure lock shell does not load the last-edited fallback profile from persisted state'
 reject_text "$WALLPAPER" 'backend_state.tsv' \
     'LockWallpaperState still follows desktop Awtwall backend state'
 reject_text "$WALLPAPER" 'FileView {' \
