@@ -401,35 +401,36 @@ article_text() {
     case "$1" in
         getting-started)
             cat <<'TEXT'
-Awtarchy is an overlay for a normal Arch Linux installation. It manages the Hyprland/Quickshell environment, helper scripts, package selections, desktop integration, and maintenance tooling.
+Awtarchy is an overlay for a normal Arch Linux install. It manages the Hyprland/Quickshell desktop, helper scripts, packages, and maintenance tools.
 
-Start here:
+Useful starting points:
+
   awtarchy
       Opens the maintenance menu.
 
   awtarchy update
-      Updates managed Awtarchy files. Preserve mode is the normal choice when you have local configuration changes you want to keep.
+      Updates managed files. Use Preserve when you want to keep local changes.
 
   SUPER+ALT+BACKSPACE
       Opens Quickshell Quick Settings.
 
   SUPER+D or ALT+P
-      Opens the Quickshell application launcher.
+      Opens the application launcher.
 
-Use reset/reinstall when you intentionally want Awtarchy's managed defaults written back over managed configuration. Use updater preserve/review workflows when local changes matter.
+Use reset/reinstall only when you intentionally want Awtarchy's managed defaults written back over your managed configuration.
 TEXT
             ;;
         update-reset)
             cat <<'TEXT'
-Awtarchy has two different maintenance intents:
+Awtarchy has two maintenance paths:
 
 UPDATE / PRESERVE
-  Use this when you want new managed files while retaining local changes that differ from Awtarchy's previous baseline. The updater can preserve, review, or clean changed files depending on the selected mode.
+  Use this for normal updates when you want to keep local edits. Changed managed files can be preserved and reviewed instead of overwritten.
 
 RESET / REINSTALL
-  Use this when you intentionally want Awtarchy's managed configuration restored to repository defaults. Treat it as destructive for managed configs.
+  Use this when you intentionally want Awtarchy's managed defaults restored over managed configuration.
 
-Before a major migration, review updater output and keep the generated backups until the new session has been tested.
+Keep generated backups until you have tested the updated session.
 TEXT
             ;;
         login-tips)
@@ -439,7 +440,7 @@ Awtarchy Tips can open automatically at login.
 Current state file:
   $DISABLE_FILE
 
-If the file exists, autostart tips are disabled. The Home menu has a "Tips on Login" row that toggles this state without requiring a command.
+If this file exists, login tips are disabled. Toggle "Tips on Login" from the Home menu to change it.
 TEXT
             ;;
         keybind-core)
@@ -457,7 +458,7 @@ Core launchers
   SUPER+C                      Clipboard history
   SUPER+ALT+BACKSPACE          Quick Settings
 
-Many actions have both ALT-oriented and SUPER-oriented forms. The noalt submap keeps the SUPER-oriented workflow available when ALT needs to pass through to an application.
+Many actions also have SUPER-oriented bindings so noalt mode can leave ALT available to applications.
 TEXT
             ;;
         keybind-window)
@@ -524,85 +525,89 @@ TEXT
             ;;
         quickshell-bar)
             cat <<'TEXT'
-The Awtarchy bar is owned by Quickshell and configured per display.
+The Awtarchy bar is provided by Quickshell and stores its settings per display.
 
-Bar placement can be moved between top, bottom, left, and right. Holding Alt while dragging the bar lifts it and shows destination-edge feedback. Horizontal flicking allows left/right placement without requiring the pointer to physically reach the edge.
+Move it between top, bottom, left, and right from Quick Settings, or hold Alt while dragging the bar. A horizontal flick can move it left or right without dragging all the way to the edge.
 
-Quick Settings includes per-display bar appearance controls for thickness, text size, and icon size, plus reset and multi-display targeting.
+Quick Settings also controls bar visibility, auto-hide, workspace visibility, themes, icons, thickness, and text/icon size.
 TEXT
             ;;
         quickshell-settings)
             cat <<'TEXT'
-Quick Settings opens with SUPER+ALT+BACKSPACE or directly from the bar.
+Quick Settings opens with SUPER+ALT+BACKSPACE or from the bar.
 
 It includes:
   - Internal and external display brightness
-  - Bar visibility and edge placement
-  - Night Light
-  - Digital vibrance
+  - Bar layout, visibility, themes, and sizing
+  - Night Light and digital vibrance
   - Hyprland submap switching
-  - Wallpaper picker
+  - Wallpaper controls
+  - Awtarchy cursor and lockscreen settings
   - Awtarchy Tips
-  - smtty
-  - sched-ext controls
+  - smtty and sched-ext controls
 
-The gear panel stores Quick Settings size, text scale, icon scale, and capture visibility per display.
+The gear panel controls Quick Settings size, text scale, icon scale, layout, and capture visibility per display.
+TEXT
+            ;;
+        quickshell-lockscreen)
+            cat <<'TEXT'
+Lockscreen controls are in Quick Settings > Awtarchy > Edit.
+
+Expand Lockscreen for quick controls such as animation, background, mouse interaction, logo physics, entry transition, visualizer, weather location, and Restore Awtarchy Defaults.
+
+Use Edit Layout for the full editor, or press SUPER+ALT+E. The editor keeps a separate profile for each connected display and can copy configurations between displays. It supports movable/scalable elements, custom text and timezone clocks, custom media, image/GIF/MP4 backgrounds, visualizer settings, and reusable saved configurations.
+
+  Ctrl+S                       Save without closing
+  Esc                          Cancel / close
+  Enter                        Confirm configuration dialogs
 TEXT
             ;;
         quickshell-launcher)
             cat <<'TEXT'
-The Quickshell application launcher replaces the older external launcher workflow.
+Open the Quickshell application launcher with SUPER+D or ALT+P.
 
-Open it with SUPER+D or ALT+P. It reads desktop applications, supports search, and follows the focused display/bar placement behavior.
-
-Firefox web-app desktop entries are treated as normal launchable desktop applications when their .desktop entries are valid.
+It searches installed desktop applications and opens on the focused display. Firefox web-app entries also appear when their .desktop files are valid.
 TEXT
             ;;
         quickshell-notifications)
             cat <<'TEXT'
-Notifications and clipboard history are native Awtarchy Quickshell surfaces.
+Notifications and clipboard history are native Quickshell surfaces.
 
-Notifications support swipe-to-dismiss and close correctly when workspace/flyout state changes.
+Notifications can be swiped away and follow the current workspace/flyout state.
 
-Clipboard history opens with SUPER+C and uses cliphist as the storage backend. Text and image clipboard entries are watched from the Hyprland session.
+Clipboard history opens with SUPER+C and uses cliphist for stored text and image entries.
 TEXT
             ;;
         quickshell-network)
             cat <<'TEXT'
-Network and Bluetooth flyouts are native Quickshell surfaces.
+Network and Bluetooth are native Quickshell flyouts.
 
-Network uses NetworkManager state for Wi-Fi and wired connections, and exposes the Awtarchy WireGuard workflow from ~/vpn.
+Network uses NetworkManager for Wi-Fi and wired connections and includes Awtarchy's WireGuard workflow from ~/vpn.
 
-Bluetooth uses the Quickshell Bluetooth API for adapter, discovery, pairing, connection, and rfkill state.
+Bluetooth handles adapter power, discovery, pairing, connections, and rfkill state.
 
-Both surfaces support capture privacy controls so sensitive flyout contents can be hidden from recordings.
+Both flyouts support capture privacy controls.
 TEXT
             ;;
         quickshell-privacy)
             cat <<'TEXT'
-Awtarchy uses Hyprland no-screen-share rules for sensitive windows and Quickshell surfaces.
+Sensitive Awtarchy windows and Quickshell flyouts can be excluded from screen capture.
 
-Quickshell privacy controls are per surface. When protection is enabled, the protected flyout is excluded from capture rather than blacking the entire desktop.
-
-Use the capture setting inside the relevant flyout only when you intentionally want that surface visible in recordings or screen shares.
+Protection is per surface, so hiding one flyout does not black out the whole desktop. Only disable protection when you intentionally want that surface visible in a recording or screen share.
 TEXT
             ;;
         display-ddc)
             cat <<'TEXT'
-Brightness uses Awtarchy's hypr-ddc-brightness.sh helper. Internal LVDS/eDP panels use
-brightnessctl, while external monitors use ddcutil.
+Brightness uses Awtarchy's hypr-ddc-brightness.sh helper.
 
-Quick Settings targets displays by Hyprland connector identity. The helper debounces repeated
-changes, and its external-monitor path caches DDC bus mappings so rapid input does not have to
-block on every physical DDC transaction.
+Laptop eDP/LVDS panels use brightnessctl. External monitors use ddcutil and need DDC/CI enabled in the monitor's own menu.
 
 Useful checks:
   brightnessctl -c backlight --list
   ddcutil detect
   hyprctl monitors
 
-If an external monitor fails, verify its DDC/CI setting in the monitor OSD before changing
-Awtarchy configuration.
+If an external monitor will not respond, check DDC/CI first before changing Awtarchy configuration.
 TEXT
             ;;
         display-night)
@@ -630,28 +635,52 @@ TEXT
             ;;
         display-multi)
             cat <<'TEXT'
-Awtarchy treats bar and flyout appearance as per-display state.
+Bar and flyout appearance is saved per display.
 
-Quick Settings can edit the current display, copy appearance settings to selected displays, or reset a display to Awtarchy defaults. Bar thickness, text scale, and icon scale are independent values.
+Quick Settings can edit the current display, copy appearance settings to other displays, or reset a display to Awtarchy defaults. Bar thickness, text scale, and icon scale are independent.
 
 Use:
   hyprctl monitors
 
-to confirm connector names and active monitor state when troubleshooting a multi-monitor layout.
+to check connector names when troubleshooting a multi-monitor layout.
 TEXT
             ;;
         gaming-kernels)
             cat <<'TEXT'
-Kernel guidance
+Kernel choices
 
 Stock Arch kernel:
-  Use it when you want the simplest supported Arch path. It is a better default than maintaining a custom-built kernel you do not specifically need.
+  The simplest default path.
 
 linux-lts:
-  Keep it available as a conservative fallback when useful.
+  Useful as a conservative fallback.
 
 linux-cachyos:
-  Awtarchy supports CachyOS kernel naming in its GPU/kernel handling. It is the preferred optional performance-oriented path when you want a tuned kernel without maintaining a local custom kernel build.
+  An optional performance-oriented kernel that Awtarchy supports without requiring you to maintain a local custom kernel build.
+TEXT
+            ;;
+        gaming-maccel)
+            cat <<'TEXT'
+maccel is an optional mouse acceleration and sensitivity tool.
+
+Open it with:
+  ALT+SHIFT+M
+  SUPER+SHIFT+M
+
+Awtarchy keeps Hyprland mouse acceleration flat so maccel can handle the acceleration curve when you use it.
+
+Useful settings:
+  SENS_MULT       Base sensitivity multiplier
+  INPUT_DPI       Your mouse hardware DPI
+  Y/X Ratio       Vertical sensitivity relative to horizontal
+  Angle Rotation  Corrects for sensor/grip angle
+  Accel / Offset / OutputCap
+                  Shape and limit the acceleration curve
+
+The maccel notes in ~/.config/hypr/hyprland.lua include a worked example, stretched-resolution Y/X ratios, angle-rotation calibration, and the OutputCap formula. The current example uses a 1.18 native Y/X baseline; treat it as a starting point, not a required value.
+
+Upstream:
+  https://github.com/Gnarus-G/maccel
 TEXT
             ;;
         gaming-smtty)
@@ -679,42 +708,37 @@ TEXT
             ;;
         packages-selector)
             cat <<'TEXT'
-The Awtarchy installer has built-in package selection for Arch repository packages, AUR packages, and Flatpaks.
+The Awtarchy installer lets you choose Arch repository packages, AUR packages, and Flatpaks before installation.
 
-The terminal UI is implemented directly in Bash. It does not require fzf, gum, dialog, or whiptail.
-
-Arch package categories can be edited before install. AUR additions are resolved against AUR search results rather than blindly accepting an arbitrary package string.
+Keep normal Arch packages in the Arch package selector. Use the AUR path only for software that actually requires the AUR.
 TEXT
             ;;
         packages-aur)
             cat <<'TEXT'
 Awtarchy delegates AUR scanning and installation to upstream aur-scanner.
 
-Use yay for read-only AUR search and query commands such as:
+Read-only yay commands are still useful:
   yay -Ss package
   yay -Si package
   yay -Qm
 
-Awtarchy's interactive shell blocks package-changing yay/paru transactions. Install AUR packages with:
+Awtarchy blocks package-changing yay/paru transactions from its interactive shell. Install AUR packages with:
   aur-scan install package
 
 Use:
   aur-scan -h
-for the current upstream commands and options.
 
-Upstream documentation:
+for current options.
+
+Upstream:
   https://github.com/KiefStudioMA/ks-aur-scanner
-
-Keep Arch repository packages in the Arch package selector when they exist there. Use the AUR path only for packages that actually require it.
-
-For cleanup guidance, see the AUR and Arch orphan-removal Extra Notes.
 TEXT
             ;;
         packages-orphans)
             cat <<'TEXT'
-Package cleanup can remove software you still rely on if it is treated as an orphan incorrectly.
+Orphan cleanup can remove software you still use.
 
-Awtarchy keeps dedicated Extra Notes for Arch and AUR orphan cleanup. Read the relevant note before executing removal commands, especially on systems with alternate kernels or manually installed tooling.
+Read the Arch/AUR orphan-removal Extra Notes before removing anything, especially if you use alternate kernels or manually installed tools.
 TEXT
             ;;
         maintenance-update)
@@ -722,57 +746,53 @@ TEXT
 Normal maintenance starts with:
   awtarchy update
 
-Use preserve behavior when local configuration edits matter. The updater compares the previous managed baseline, your live file, and the new target so unchanged managed files can update cleanly while diverged files can be preserved/reviewed.
+Use Preserve when local configuration edits matter. Unchanged managed files update normally; changed files can be preserved and reviewed.
 
-Use clean/reset behavior only when you intend to replace local managed changes.
+Use reset/clean behavior only when you intend to replace local managed changes.
 TEXT
             ;;
         maintenance-review)
             cat <<'TEXT'
-Awtarchy updater backups are designed for manual review and recovery.
-
-Useful maintenance entry points include:
+Useful maintenance commands:
   awtarchy update
   awtarchy review
   awtarchy clean-backups --dry-run
 
-Review generated backups before deleting them after a large shell migration.
+Awtarchy keeps updater backups for review and recovery. Keep them until the updated configuration has been tested.
 TEXT
             ;;
         maintenance-reset)
             cat <<'TEXT'
-Reset/reinstall semantics are intentionally different from updater preserve mode.
+Reset/reinstall is different from a normal update.
 
-A reset/reinstall writes repository-managed defaults back over managed configuration. Use it when you want a known Awtarchy baseline, not when you are trying to preserve a personalized managed file.
-
-For day-to-day updates on a customized system, use updater preserve/review workflows instead.
+It writes Awtarchy's managed defaults back over managed configuration. Use it when you want a clean Awtarchy baseline, not when you are trying to preserve personalized managed files.
 TEXT
             ;;
         maintenance-cleaner)
             cat <<'TEXT'
-The backup cleaner can scan Awtarchy-managed locations and supports dry-run, age filtering, archive handling, and interactive keep/delete review.
+The backup cleaner scans Awtarchy-managed locations and supports dry-run, age filtering, archives, and interactive keep/delete review.
 
-Start safely:
+Start with:
   awtarchy clean-backups --dry-run
 
-Only remove backups once the corresponding updated configuration has been tested.
+Delete backups only after the updated configuration has been tested.
 TEXT
             ;;
         networking-network)
             cat <<'TEXT'
-The Quickshell Network flyout uses NetworkManager for normal Wi-Fi and wired connection management.
+The Quickshell Network flyout uses NetworkManager for normal Wi-Fi and wired connections.
 
-It can show local interface/router information and can request public IP information when the user explicitly asks for it. The Awtarchy Tips TUI itself does not perform public-IP or telemetry network requests.
+It shows local connection details and only requests public-IP information when you explicitly ask for it. Awtarchy Tips itself does not make public-IP or telemetry requests.
 TEXT
             ;;
         networking-wireguard)
             cat <<'TEXT'
-Awtarchy's Quickshell WireGuard workflow uses:
+Awtarchy's Quickshell WireGuard workflow reads profiles from:
   ~/vpn
 
-Put the WireGuard profiles you want exposed to the Network flyout in that directory. The flyout can list, activate/deactivate, and edit those profiles through Awtarchy's helper.
+Put the profiles you want available in the Network flyout there. The flyout can list, activate/deactivate, and edit them.
 
-Keep private keys protected. Do not paste complete WireGuard configurations into public bug reports.
+Keep private keys out of public bug reports.
 TEXT
             ;;
         networking-bluetooth)
@@ -786,17 +806,16 @@ TEXT
             ;;
         troubleshoot-hypr)
             cat <<'TEXT'
-Hyprland configuration check
+Hyprland configuration check:
 
-Run:
   hyprctl configerrors
 
-No output is the normal clean result. If errors appear after an Awtarchy update, identify the exact key/rule first instead of replacing your entire live Hyprland configuration just to test one fix.
+No output is the normal clean result. If errors appear after an update, fix the exact key or rule instead of replacing the whole configuration.
 TEXT
             ;;
         troubleshoot-shell)
             cat <<'TEXT'
-Restart Quickshell cleanly:
+Restart Quickshell:
   ~/.config/hypr/scripts/quickshell.sh restart
 
 Check status:
@@ -804,8 +823,6 @@ Check status:
 
 Log:
   ~/.cache/awtarchy/quickshell.log
-
-Awtarchy performs a full Quickshell process restart when component discovery requires more than a soft QML reload.
 TEXT
             ;;
         troubleshoot-portals)
@@ -819,7 +836,7 @@ Useful checks:
   systemctl --user status xdg-desktop-portal.service
   systemctl --user status xdg-desktop-portal-hyprland.service
 
-Fix the portal/backend mismatch before adding random environment overrides.
+Fix the portal/backend mismatch before adding extra environment overrides.
 TEXT
             ;;
         troubleshoot-ddc)
@@ -836,14 +853,18 @@ TEXT
             ;;
         troubleshoot-update)
             cat <<'TEXT'
-If an update produces a bad managed file, do not erase the updater evidence first.
+If an update produces a bad managed file, keep the updater evidence.
 
 1. Keep the generated backup.
-2. Review the live file against the backup/new target.
+2. Compare the live file with the backup/new target.
 3. Restore only the affected file if needed.
-4. Re-run the relevant syntax/config check.
+4. Re-run the relevant check.
 
-For Hyprland, use hyprctl configerrors. For Bash scripts, use bash -n. For Awtarchy's main maintenance path, dry-run/review modes should be used before destructive cleanup.
+For Hyprland use:
+  hyprctl configerrors
+
+For Bash scripts use:
+  bash -n <script>
 TEXT
             ;;
         *) printf 'No article is available for this item.\n' ;;
@@ -931,12 +952,13 @@ run_tui() {
     local -a quickshell_labels=(
         "Bar Basics"
         "Quick Settings"
+        "Lockscreen"
         "Application Launcher"
         "Notifications and Clipboard"
         "Network and Bluetooth"
         "Capture Privacy"
     )
-    local -a quickshell_ids=(quickshell-bar quickshell-settings quickshell-launcher quickshell-notifications quickshell-network quickshell-privacy)
+    local -a quickshell_ids=(quickshell-bar quickshell-settings quickshell-lockscreen quickshell-launcher quickshell-notifications quickshell-network quickshell-privacy)
 
     local -a display_labels=(
         "Brightness and DDC"
@@ -948,10 +970,11 @@ run_tui() {
 
     local -a gaming_labels=(
         "Kernel Choices"
+        "maccel Mouse Acceleration"
         "smtty, GameMode, and gamescope"
         "Sunshine and Moonlight"
     )
-    local -a gaming_ids=(gaming-kernels gaming-smtty gaming-streaming)
+    local -a gaming_ids=(gaming-kernels gaming-maccel gaming-smtty gaming-streaming)
 
     local -a package_labels=(
         "Package Selector"
