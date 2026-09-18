@@ -781,7 +781,7 @@ print_nvidia_rollback_changes() {
 }
 
 apply_nvidia_rollback() {
-  local assume_yes="${1:-0}" complete="" pkg old_version current_version archive_name
+  local assume_yes="${1:-0}" complete="" pkg old_version saved_current_version archive_name installed_version
   local -a archives=()
 
   [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
@@ -797,14 +797,25 @@ apply_nvidia_rollback() {
     printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
   fi
 
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" && -n "$saved_current_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" && "$installed_version" != "$saved_current_version" ]]; then
+      die "Saved NVIDIA rollback point no longer matches ${pkg}: expected ${saved_current_version} (or already-restored ${old_version}), found ${installed_version}. Refusing an automatic rollback after later package changes."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
   if (( assume_yes == 0 )); then
     confirm_yes_no 'Restore the saved NVIDIA/kernel package versions now?' 0 \
       || { log 'NVIDIA rollback canceled.'; return 0; }
   fi
 
-  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
     [[ -n "$pkg" && -n "$old_version" ]] || continue
-    [[ "$(package_version "$pkg" || true)" != "$old_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    [[ "$installed_version" != "$old_version" ]] || continue
     [[ -n "$archive_name" && -f "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" ]] \
       || die "Rollback archive is missing for ${pkg} ${old_version}."
     archives+=("$NVIDIA_ROLLBACK_DIR/packages/$archive_name")
@@ -817,7 +828,7 @@ apply_nvidia_rollback() {
 
   as_root pacman -U --needed --noconfirm "${archives[@]}"
 
-  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
     [[ -n "$pkg" && -n "$old_version" ]] || continue
     if [[ "$(package_version "$pkg" || true)" != "$old_version" ]]; then
       die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}."
