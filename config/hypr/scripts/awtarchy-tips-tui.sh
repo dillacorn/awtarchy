@@ -516,11 +516,11 @@ Submaps
   SUPER+ALT+M                  Toggle mouse mode
   SUPER+ALT+V                  Toggle VM mode
 
-noalt keeps SUPER-centric desktop controls available while reducing normal ALT bindings.
+noalt keeps the SUPER desktop controls available while leaving more ALT shortcuts to applications.
 
-mouse mode exposes direct keyboard-driven resize/mouse operations.
+mouse mode adds keyboard-driven mouse and resize controls.
 
-VM mode remaps desktop actions behind SUPER+ALT so common guest shortcuts can pass through. VM mode intentionally keeps its own SUPER+ALT+CTRL+V behavior for Wiremix.
+VM mode moves desktop actions behind SUPER+ALT so common guest shortcuts can pass through.
 TEXT
             ;;
         quickshell-bar)
@@ -553,9 +553,22 @@ TEXT
             cat <<'TEXT'
 Lockscreen controls are in Quick Settings > Awtarchy > Edit.
 
-Expand Lockscreen for quick controls such as animation, background, mouse interaction, logo physics, entry transition, visualizer, weather location, and Restore Awtarchy Defaults.
+Expand Lockscreen for quick controls:
+  - Animation and background
+  - Mouse interaction and logo physics
+  - Entry transition and visualizer
+  - Weather location
+  - Restore Awtarchy Defaults
 
-Use Edit Layout for the full editor, or press SUPER+ALT+E. The editor keeps a separate profile for each connected display and can copy configurations between displays. It supports movable/scalable elements, custom text and timezone clocks, custom media, image/GIF/MP4 backgrounds, visualizer settings, and reusable saved configurations.
+Use Edit Layout for the full editor, or press SUPER+ALT+E.
+
+The full editor supports:
+  - Separate profiles for each connected display
+  - Copying configurations between displays
+  - Moving, scaling, and rotating elements
+  - Custom text and timezone clocks
+  - Image, GIF, and MP4 backgrounds/custom media
+  - Visualizer controls and reusable saved configurations
 
   Ctrl+S                       Save without closing
   Esc                          Cancel / close
@@ -630,7 +643,7 @@ Digital vibrance uses Awtarchy's Hyprland screen shader helper.
   SUPER+ALT+\                  Toggle
   SUPER+ALT+CTRL+V             Toggle
 
-The helper manages the active vibrance shader and keeps the current value in the shader configuration. The VM submap keeps its own shortcut map instead of exposing this toggle.
+Quick Settings exposes the same controls. VM mode uses its own shortcut map.
 TEXT
             ;;
         display-multi)
@@ -673,11 +686,19 @@ Useful settings:
   SENS_MULT       Base sensitivity multiplier
   INPUT_DPI       Your mouse hardware DPI
   Y/X Ratio       Vertical sensitivity relative to horizontal
-  Angle Rotation  Corrects for sensor/grip angle
-  Accel / Offset / OutputCap
-                  Shape and limit the acceleration curve
+  Angle Rotation  Corrects sensor/grip angle
+  Accel           Acceleration strength
+  Offset          Where acceleration starts
+  OutputCap       Maximum acceleration multiplier
 
-The maccel notes in ~/.config/hypr/hyprland.lua include a worked example, stretched-resolution Y/X ratios, angle-rotation calibration, and the OutputCap formula. The current example uses a 1.18 native Y/X baseline; treat it as a starting point, not a required value.
+The notes in ~/.config/hypr/hyprland.lua include a worked example, angle calibration, OutputCap calculation, and stretched-resolution Y/X ratios.
+
+Current Y/X example:
+  16:9 native       1.18
+  16:10 stretched   1.31
+  4:3 stretched     1.57
+
+These are starting points, not required values.
 
 Upstream:
   https://github.com/Gnarus-G/maccel
@@ -685,15 +706,14 @@ TEXT
             ;;
         gaming-smtty)
             cat <<'TEXT'
-Gaming helpers
-
 smtty manages Steam/game sessions and launch options:
+
   SUPER+ALT+G                  Interactive smtty
   SUPER+ALT+L                  Launch last profile
   SUPER+ALT+O                  Write Steam launch options
   SUPER+ALT+K                  End session / restore cleanup
 
-Awtarchy also ships GameMode configuration and supports gamescope-oriented launch workflows. Use per-game profiles instead of forcing one global launch string onto every title.
+Awtarchy also includes GameMode configuration and gamescope-oriented launch workflows. Per-game profiles are usually cleaner than one global launch string.
 TEXT
             ;;
         gaming-streaming)
@@ -703,7 +723,7 @@ Sunshine / Moonlight
 Awtarchy includes:
   ~/.config/hypr/scripts/sunshine-moonlight-fix.sh
 
-The helper is intended for display/session adjustments around Sunshine streaming. The matching Extra Note contains additional troubleshooting context.
+The helper handles display/session adjustments around Sunshine streaming. See the matching Extra Note for troubleshooting.
 TEXT
             ;;
         packages-selector)
@@ -797,9 +817,9 @@ TEXT
             ;;
         networking-bluetooth)
             cat <<'TEXT'
-The Quickshell Bluetooth flyout handles adapter power/rfkill state, discovery, pairing, connection, and device state without depending on blueman-applet.
+The Quickshell Bluetooth flyout handles adapter power, discovery, pairing, connections, and rfkill state.
 
-If Bluetooth disappears entirely, first check:
+If Bluetooth disappears entirely, check:
   systemctl status bluetooth
   rfkill list bluetooth
 TEXT
@@ -846,9 +866,7 @@ DDC troubleshooting
   ddcutil detect
   hyprctl monitors
 
-External monitors must expose DDC/CI; compare their detected DDC bus with the Hyprland
-connector Awtarchy is targeting. Laptop LVDS/eDP panels use the kernel backlight through
-brightnessctl and do not require DDC/CI.
+External monitors need DDC/CI enabled and should appear in ddcutil. Laptop eDP/LVDS panels use brightnessctl instead.
 TEXT
             ;;
         troubleshoot-update)
