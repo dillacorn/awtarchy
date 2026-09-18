@@ -34,7 +34,10 @@ grep -Fq -- 'function M:path_to_file_uri' "$RUNTIME" \
 grep -Fq 'A custom Yazi clipboard.yazi plugin remains' "$RUNTIME" \
   || fail 'runtime does not preserve unrelated user clipboard.yazi plugins'
 
+# These assertions intentionally search for literal shell variables in runtime source.
+# shellcheck disable=SC2016
 install_count="$(grep -Fc 'run_as_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTIME" || true)"
+# shellcheck disable=SC2016
 update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTIME" || true)"
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
