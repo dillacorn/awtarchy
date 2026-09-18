@@ -55,5 +55,26 @@ for token in (
     if token not in body:
         raise SystemExit(f"FAIL: post-update confirmation is missing {token}")
 
+if 'if ! confirm_live_update_result; then\n    return 20\n  fi' not in text:
+    raise SystemExit("FAIL: runtime does not return the dedicated user-rollback status")
+
 print("PASS: live updates require an explicit keep/rollback decision before finalization.")
+PY
+
+python3 - "$ROOT/local/bin/awtarchy" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+required = (
+    '20)\n      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."',
+    '20)\n              log "Update was rolled back by the user; skipping post-update UI reconciliation."',
+    '20)\n          log "Update was rolled back by the user; skipping post-update UI reconciliation."',
+)
+for token in required:
+    if token not in text:
+        raise SystemExit(f"FAIL: launcher does not consume user rollback status safely: {token}")
+
+print("PASS: launcher suppresses post-update reconciliation after a user rollback.")
 PY
