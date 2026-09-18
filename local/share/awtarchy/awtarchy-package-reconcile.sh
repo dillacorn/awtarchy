@@ -16,6 +16,13 @@ MIGRATE_LOCKSCREEN_RETIREMENT_ONLY=0
 NEEDS_ACTION_ONLY=0
 PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
+NVIDIA_ROLLBACK_ONLY=0
+NVIDIA_ROLLBACK_DIR="${AWTARCHY_NVIDIA_ROLLBACK_DIR:-${STATE_DIR}/nvidia-driver-rollback}"
+NVIDIA_ROLLBACK_PENDING=""
+NVIDIA_ROLLBACK_CHANGED=0
+NVIDIA_ROLLBACK_COMPLETE=0
+PACMAN_CACHE_DIR="${AWTARCHY_PACMAN_CACHE_DIR:-/var/cache/pacman/pkg}"
+YAY_CACHE_HOME="${AWTARCHY_YAY_CACHE_HOME:-${HOME}/.cache/yay}"
 declare -a PACMAN_RECOVERY_RUN_ARGS=()
 
 # Packages required by currently exposed Awtarchy shell/runtime features.
@@ -85,6 +92,7 @@ usage() {
 Usage:
   awtarchy packages
   awtarchy packages --review
+  awtarchy nvidia-rollback
 
 Without options, opens an installer-style package reconciliation UI.
 
@@ -96,6 +104,10 @@ The reconciler:
   - preselects retired package removal only for Awtarchy-owned packages.
 
 Deselecting a current package never uninstalls it.
+
+When a full package reconciliation would run on a system with NVIDIA drivers,
+Awtarchy asks before allowing the system upgrade and saves a rollback point
+from the currently cached NVIDIA/kernel packages when possible.
 EOF
 }
 
@@ -112,6 +124,9 @@ while (( $# )); do
       ;;
     --needs-action)
       NEEDS_ACTION_ONLY=1
+      ;;
+    --nvidia-rollback)
+      NVIDIA_ROLLBACK_ONLY=1
       ;;
     --pacman-recovery-check)
       PACMAN_RECOVERY_CHECK_ONLY=1
