@@ -92,6 +92,18 @@ contains "$SAVE" 'lockscreen_custom_texts' \
 test -x "$TZ_HELPER" || fail 'timezone helper is missing or not executable'
 contains "$TZ_HELPER" '/usr/share/zoneinfo' \
     'timezone helper does not validate against local zoneinfo data'
+contains "$TZ_HELPER" 'if [[ "${1:-}" == "--validate" ]]' \
+    'timezone helper has no explicit custom-zone validation mode'
+"$TZ_HELPER" --validate UTC >/dev/null \
+    || fail 'timezone helper rejected UTC validation'
+"$TZ_HELPER" --validate Europe/London >/dev/null \
+    || fail 'timezone helper rejected a valid regional IANA zone'
+if "$TZ_HELPER" --validate Not/A_Real_Zone >/dev/null 2>&1; then
+    fail 'timezone helper accepted a nonexistent custom zone'
+fi
+if "$TZ_HELPER" --validate ../UTC >/dev/null 2>&1; then
+    fail 'timezone helper accepted a traversal-style custom zone'
+fi
 # This test intentionally searches for a literal shell assignment.
 # shellcheck disable=SC2016
 contains "$TZ_HELPER" 'TZ="$zone"' \
