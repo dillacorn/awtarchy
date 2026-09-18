@@ -7192,6 +7192,45 @@ file_summary() {
   fi
 }
 
+view_diff_file() {
+  local file="$1" key="" height=24 page_size=20 offset=0 max_offset=0 i=0
+  local -a lines=()
+
+  mapfile -t lines <"$file"
+  while true; do
+    height="$(tput lines 2>/dev/null || printf '24')"
+    [[ "$height" =~ ^[0-9]+$ ]] || height=24
+    page_size=$((height - 4))
+    (( page_size < 5 )) && page_size=5
+
+    max_offset=$((${#lines[@]} - page_size))
+    (( max_offset < 0 )) && max_offset=0
+    (( offset > max_offset )) && offset="$max_offset"
+    (( offset < 0 )) && offset=0
+
+    printf '\033[H\033[2J' >/dev/tty
+    printf 'Awtarchy diff review  [q/Esc/Enter: return]  [Up/Down/PgUp/PgDn: scroll]\n\n' >/dev/tty
+    for (( i = 0; i < page_size && offset + i < ${#lines[@]}; i++ )); do
+      printf '%s\n' "${lines[offset + i]}" >/dev/tty
+    done
+
+    printf '\nLines %d-%d of %d\n' \
+      "$(( ${#lines[@]} == 0 ? 0 : offset + 1 ))" \
+      "$(( offset + i ))" "${#lines[@]}" >/dev/tty
+
+    key="$(read_update_key || true)"
+    case "$key" in
+      q|Q) return 0 ;;
+      $'\033') return 0 ;;
+      $'\n'|$'\r'|"") return 0 ;;
+      $'\033[A') (( offset > 0 )) && offset=$((offset - 1)) || true ;;
+      $'\033[B') (( offset < max_offset )) && offset=$((offset + 1)) || true ;;
+      $'\033[5~') offset=$((offset - page_size)); (( offset < 0 )) && offset=0 ;;
+      $'\033[6~') offset=$((offset + page_size)); (( offset > max_offset )) && offset="$max_offset" ;;
+    esac
+  done
+}
+
 show_diff() {
   local class="$1" rel="$2" local_file="$3" target_file="$4" baseline_file="$5"
   disable_mouse
@@ -7211,17 +7250,10 @@ show_diff() {
     fi
   } >"$tmp"
 
-  if command -v less >/dev/null 2>&1; then
-    less -R "$tmp" </dev/tty >/dev/tty
-  else
-    cat "$tmp" >/dev/tty
-    printf '\nPress any key to return...' >/dev/tty
-    read_update_key >/dev/null || true
-  fi
+  view_diff_file "$tmp"
   rm -f -- "$tmp"
   enable_mouse
 }
-
 review_plan() {
   local plan_file="$1"
   local -a classes=() rels=() locals=() targets=() baselines=()
