@@ -100,7 +100,7 @@ normalize_timezone_clocks() {
                 scale: clamp(.scale; 1; 0.5; 100),
                 stretch_x: clamp(.stretch_x; 1; 0.25; 4),
                 stretch_y: clamp(.stretch_y; 1; 0.25; 4),
-                opacity: clamp(.opacity; 100; 0; 100),
+                opacity: clamp(.opacity; 100; 5; 100),
                 rotation: clamp(.rotation; 0; -180; 180),
                 color: ((.color // "auto") | ascii_downcase),
                 visible: (if (.visible | type) == "boolean" then .visible else true end)
@@ -145,7 +145,7 @@ normalize_custom_texts() {
                 scale: clamp(.scale; 1; 0.5; 100),
                 stretch_x: clamp(.stretch_x; 1; 0.25; 4),
                 stretch_y: clamp(.stretch_y; 1; 0.25; 4),
-                opacity: clamp(.opacity; 100; 0; 100),
+                opacity: clamp(.opacity; 100; 5; 100),
                 rotation: clamp(.rotation; 0; -180; 180),
                 color: ((.color // "auto") | ascii_downcase),
                 visible: (if (.visible | type) == "boolean" then .visible else true end)
@@ -171,7 +171,7 @@ custom_image_entry_schema_valid() {
         and ($candidate.scale | type) == "number" and $candidate.scale >= 0.50 and $candidate.scale <= 100.00
         and ($candidate.stretch_x | type) == "number" and $candidate.stretch_x >= 0.25 and $candidate.stretch_x <= 4.00
         and ($candidate.stretch_y | type) == "number" and $candidate.stretch_y >= 0.25 and $candidate.stretch_y <= 4.00
-        and ($candidate.opacity | type) == "number" and $candidate.opacity >= 0 and $candidate.opacity <= 100
+        and ($candidate.opacity | type) == "number" and $candidate.opacity >= 5 and $candidate.opacity <= 100
         and (($candidate.rotation // 0) | type) == "number"
         and ($candidate.rotation // 0) >= -180 and ($candidate.rotation // 0) <= 180
         and (($candidate.spawn_animation // "none") | type) == "string"
