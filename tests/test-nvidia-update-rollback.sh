@@ -156,4 +156,26 @@ grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
 grep -Fxq 'linux 6.18.1.arch1-1' "$state" \
   || fail 'NVIDIA rollback did not restore the kernel version captured with the driver'
 
-printf '%s\n' 'PASS: NVIDIA full upgrades require consent, save rollback state, and expose a verified later rollback command.'
+cat >"$state" <<'EOF'
+nvidia-utils 620.12.01-1
+linux 6.18.3.arch1-1
+EOF
+
+if PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_DIR="$rollback" \
+  FAKE_PACMAN_STATE="$state" \
+  "$RECONCILER" --nvidia-rollback >/dev/null 2>&1
+then
+  fail 'stale NVIDIA rollback point was accepted after later package changes'
+fi
+
+grep -Fxq 'nvidia-utils 620.12.01-1' "$state" \
+  || fail 'stale rollback mutated the newer NVIDIA package before refusing'
+grep -Fxq 'linux 6.18.3.arch1-1' "$state" \
+  || fail 'stale rollback mutated the newer kernel package before refusing'
+
+printf '%s\n' 'PASS: NVIDIA upgrades require consent, rollback state is recoverable, and stale rollback points fail closed.'
