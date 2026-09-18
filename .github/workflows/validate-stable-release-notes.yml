@@ -39,3 +39,84 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v3-7-2:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'release: publish v3.7.2 bridge' &&
+      github.head_ref == 'release/v3.7.2-bridge' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_SHA: e6d5c8ab31b0629491dfaab90604a3029d1be128
+      RELEASE_TAG: v3.7.2
+      PREVIOUS_TAG: v3.7.1
+      RELEASE_TITLE: Awtarchy v3.7.2 Quickshell
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Verify release target and state
+        run: |
+          set -Eeuo pipefail
+          main_sha="$(git ls-remote origin refs/heads/main | awk '{print $1}')"
+          [[ "$main_sha" == "$EXPECTED_SHA" ]] || {
+            printf 'main moved: expected %s, got %s\n' "$EXPECTED_SHA" "$main_sha" >&2
+            exit 1
+          }
+          latest_stable="$(gh release list --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')"
+          [[ "$latest_stable" == "$PREVIOUS_TAG" ]] || {
+            printf 'latest stable changed: expected %s, got %s\n' "$PREVIOUS_TAG" "$latest_stable" >&2
+            exit 1
+          }
+          ! gh release view "$RELEASE_TAG" >/dev/null 2>&1 || {
+            printf 'release %s already exists\n' "$RELEASE_TAG" >&2
+            exit 1
+          }
+          [[ -z "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG")" ]] || {
+            printf 'tag %s already exists\n' "$RELEASE_TAG" >&2
+            exit 1
+          }
+      - name: Validate proposed stable release notes
+        run: |
+          set -Eeuo pipefail
+          printf '%s' 'IyBBd3RhcmNoeSB2My43LjIgUXVpY2tzaGVsbAoKQXd0YXJjaHkgdjMuNy4yIGZvY3VzZXMgb24gc2FmZXIgdXBkYXRlcyBhbmQgcmVjb3ZlcnksIGVhc2llciBOVklESUEgcm9sbGJhY2ssIGNsZWFuZXIgbWFpbnRlbmFuY2UgVVgsIGFuZCBhIGZldyBkZXNrdG9wL2xvY2tzY3JlZW4gcmVmaW5lbWVudHMgZGlzY292ZXJlZCBhZnRlciB2My43LjEuCgojIyBJbnN0YWxsIGFuZCB1cGRhdGUKCkZyZXNoIGluc3RhbGxhdGlvbjogW0lOU1RBTEwubWRdKGh0dHBzOi8vZ2l0aHViLmNvbS9kaWxsYWNvcm4vYXd0YXJjaHkvYmxvYi9tYWluL0lOU1RBTEwubWQpCgpFeGlzdGluZyBBd3RhcmNoeSBpbnN0YWxsYXRpb25zIGFuZCBzdGFibGUgdXBkYXRlczogW1VQREFUSU5HLm1kXShodHRwczovL2dpdGh1Yi5jb20vZGlsbGFjb3JuL2F3dGFyY2h5L2Jsb2IvbWFpbi9VUERBVElORy5tZCkKClF1aWNrIHVwZGF0ZToKCmBgYGJhc2gKYXd0YXJjaHkgdXBkYXRlCmBgYAoKIyMgVXBkYXRlIGFuZCByZWNvdmVyeSBzYWZldHkKCi0gU3RhYmxlIGNvbmZpZyB1cGRhdGVzIG5vIGxvbmdlciBwZXJmb3JtIGFuIHVubmVjZXNzYXJ5IGZ1bGwgcGFja2FnZSB1cGdyYWRlIGFzIHBhcnQgb2Ygbm9ybWFsIGhhcmR3YXJlIHJlY29uY2lsaWF0aW9uLgotIEFmdGVyIGxpdmUgdmFsaWRhdGlvbiwgQXd0YXJjaHkgbm93IGFza3Mgd2hldGhlciB0byBrZWVwIHRoZSB1cGRhdGUgb3Igcm9sbCBtYW5hZ2VkIGNvbmZpZyBjaGFuZ2VzIGJhY2sgYmVmb3JlIGZpbmFsaXppbmcuCi0gUGFja2FnZSByZWNvbmNpbGlhdGlvbiBhbmQgdXBkYXRlciBoYW5kb2ZmIGJlaGF2aW9yIHdlcmUgaGFyZGVuZWQgdG8gcmVkdWNlIHRoZSBjaGFuY2Ugb2YgYW4gdW5yZWxhdGVkIGRyaXZlci9wYWNrYWdlIHVwZGF0ZSBicmVha2luZyBhbiBvdGhlcndpc2UtZ29vZCBBd3RhcmNoeSB1cGRhdGUuCi0gUnVubmluZyBiYXJlIGBhd3RhcmNoeWAgbm93IGNoZWNrcyB0aGUgaW5zdGFsbGVkIG1haW50ZW5hbmNlLWNvbW1hbmQgcmV2aXNpb24gYWdhaW5zdCBgbWFpbmAgYW5kIHJlZnJlc2hlcyBvbmx5IHdoZW4gdGhlIHJldmlzaW9uIGhhc2ggZGlmZmVycy4KCiMjIE5WSURJQSByZWNvdmVyeQoKLSBGdWxsLXN5c3RlbSBwYWNrYWdlIHVwZ3JhZGVzIHRoYXQgY2FuIHVwZGF0ZSBhbiBpbnN0YWxsZWQgTlZJRElBIHN0YWNrIG5vdyByZXF1aXJlIGV4cGxpY2l0IGNvbmZpcm1hdGlvbi4KLSBBd3RhcmNoeSBjYW4gc2F2ZSBhIHRydXN0ZWQgTlZJRElBL2tlcm5lbCByb2xsYmFjayBwb2ludCBiZWZvcmUgYW4gTlZJRElBLWFmZmVjdGluZyB0cmFuc2FjdGlvbi4KLSBOVklESUEgcmVjb3Zlcnkgbm93IHN1cHBvcnRzIHJlc3RvcmluZyB0aGUgc2F2ZWQgcm9sbGJhY2sgcG9pbnQgb3IgY2hvb3NpbmcgYSBjb21wbGV0ZSBjYWNoZWQgaGlzdG9yaWNhbCBOVklESUEva2VybmVsIHBhY2thZ2Ugc2V0IHdpdGggYC0tcGlja2AsIGAtLWxpc3RgLCBvciBgLS12ZXJzaW9uYC4KLSBUaGUgbWFpbnRlbmFuY2UgbWVudSBpbmNsdWRlcyBOVklESUEgcmVjb3ZlcnkgdG9vbHMgYW5kIHdhcm5zIGJlZm9yZSBjb250aW51aW5nIHdoZW4gbm8gTlZJRElBIFBDSSBHUFUgaXMgZGV0ZWN0ZWQuCgojIyBMb2Nrc2NyZWVuLCBkZXNrdG9wLCBhbmQgWWF6aQoKLSBMb2Nrc2NyZWVuIHRpbWV6b25lIGNsb2NrcyBjYW4gbm93IGJlIHNlYXJjaGVkIGJ5IGZyaWVuZGx5IGNpdHkgbmFtZSBvciBmdWxsIElBTkEgaWRlbnRpZmllciwgd2l0aCB2YWxpZGF0ZWQgY3VzdG9tIElBTkEgdGltZXpvbmUgZW50cnkuCi0gQXd0YXJjaHkgVGlwcyBjb250ZW50IGFuZCB3b3JkaW5nIHdlcmUgcmVmcmVzaGVkLgotIEZsb2F0aW5nLXdpbmRvdyBzdGF0ZSBoYW5kbGluZyBhbmQgcmVjb3Zlcnkgd2VyZSB0aWdodGVuZWQuCi0gQWRkZWQgSmV0QnJhaW5zTW9ubyBOZXJkIEZvbnQgZGVmYXVsdHMgZm9yIFlhemkgYW5kIHF1aWNrIEh5cHJsYW5kIHJlc2l6ZSBiaW5kaW5ncy4KLSBZYXppIHN5c3RlbSBjbGlwYm9hcmQgY29weSBub3cgdXNlcyBBd3RhcmNoeSdzIGV4aXN0aW5nIGB3bC1jbGlwYm9hcmRgIGRlcGVuZGVuY3kgZGlyZWN0bHksIHJlbW92aW5nIHRoZSBkZXByZWNhdGVkIHRoaXJkLXBhcnR5IGBjbGlwYm9hcmRgIHBsdWdpbiB3YXJuaW5nLgoKIyMgVmFsaWRhdGlvbgoKLSBFeGFjdCByZWxlYXNlIHRhcmdldDogYGU2ZDVjOGFiMzFiMDYyOTQ5MWRmYWFiOTA2MDRhMzAyOWQxYmUxMjhgLgotIEFsbCBtZXJnZWQgcmVsZWFzZS1jYW5kaWRhdGUgcHVsbCByZXF1ZXN0cyBjb21wbGV0ZWQgdGhlaXIgZm9jdXNlZCBjaGVja3MgYW5kIGZ1bGwgQXd0YXJjaHkgQ0kgYmVmb3JlIG1lcmdlLgotIFRoZSBtYWludGFpbmVyIHJ1bnRpbWUtdGVzdGVkIHRoZSB1cGRhdGUgY29uZmlybWF0aW9uIHBhdGggb24gQU1ELCB0aGUgbG9ja3NjcmVlbiB0aW1lem9uZSBlZGl0b3IgY2hhbmdlcywgYW5kIFlhemkgc3lzdGVtIGNsaXBib2FyZCBjb3B5aW5nLgotIE5WSURJQSByb2xsYmFjay92ZXJzaW9uLXNlbGVjdGlvbiBsb2dpYyBpcyBjb3ZlcmVkIGJ5IGF1dG9tYXRlZCBwYWNrYWdlLWhpc3RvcnkvY2FjaGUgdGVzdHM7IHJlYWwgTlZJRElBIHJlY292ZXJ5IHJlbWFpbnMgaGFyZHdhcmUtZGVwZW5kZW50LgoKIyMgUG9zdC1yZWxlYXNlIHVwZGF0ZXMKCl9QbGFjZWhvbGRlciBmb3IgcG9zc2libGUgdGVzdGVkIHBvc3QtcmVsZWFzZSBwYXRjaGVzIHRvIHYzLjcuMi5fCg==' | base64 -d > /tmp/proposed-release.md
+          gh release view "$PREVIOUS_TAG" --json body --jq .body > /tmp/previous-release.md
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$RELEASE_TAG"             --notes /tmp/proposed-release.md             --previous /tmp/previous-release.md
+      - name: Publish stable release
+        run: |
+          set -Eeuo pipefail
+          gh release create "$RELEASE_TAG"             --target "$EXPECTED_SHA"             --title "$RELEASE_TITLE"             --notes-file /tmp/proposed-release.md
+      - name: Verify published release and notes
+        run: |
+          set -Eeuo pipefail
+          gh release view "$RELEASE_TAG" --json body --jq .body > /tmp/published-release.md
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$RELEASE_TAG"             --notes /tmp/published-release.md             --previous /tmp/previous-release.md
+
+          gh release view "$RELEASE_TAG"             --json tagName,name,isDraft,isPrerelease,targetCommitish             --jq '{tagName,name,isDraft,isPrerelease,targetCommitish}'
+
+          tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.type)"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq .object.sha)"
+          if [[ "$tag_type" == "tag" ]]; then
+            tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$tag_sha" --jq .object.sha)"
+          fi
+          [[ "$tag_sha" == "$EXPECTED_SHA" ]] || {
+            printf 'tag target mismatch: expected %s, got %s\n' "$EXPECTED_SHA" "$tag_sha" >&2
+            exit 1
+          }
+
+          release_name="$(gh release view "$RELEASE_TAG" --json name --jq .name)"
+          release_draft="$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft)"
+          release_prerelease="$(gh release view "$RELEASE_TAG" --json isPrerelease --jq .isPrerelease)"
+          release_target="$(gh release view "$RELEASE_TAG" --json targetCommitish --jq .targetCommitish)"
+          [[ "$release_name" == "$RELEASE_TITLE" ]]
+          [[ "$release_draft" == "false" ]]
+          [[ "$release_prerelease" == "false" ]]
+          [[ "$release_target" == "$EXPECTED_SHA" ]]
+      - name: Remove one-use helper branch
+        if: success()
+        run: |
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/release/v3.7.2-bridge"
