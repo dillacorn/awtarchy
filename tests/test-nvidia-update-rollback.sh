@@ -37,8 +37,12 @@ if tx < 0:
     raise SystemExit('FAIL: could not locate package reconciliation full-upgrade transaction')
 before = text.rfind('confirm_nvidia_system_upgrade', 0, tx)
 after = text.find('offer_nvidia_post_upgrade_choice', tx)
-if before < 0 or after < 0 or not (before < tx < after):
-    raise SystemExit('FAIL: NVIDIA consent/snapshot must wrap the full system upgrade')
+bookkeeping = text.find('record_managed_packages "${install_arch[@]}"', tx)
+if before < 0 or after < 0 or bookkeeping < 0 or not (before < tx < after < bookkeeping):
+    raise SystemExit(
+        'FAIL: NVIDIA consent/snapshot must wrap the full system upgrade and '
+        'persist rollback before managed-package bookkeeping'
+    )
 print('NVIDIA upgrade gate ordering OK')
 PY
 
