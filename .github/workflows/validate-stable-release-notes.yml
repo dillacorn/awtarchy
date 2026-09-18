@@ -39,3 +39,153 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  edit-v371-notes:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.ref == 'release-v3.7.1-notes-bridge' &&
+      github.event.pull_request.title == 'Expand v3.7.1 release notes'
+    needs: release-notes-contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: v3.7.1
+      TARGET_SHA: 7e9ab52d16dce4339261ad7e383c71861c23a0e7
+      BRIDGE_BRANCH: release-v3.7.1-notes-bridge
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 7e9ab52d16dce4339261ad7e383c71861c23a0e7
+          fetch-depth: 0
+      - name: Validate, edit, verify, and clean v3.7.1 notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          before_json=/tmp/v371-before.json
+          after_json=/tmp/v371-after.json
+          current=/tmp/v371-current.md
+          proposed=/tmp/v371-proposed.md
+          published=/tmp/v371-published.md
+          previous=/tmp/v370.md
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${VERSION}" >"$before_json"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/v3.7.0" > /tmp/v370.json
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path('/tmp/v371-before.json').read_text())
+          previous = json.loads(Path('/tmp/v370.json').read_text())
+          Path('/tmp/v371-current.md').write_text(before['body'], encoding='utf-8')
+          Path('/tmp/v370.md').write_text(previous['body'], encoding='utf-8')
+
+          current = before['body']
+          install_idx = current.index('## Install and update')
+          improvements_idx = current.index('## Improvements')
+          validation_idx = current.index('## Validation')
+          title = current.splitlines()[0]
+          install = current[install_idx:improvements_idx].rstrip()
+          tail = current[validation_idx:].rstrip()
+
+          overview = (
+              'Awtarchy v3.7.1 expands the v3.7.0 lockscreen editor with per-display profiles, '
+              'animated media, reusable saved configurations, new password feedback effects, and '
+              'keyboard/direct-manipulation polish.'
+          )
+
+          features = '''## Animated lockscreen media
+
+- Lockscreen backgrounds now support still images, animated GIFs, and MP4 video.
+- Custom media elements can also use still images, GIFs, or silent looping MP4 video while keeping their existing position, scale, rotation, stretch, opacity, and spawn controls.
+- Video is rendered inside the secure Quickshell lock scene, loops silently, and pre-rolls decoded frames before the transition when possible without allowing media readiness to block lock security.
+- Existing fit, focal-point, opacity, blur, pixelation, overlay, transition, and Auto Contrast behavior continues to work with animated media.
+
+## Per-display lockscreen profiles
+
+- The editor now previews the real lockscreen composition on every connected display while keeping one active display as the editing target.
+- Every output gets its own complete lockscreen profile instead of Shared/Individual modes, so editing one display no longer live-mutates another.
+- Reconnecting the same output name restores that display's saved profile; a genuinely new display starts from the most recently edited complete profile.
+- `Copy Configuration To…` can copy the active display's complete configuration to one other display or all other connected displays.
+- Per-display profiles cover layout, visibility, custom media/text/timezone elements, visualizer settings, backgrounds, wallpaper/media, blur/overlay settings, weather units, transitions, password presentation, clock format, and the other editor-owned visual settings.
+
+## Saved configurations and editor workflow
+
+- Added reusable named lockscreen configurations that can be saved from the current display, renamed, reordered, overwritten, deleted, and applied to connected displays.
+- Added an explicit Element selector for built-in elements, custom media, timezone clocks, custom text, the visualizer, and password presentation, so canvas clicking is no longer required to select an element.
+- Clicking an element now selects it without jumping it to the pointer; movement begins only after an actual drag threshold is crossed.
+- Visible editable elements now use a 5–100% opacity range, with Hide/Show remaining the explicit way to fully hide an element.
+- `Ctrl+S` saves while keeping the editor open, `Escape` cancels/closes through the draft-discard path, and `Enter`/`Return` confirms the saved-configuration dialogs.
+- `Super+Alt+E` now toggles the lockscreen editor directly on the focused display and is shown under Edit Layout in Quick Settings.
+- Modal keyboard handling was tightened so background editor shortcuts cannot mutate the layout while a saved-configuration dialog is open.
+
+## Password feedback
+
+- Added password feedback modes: Squares, Dots, Custom Character, Sparks, Mini Flash, and Hidden.
+- Sparks and Mini Flash provide short localized typing effects without exposing password content.
+- Authentication failure now gives every locked display a brief red edge-light response, including when per-key feedback is Hidden.
+
+## Other fixes
+
+- Fixed lockscreen profile save/validation parity for custom media and per-display state.
+- Improved per-monitor weather/contrast handling and animated-media contrast stability.
+- Fixed Yazi multi-key shortcuts so `g g` jumps to the top and `d d` removes the selection.'''
+
+          proposed = f'{title}\n\n{overview}\n\n{install}\n\n{features}\n\n{tail}'
+          Path('/tmp/v371-proposed.md').write_text(proposed, encoding='utf-8')
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --notes "$proposed" \
+            --previous "$previous"
+
+          before_tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" --jq '.object.sha')"
+          [[ "$before_tag_sha" == "$TARGET_SHA" ]] || {
+            printf 'tag moved before edit: %s\n' "$before_tag_sha" >&2
+            exit 1
+          }
+
+          gh release edit "$VERSION" --repo "$GITHUB_REPOSITORY" --notes-file "$proposed"
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${VERSION}" >"$after_json"
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          before = json.loads(Path('/tmp/v371-before.json').read_text())
+          after = json.loads(Path('/tmp/v371-after.json').read_text())
+          proposed = Path('/tmp/v371-proposed.md').read_text(encoding='utf-8')
+          published = after['body']
+          Path('/tmp/v371-published.md').write_text(published, encoding='utf-8')
+
+          if published != proposed:
+              raise SystemExit('published release body differs from intended body')
+
+          stable_fields = ('id', 'tag_name', 'target_commitish', 'name', 'draft', 'prerelease', 'published_at')
+          changed = {key: (before.get(key), after.get(key)) for key in stable_fields if before.get(key) != after.get(key)}
+          if changed:
+              raise SystemExit(f'release metadata changed unexpectedly: {changed}')
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --notes "$published" \
+            --previous "$previous"
+
+          after_tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" --jq '.object.sha')"
+          [[ "$after_tag_sha" == "$before_tag_sha" && "$after_tag_sha" == "$TARGET_SHA" ]] || {
+            printf 'tag changed during release-note edit\n' >&2
+            exit 1
+          }
+
+          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          [[ "$latest_tag" == "$VERSION" ]] || {
+            printf 'latest release is %s, expected %s\n' "$latest_tag" "$VERSION" >&2
+            exit 1
+          }
+
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRIDGE_BRANCH}"
