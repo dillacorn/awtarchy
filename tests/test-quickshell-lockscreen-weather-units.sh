@@ -30,8 +30,8 @@ require_text "$BAR" '["auto", "fahrenheit", "celsius"]' 'BarState does not valid
 # deduplicates it, and includes the full set in the throttle identity.
 require_text "$WEATHER" 'readonly property var configuredUnitModes: requiredUnitModes()' 'weather service does not derive configured unit modes'
 require_text "$WEATHER" 'function requiredUnitModes()' 'weather service has no profile unit-mode collector'
-require_text "$WEATHER" 'addProfile(BarState.lockscreenSharedProfile());' 'weather service does not include the Shared profile'
-require_text "$WEATHER" 'const overrides = BarState.lockscreenMonitorOverrides();' 'weather service does not include per-monitor overrides'
+require_text "$WEATHER" 'addProfile(BarState.lockscreenLastEditedProfile());' 'weather service does not include the last-edited fallback profile'
+require_text "$WEATHER" 'const profiles = BarState.lockscreenMonitorProfiles();' 'weather service does not include per-display profiles'
 require_text "$WEATHER" 'profile.lockscreen_show_weather === true' 'weather service refreshes units for profiles that hide weather'
 require_text "$WEATHER" 'property string lastRequestIdentity: ""' 'weather service has no request identity'
 require_text "$WEATHER" 'const requestIdentity = location + "|" + sortedModes.join(",");' 'weather service identity omits the profile unit set'
@@ -40,7 +40,7 @@ require_text "$WEATHER" 'refreshProcess.exec([root.weatherHelper, "refresh-set",
 # Editor units are profile draft state, so Cancel cannot accidentally persist them.
 require_text "$EDITOR" 'property string draftWeatherUnits: "auto"' 'editor has no weather-unit draft'
 require_text "$EDITOR" 'weatherUnits: draftWeatherUnits' 'editor history omits weather units'
-require_text "$EDITOR" 'const shared = BarState.lockscreenSharedProfile();' 'editor does not load the persisted Shared profile'
+require_text "$EDITOR" 'const lastEdited = BarState.lockscreenLastEditedProfile();' 'editor does not load the persisted last-edited profile'
 require_text "$EDITOR" 'draftWeatherUnits = String(profile.lockscreen_weather_units || "auto");' 'editor does not load persisted profile weather units'
 require_text "$EDITOR" 'draftWeatherUnits = "auto";' 'editor reset does not restore Auto weather units'
 require_text "$EDITOR" 'function setDraftWeatherUnits(value)' 'editor has no weather-unit setter'
