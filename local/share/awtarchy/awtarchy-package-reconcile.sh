@@ -790,9 +790,11 @@ apply_nvidia_rollback() {
   [[ "$complete" == 1 ]] \
     || die "The saved NVIDIA rollback point is incomplete; refusing an automatic partial driver rollback."
 
-  print_nvidia_rollback_changes
-  printf '\nRollback restores the saved NVIDIA packages and any kernel packages that changed with them.\n' >/dev/tty
-  printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    print_nvidia_rollback_changes
+    printf '\nRollback restores the saved NVIDIA packages and any kernel packages that changed with them.\n' >/dev/tty
+    printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
+  fi
 
   if (( assume_yes == 0 )); then
     confirm_yes_no 'Restore the saved NVIDIA/kernel package versions now?' 0 \
