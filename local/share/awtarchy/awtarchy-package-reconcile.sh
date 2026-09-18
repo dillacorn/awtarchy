@@ -805,7 +805,7 @@ historical_package_version() {
 build_nvidia_history_bundle() {
   local target_driver="$1" output="$2"
   local current_driver="" tx="" side="" pkg="" current_version="" target_version=""
-  local current_pkg_driver="" target_pkg_driver="" archive="" changes=0 complete=0
+  local current_pkg_driver="" target_pkg_driver="" archive="" changes=0 complete=0 found=0
   local records="" points="" attempt=""
   local -a candidates=()
 
@@ -864,44 +864,44 @@ build_nvidia_history_bundle() {
       ' "$attempt";
       then
         cat -- "$attempt" >"$output"
-        rm -f -- "$records" "$points" "$attempt"
-        return 0
+        found=1
+        break
       fi
     fi
   done <"$points"
 
   rm -f -- "$records" "$points" "$attempt"
-  return 1
+  (( found == 1 ))
 }
 
 recoverable_nvidia_history_versions() {
-  local current_driver="" records="" candidates="" version="" bundle=""
+  local current_driver="" records="" candidate_versions_file="" version="" bundle=""
   local tx pkg old_version new_version
 
   current_driver="$(installed_nvidia_driver_version)" || return 1
   records="$(mktemp)"
-  candidates="$(mktemp)"
+  candidate_versions_file="$(mktemp)"
   bundle="$(mktemp)"
   nvidia_history_records >"$records"
 
   while IFS=$'\t' read -r tx pkg old_version new_version; do
     [[ "$pkg" == nvidia-utils ]] || continue
     version="$(nvidia_driver_version_from_package_version "$old_version" 2>/dev/null || true)"
-    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidates"
+    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidate_versions_file"
     version="$(nvidia_driver_version_from_package_version "$new_version" 2>/dev/null || true)"
-    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidates"
+    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidate_versions_file"
   done <"$records"
 
-  if [[ -s "$candidates" ]]; then
+  if [[ -s "$candidate_versions_file" ]]; then
     while IFS= read -r version; do
       [[ -n "$version" && "$version" != "$current_driver" ]] || continue
       if build_nvidia_history_bundle "$version" "$bundle"; then
         printf '%s\n' "$version"
       fi
-    done < <(LC_ALL=C sort -Vu "$candidates")
+    done < <(LC_ALL=C sort -Vu "$candidate_versions_file")
   fi
 
-  rm -f -- "$records" "$candidates" "$bundle"
+  rm -f -- "$records" "$candidate_versions_file" "$bundle"
 }
 
 print_recoverable_nvidia_versions() {
@@ -1019,7 +1019,7 @@ apply_nvidia_history_version() {
 }
 
 pick_nvidia_history_version() {
-  local current_driver="" answer="" i selected=""
+  local current_driver="" answer="" i selected_driver=""
   local -a versions=()
 
   [[ -r /dev/tty && -w /dev/tty ]] \
@@ -1045,8 +1045,8 @@ pick_nvidia_history_version() {
   esac
   [[ "$answer" =~ ^[0-9]+$ ]] || die "Invalid NVIDIA driver selection."
   (( answer >= 1 && answer <= ${#versions[@]} )) || die "Invalid NVIDIA driver selection."
-  selected="${versions[answer-1]}"
-  apply_nvidia_history_version "$selected" 0
+  selected_driver="${versions[answer-1]}"
+  apply_nvidia_history_version "$selected_driver" 0
 }
 validate_nvidia_rollback_storage() {
   root_owned_nonwritable_path "$NVIDIA_ROLLBACK_ROOT" \
