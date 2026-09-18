@@ -24,8 +24,8 @@ grep -Fq 'offer_nvidia_post_upgrade_choice' "$RECONCILER" \
   || fail 'package reconciler does not offer post-upgrade keep/rollback choice'
 grep -Fq 'awtarchy nvidia-rollback' "$LAUNCHER" \
   || fail 'launcher does not expose the NVIDIA rollback command'
-grep -Fq 'Rollback last NVIDIA driver update' "$LAUNCHER" \
-  || fail 'maintenance menu does not expose NVIDIA rollback'
+grep -Fq 'NVIDIA driver rollback / cached version recovery' "$LAUNCHER" \
+  || fail 'maintenance menu does not expose NVIDIA recovery'
 grep -Fq 'run_current_nvidia_rollback' "$LAUNCHER" \
   || fail 'NVIDIA rollback is not pinned to the current updater reconciler'
 grep -Fq 'awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]' "$LAUNCHER" \
