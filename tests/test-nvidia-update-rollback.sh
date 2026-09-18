@@ -35,8 +35,9 @@ grep -Fq 'root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages/$archive_na
 grep -Fq 'trusted_nvidia_cache_archive "$candidate"' "$RECONCILER" \
   || fail 'NVIDIA rollback snapshot accepts untrusted cache archives'
 if grep -Fq 'AWTARCHY_NVIDIA_ROLLBACK_DIR' "$RECONCILER" \
-  || grep -Fq 'AWTARCHY_YAY_CACHE_HOME' "$RECONCILER"; then
-  fail 'production rollback path still accepts user-controlled privileged package sources'
+  || grep -Fq 'AWTARCHY_YAY_CACHE_HOME' "$RECONCILER" \
+  || grep -Fq 'AWTARCHY_KERNEL_PKGBASES' "$RECONCILER"; then
+  fail 'production rollback discovery still accepts user-controlled privileged package-source overrides'
 fi
 
 grep -Fq 'as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER" \
