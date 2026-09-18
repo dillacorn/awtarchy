@@ -38,11 +38,15 @@ if tx < 0:
 before = text.rfind('confirm_nvidia_system_upgrade', 0, tx)
 after = text.find('offer_nvidia_post_upgrade_choice', tx)
 bookkeeping = text.find('record_managed_packages "${install_arch[@]}"', tx)
-if before < 0 or after < 0 or bookkeeping < 0 or not (before < tx < after < bookkeeping):
+rollback_stop = text.find("NVIDIA/kernel rollback completed; stopping package reconciliation", bookkeeping)
+if before < 0 or after < 0 or bookkeeping < 0 or rollback_stop < 0 or not (before < tx < after < bookkeeping < rollback_stop):
     raise SystemExit(
         'FAIL: NVIDIA consent/snapshot must wrap the full system upgrade and '
-        'persist rollback before managed-package bookkeeping'
+        'persist rollback before managed-package bookkeeping and stop after an immediate rollback'
     )
+if "apply_nvidia_rollback 1\n      return 20" not in text:
+    raise SystemExit('FAIL: immediate NVIDIA rollback does not signal the caller to stop')
+
 print('NVIDIA upgrade gate ordering OK')
 PY
 
