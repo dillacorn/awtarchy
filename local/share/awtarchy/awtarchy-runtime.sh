@@ -9158,7 +9158,7 @@ main() {
   fi
 
   if ! confirm_live_update_result; then
-    return 0
+    return 20
   fi
 
   # Do not mutate hardware/package state until the user accepts the live config.
