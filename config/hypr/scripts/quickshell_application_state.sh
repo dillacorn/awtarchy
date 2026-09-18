@@ -327,7 +327,7 @@ normalize_lockscreen_visualizer_json() {
                 and ($scale | type) == "number" and $scale >= 0.5 and $scale <= 100
                 and ($stretch_x | type) == "number" and $stretch_x >= 0.25 and $stretch_x <= 4
                 and ($stretch_y | type) == "number" and $stretch_y >= 0.25 and $stretch_y <= 4
-                and ($opacity | type) == "number" and $opacity >= 0 and $opacity <= 100
+                and ($opacity | type) == "number" and $opacity >= 5 and $opacity <= 100
                 and ($color | type) == "string"
                 and ($color == "auto" or ($color | test("^#[0-9A-Fa-f]{6}$")))
                 and ($bands | type) == "number" and ($bands | floor) == $bands and $bands >= 4 and $bands <= 64
@@ -516,7 +516,7 @@ normalize_lockscreen_layout_json() {
                 and (($candidate[$key].stretch_x // 1) <= 4.00)
                 and (($candidate[$key].stretch_y // 1) >= 0.25)
                 and (($candidate[$key].stretch_y // 1) <= 4.00)
-                and (($candidate[$key].opacity // 100) >= (if $key == "password" then 20 else 0 end))
+                and (($candidate[$key].opacity // 100) >= 5)
                 and (($candidate[$key].opacity // 100) <= 100)
                 and (if $key == "password" then
                     $candidate[$key].x >= 0.15 and $candidate[$key].x <= 0.85
