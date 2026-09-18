@@ -131,10 +131,11 @@ exec "$@"
 EOF
 chmod +x "$fakebin/sudo"
 
-if ! printf 'y\n' | \
-  PATH="$fakebin:/usr/bin:/bin" \
+if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
   AWTARCHY_NVIDIA_ROLLBACK_DIR="$rollback" \
   FAKE_PACMAN_STATE="$state" \
   "$RECONCILER" --nvidia-rollback >/dev/null
