@@ -26,6 +26,11 @@ grep -Fq 'awtarchy nvidia-rollback' "$LAUNCHER" \
   || fail 'launcher does not expose the NVIDIA rollback command'
 grep -Fq 'Rollback last NVIDIA driver update' "$LAUNCHER" \
   || fail 'maintenance menu does not expose NVIDIA rollback'
+grep -Fq 'run_current_nvidia_rollback' "$LAUNCHER" \
+  || fail 'NVIDIA rollback is not pinned to the current updater reconciler'
+if grep -Fq 'run_package_reconciler --nvidia-rollback' "$LAUNCHER"; then
+  fail 'NVIDIA emergency rollback still follows the active Git-testing package revision'
+fi
 grep -Fq 'NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"' "$RECONCILER" \
   || fail 'production NVIDIA rollback state is not rooted under /var/lib/awtarchy'
 grep -Fq 'validate_nvidia_rollback_storage' "$RECONCILER" \
