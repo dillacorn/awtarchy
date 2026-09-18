@@ -929,40 +929,9 @@ run_package_reconciler() {
   AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" "$@"
 }
 
-offer_package_reconciliation_before_update() {
-  local arg="" answer="" rc=0
-
-  for arg in "$@"; do
-    [[ $arg == --review-only ]] && return 0
-  done
-
-  if [[ ! -t 0 || ! -t 1 || ! -r /dev/tty || ! -w /dev/tty ]]; then
-    return 0
-  fi
-
+run_current_nvidia_rollback() {
   require_package_reconciler
-  if AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --needs-action >/dev/null 2>&1; then
-    return 0
-  else
-    rc=$?
-  fi
-
-  if (( rc != 10 )); then
-    printf 'WARN: Could not determine Awtarchy package drift; continuing with the config update.\n' >&2
-    return 0
-  fi
-
-  printf '\nAwtarchy detected missing, replaced, or retired Awtarchy-managed packages.\n' >/dev/tty
-  printf 'Review/install package changes before updating configs? [Y/n] ' >/dev/tty
-  IFS= read -r answer </dev/tty || answer=''
-  case "$answer" in
-    n|N|no|NO)
-      printf 'Skipping package reconciliation; continuing with the config update.\n' >/dev/tty
-      return 0
-      ;;
-  esac
-
-  AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER"
+  AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --nvidia-rollback
 }
 
 run_failure_reports() {
@@ -1174,10 +1143,22 @@ run_git_operation() {
   printf 'Selected remote branch: %s\n' "$branch"
   printf 'Exact revision: %s\n' "$revision"
   printf 'Git testing action: %s\n' "$action"
-  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}"
-  if [[ "$action" == update ]]; then
-    reconcile_quickshell_ui_after_update
-  fi
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
 }
 
 git_cli() {
@@ -1273,13 +1254,14 @@ git_menu() {
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
-  local choice rc
+  local choice rc update_rc
   while true; do
     choice="$(single_select_menu "Awtarchy Maintenance" 0 \
       "Refresh Awtarchy updater from main" \
       "Update configs (preserve Hyprland customizations)" \
       "Reset configs (clean-slate managed files)" \
       "Reconcile packages (install current / remove replaced)" \
+      "Rollback last NVIDIA driver update" \
       "Review config changes without applying" \
       "Clean Awtarchy backup files" \
       "Version information" \
@@ -1293,12 +1275,20 @@ maintenance_menu() {
       1)
         protect_git_state_before_updater_refresh
         ensure_latest_updater update
-        offer_package_reconciliation_before_update || rc=$?
-        if [[ -z ${rc:-} ]] && config_release_ready_or_noop; then
-          run_runtime update-reset-backup --mode preserve || rc=$?
-          if [[ -z ${rc:-} ]]; then
-            reconcile_quickshell_ui_after_update
-          fi
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
         fi
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
@@ -1320,6 +1310,13 @@ maintenance_menu() {
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
       4)
+        ensure_latest_updater nvidia-rollback
+        clear_screen
+        run_current_nvidia_rollback || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      5)
         protect_git_state_before_updater_refresh
         ensure_latest_updater review
         if config_release_ready_or_noop; then
@@ -1328,12 +1325,12 @@ maintenance_menu() {
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
-      5)
+      6)
         run_runtime clean-backups || rc=$?
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
-      6)
+      7)
         clear_screen
         print_version_status >/dev/tty
         pause_menu
@@ -1351,6 +1348,7 @@ Usage:
   awtarchy update [--tag <tag>] [update options]
   awtarchy reset [--tag <tag>] [update options]
   awtarchy packages [--review]
+  awtarchy nvidia-rollback
   awtarchy review [--tag <tag>]
   awtarchy report
   awtarchy git
@@ -1371,7 +1369,10 @@ published release selected with --tag.
 Package reconciliation uses the current installed Awtarchy package catalogs.
 It can install missing current dependencies and selected catalog items, and it
 can remove explicitly retired/replaced packages. Retired package removal is
-preselected only when Awtarchy recorded ownership of that package.
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
 
 Git testing is explicit. The selected Awtarchy remote branch is resolved to an
 exact revision, and an exact --commit is accepted only when it belongs to that
@@ -1433,18 +1434,35 @@ main() {
       shift
       run_package_reconciler "$@"
       ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      (( $# == 0 )) || die "nvidia-rollback does not accept options."
+      run_current_nvidia_rollback
+      ;;
     update)
       reject_stable_testing_overrides "$@"
       protect_git_state_before_updater_refresh "$@"
       ensure_latest_updater "$@"
       shift
-      offer_package_reconciliation_before_update "$@"
       ensure_update_disk_headroom
       if ! config_release_ready_or_noop "$@"; then
         return 0
       fi
-      run_runtime update-reset-backup --mode preserve "$@"
-      reconcile_quickshell_ui_after_update
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
       ;;
     reset)
       reject_stable_testing_overrides "$@"

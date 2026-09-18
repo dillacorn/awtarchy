@@ -56,8 +56,10 @@ update_arm = update_arm[:end_pos]
 if "start_update_privilege_session" in update_arm or "sudo -v" in update_arm:
     raise SystemExit("stable update authenticates sudo before package-plan approval")
 
+if "offer_package_reconciliation_before_update" in update_arm or "run_package_reconciler" in update_arm:
+    raise SystemExit("stable config update must not invoke full package reconciliation")
+
 ordered = (
-    "offer_package_reconciliation_before_update",
     "ensure_update_disk_headroom",
     "config_release_ready_or_noop",
     "run_runtime update-reset-backup",
@@ -181,4 +183,4 @@ repair_v353_update_notifier_target "$control_target_home" v3.5.2
 cmp -s "${control_target_home}/.config/hypr/scripts/quickshell_update_notifications.sh" "$original_notifier" \
   || { printf '%s\n' 'FAIL: v3.5.3 notifier post-release repair changed another release target' >&2; exit 1; }
 
-printf '%s\n' 'PASS: notification detachment, v3.5.3 post-release delivery, AUR-only no-preauth, low-disk recovery, and per-package AUR sudo isolation are enforced.'
+printf '%s\n' 'PASS: stable updates keep package reconciliation explicit while preserving notification, disk-recovery, and sudo-isolation guarantees.'

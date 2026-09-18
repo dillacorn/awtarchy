@@ -40,7 +40,7 @@ chmod 0755 "$home/.local/share/awtarchy/awtarchy-runtime.sh"
 
 cat >"$home/.local/share/awtarchy/awtarchy-package-reconcile.sh" <<'EOF_MAIN_RECONCILER'
 #!/usr/bin/env bash
-printf '%s\n' 'MAIN-RECONCILER'
+printf 'MAIN-RECONCILER %s\n' "$*"
 EOF_MAIN_RECONCILER
 chmod 0755 "$home/.local/share/awtarchy/awtarchy-package-reconcile.sh"
 
@@ -147,5 +147,25 @@ grep -Fxq 'tag=main' "$home/.local/state/awtarchy/command-version" \
   || fail "Git-testing package execution changed main command state"
 grep -Fxq "revision=${MAIN_REV}" "$home/.local/state/awtarchy/command-version" \
   || fail "Git-testing package execution changed main command revision"
+
+: >"$curl_log"
+rollback_output="$(
+  env \
+    HOME="$home" \
+    USER="$(id -un)" \
+    LOGNAME="$(id -un)" \
+    PATH="${fakebin}:$PATH" \
+    AWTARCHY_TEST_CURL_LOG="$curl_log" \
+    AWTARCHY_TEST_MAIN_REV="$MAIN_REV" \
+    AWTARCHY_TEST_REV="$TEST_REV" \
+    AWTARCHY_TEST_ARCHIVE="$archive" \
+    "$home/.local/bin/awtarchy" nvidia-rollback
+)"
+grep -Fq 'MAIN-RECONCILER --nvidia-rollback' <<<"$rollback_output" \
+  || fail "NVIDIA rollback did not use the current main package reconciler"
+! grep -Fq 'TESTING-RECONCILER' <<<"$rollback_output" \
+  || fail "NVIDIA rollback incorrectly used the active Git-testing reconciler"
+! grep -Fq "/archive/${TEST_REV}.tar.gz" "$curl_log" \
+  || fail "NVIDIA rollback fetched the active Git-testing package revision"
 
 printf 'Awtarchy Git-testing package handoff test passed.\n'

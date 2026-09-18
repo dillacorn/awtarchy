@@ -14,8 +14,8 @@ Rectangle {
     Layout.fillWidth: true
     Layout.preferredHeight: content.implicitHeight + 16
     color: Theme.popupButton
-    border.width: 1
-    border.color: Theme.active
+    border.width: root.floatingState === "enabled" ? 2 : 1
+    border.color: root.floatingState === "enabled" ? Theme.urgent : Theme.active
 
     function scaledText(baseSize) {
         return Math.max(8, Math.round(baseSize * textScale / 100));
@@ -23,9 +23,9 @@ Rectangle {
 
     function statusLabel() {
         if (floatingState === "enabled")
-            return "Enabled";
+            return "FLOATING ON";
         if (floatingState === "disabled")
-            return "Disabled";
+            return "Tiling";
         if (floatingState === "unavailable")
             return "Unavailable";
         return "Checking…";
@@ -77,13 +77,14 @@ Rectangle {
 
             Text {
                 text: root.statusLabel()
-                color: Theme.muted
+                color: root.floatingState === "enabled" ? Theme.urgent : Theme.muted
                 font.family: Theme.fontFamily
                 font.pixelSize: root.scaledText(8)
+                font.bold: root.floatingState === "enabled"
             }
 
             SettingsButton {
-                label: root.floatingState === "enabled" ? "Disable" : "Enable"
+                label: root.floatingState === "enabled" ? "Restore tiling" : "Enable floating"
                 active: root.floatingState === "enabled"
                 textSize: root.scaledText(9)
                 enabled: FloatingWindowsState.available && !root.operationBusy
@@ -98,9 +99,11 @@ Rectangle {
                 : (FloatingWindowsState.message.length > 0
                     ? FloatingWindowsState.message
                     : (root.floatingState === "enabled"
-                        ? "New windows open floating by default. Existing windows keep their current state. Use SUPER+ALT+F to disable this mode or SUPER+F to tile/float the focused window."
-                        : "New windows use Awtarchy's normal tiling behavior. Existing windows keep their current state. Use SUPER+ALT+F to toggle floating-spawn mode."))
-            color: FloatingWindowsState.errorMessage.length > 0 ? Theme.urgent : Theme.muted
+                        ? "GLOBAL MODE ACTIVE: new windows open floating by default. Existing windows keep their current state. Restore tiling here or press SUPER+ALT+F. SUPER+F only changes the focused window."
+                        : "New windows use Awtarchy's normal tiling behavior. SUPER+ALT+F toggles global floating mode; SUPER+F only changes the focused window."))
+            color: (FloatingWindowsState.errorMessage.length > 0 || root.floatingState === "enabled")
+                ? Theme.urgent
+                : Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: root.scaledText(8)
             wrapMode: Text.Wrap

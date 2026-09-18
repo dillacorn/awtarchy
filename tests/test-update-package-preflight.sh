@@ -15,8 +15,11 @@ bash -n "$RECONCILER"
 
 grep -Fq -- '--needs-action' "$RECONCILER" \
     || fail 'package reconciler does not expose the non-mutating --needs-action status mode'
-grep -Fq -- 'offer_package_reconciliation_before_update' "$LAUNCHER" \
-    || fail 'awtarchy update has no package reconciliation preflight helper'
+if grep -Fq -- 'offer_package_reconciliation_before_update' "$LAUNCHER"; then
+    fail 'awtarchy update still invokes package reconciliation implicitly'
+fi
+grep -Fq -- '"Reconcile packages (install current / remove replaced)"' "$LAUNCHER" \
+    || fail 'explicit package reconciliation menu entry disappeared'
 
 update_case="$(python3 - "$LAUNCHER" <<'PY'
 from pathlib import Path
@@ -35,12 +38,15 @@ PY
 )" || fail 'could not locate the main awtarchy update dispatcher'
 
 ensure_line="$(grep -n -m1 -F 'ensure_latest_updater "$@"' <<<"$update_case" | cut -d: -f1 || true)"
-preflight_line="$(grep -n -m1 -F 'offer_package_reconciliation_before_update' <<<"$update_case" | cut -d: -f1 || true)"
 release_line="$(grep -n -m1 -F 'config_release_ready_or_noop "$@"' <<<"$update_case" | cut -d: -f1 || true)"
-[[ $ensure_line =~ ^[0-9]+$ && $preflight_line =~ ^[0-9]+$ && $release_line =~ ^[0-9]+$ ]] \
-    || fail 'could not locate update preflight ordering'
-(( ensure_line < preflight_line && preflight_line < release_line )) \
-    || fail 'package preflight must run after updater refresh and before config update readiness/apply'
+[[ $ensure_line =~ ^[0-9]+$ && $release_line =~ ^[0-9]+$ ]] \
+    || fail 'could not locate update readiness ordering'
+(( ensure_line < release_line )) \
+    || fail 'updater refresh must happen before config update readiness/apply'
+if grep -Fq -- 'run_package_reconciler' <<<"$update_case" \
+    || grep -Fq -- 'PACKAGE_RECONCILER' <<<"$update_case"; then
+    fail 'awtarchy update must not launch the full package reconciler'
+fi
 
 tmp="$(mktemp -d)"
 trap 'rm -rf -- "$tmp"' EXIT
@@ -135,8 +141,8 @@ set -e
 
 printf '%s\n' snapshot >>"$tmp/installed"
 
-# Only optional apps remain missing now. That is a valid clean state and must
-# not trigger the awtarchy update package-drift preflight.
+# Only optional apps remain missing now. That is still a valid clean state for
+# the explicit reconciler status check.
 set +e
 AWTARCHY_RUNTIME="$tmp/runtime.sh" \
 AWTARCHY_HARDWARE_FILE="$tmp/hardware-state" \
@@ -159,4 +165,4 @@ if [[ $rc -ne 0 ]]; then
     fail "--needs-action should ignore missing optional apps, got ${rc}"
 fi
 
-printf '%s\n' 'PASS: awtarchy update package preflight ignores optional apps while detecting real package drift.'
+printf '%s\n' 'PASS: awtarchy update never launches package reconciliation implicitly; explicit drift detection remains available.'

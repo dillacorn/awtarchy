@@ -27,8 +27,12 @@ contains "$HELPER" 'AWTARCHY_FLOATING_STATE_FILE' \
     'Floating Windows helper does not publish shared runtime state'
 contains "$HELPER" '--notify' \
     'Floating Windows helper has no notification-capable toggle path'
-contains "$HELPER" "\"\$NOTIFY_SEND\" -a Hyprland -t 1000 \"Floating windows\" \"\$state\"" \
-    'Floating Windows feedback is not using the short transient Hyprland notification identity'
+contains "$HELPER" 'title="Floating windows: ON"' \
+    'Floating Windows enable feedback does not clearly identify global mode'
+contains "$HELPER" 'body="Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling."' \
+    'Floating Windows enable feedback does not explain how to restore tiling'
+contains "$HELPER" 'timeout=5000' \
+    'Floating Windows enable feedback is too brief to be useful'
 if grep -Fq -- '-a Awtarchy' "$HELPER"; then
     fail 'Floating Windows feedback still uses the persistent Awtarchy notification identity'
 fi
@@ -59,6 +63,12 @@ contains "$CARD" 'FloatingWindowsState.state' \
     'Quick Settings Floating Windows card does not consume shared state'
 contains "$CARD" 'FloatingWindowsState.toggle()' \
     'Quick Settings Floating Windows card does not use the shared toggle path'
+contains "$CARD" 'return "FLOATING ON";' \
+    'Quick Settings does not make global Floating Windows state obvious'
+contains "$CARD" 'label: root.floatingState === "enabled" ? "Restore tiling" : "Enable floating"' \
+    'Quick Settings does not expose an explicit restore-tiling action'
+contains "$CARD" 'GLOBAL MODE ACTIVE: new windows open floating by default.' \
+    'Quick Settings enabled-state explanation is not prominent enough'
 if grep -Fq 'interval: 3000' "$CARD"; then
     fail 'Quick Settings Floating Windows card still polls status every 3 seconds'
 fi
@@ -134,8 +144,8 @@ printf '0\n' >"$CONFIGERROR_COUNT"
     || fail 'toggle did not publish enabled runtime state'
 contains "$TEST_LUA" 'local awtarchy_floating_windows = true -- AWTARCHY_FLOATING_WINDOWS' \
     'toggle did not persist the enabled marker'
-contains "$NOTIFY_LOG" '-a Hyprland -t 1000 Floating windows enabled' \
-    'keyboard enable feedback is not short-lived/transient'
+contains "$NOTIFY_LOG" '-a Hyprland -t 5000 Floating windows: ON Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling.' \
+    'keyboard enable feedback does not provide an obvious global-mode warning'
 
 printf '0\n' >"$CONFIGERROR_COUNT"
 [[ "$(run_helper toggle --notify)" == "disabled" ]] \
@@ -144,8 +154,8 @@ printf '0\n' >"$CONFIGERROR_COUNT"
     || fail 'second toggle did not publish disabled runtime state'
 contains "$TEST_LUA" 'local awtarchy_floating_windows = false -- AWTARCHY_FLOATING_WINDOWS' \
     'second toggle did not persist the disabled marker'
-contains "$NOTIFY_LOG" '-a Hyprland -t 1000 Floating windows disabled' \
-    'keyboard disable feedback is not short-lived/transient'
+contains "$NOTIFY_LOG" '-a Hyprland -t 2500 Floating windows: OFF Normal tiling is restored for new windows.' \
+    'keyboard disable feedback does not confirm restored tiling'
 
 missing_history=0
 for rel in \
@@ -163,4 +173,4 @@ done
 (( missing_history == 0 )) \
     || fail 'managed history is missing current global Floating Windows QML hashes'
 
-printf '%s\n' 'PASS: global Floating Windows mode has shared state, short transient feedback, keyboard toggle, and clickable bar escape hatch.'
+printf '%s\n' 'PASS: global Floating Windows mode has shared state, obvious active-state feedback, keyboard toggle, and clear restore-tiling escape hatches.'

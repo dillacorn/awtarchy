@@ -54,10 +54,14 @@ contains "$CARD" 'text: "Window Behavior"' \
   'Floating Windows card is not identified as native window behavior'
 contains "$CARD" 'text: "Floating Windows"' \
   'Floating Windows card is missing its user-facing label'
-contains "$CARD" 'New windows open floating by default.' \
+contains "$CARD" 'GLOBAL MODE ACTIVE: new windows open floating by default.' \
   'Floating Windows card does not explain enabled behavior'
 contains "$CARD" 'Existing windows keep their current state.' \
   'Floating Windows card does not explain map-time behavior'
+contains "$CARD" 'return "FLOATING ON";' \
+  'Floating Windows card does not make the active global mode obvious'
+contains "$CARD" 'label: root.floatingState === "enabled" ? "Restore tiling" : "Enable floating"' \
+  'Floating Windows card does not provide an explicit restore-tiling action'
 absent "$CARD" 'hyprpm' 'Floating Windows incorrectly depends on HyprPM'
 absent "$CARD" 'sudo' 'Floating Windows incorrectly requires sudo'
 

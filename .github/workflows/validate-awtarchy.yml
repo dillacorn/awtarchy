@@ -73,6 +73,9 @@ jobs:
           bash -n tests/test-awtarchy-command-shim.sh
           bash -n tests/test-awtarchy-legacy-cleanup.sh
           bash -n tests/test-awtarchy-update-notifications.sh
+          bash -n tests/test-update-diff-viewer.sh
+          bash -n tests/test-update-post-apply-confirmation.sh
+          bash -n tests/test-nvidia-update-rollback.sh
           bash -n tests/test-installer-aur-scanner-delegation.sh
           bash -n tests/test-aur-scanner-updater-migration.sh
           bash -n tests/test-aur-helper-policy.sh
@@ -198,6 +201,8 @@ jobs:
             tests/test-package-reconciler-alternatives.sh \
             tests/test-package-reconciler-interrupted-recovery.sh \
             tests/test-package-reconciler-aur-equivalents.sh \
+            tests/test-update-post-apply-confirmation.sh \
+            tests/test-nvidia-update-rollback.sh \
             tests/test-bar-control-actions.sh \
             tests/test-bar-icon-customization.sh \
             tests/test-bar-module-visibility.sh \
@@ -276,6 +281,9 @@ jobs:
           bash tests/test-awtarchy-command-shim.sh
           bash tests/test-awtarchy-legacy-cleanup.sh
           bash tests/test-awtarchy-update-notifications.sh
+          bash tests/test-update-diff-viewer.sh
+          bash tests/test-update-post-apply-confirmation.sh
+          bash tests/test-nvidia-update-rollback.sh
           bash tests/test-installer-aur-scanner-delegation.sh
           bash tests/test-aur-scanner-updater-migration.sh
           bash tests/test-aur-helper-policy.sh
