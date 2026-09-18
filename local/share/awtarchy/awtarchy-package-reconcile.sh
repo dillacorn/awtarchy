@@ -714,12 +714,16 @@ prepare_nvidia_rollback_snapshot() {
   mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
   (( ${#candidates[@]} )) || return 2
 
-  NVIDIA_ROLLBACK_PENDING="${NVIDIA_ROLLBACK_DIR}.pending.$$"
-  as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING"
-  as_root install -d -m 0755 -- \
-    "$NVIDIA_ROLLBACK_ROOT" \
-    "$NVIDIA_ROLLBACK_PENDING" \
-    "$NVIDIA_ROLLBACK_PENDING/packages"
+  NVIDIA_ROLLBACK_PENDING="${NVIDIA_ROLLBACK_DIR}.pending.$"
+  if ! as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING" \
+    || ! as_root install -d -m 0755 -- \
+      "$NVIDIA_ROLLBACK_ROOT" \
+      "$NVIDIA_ROLLBACK_PENDING" \
+      "$NVIDIA_ROLLBACK_PENDING/packages";
+  then
+    NVIDIA_ROLLBACK_PENDING=""
+    return 3
+  fi
 
   metadata_tmp="$(mktemp)"
   before_tmp="$(mktemp)"
@@ -807,7 +811,10 @@ finalize_nvidia_rollback_snapshot() {
   fi
 
   NVIDIA_ROLLBACK_COMPLETE="$complete"
-  cat -- "$NVIDIA_ROLLBACK_PENDING/metadata" >"$metadata_tmp"
+  if ! cat -- "$NVIDIA_ROLLBACK_PENDING/metadata" >"$metadata_tmp"; then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    die "Could not read pending NVIDIA rollback metadata."
+  fi
   {
     printf 'status=available\n'
     printf 'finalized_at=%s\n' "$(date -Iseconds)"
@@ -822,16 +829,24 @@ finalize_nvidia_rollback_snapshot() {
   fi
   rm -f -- "$changes_tmp" "$metadata_tmp"
 
-  as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    die "Could not clear the previous NVIDIA rollback staging path."
+  fi
   if [[ -e "$NVIDIA_ROLLBACK_DIR" ]]; then
-    as_root mv -- "$NVIDIA_ROLLBACK_DIR" "${NVIDIA_ROLLBACK_DIR}.previous"
+    if ! as_root mv -- "$NVIDIA_ROLLBACK_DIR" "${NVIDIA_ROLLBACK_DIR}.previous"; then
+      die "Could not preserve the previous NVIDIA rollback point."
+    fi
   fi
   if ! as_root mv -- "$NVIDIA_ROLLBACK_PENDING" "$NVIDIA_ROLLBACK_DIR"; then
-    [[ -e "${NVIDIA_ROLLBACK_DIR}.previous" ]] \
-      && as_root mv -- "${NVIDIA_ROLLBACK_DIR}.previous" "$NVIDIA_ROLLBACK_DIR"
+    if [[ -e "${NVIDIA_ROLLBACK_DIR}.previous" ]]; then
+      as_root mv -- "${NVIDIA_ROLLBACK_DIR}.previous" "$NVIDIA_ROLLBACK_DIR" \
+        || warn "Could not restore the previous NVIDIA rollback point after persistence failure."
+    fi
     die "Could not save the NVIDIA rollback point."
   fi
-  as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    warn "Saved the new NVIDIA rollback point, but could not remove the previous snapshot staging directory."
+  fi
   NVIDIA_ROLLBACK_PENDING=""
   return 0
 }
@@ -900,9 +915,972 @@ apply_nvidia_rollback() {
     return 0
   fi
 
-  as_root pacman -U --needed --noconfirm "${archives[@]}"
+  if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
+    die "NVIDIA rollback package transaction failed."
+  fi
 
-  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+  while IFS=    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    if [[ "$(package_version "$pkg" || true)" != "$old_version" ]]; then
+      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  metadata_tmp="$(mktemp)"
+  if ! cat -- "$NVIDIA_ROLLBACK_DIR/metadata" >"$metadata_tmp"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be read for status update."
+  fi
+  {
+    printf 'restored_at=%s\n' "$(date -Iseconds)"
+    printf 'status=restored\n'
+  } >>"$metadata_tmp"
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be updated."
+  fi
+  rm -f -- "$metadata_tmp"
+
+  log 'NVIDIA/kernel rollback completed. Reboot before judging the restored driver.'
+}
+
+confirm_nvidia_system_upgrade() {
+  local snapshot_rc=0
+  local -a nvidia_packages=()
+
+  mapfile -t nvidia_packages < <(installed_nvidia_package_names)
+  (( ${#nvidia_packages[@]} )) || return 0
+
+  printf '\nNVIDIA drivers are installed on this system.\n' >/dev/tty
+  printf 'This package plan requires a full system upgrade, which may update the NVIDIA driver and kernel.\n' >/dev/tty
+  printf 'Awtarchy will save the currently cached driver/kernel packages first so they can be restored later.\n\n' >/dev/tty
+  printf 'Current NVIDIA packages:\n' >/dev/tty
+  pacman -Q "${nvidia_packages[@]}" 2>/dev/null | sed 's/^/  /' >/dev/tty || true
+  printf '\n' >/dev/tty
+
+  confirm_yes_no 'Allow the full system upgrade, including any available NVIDIA update?' 0 \
+    || { log 'Package reconciliation canceled before NVIDIA/system upgrade.'; return 1; }
+
+  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      log 'Saved a complete pre-upgrade NVIDIA/kernel rollback snapshot.'
+      ;;
+    1)
+      printf '\nAwtarchy could not cache every currently installed NVIDIA/kernel package.\n' >/dev/tty
+      printf 'A one-command rollback may be unavailable if one of those uncached packages changes.\n' >/dev/tty
+      confirm_yes_no 'Continue with the NVIDIA/system upgrade anyway?' 0 \
+        || {
+          cleanup_nvidia_pending_snapshot
+          NVIDIA_ROLLBACK_PENDING=""
+          log 'Package reconciliation canceled because a complete rollback point was unavailable.'
+          return 1
+        }
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      ;;
+    *)
+      die 'Could not prepare the NVIDIA rollback point.'
+      ;;
+  esac
+  return 0
+}
+
+offer_nvidia_post_upgrade_choice() {
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" ]] || return 0
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    log 'NVIDIA/kernel package versions did not change during the system upgrade.'
+    return 0
+  fi
+
+  printf '\n' >/dev/tty
+  print_nvidia_rollback_changes
+  printf '\n' >/dev/tty
+
+  if (( NVIDIA_ROLLBACK_COMPLETE == 1 )); then
+    printf 'Rollback point saved. If a problem appears after reboot, run: awtarchy nvidia-rollback\n' >/dev/tty
+    printf 'Some NVIDIA problems only appear after reboot or when launching a game.\n' >/dev/tty
+    if ! confirm_yes_no 'Keep the new NVIDIA/kernel versions for now?' 1; then
+      apply_nvidia_rollback 1
+      return 20
+    fi
+  else
+    warn 'NVIDIA/kernel packages changed, but the saved rollback point is incomplete.'
+    warn 'Awtarchy will not attempt an unsafe partial automatic rollback.'
+  fi
+}
+
+choose_ly_action() {
+  install_ly=0
+  enable_ly=0
+
+  case "$LY_STATUS" in
+    'not installed')
+      if confirm_yes_no 'Install and enable Ly on tty2?' 0; then
+        install_ly=1
+        enable_ly=1
+      fi
+      ;;
+    'installed, not enabled on tty2')
+      if confirm_yes_no 'Enable installed Ly on tty2?' 0; then
+        enable_ly=1
+      fi
+      ;;
+    'installed and enabled on tty2')
+      printf '\nLy is already installed and enabled on tty2; leaving it unchanged.\n' >/dev/tty
+      ;;
+    *)
+      printf '\nLy state is %s; leaving it unchanged.\n' "$LY_STATUS" >/dev/tty
+      ;;
+  esac
+}
+
+selected_values() {
+  local values_name="$1" flags_name="$2" output_name="$3"
+  local -n values="$values_name"
+  local -n flags="$flags_name"
+  local -n output="$output_name"
+  local i
+  output=()
+  for i in "${!values[@]}"; do
+    (( flags[i] == 1 )) && output+=("${values[$i]}")
+  done
+}
+
+root_free_mib() {
+  local available_kib=""
+  available_kib="$(/usr/bin/df -Pk / 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  [[ $available_kib =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$(( available_kib / 1024 ))"
+}
+
+recover_package_disk_headroom() {
+  local preferred_mib="${AWTARCHY_UPDATE_PREFERRED_FREE_MIB:-4096}"
+  local required_mib="${AWTARCHY_UPDATE_REQUIRED_FREE_MIB:-1024}"
+  local free_mib="" paccache_bin=""
+
+  [[ $preferred_mib =~ ^[0-9]+$ && $required_mib =~ ^[0-9]+$ ]] \
+    || die "Invalid update disk-space threshold override."
+  (( preferred_mib >= required_mib )) \
+    || die "Preferred update disk-space threshold cannot be below the required threshold."
+
+  free_mib="$(root_free_mib)" \
+    || die "Could not determine free space on the root filesystem."
+  (( free_mib >= preferred_mib )) && return 0
+
+  for paccache_bin in /usr/bin/paccache /usr/sbin/paccache; do
+    [[ -x $paccache_bin ]] && break
+    paccache_bin=""
+  done
+
+  if [[ -n $paccache_bin ]]; then
+    log "Root filesystem has ${free_mib} MiB free; pruning old pacman cache entries while keeping two package versions..."
+    if ! as_root "$paccache_bin" -rk2; then
+      die "Automatic pacman cache pruning failed."
+    fi
+    free_mib="$(root_free_mib)" \
+      || die "Could not re-check free space after pacman cache pruning."
+  fi
+
+  (( free_mib >= required_mib )) \
+    || die "Root filesystem has only ${free_mib} MiB free; at least ${required_mib} MiB is required before continuing package installation."
+
+  if (( free_mib < preferred_mib )); then
+    warn "Root filesystem has ${free_mib} MiB free; continuing above the ${required_mib} MiB hard minimum."
+  fi
+}
+
+as_root() {
+  if (( EUID == 0 )); then
+    "$@"
+  else
+    sudo -- "$@"
+  fi
+}
+
+pacman_recovery_supported_runtime() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    return 0
+  fi
+  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+}
+
+pacman_recovery_configure() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
+    PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
+    PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
+    PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
+  else
+    PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_CONF=/etc/pacman.conf
+    PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
+    PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
+    PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
+  fi
+
+  [[ -x $PACMAN_RECOVERY_PACMAN ]] \
+    || { warn "Pacman recovery binary is unavailable: ${PACMAN_RECOVERY_PACMAN}"; return 1; }
+  [[ -r $PACMAN_RECOVERY_CONF ]] \
+    || { warn "Pacman recovery configuration is unavailable: ${PACMAN_RECOVERY_CONF}"; return 1; }
+}
+
+pacman_recovery_as_root() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    "$@"
+  else
+    as_root "$@"
+  fi
+}
+
+pacman_recovery_run_capture() {
+  local root_mode="$1" error_file="$2"
+  shift 2
+  local rc=0
+
+  : >"$error_file"
+  if [[ $root_mode == root ]]; then
+    if pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    if "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  fi
+
+  if [[ -s $error_file ]]; then
+    cat -- "$error_file" >&2
+  fi
+  return "$rc"
+}
+
+pacman_recovery_parse_repos() {
+  local error_file="$1" line
+  local saw_sync_failure=0
+  local -a repos=()
+
+  grep -Fq 'failed to synchronize all databases' "$error_file" \
+    && saw_sync_failure=1
+
+  while IFS= read -r line; do
+    if [[ $line =~ ^error:\ database\ \'([A-Za-z0-9@._+:-]+)\'\ is\ not\ valid\ \(invalid\ or\ corrupted\ database\ \(PGP\ signature\)\)$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+      continue
+    fi
+    if (( saw_sync_failure == 1 )) \
+      && [[ $line =~ ^error:\ ([A-Za-z0-9@._+:-]+):\ signature\ from\ .+\ is\ invalid$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+    fi
+  done <"$error_file"
+
+  (( ${#repos[@]} > 0 )) || return 1
+  printf '%s\n' "${repos[@]}" | LC_ALL=C sort -u
+}
+
+pacman_recovery_repo_is_cachyos() {
+  [[ $1 == cachyos || $1 == cachyos-* ]]
+}
+
+pacman_recovery_repo_is_arch() {
+  [[ $1 =~ ^(core|extra|multilib)(-testing|-staging)?$ ]]
+}
+
+pacman_recovery_repo_in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ $item == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+pacman_recovery_write_config_without_repos() {
+  local destination="$1"
+  shift
+  local -a blocked=("$@")
+  local line section="" skip=0
+
+  : >"$destination"
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^\[([A-Za-z0-9@._+:-]+)\][[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      if pacman_recovery_repo_in_list "$section" "${blocked[@]}"; then
+        skip=1
+      else
+        skip=0
+      fi
+    fi
+    (( skip == 1 )) || printf '%s\n' "$line" >>"$destination"
+  done <"$PACMAN_RECOVERY_CONF"
+}
+
+pacman_recovery_bootstrap_tool() {
+  local kind="$1"
+  shift
+  local -a repos=("$@")
+  local tmp_conf
+
+  tmp_conf="$(mktemp)"
+  pacman_recovery_write_config_without_repos "$tmp_conf" "${repos[@]}"
+
+  case "$kind" in
+    cachyos)
+      log "CachyOS mirror tool is missing; bootstrapping rate-mirrors and cachyos-rate-mirrors without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm rate-mirrors cachyos-rate-mirrors; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap cachyos-rate-mirrors; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    arch)
+      log "Arch mirror tool is missing; trying to bootstrap reflector without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm reflector; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap reflector; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    *)
+      rm -f -- "$tmp_conf"
+      return 1
+      ;;
+  esac
+
+  rm -f -- "$tmp_conf"
+}
+
+pacman_recovery_refresh_mirrors() {
+  local -a repos=("$@")
+  local repo need_cachy=0 need_arch=0
+
+  [[ $PACMAN_RECOVERY_SKIP_MIRROR_REFRESH == 1 ]] && return 0
+
+  for repo in "${repos[@]}"; do
+    pacman_recovery_repo_is_cachyos "$repo" && need_cachy=1
+    pacman_recovery_repo_is_arch "$repo" && need_arch=1
+  done
+
+  if (( need_cachy == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      pacman_recovery_bootstrap_tool cachyos "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      log "Refreshing CachyOS mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" \
+        || warn "CachyOS mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+
+  if (( need_arch == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      pacman_recovery_bootstrap_tool arch "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      log "Refreshing standard Arch mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+        --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist \
+        || warn "Arch mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+}
+
+pacman_recovery_confirm() {
+  local answer=""
+  local -a repos=("$@")
+
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    case "${AWTARCHY_ASSUME_PACMAN_REPAIR:-no}" in
+      y|Y|yes|YES) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    warn "Pacman has an invalid signed repository database, but no interactive terminal is available for repair approval."
+    return 1
+  fi
+
+  printf '\nAwtarchy detected an invalid signed pacman repository database:\n' >/dev/tty
+  printf '  - %s\n' "${repos[@]}" >/dev/tty
+  printf '\nAwtarchy can refresh supported mirrors, remove only the affected cached\n' >/dev/tty
+  printf 'repository database/signature files, force a fresh sync, and retry once.\n' >/dev/tty
+  printf 'It will not disable signature checking or reset your pacman keyring.\n\n' >/dev/tty
+  printf 'Attempt this repair? [y/N] ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=''
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *)
+      printf 'Pacman repository repair skipped.\n' >/dev/tty
+      return 1
+      ;;
+  esac
+}
+
+pacman_recovery_clear_sync_databases() {
+  local repo
+  for repo in "$@"; do
+    pacman_recovery_as_root rm -f -- \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db" \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db.sig"
+  done
+}
+
+pacman_recovery_repair() {
+  local -a repos=("$@")
+  local error_file rc=0
+
+  (( ${#repos[@]} > 0 )) || return 1
+  pacman_recovery_confirm "${repos[@]}" || return 1
+
+  pacman_recovery_refresh_mirrors "${repos[@]}"
+  pacman_recovery_clear_sync_databases "${repos[@]}"
+
+  error_file="$(mktemp)"
+  log "Forcing a fresh pacman database sync..."
+  if pacman_recovery_run_capture root "$error_file" -Syy; then
+    rm -f -- "$error_file"
+    log "Pacman repository database recovery completed."
+    return 0
+  else
+    rc=$?
+  fi
+  rm -f -- "$error_file"
+  warn "Pacman database resync still failed; no signature checks were bypassed and no keyring changes were made."
+  return "$rc"
+}
+
+pacman_sync_db_preflight() {
+  local error_file rc=0
+  local -a repos=()
+
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture user "$error_file" -Slq >/dev/null; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+  pacman_recovery_repair "${repos[@]}"
+}
+
+pacman_recovery_run_command() {
+  local error_file rc=0 retry_rc=0
+  local -a repos=() args=("$@")
+
+  pacman_recovery_supported_runtime || {
+    as_root pacman "${args[@]}"
+    return $?
+  }
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+
+  if ! pacman_recovery_repair "${repos[@]}"; then
+    return "$rc"
+  fi
+
+  error_file="$(mktemp)"
+  log "Retrying the original pacman command once..."
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    retry_rc=0
+  else
+    retry_rc=$?
+  fi
+  rm -f -- "$error_file"
+  return "$retry_rc"
+}
+
+pacman_install_with_recovery() {
+  pacman_recovery_run_command "$@"
+}
+
+ensure_aur_scanner() {
+  if [[ -x "$AUR_SCAN_BIN" ]] && "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "$AUR_SCAN_BIN" != /usr/bin/aur-scan ]]; then
+    warn "Configured aur-scan test binary is unavailable: ${AUR_SCAN_BIN}"
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/yay ]] || ! /usr/bin/yay --version >/dev/null 2>&1; then
+    warn "aur-scanner is missing and a usable /usr/bin/yay is unavailable for the one-time bootstrap."
+    return 1
+  fi
+
+  log "Installing stable aur-scanner through yay for the one-time bootstrap..."
+  if ! /usr/bin/yay -S --noconfirm --pgpfetch aur-scanner; then
+    warn "Failed to bootstrap stable aur-scanner."
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/aur-scan ]] || ! /usr/bin/aur-scan --version >/dev/null 2>&1; then
+    warn "aur-scanner installed without a usable /usr/bin/aur-scan."
+    return 1
+  fi
+
+  AUR_SCAN_BIN="/usr/bin/aur-scan"
+}
+
+install_selected_aur_packages() {
+  local pkg
+
+  for pkg in "$@"; do
+    if aur_package_satisfied "$pkg"; then
+      log "${pkg} or an equivalent installation is already present; skipping."
+      continue
+    fi
+
+    if (( EUID != 0 )); then
+      sudo -k
+    fi
+    log "Installing AUR package through upstream aur-scanner: ${pkg}"
+    if ! "$AUR_SCAN_BIN" install "$pkg" --noconfirm; then
+      warn "AUR package failed: ${pkg}. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! aur_package_satisfied "$pkg"; then
+      warn "aur-scanner returned success but ${pkg} is still not detected. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! record_managed_packages "$pkg"; then
+      warn "${pkg} installed, but Awtarchy could not update its managed-package ledger."
+    fi
+  done
+
+  return 0
+}
+
+record_managed_packages() {
+  local -a add=("$@")
+  local tmp pkg
+  (( ${#add[@]} )) || return 0
+  tmp="$(mktemp)"
+  if [[ -r "$MANAGED_PACKAGES_FILE" ]]; then
+    cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  else
+    : >"$tmp"
+  fi
+  for pkg in "${add[@]}"; do
+    package_installed "$pkg" && printf '%s\n' "$pkg" >>"$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -d -m 0755 -- "$(dirname -- "$MANAGED_PACKAGES_FILE")"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+forget_managed_packages() {
+  local -a remove=("$@")
+  local tmp pkg
+  (( ${#remove[@]} )) || return 0
+  [[ -r "$MANAGED_PACKAGES_FILE" ]] || return 0
+  tmp="$(mktemp)"
+  cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  for pkg in "${remove[@]}"; do
+    sed -i "/^$(printf '%s' "$pkg" | sed 's/[][\\.^$*+?{}|()]/\\&/g')$/d" "$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+apply_cheese_snapshot_replacement() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) || return 0
+
+  log "Replacing retired Cheese camera app with Snapshot..."
+  if ! package_installed snapshot; then
+    pacman_install_with_recovery -S --needed --noconfirm snapshot
+  fi
+  record_managed_packages snapshot
+  as_root pacman -R --noconfirm cheese
+  forget_managed_packages cheese
+  CHEESE_REPLACEMENT_NEEDED=0
+  log "Replaced Cheese with Snapshot."
+}
+
+apply_bibata_cursor_replacement() {
+  array_contains bibata-cursor-theme-bin "${AUR_CATALOG[@]}" || return 0
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    if [[ ! -x "$AUR_SCAN_BIN" ]] || ! "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+      warn "Bibata cursor migration requires a usable aur-scan; leaving the existing cursor package untouched."
+      return 0
+    fi
+    log "Installing Bibata cursor theme through upstream aur-scanner..."
+    install_selected_aur_packages bibata-cursor-theme-bin
+  fi
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    warn "Bibata cursor theme is not installed; leaving the existing cursor package untouched."
+    return 0
+  fi
+
+  package_installed xcursor-comix || return 0
+  local ownership_recorded=0
+  managed_package xcursor-comix && ownership_recorded=1
+  log "Removing retired xcursor-comix package after Bibata replacement..."
+
+  if ! as_root pacman -R --noconfirm xcursor-comix; then
+    warn "Could not remove retired xcursor-comix; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed xcursor-comix; then
+    warn "xcursor-comix is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages xcursor-comix; then
+      warn "xcursor-comix was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Replaced retired xcursor-comix with Bibata."
+}
+
+migrate_lockscreen_retirement() {
+  [[ "${AWTARCHY_LOCKSCREEN_RETIRE_CONFIRMED:-0}" == 1 ]] \
+    || die "Lockscreen retirement requires an explicitly confirmed target."
+
+  if array_contains hyprlock "${ARCH_CATALOG[@]}"; then
+    die "Target runtime still requires Hyprlock; refusing package retirement."
+  fi
+
+  package_installed hyprlock || return 0
+  local ownership_recorded=0
+  managed_package hyprlock && ownership_recorded=1
+  log "Removing retired Hyprlock package after Quickshell lockscreen cutover..."
+
+  if ! as_root pacman -R --noconfirm hyprlock; then
+    warn "Could not remove retired Hyprlock; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed hyprlock; then
+    warn "hyprlock is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages hyprlock; then
+      warn "Hyprlock was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Removed retired Hyprlock package."
+}
+
+flatpak_scope() {
+  local fs=""
+  if have findmnt; then
+    fs="$(findmnt -n -o FSTYPE / 2>/dev/null || true)"
+  fi
+  if [[ $fs == btrfs ]]; then printf '%s\n' system; else printf '%s\n' user; fi
+}
+
+install_flatpak_apps() {
+  local scope="$1"
+  shift
+  local -a apps=("$@") cmd=()
+  (( ${#apps[@]} )) || return 0
+
+  if [[ $scope == user ]]; then
+    cmd=(flatpak --user)
+  else
+    cmd=(as_root flatpak --system)
+  fi
+
+  if ! "${cmd[@]}" remotes --columns=name 2>/dev/null | grep -Fxq flathub; then
+    "${cmd[@]}" remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  fi
+  "${cmd[@]}" install -y flathub "${apps[@]}"
+}
+
+package_reconciliation_needs_action() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) && return 0
+  (( ${#MISSING_REQUIRED[@]} > 0 )) && return 0
+  (( ${#MISSING_ARCH[@]} > 0 )) && return 0
+  (( ${#MISSING_AUR[@]} > 0 )) && return 0
+  (( ${#MISSING_FLATPAK_IDS[@]} > 0 )) && return 0
+  (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
+  return 1
+}
+
+if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
+  if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+    apply_nvidia_rollback 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
+    apply_nvidia_rollback 0
+  fi
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_CHECK_ONLY == 1 )); then
+  pacman_sync_db_preflight
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_RUN_ONLY == 1 )); then
+  pacman_recovery_run_command "${PACMAN_RECOVERY_RUN_ARGS[@]}"
+  exit $?
+fi
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  pacman_sync_db_preflight || true
+fi
+
+collect_state
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  if package_reconciliation_needs_action; then
+    exit 10
+  fi
+  exit 0
+fi
+
+if (( MIGRATE_REPLACEMENTS_ONLY == 1 )); then
+  apply_cheese_snapshot_replacement
+  apply_bibata_cursor_replacement
+  exit 0
+fi
+
+if (( MIGRATE_LOCKSCREEN_RETIREMENT_ONLY == 1 )); then
+  migrate_lockscreen_retirement
+  exit 0
+fi
+
+if (( REVIEW_ONLY == 1 )); then
+  print_review
+  exit 0
+fi
+
+[[ -r /dev/tty && -w /dev/tty ]] || die "Interactive package reconciliation requires a terminal."
+
+print_review >/dev/tty
+printf '\nOptional choices are listed first and start unchecked.\n' >/dev/tty
+printf 'Missing default packages start selected; Space opts out.\n' >/dev/tty
+printf 'Installed current packages are preserved even when not selected here.\n\n' >/dev/tty
+confirm_yes_no 'Continue to package choices?' 1 || { log 'Package reconciliation canceled.'; exit 0; }
+
+# Optional Arch packages are shown first and unchecked; missing defaults follow selected.
+declare -a arch_labels=()
+declare -a arch_values=()
+declare -a arch_flags=()
+declare -a selected_arch=()
+for pkg in "${MISSING_OPTIONAL_ARCH[@]}"; do
+  arch_labels+=("${pkg} (optional)")
+  arch_values+=("$pkg")
+  arch_flags+=(0)
+done
+for pkg in "${MISSING_ARCH[@]}"; do
+  arch_labels+=("$pkg")
+  arch_values+=("$pkg")
+  arch_flags+=(1)
+done
+if (( ${#arch_labels[@]} )); then
+  multi_select 'Arch packages to install' arch_labels arch_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values arch_values arch_flags selected_arch
+
+# Optional AUR packages are shown first and unchecked; missing defaults follow selected.
+declare -a aur_labels=()
+declare -a aur_values=()
+declare -a aur_flags=()
+declare -a selected_aur=()
+for pkg in "${MISSING_OPTIONAL_AUR[@]}"; do
+  aur_labels+=("${pkg} (optional)")
+  aur_values+=("$pkg")
+  aur_flags+=(0)
+done
+for pkg in "${MISSING_AUR[@]}"; do
+  aur_labels+=("$pkg")
+  aur_values+=("$pkg")
+  aur_flags+=(1)
+done
+if (( ${#aur_labels[@]} )); then
+  multi_select 'AUR packages to install' aur_labels aur_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values aur_values aur_flags selected_aur
+
+# Optional Flatpaks are shown first and unchecked; missing defaults follow selected.
+declare -a flatpak_labels=()
+declare -a flatpak_values=()
+declare -a flatpak_flags=()
+declare -a selected_flatpak=()
+for i in "${!MISSING_OPTIONAL_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_OPTIONAL_FLATPAK_NAMES[$i]} (${MISSING_OPTIONAL_FLATPAK_IDS[$i]}) (optional)")
+  flatpak_values+=("${MISSING_OPTIONAL_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(0)
+done
+for i in "${!MISSING_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_FLATPAK_NAMES[$i]} (${MISSING_FLATPAK_IDS[$i]})")
+  flatpak_values+=("${MISSING_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(1)
+done
+if (( ${#flatpak_labels[@]} )); then
+  multi_select 'Flatpak apps to install' flatpak_labels flatpak_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values flatpak_values flatpak_flags selected_flatpak
+
+install_ly=0
+enable_ly=0
+choose_ly_action
+
+# Retired packages: Awtarchy-owned defaults selected; unowned defaults kept.
+declare -a retired_labels=()
+declare -a retired_values=()
+declare -a retired_flags=()
+declare -a selected_retired=()
+for pkg in "${RETIRED_MANAGED[@]}"; do
+  retired_labels+=("${pkg} (Awtarchy-owned, replaced)")
+  retired_values+=("$pkg")
+  retired_flags+=(1)
+done
+for pkg in "${RETIRED_UNOWNED[@]}"; do
+  retired_labels+=("${pkg} (not Awtarchy-owned, keep unless selected)")
+  retired_values+=("$pkg")
+  retired_flags+=(0)
+done
+if (( ${#retired_labels[@]} )); then
+  multi_select 'Retired/replaced packages to remove' retired_labels retired_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values retired_values retired_flags selected_retired
+
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )); then
+  array_contains cheese "${selected_retired[@]}" || selected_retired+=(cheese)
+fi
+
+install_arch=("${MISSING_REQUIRED[@]}" "${selected_arch[@]}")
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )) && ! package_installed snapshot; then
+  install_arch+=(snapshot)
+fi
+sort_unique_array install_arch
+if (( install_ly == 1 )); then install_arch+=(ly); fi
+if (( ${#selected_flatpak[@]} )) && ! have flatpak; then
+  install_arch+=(flatpak)
+fi
+sort_unique_array install_arch
+
+printf '\033[H\033[2J' >/dev/tty
+printf '%s\n\n' 'Awtarchy package reconciliation plan' >/dev/tty
+print_list 'Install from Arch repositories:' "${install_arch[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install from AUR:' "${selected_aur[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install Flatpak apps:' "${selected_flatpak[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Remove retired/replaced packages:' "${selected_retired[@]}" >/dev/tty
+if (( enable_ly == 1 )); then printf '\nLy: enable ly@tty2.service and disable getty@tty2.service\n' >/dev/tty; fi
+printf '\nNo current installed package will be removed merely because it was not selected; explicit replacements may be migrated.\n\n' >/dev/tty
+
+if (( ${#install_arch[@]} == 0 && ${#selected_aur[@]} == 0 && ${#selected_flatpak[@]} == 0 && ${#selected_retired[@]} == 0 && enable_ly == 0 )); then
+  log 'No package changes selected.'
+  exit 0
+fi
+
+confirm_yes_no 'Apply this package plan?' 0 || { log 'Package reconciliation canceled.'; exit 0; }
+recover_package_disk_headroom
+
+if (( ${#install_arch[@]} )); then
+  confirm_nvidia_system_upgrade || exit 0
+  log "Installing Arch packages with a full system upgrade: ${install_arch[*]}"
+  if ! pacman_install_with_recovery -Syu --needed --noconfirm "${install_arch[@]}"; then
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Arch package transaction failed."
+  fi
+  # Finalize/offer NVIDIA recovery before bookkeeping so a ledger failure cannot
+  # strand a successful driver upgrade without its rollback point.
+  nvidia_post_rc=0
+  offer_nvidia_post_upgrade_choice || nvidia_post_rc=$?
+  record_managed_packages "${install_arch[@]}"
+  case "$nvidia_post_rc" in
+    0) ;;
+    20)
+      log 'NVIDIA/kernel rollback completed; stopping package reconciliation so the system can be rebooted cleanly.'
+      exit 0
+      ;;
+    *)
+      exit "$nvidia_post_rc"
+      ;;
+  esac
+fi
+
+if (( enable_ly == 1 )); then
+  have systemctl || die "Ly is installed but systemctl is unavailable for tty2 setup."
+  as_root systemctl disable getty@tty2.service >/dev/null 2>&1 || true
+  as_root systemctl enable ly@tty2.service
+  log 'Ly enabled on tty2; getty@tty2 disabled.'
+fi
+
+if (( ${#selected_aur[@]} )); then
+  log 'AUR build privilege isolation enabled; makepkg may request sudo independently.'
+  if ensure_aur_scanner; then
+    install_selected_aur_packages "${selected_aur[@]}"
+  else
+    warn 'aur-scanner is unavailable; recording selected AUR packages as failed and continuing with remaining package actions.'
+    FAILED_AUR+=("${selected_aur[@]}")
+  fi
+fi
+
+if (( ${#selected_flatpak[@]} )); then
+  have flatpak || die "Flatpak installation was selected but flatpak is unavailable after package installation."
+  scope="$(flatpak_scope)"
+  log "Installing Flatpak apps in ${scope} scope: ${selected_flatpak[*]}"
+  install_flatpak_apps "$scope" "${selected_flatpak[@]}"
+fi
+
+if (( ${#selected_retired[@]} )); then
+  log "Removing selected retired packages: ${selected_retired[*]}"
+  as_root pacman -R --noconfirm "${selected_retired[@]}"
+  forget_managed_packages "${selected_retired[@]}"
+fi
+
+if (( ${#FAILED_AUR[@]} )); then
+  sort_unique_array FAILED_AUR
+  printf '\n'
+  print_list 'AUR packages that could not be installed:' "${FAILED_AUR[@]}"
+  warn 'AUR failures do not stop package reconciliation; all other selected package actions were still processed.'
+  log 'Package reconciliation completed with AUR package failures.'
+else
+  log 'Package reconciliation complete.'
+fi\t' read -r pkg old_version saved_current_version archive_name; do
     [[ -n "$pkg" && -n "$old_version" ]] || continue
     if [[ "$(package_version "$pkg" || true)" != "$old_version" ]]; then
       die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}."
