@@ -51,6 +51,7 @@ declare -a RETIRED_ARCH=(
   network-manager-applet
   blueman
   termdown
+  qemu-guest-agent
 )
 
 declare -a ARCH_CATALOG=()
