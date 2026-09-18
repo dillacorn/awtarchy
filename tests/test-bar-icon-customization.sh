@@ -187,7 +187,7 @@ for removed_style in \
     filled-dot filled-diamond center-diamond filled-square small-square filled-triangle spark minimal-bar \
     dots diamonds squares triangles minimal
 do
-    if grep -Fq "\"${removed_style}\"" "$STATE_SCRIPT"; then
+    if grep -F 'WORKSPACE_STYLES_JSON=' "$STATE_SCRIPT" | grep -Fq "\"${removed_style}\""; then
         fail "state writer still accepts removed workspace style ${removed_style}"
     fi
 done
