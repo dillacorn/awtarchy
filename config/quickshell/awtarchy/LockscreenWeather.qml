@@ -15,20 +15,48 @@ Singleton {
     readonly property int minimumRefreshIntervalMs: 1200000
     readonly property string configuredLocation:
         String(BarState.lockscreenWeatherLocation() || "").trim()
-    readonly property bool refreshEnabled: BarState.lockscreenShowWeather()
-    readonly property string configuredUnits: BarState.lockscreenWeatherUnits()
+    readonly property var configuredUnitModes: requiredUnitModes()
+    readonly property bool refreshEnabled: configuredUnitModes.length > 0
 
     property string lastRequestIdentity: ""
     property double lastRequestMs: 0
 
+    function normalizedUnitMode(value) {
+        const mode = String(value || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(mode) >= 0 ? mode : "auto";
+    }
+
+    function requiredUnitModes() {
+        const modes = [];
+        const seen = ({});
+        function addProfile(profile) {
+            if (!profile || typeof profile !== "object")
+                return;
+            if (profile.lockscreen_show_weather === true) {
+                const mode = root.normalizedUnitMode(profile.lockscreen_weather_units);
+                if (seen[mode])
+                    return;
+                seen[mode] = true;
+                modes.push(mode);
+            }
+        }
+
+        addProfile(BarState.lockscreenLastEditedProfile());
+        const profiles = BarState.lockscreenMonitorProfiles();
+        for (const name of Object.keys(profiles || ({})))
+            addProfile(profiles[name]);
+        return modes;
+    }
+
     function requestRefresh() {
         const location = String(root.configuredLocation || "").trim();
-        const units = String(root.configuredUnits || "auto");
-        if (!root.refreshEnabled || refreshProcess.running)
+        const modes = root.requiredUnitModes();
+        if (modes.length === 0 || refreshProcess.running)
             return;
 
+        const sortedModes = modes.slice().sort();
         const now = Date.now();
-        const requestIdentity = location + "|" + units;
+        const requestIdentity = location + "|" + sortedModes.join(",");
         const requestChanged = requestIdentity !== root.lastRequestIdentity;
         if (!requestChanged && root.lastRequestMs > 0
                 && now - root.lastRequestMs < root.minimumRefreshIntervalMs)
@@ -36,7 +64,7 @@ Singleton {
 
         root.lastRequestIdentity = requestIdentity;
         root.lastRequestMs = now;
-        refreshProcess.exec([root.weatherHelper, "refresh", location, units]);
+        refreshProcess.exec([root.weatherHelper, "refresh-set", location, JSON.stringify(modes)]);
     }
 
     Process {

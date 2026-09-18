@@ -31,8 +31,9 @@ has "$STATE" '800 6000' 'approved 800-6000ms transition duration range is missin
 has "$BAR_STATE" 'function lockscreenEntryTransitionDuration()' 'BarState duration reader is missing'
 has "$EDITOR" 'property int draftEntryTransitionDuration: 1800' 'editor duration draft is not 1800ms'
 has "$EDITOR" 'text: "Transition Speed"' 'editor duration control is missing'
-has "$SURFACE" 'required property int entryTransitionDuration' 'secure surface duration input is missing'
-has "$SHELL" 'entryTransitionDuration: root.lockEntryTransitionDuration' 'secure shell does not pass duration'
+has "$SURFACE" 'duration: root.profile.lockscreen_entry_transition_duration' 'secure surface transition duration is not monitor-profile local'
+has "$SHELL" 'monitorProfiles: root.lockMonitorProfiles' 'secure shell does not pass per-display presentation profiles'
+has "$SHELL" 'lastEditedProfile: root.lockLastEditedProfile' 'secure shell does not pass the last-edited fallback profile'
 has "$LAYER" 'Math.max(800, Math.min(6000' 'shared renderer does not enforce transition duration bounds'
 has "$SCENE" '&& !root.effectiveEntryTransitionRunning' 'logo formation is not sequenced after the active scene reveal'
 lacks "$AUTH" 'entryTransitionDuration' 'transition duration leaked into authentication owner'
@@ -107,7 +108,7 @@ has "$PICKER" '.fullscreen' 'picker does not verify exact-client fullscreen stat
 has "$PICKER" 'mode = "fullscreen"' 'picker does not request true fullscreen mode'
 has "$PICKER" 'action = "set"' 'picker fullscreen request can toggle instead of set'
 lacks "$PICKER" 'class:^(awtarchy-lock-wallpaper)$' 'picker still dispatches by class instead of exact address'
-has "$PICKER" '--select-only --type images' 'picker no longer uses selection-only mode'
+has "$PICKER" '--select-only --type all' 'picker no longer uses all-media selection-only mode'
 bash "$ROOT/tests/test-quickshell-lockscreen-picker-targeting.sh" >/dev/null \
     || fail 'exact mapped Awtwall fullscreen targeting contract failed'
 

@@ -12,6 +12,22 @@ ShellRoot {
     id: root
 
     property bool unlockRequested: false
+    property var lockMonitorProfiles: ({})
+    property var lockLastEditedProfile: LockscreenPresentationState.sharedProfile(({}))
+    readonly property int captureCleanupTransitionDuration: {
+        let maximum = Number(root.lockLastEditedProfile.lockscreen_entry_transition_duration);
+        if (!Number.isFinite(maximum))
+            maximum = 1800;
+        const profiles = root.lockMonitorProfiles;
+        if (profiles && typeof profiles === "object" && !Array.isArray(profiles)) {
+            for (const name of Object.keys(profiles)) {
+                const profile = profiles[name];
+                if (profile && typeof profile === "object" && !Array.isArray(profile))
+                    maximum = Math.max(maximum, Number(profile.lockscreen_entry_transition_duration));
+            }
+        }
+        return Math.max(800, Math.min(6000, Math.round(maximum)));
+    }
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string runtimeDir: Quickshell.env("XDG_RUNTIME_DIR") || ""
@@ -48,6 +64,7 @@ ShellRoot {
     property int lockWallpaperBlur: 10
     property string lockBlurStyle: "pixelated"
     property string lockWeatherLocation: ""
+    property string lockWeatherUnits: "auto"
     readonly property string wallpaperFit: normalizedWallpaperFit(lockWallpaperFit)
     readonly property real wallpaperFocalX: normalizedUnitInterval(lockWallpaperFocalX, 0.5)
     readonly property real wallpaperFocalY: normalizedUnitInterval(lockWallpaperFocalY, 0.5)
@@ -223,6 +240,11 @@ ShellRoot {
     function normalizedClockFormat(value) {
         const key = String(value || "");
         return ["24h", "12h"].indexOf(key) >= 0 ? key : "24h";
+    }
+
+    function normalizedWeatherUnits(value) {
+        const key = String(value || "auto");
+        return ["auto", "fahrenheit", "celsius"].indexOf(key) >= 0 ? key : "auto";
     }
 
     function normalizedBackground(value) {
@@ -439,6 +461,8 @@ ShellRoot {
     }
 
     function resetPreferences() {
+        lockMonitorProfiles = ({});
+        lockLastEditedProfile = LockscreenPresentationState.sharedProfile(({}));
         lockAnimationPreference = "split";
         lockEntryTransition = "fade";
         lockEntryTransitionDuration = 1800;
@@ -463,6 +487,8 @@ ShellRoot {
         lockWallpaperBlur = 10;
         lockBlurStyle = "pixelated";
         lockWeatherLocation = "";
+        lockWeatherUnits = "auto";
+        lockWeatherUnits = "auto";
         lockLayout = defaultLockLayout();
         lockCustomImages = [];
         lockTimezoneClocks = [];
@@ -486,6 +512,9 @@ ShellRoot {
                 return;
             }
 
+            lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);
+            lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);
+
             lockAnimationPreference = normalizedAnimationPreference(parsed.lockscreen_animation);
             lockEntryTransition = normalizedEntryTransition(parsed.lockscreen_entry_transition);
             lockEntryTransitionDuration = normalizedEntryTransitionDuration(
@@ -497,7 +526,7 @@ ShellRoot {
             lockShowDate = normalizedBoolean(parsed.lockscreen_show_date, false);
             lockShowUsername = normalizedBoolean(parsed.lockscreen_show_username, false);
             lockShowWeather = normalizedBoolean(parsed.lockscreen_show_weather, false);
-            lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_mask_mode);
+            lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_feedback_mode);
             lockPasswordMaskCharacter = normalizedPasswordMaskCharacter(parsed.lockscreen_password_mask_character);
             lockClockFormat = normalizedClockFormat(parsed.lockscreen_clock_format);
             lockBackground = normalizedBackground(parsed.lockscreen_background);
@@ -511,6 +540,8 @@ ShellRoot {
             lockWallpaperBlur = normalizedBlurPercent(parsed.lockscreen_wallpaper_blur);
             lockBlurStyle = normalizedBlurStyle(parsed.lockscreen_blur_style);
             lockWeatherLocation = normalizedWeatherLocation(parsed.lockscreen_weather_location);
+            lockWeatherUnits = normalizedWeatherUnits(parsed.lockscreen_weather_units);
+            lockWeatherUnits = normalizedWeatherUnits(parsed.lockscreen_weather_units);
             lockLayout = normalizedLayout(parsed.lockscreen_layout);
             lockCustomImages = normalizedCustomImages(parsed.lockscreen_custom_images);
             lockTimezoneClocks = normalizedTimezoneClocks(parsed.lockscreen_timezone_clocks);
@@ -525,14 +556,7 @@ ShellRoot {
     Component.onCompleted: {
         Quickshell.watchFiles = false;
         root.loadPreferences();
-        Qt.callLater(root.refreshTimezoneValues);
     }
-
-    Process {
-        id: timezoneProcess
-        stdout: SplitParser { onRead: line => root.applyTimezoneValues(line) }
-    }
-    Timer { interval: 15000; repeat: true; running: root.lockTimezoneClocks.length > 0; triggeredOnStart: true; onTriggered: root.refreshTimezoneValues() }
 
     FileView {
         id: stateFile
@@ -557,26 +581,6 @@ ShellRoot {
         }
     }
 
-    LockWeatherCache {
-        id: lockWeatherCache
-        enabled: root.lockShowWeather
-    }
-
-    LockWallpaperState {
-        id: lockWallpaperState
-        path: root.lockWallpaperPath
-    }
-
-    LockContrastCache {
-        id: lockContrastCache
-    }
-
-    LockAudioAnalyzer {
-        id: lockAudioAnalyzer
-        enabled: root.lockVisualizer.enabled
-        performanceMode: root.lockVisualizer.performance
-    }
-
     WlSessionLock {
         id: sessionLock
         locked: true
@@ -586,40 +590,11 @@ ShellRoot {
                 auth: lockAuth
                 theme: lockTheme
                 unlocking: root.unlockRequested
-                animationPreference: root.lockAnimationPreference
-                entryTransition: root.lockEntryTransition
-                entryTransitionDuration: root.lockEntryTransitionDuration
+                monitorProfiles: root.lockMonitorProfiles
+                lastEditedProfile: root.lockLastEditedProfile
                 randomFormationMode: root.randomFormationMode
                 logoPhysicsHz: root.lockLogoPhysicsHz
                 mouseInteractive: root.lockMouseInteractive
-                showLogo: root.lockShowLogo
-                showTime: root.lockShowTime
-                showDate: root.lockShowDate
-                showUsername: root.lockShowUsername
-                showWeather: root.lockShowWeather
-                weatherText: lockWeatherCache.summary
-                backgroundMode: root.lockBackground
-                wallpaperSource: lockWallpaperState.source
-                backgroundColor: root.lockBackgroundColor
-                wallpaperFit: root.wallpaperFit
-                wallpaperFocalX: root.wallpaperFocalX
-                wallpaperFocalY: root.wallpaperFocalY
-                overlayMode: root.overlayMode
-                overlayStrength: root.overlayStrength
-                wallpaperBlur: root.wallpaperBlur
-                blurStyle: root.blurStyle
-                autoAccents: lockContrastCache.colors
-                layout: root.lockLayout
-                customImages: root.lockCustomImages
-                timezoneClocks: root.lockTimezoneClocks
-                timezoneValues: root.lockTimezoneValues
-                customTexts: root.lockCustomTexts
-                visualizer: root.lockVisualizer
-                audioBands: lockAudioAnalyzer.bands
-                backgroundOpacity: root.lockBackgroundOpacity
-                passwordMaskMode: root.lockPasswordMaskMode
-                passwordMaskCharacter: root.lockPasswordMaskCharacter
-                clockFormat: root.lockClockFormat
                 captureDirectory: root.captureDirectory
             }
         }
@@ -666,7 +641,7 @@ ShellRoot {
 
     Timer {
         id: captureCleanupTimer
-        interval: Math.max(3000, Math.min(8000, root.lockEntryTransitionDuration + 2000))
+        interval: Math.max(3000, Math.min(8000, root.captureCleanupTransitionDuration + 2000))
         repeat: false
         onTriggered: root.cleanupTransitionCapture()
     }

@@ -162,12 +162,25 @@ contains "$EDITOR" 'function selectElement(name, additive) {' \
     'editor has no shared element selection path'
 contains "$EDITOR" 'activeDrawer = "element";' \
     'element selection does not activate the Element settings drawer'
-contains "$EDITOR" 'if (additive) root.selectElement(parent.elementName, true);' \
-    'additive preview selection does not use the shared element selection path'
-contains "$EDITOR" 'else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false);' \
-    'new single-element preview selection does not use the shared element selection path'
-contains "$EDITOR" 'else root.activeDrawer = "element";' \
-    'pressing an already-selected group member does not expose Element settings while preserving the group'
+python3 - "$EDITOR" <<'PY_SELECTION'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+pattern = re.compile(
+    r'if\s*\(additive\)\s*'
+    r'root\.selectElement\(parent\.elementName,\s*true\);\s*'
+    r'else\s+if\s*\(!root\.selectedContains\(parent\.elementName\)\)\s*'
+    r'root\.selectElement\(parent\.elementName,\s*false\);\s*'
+    r'else\s*root\.activeDrawer\s*=\s*"element";',
+    re.S,
+)
+if not pattern.search(text):
+    raise SystemExit(
+        'FAIL: preview press selection no longer routes additive, new-single, and existing-group cases through the shared selection path'
+    )
+PY_SELECTION
 
 # Selected-element transform handles must sit above overlapping element hitboxes
 # so grabbing rotate/resize never selects a different element underneath.
@@ -190,6 +203,17 @@ not_contains "$EDITOR" 'id: settingsBarAltDrag' \
     'legacy Alt+Mouse1 settings-bar dragging still exists'
 not_contains "$EDITOR" 'acceptedModifiers: Qt.AltModifier' \
     'settings-bar dragging still requires Alt'
+
+contains "$EDITOR" 'function selectElementByName(name)' \
+    'Element tab has no explicit selection action'
+contains "$EDITOR" 'function elementSelectorModel()' \
+    'Element tab has no selector model for built-in and dynamic elements'
+contains "$EDITOR" 'Text { text: "Select Element";' \
+    'Element tab has no explicit element selector label'
+contains "$EDITOR" 'model: root.elementSelectorModel()' \
+    'Element selector does not include the current editable element set'
+contains "$EDITOR" 'root.selectElementByName(root.elementSelectorModel()[index].key)' \
+    'Element selector does not select the chosen element'
 
 contains "$EDITOR" 'Text { text: "Opacity";' \
     'selected element settings do not expose opacity'

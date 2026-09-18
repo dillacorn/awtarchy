@@ -99,16 +99,16 @@ contains "$BAR_STATE" 'function lockscreenEntryTransition()' \
 contains "$BAR_STATE" 'function lockscreenEntryTransitionDuration()' \
     'BarState duration reader is missing'
 
-contains "$SHELL" 'property string lockEntryTransition: "fade"' \
-    'secure shell transition state is missing'
-contains "$SHELL" 'property int lockEntryTransitionDuration: 1800' \
-    'secure shell does not use the approved 1800ms default'
-contains "$SHELL" 'Math.max(800, Math.min(6000' \
-    'secure shell does not clamp transition duration to 800-6000ms'
-contains "$SHELL" 'entryTransition: root.lockEntryTransition' \
-    'secure shell does not pass entry transition to lock surfaces'
-contains "$SHELL" 'entryTransitionDuration: root.lockEntryTransitionDuration' \
-    'secure shell does not pass transition duration to lock surfaces'
+contains "$SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure shell does not snapshot per-display presentation profiles'
+contains "$SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure shell does not snapshot the last-edited fallback profile'
+contains "$SURFACE" 'mode: root.profile.lockscreen_entry_transition' \
+    'secure surface does not resolve entry transition from its monitor profile'
+contains "$SURFACE" 'duration: root.profile.lockscreen_entry_transition_duration' \
+    'secure surface does not resolve transition duration from its monitor profile'
+contains "$SHELL" 'readonly property int captureCleanupTransitionDuration:' \
+    'secure shell does not retain captures for monitor-local transition durations'
 
 # The secure runtime and unlocked editor both use the same shared renderer.
 contains "$LAYER" 'property Item startSource' \

@@ -8,6 +8,7 @@ Item {
     readonly property string cachePath:
         (Quickshell.env("XDG_CACHE_HOME") || (Quickshell.env("HOME") + "/.cache"))
         + "/awtarchy/lockscreen-contrast.json"
+    property string monitorName: ""
     readonly property var elementNames: ["logo", "time", "date", "username", "weather", "password"]
     property var colors: ({
         logo: "#ffffff",
@@ -32,9 +33,16 @@ Item {
             if (!parsed || parsed.provider !== "awtarchy-local-contrast"
                     || !parsed.colors || typeof parsed.colors !== "object")
                 return;
+            let selected = parsed.colors;
+            if (parsed.monitor_colors && typeof parsed.monitor_colors === "object"
+                    && !Array.isArray(parsed.monitor_colors)
+                    && parsed.monitor_colors[root.monitorName]
+                    && typeof parsed.monitor_colors[root.monitorName] === "object"
+                    && !Array.isArray(parsed.monitor_colors[root.monitorName]))
+                selected = parsed.monitor_colors[root.monitorName];
             const next = ({});
             for (const name of elementNames) {
-                const value = String(parsed.colors[name] || "");
+                const value = String(selected[name] || "");
                 next[name] = /^#[0-9a-fA-F]{6}$/.test(value)
                     ? value.toLowerCase() : "#ffffff";
             }

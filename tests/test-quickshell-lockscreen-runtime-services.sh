@@ -9,6 +9,7 @@ WEATHER="${ROOT}/config/quickshell/awtarchy/LockscreenWeather.qml"
 WALLPAPER="${ROOT}/config/quickshell/awtarchy-lock/LockWallpaperState.qml"
 PREVIEW_WALLPAPER="${ROOT}/config/quickshell/awtarchy/LockPreviewWallpaperState.qml"
 LOCK_SHELL="${ROOT}/config/quickshell/awtarchy-lock/shell.qml"
+SURFACE="${ROOT}/config/quickshell/awtarchy-lock/LockSurface.qml"
 LOCK_SCENE="${ROOT}/config/quickshell/awtarchy-lock/LockScene.qml"
 
 fail() {
@@ -43,8 +44,12 @@ require_text "$WEATHER" 'pragma Singleton' \
     'LockscreenWeather is not an unlocked-session singleton'
 require_text "$WEATHER" 'quickshell_lockscreen_weather.sh' \
     'LockscreenWeather does not use the dedicated weather helper'
-require_text "$WEATHER" 'BarState.lockscreenShowWeather()' \
-    'LockscreenWeather does not honor the saved Weather toggle'
+require_text "$WEATHER" 'if (profile.lockscreen_show_weather === true)' \
+    'LockscreenWeather does not honor per-profile Weather visibility'
+require_text "$WEATHER" 'addProfile(BarState.lockscreenLastEditedProfile());' \
+    'LockscreenWeather does not include the last-edited fallback profile when deriving refresh modes'
+require_text "$WEATHER" 'BarState.lockscreenMonitorProfiles()' \
+    'LockscreenWeather does not include per-display profiles when deriving refresh modes'
 require_text "$WEATHER" 'BarState.lockscreenWeatherLocation()' \
     'LockscreenWeather does not use the explicit saved location'
 require_text "$WEATHER" 'interval: 1200000' \
@@ -72,10 +77,10 @@ require_text "$APP_STATE" 'normalize_lockscreen_wallpaper_path()' \
     'application state does not validate the dedicated lockscreen wallpaper path'
 require_text "$LOCK_SHELL" '/awtarchy/quickshell-state.json' \
     'secure lock shell does not read the local persisted Quickshell state cache'
-require_text "$LOCK_SHELL" 'lockWallpaperPath = normalizedWallpaperPath(parsed.lockscreen_wallpaper_path);' \
-    'secure lock shell does not load the dedicated wallpaper path from persisted state'
-require_text "$LOCK_SHELL" 'path: root.lockWallpaperPath' \
-    'secure lock wallpaper reader does not receive the normalized persisted path'
+require_text "$LOCK_SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure lock shell does not load per-display presentation profiles from persisted state'
+require_text "$LOCK_SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure lock shell does not load the last-edited fallback profile from persisted state'
 reject_text "$WALLPAPER" 'backend_state.tsv' \
     'LockWallpaperState still follows desktop Awtwall backend state'
 reject_text "$WALLPAPER" 'FileView {' \
@@ -90,10 +95,12 @@ for forbidden in curl wget http:// https://; do
     reject_text "$WALLPAPER" "$forbidden" \
         "LockWallpaperState contains network behavior: $forbidden"
 done
-require_text "$LOCK_SHELL" 'LockWallpaperState {' \
-    'secure lock shell does not own a local wallpaper-state reader'
-require_text "$LOCK_SHELL" 'wallpaperSource: lockWallpaperState.source' \
-    'secure lock surfaces do not receive the local wallpaper source'
+require_text "$SURFACE" 'LockWallpaperState {' \
+    'secure lock surface does not own its per-monitor local wallpaper-state reader'
+require_text "$SURFACE" 'path: root.profile.lockscreen_wallpaper_path' \
+    'secure wallpaper reader does not use the effective monitor profile path'
+require_text "$SURFACE" 'wallpaperSource: lockWallpaperState.source' \
+    'secure lock scene does not receive the local per-monitor wallpaper source'
 cmp -s "$WALLPAPER" "$PREVIEW_WALLPAPER" \
     || fail 'desktop wallpaper preview reader drifted from secure lock wallpaper reader'
 require_text "$EDITOR" 'LockPreviewWallpaperState {' \

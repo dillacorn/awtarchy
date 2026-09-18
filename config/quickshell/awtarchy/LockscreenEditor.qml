@@ -91,10 +91,13 @@ Singleton {
         { key: "split", label: "Split In" },
         { key: "off", label: "No Spawn Animation" }
     ]
-    readonly property var passwordMaskPresets: [
+    readonly property var passwordFeedbackPresets: [
         { key: "squares", label: "Squares" },
         { key: "dots", label: "Dots" },
-        { key: "custom", label: "Custom Character" }
+        { key: "custom", label: "Custom Character" },
+        { key: "sparks", label: "Sparks" },
+        { key: "mini-flash", label: "Mini Flash" },
+        { key: "hidden", label: "Hidden" }
     ]
     readonly property var clockFormatPresets: [
         { key: "24h", label: "24-hour" },
@@ -112,10 +115,11 @@ Singleton {
     property string draftEntryTransition: "fade"
     property int draftEntryTransitionDuration: 1800
     property string draftLogoSpawnAnimation: "split"
-    property string draftPasswordMaskMode: "squares"
+    property string draftPasswordFeedbackMode: "squares"
     property string draftPasswordMaskCharacter: "•"
     property string draftClockFormat: "24h"
     property int entryTransitionReplayToken: 0
+    property int previewPasswordFeedbackEpoch: 0
     property string previewIndividualImageReplayId: ""
     property int previewIndividualImageReplayEpoch: 0
     property real editorEntranceOpacity: 1.0
@@ -133,6 +137,23 @@ Singleton {
     property bool draftWallpaperBlurExplicit: false
     property string draftWeatherUnits: "auto"
     property var draftAutoAccents: defaultAutoAccents()
+    property var draftMonitorProfiles: ({})
+    property var draftLastEditedProfile: ({})
+    property var draftSavedProfiles: []
+    property string selectedSavedConfigurationId: ""
+    property string savedConfigurationNameDialogMode: ""
+    property string savedConfigurationNameDraft: ""
+    property string savedConfigurationConfirmMode: ""
+    readonly property bool savedConfigurationModalOpen: savedConfigurationNameDialogMode.length > 0
+        || savedConfigurationConfirmMode.length > 0
+    property string savedProfilesPersistError: ""
+    property var savedProfilesPersistRollback: []
+    property string savedProfilesPersistRollbackSelection: ""
+    property string activeMonitorName: ""
+    property bool profileLoadActive: false
+    property var profileUndoStacks: ({})
+    property var profileRedoStacks: ({})
+    property var draftMonitorAutoAccents: ({})
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
@@ -154,6 +175,7 @@ Singleton {
     readonly property real snapThreshold: 0.008
     readonly property real keyboardNudge: 0.002
     readonly property real keyboardNudgeLarge: 0.01
+    readonly property real dragActivationThresholdPx: 5
 
     property var undoStack: []
     property var redoStack: []
@@ -232,7 +254,7 @@ Singleton {
             scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : defaults.scale)),
             stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : defaults.stretch_x)),
             stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : defaults.stretch_y)),
-            opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
+            opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? Math.round(opacity) : defaults.opacity)),
             rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : defaults.rotation),
             color: color,
             bands: Number.isInteger(bands) ? Math.max(4, Math.min(64, bands)) : defaults.bands,
@@ -370,6 +392,19 @@ Singleton {
         });
     }
 
+    function cloneAutoAccents(value) {
+        const source = value && typeof value === "object" && !Array.isArray(value)
+            ? value : defaultAutoAccents();
+        const next = defaultAutoAccents();
+        for (const name of elementNames) {
+            const color = String(source[name] || "").toLowerCase();
+            next[name] = validHex(color) ? color : "#ffffff";
+        }
+        const visualizer = String(source.visualizer || source.logo || "#ffffff").toLowerCase();
+        next.visualizer = validHex(visualizer) ? visualizer : "#ffffff";
+        return next;
+    }
+
     function validHex(value) {
         return /^#[0-9a-f]{6}$/.test(String(value || "").toLowerCase());
     }
@@ -380,6 +415,645 @@ Singleton {
         } catch (error) {
             return null;
         }
+    }
+
+    function profileFromDraftScalars() {
+        return ({
+            lockscreen_layout: cloneLayout(draftLayout),
+            lockscreen_show_logo: !!draftVisibility.logo,
+            lockscreen_show_time: !!draftVisibility.time,
+            lockscreen_show_date: !!draftVisibility.date,
+            lockscreen_show_username: !!draftVisibility.username,
+            lockscreen_show_weather: !!draftVisibility.weather,
+            lockscreen_custom_images: cloneCustomImages(draftCustomImages),
+            lockscreen_timezone_clocks: cloneTimezoneClocks(draftTimezoneClocks),
+            lockscreen_custom_texts: cloneCustomTexts(draftCustomTexts),
+            lockscreen_visualizer: cloneVisualizer(draftVisualizer),
+            lockscreen_background: draftBackgroundMode,
+            lockscreen_background_color: draftBackgroundColor,
+            lockscreen_wallpaper_path: draftWallpaperPath,
+            lockscreen_wallpaper_fit: draftWallpaperFit,
+            lockscreen_wallpaper_focal_x: draftWallpaperFocalX,
+            lockscreen_wallpaper_focal_y: draftWallpaperFocalY,
+            lockscreen_background_opacity: draftBackgroundOpacity,
+            lockscreen_background_opacity_previous: draftLastBackgroundOpacity,
+            lockscreen_overlay_mode: draftOverlayMode,
+            lockscreen_overlay_strength: draftOverlayStrength,
+            lockscreen_wallpaper_blur: draftWallpaperBlur,
+            lockscreen_blur_style: draftBlurStyle,
+            lockscreen_weather_units: draftWeatherUnits,
+            lockscreen_animation: draftLogoSpawnAnimation,
+            lockscreen_entry_transition: draftEntryTransition,
+            lockscreen_entry_transition_duration: draftEntryTransitionDuration,
+            lockscreen_password_feedback_mode: draftPasswordFeedbackMode,
+            lockscreen_password_mask_character: draftPasswordMaskCharacter,
+            lockscreen_clock_format: draftClockFormat
+        });
+    }
+
+    function loadProfileIntoDraft(profile) {
+        if (!profile || typeof profile !== "object")
+            return;
+        profileLoadActive = true;
+        try {
+            draftLayout = cloneLayout(profile.lockscreen_layout);
+            draftCustomImages = cloneCustomImages(profile.lockscreen_custom_images);
+            draftTimezoneClocks = cloneTimezoneClocks(profile.lockscreen_timezone_clocks);
+            draftCustomTexts = cloneCustomTexts(profile.lockscreen_custom_texts);
+            draftVisualizer = cloneVisualizer(profile.lockscreen_visualizer);
+            draftVisibility = cloneVisibility(({
+                logo: profile.lockscreen_show_logo,
+                time: profile.lockscreen_show_time,
+                date: profile.lockscreen_show_date,
+                username: profile.lockscreen_show_username,
+                weather: profile.lockscreen_show_weather,
+                password: true
+            }));
+            draftBackgroundMode = String(profile.lockscreen_background || "black");
+            draftBackgroundColor = String(profile.lockscreen_background_color || "#000000").toLowerCase();
+            draftWallpaperPath = String(profile.lockscreen_wallpaper_path || "");
+            draftWallpaperFit = String(profile.lockscreen_wallpaper_fit || "cover");
+            draftWallpaperFocalX = Number(profile.lockscreen_wallpaper_focal_x);
+            draftWallpaperFocalY = Number(profile.lockscreen_wallpaper_focal_y);
+            draftBackgroundOpacity = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_background_opacity))));
+            draftLastBackgroundOpacity = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_background_opacity_previous))));
+            draftOverlayMode = String(profile.lockscreen_overlay_mode || "none");
+            draftOverlayStrength = Math.max(0, Math.min(100, Math.round(Number(profile.lockscreen_overlay_strength))));
+            draftWallpaperBlur = Math.max(0, Math.min(200, Math.round(Number(profile.lockscreen_wallpaper_blur))));
+            draftBlurStyle = String(profile.lockscreen_blur_style || "pixelated");
+            draftWeatherUnits = String(profile.lockscreen_weather_units || "auto");
+            draftLogoSpawnAnimation = normalizedLogoSpawn(profile.lockscreen_animation);
+            draftEntryTransition = String(profile.lockscreen_entry_transition || "fade");
+            draftEntryTransitionDuration = Math.max(800, Math.min(6000, Math.round(Number(profile.lockscreen_entry_transition_duration))));
+            draftPasswordFeedbackMode = normalizedPasswordFeedbackMode(profile.lockscreen_password_feedback_mode);
+            draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(profile.lockscreen_password_mask_character);
+            draftClockFormat = normalizedClockFormat(profile.lockscreen_clock_format);
+            draftWallpaperBlurExplicit = false;
+            draftAutoAccents = defaultAutoAccents();
+            refreshPreviewTimezoneValues();
+            if (!elementExists(selectedElement))
+                selectedElement = "logo";
+            selectedElements = [selectedElement];
+            clearGuides();
+        } finally {
+            profileLoadActive = false;
+        }
+        scheduleContrastRefresh();
+    }
+
+
+    function stashAutoAccentsForActiveProfile() {
+        if (activeMonitorName.length === 0)
+            return;
+        const next = Object.assign({}, draftMonitorAutoAccents);
+        next[activeMonitorName] = cloneAutoAccents(draftAutoAccents);
+        draftMonitorAutoAccents = next;
+    }
+
+    function loadAutoAccentsForActiveProfile() {
+        if (activeMonitorName.length === 0) {
+            draftAutoAccents = defaultAutoAccents();
+            return;
+        }
+        const stored = draftMonitorAutoAccents[activeMonitorName];
+        draftAutoAccents = cloneAutoAccents(
+            stored || LockscreenContrast.colorsForMonitor(activeMonitorName));
+    }
+
+    function autoAccentsForMonitor(name) {
+        const key = String(name || "");
+        if (key === activeMonitorName)
+            return cloneAutoAccents(draftAutoAccents);
+        const stored = draftMonitorAutoAccents[key];
+        return cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(key));
+    }
+
+
+
+    function activeProfileKey() {
+        return "monitor:" + activeMonitorName;
+    }
+
+    function stashHistoryForActiveProfile() {
+        const key = activeProfileKey();
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        undo[key] = cloneSnapshot(undoStack) || [];
+        redo[key] = cloneSnapshot(redoStack) || [];
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+    }
+
+    function restoreHistoryForActiveProfile() {
+        const key = activeProfileKey();
+        undoStack = cloneSnapshot(profileUndoStacks[key]) || [];
+        redoStack = cloneSnapshot(profileRedoStacks[key]) || [];
+        historyTransactionActive = false;
+        historyTransactionSnapshot = null;
+    }
+
+    function flushActiveProfile() {
+        if (activeMonitorName.length === 0)
+            return;
+        const profile = cloneSnapshot(profileFromDraftScalars());
+        if (!profile)
+            return;
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[activeMonitorName] = profile;
+        draftMonitorProfiles = next;
+        draftLastEditedProfile = cloneSnapshot(profile) || ({});
+    }
+
+    function effectiveProfileForMonitor(name) {
+        const key = String(name || "");
+        if (key === activeMonitorName)
+            return profileFromDraftScalars();
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, key))
+            return cloneSnapshot(draftMonitorProfiles[key]);
+        return cloneSnapshot(draftLastEditedProfile) || profileFromDraftScalars();
+    }
+
+    function ensureMonitorProfile(name) {
+        const key = String(name || "");
+        if (key.length === 0)
+            return null;
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, key))
+            return cloneSnapshot(draftMonitorProfiles[key]);
+        const profile = cloneSnapshot(draftLastEditedProfile)
+            || cloneSnapshot(profileFromDraftScalars());
+        if (!profile)
+            return null;
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[key] = cloneSnapshot(profile);
+        draftMonitorProfiles = next;
+        return profile;
+    }
+
+    function connectedScreenByName(name) {
+        const key = String(name || "");
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            if (screens[i] && String(screens[i].name || "") === key)
+                return screens[i];
+        }
+        return null;
+    }
+
+
+
+
+
+
+    function savedConfigurationIndex(id) {
+        const key = String(id || "");
+        for (let i = 0; i < draftSavedProfiles.length; ++i) {
+            if (String(draftSavedProfiles[i].id || "") === key)
+                return i;
+        }
+        return -1;
+    }
+
+    function savedConfigurationSelectorModel() {
+        const result = [];
+        for (const entry of draftSavedProfiles)
+            result.push(({ key: String(entry.id || ""), label: String(entry.name || "") }));
+        return result;
+    }
+
+    function selectedSavedConfigurationIndex() {
+        return savedConfigurationIndex(selectedSavedConfigurationId);
+    }
+
+    function savedConfigurationNameValid(value, ignoredId) {
+        const name = String(value || "").trim();
+        const points = Array.from(name);
+        if (points.length < 1 || points.length > 64 || /[\u0000-\u001f\u007f-\u009f]/.test(name))
+            return false;
+        const lower = name.toLowerCase();
+        const ignore = String(ignoredId || "");
+        for (const entry of draftSavedProfiles) {
+            if (String(entry.id || "") === ignore)
+                continue;
+            if (String(entry.name || "").toLowerCase() === lower)
+                return false;
+        }
+        return true;
+    }
+
+    function nextSavedConfigurationId() {
+        const stem = "profile-" + Date.now().toString(36);
+        let candidate = stem;
+        let suffix = 0;
+        while (savedConfigurationIndex(candidate) >= 0) {
+            suffix++;
+            candidate = stem + "-" + suffix;
+        }
+        return candidate;
+    }
+
+    function openSaveCurrentConfigurationDialog() {
+        if (savedProfilesPersistProcess.running)
+            return;
+        if (draftSavedProfiles.length >= 32) {
+            statusMessage = "Saved configuration limit reached";
+            return;
+        }
+        savedConfigurationNameDraft = "";
+        savedConfigurationNameDialogMode = "create";
+    }
+
+    function confirmSaveCurrentConfiguration() {
+        if (savedConfigurationNameDialogMode !== "create")
+            return;
+        const name = String(savedConfigurationNameDraft || "").trim();
+        if (!savedConfigurationNameValid(name, "")) {
+            statusMessage = "Configuration name must be unique and non-empty";
+            return;
+        }
+        const profile = cloneSnapshot(profileFromDraftScalars());
+        if (!profile) {
+            statusMessage = "Could not snapshot current configuration";
+            return;
+        }
+        const id = nextSavedConfigurationId();
+        const next = cloneSnapshot(draftSavedProfiles) || [];
+        next.push(({ id: id, name: name, profile: profile }));
+        draftSavedProfiles = next;
+        selectedSavedConfigurationId = id;
+        cancelSavedConfigurationNameDialog();
+        statusMessage = "Saved configuration added. Ctrl+S to persist.";
+    }
+
+    function openRenameSavedConfigurationDialog() {
+        if (savedProfilesPersistProcess.running)
+            return;
+        const index = selectedSavedConfigurationIndex();
+        if (index < 0)
+            return;
+        savedConfigurationNameDraft = String(draftSavedProfiles[index].name || "");
+        savedConfigurationNameDialogMode = "rename";
+    }
+
+    function confirmRenameSavedConfiguration() {
+        if (savedConfigurationNameDialogMode !== "rename")
+            return;
+        const index = selectedSavedConfigurationIndex();
+        if (index < 0) {
+            cancelSavedConfigurationNameDialog();
+            return;
+        }
+        const id = String(draftSavedProfiles[index].id || "");
+        const name = String(savedConfigurationNameDraft || "").trim();
+        if (!savedConfigurationNameValid(name, id)) {
+            statusMessage = "Configuration name must be unique and non-empty";
+            return;
+        }
+        const next = cloneSnapshot(draftSavedProfiles) || [];
+        next[index].name = name;
+        draftSavedProfiles = next;
+        cancelSavedConfigurationNameDialog();
+        statusMessage = "Configuration renamed. Ctrl+S to persist.";
+    }
+
+    function confirmSavedConfigurationNameDialog() {
+        if (savedConfigurationNameDialogMode === "rename")
+            confirmRenameSavedConfiguration();
+        else if (savedConfigurationNameDialogMode === "create")
+            confirmSaveCurrentConfiguration();
+    }
+
+    function restoreEditorFocusAfterModal() {
+        Qt.callLater(() => {
+            if (open && !pickerSuspended && !savedConfigurationModalOpen)
+                editorFocus.forceActiveFocus();
+        });
+    }
+
+    function cancelSavedConfigurationNameDialog() {
+        savedConfigurationNameDialogMode = "";
+        savedConfigurationNameDraft = "";
+        restoreEditorFocusAfterModal();
+    }
+
+    function requestDeleteSavedConfiguration() {
+        if (savedProfilesPersistProcess.running || selectedSavedConfigurationIndex() < 0)
+            return;
+        savedConfigurationConfirmMode = "delete";
+    }
+
+    function confirmDeleteSavedConfiguration() {
+        if (savedConfigurationConfirmMode !== "delete"
+                || savedProfilesPersistProcess.running || saveProcess.running
+                || contrastPersistProcess.running)
+            return;
+        const index = selectedSavedConfigurationIndex();
+        if (index < 0) {
+            cancelSavedConfigurationConfirm();
+            return;
+        }
+        const previousProfiles = cloneSnapshot(draftSavedProfiles) || [];
+        const previousSelection = selectedSavedConfigurationId;
+        const next = cloneSnapshot(draftSavedProfiles) || [];
+        next.splice(index, 1);
+        draftSavedProfiles = next;
+        selectedSavedConfigurationId = next.length > 0
+            ? String(next[Math.min(index, next.length - 1)].id || "") : "";
+        savedProfilesPersistRollback = previousProfiles;
+        savedProfilesPersistRollbackSelection = previousSelection;
+        savedProfilesPersistError = "";
+        cancelSavedConfigurationConfirm();
+        statusMessage = "Deleting configuration…";
+        savedProfilesPersistProcess.exec([
+            "bash", editorSaveBackend, "--saved-profiles", JSON.stringify(next)
+        ]);
+    }
+
+    function requestOverwriteSavedConfiguration() {
+        if (savedProfilesPersistProcess.running || selectedSavedConfigurationIndex() < 0)
+            return;
+        savedConfigurationConfirmMode = "overwrite";
+    }
+
+    function confirmOverwriteSavedConfiguration() {
+        if (savedConfigurationConfirmMode !== "overwrite" || savedProfilesPersistProcess.running)
+            return;
+        const index = selectedSavedConfigurationIndex();
+        if (index < 0) {
+            cancelSavedConfigurationConfirm();
+            return;
+        }
+        const profile = cloneSnapshot(profileFromDraftScalars());
+        if (!profile) {
+            cancelSavedConfigurationConfirm();
+            statusMessage = "Could not snapshot current configuration";
+            return;
+        }
+        const next = cloneSnapshot(draftSavedProfiles) || [];
+        next[index].profile = profile;
+        draftSavedProfiles = next;
+        cancelSavedConfigurationConfirm();
+        statusMessage = "Saved configuration overwritten. Ctrl+S to persist.";
+    }
+
+    function confirmSavedConfigurationConfirmDialog() {
+        if (savedConfigurationConfirmMode === "delete")
+            confirmDeleteSavedConfiguration();
+        else if (savedConfigurationConfirmMode === "overwrite")
+            confirmOverwriteSavedConfiguration();
+    }
+
+    function cancelSavedConfigurationConfirm() {
+        savedConfigurationConfirmMode = "";
+        restoreEditorFocusAfterModal();
+    }
+
+    function handleEscape() {
+        if (savedConfigurationNameDialogMode.length > 0) {
+            cancelSavedConfigurationNameDialog();
+            return;
+        }
+        if (savedConfigurationConfirmMode.length > 0) {
+            cancelSavedConfigurationConfirm();
+            return;
+        }
+        if (elementPaletteOpen) {
+            elementPaletteOpen = false;
+            return;
+        }
+        if (backgroundPaletteOpen) {
+            backgroundPaletteOpen = false;
+            return;
+        }
+        close();
+    }
+
+    function moveSavedConfiguration(offset) {
+        if (savedProfilesPersistProcess.running)
+            return;
+        const index = selectedSavedConfigurationIndex();
+        const target = index + Number(offset);
+        if (index < 0 || !Number.isInteger(target) || target < 0 || target >= draftSavedProfiles.length)
+            return;
+        const next = cloneSnapshot(draftSavedProfiles) || [];
+        const entry = next[index];
+        next.splice(index, 1);
+        next.splice(target, 0, entry);
+        draftSavedProfiles = next;
+        statusMessage = "Saved configuration order changed. Ctrl+S to persist.";
+    }
+
+    function applySavedConfigurationToMonitor(id, name) {
+        const index = savedConfigurationIndex(id);
+        const targetName = String(name || "");
+        if (index < 0 || targetName.length === 0 || !connectedScreenByName(targetName))
+            return;
+        const profile = cloneSnapshot(draftSavedProfiles[index].profile);
+        if (!profile)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+
+        const targetIsActive = targetName === activeMonitorName;
+        const before = targetIsActive ? editorSnapshot() : null;
+        if (targetIsActive) {
+            stashHistoryForActiveProfile();
+            stashAutoAccentsForActiveProfile();
+        }
+        flushActiveProfile();
+
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[targetName] = cloneSnapshot(profile);
+        draftMonitorProfiles = next;
+
+        const accents = Object.assign({}, draftMonitorAutoAccents);
+        delete accents[targetName];
+        draftMonitorAutoAccents = accents;
+
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        const historyKey = "monitor:" + targetName;
+        if (targetIsActive) {
+            undo[historyKey] = appendHistory(cloneSnapshot(undo[historyKey]) || [], before);
+            redo[historyKey] = [];
+        } else {
+            delete undo[historyKey];
+            delete redo[historyKey];
+        }
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+
+        if (targetIsActive) {
+            draftLastEditedProfile = cloneSnapshot(profile) || ({});
+            loadProfileIntoDraft(profile);
+            loadAutoAccentsForActiveProfile();
+            restoreHistoryForActiveProfile();
+        }
+        statusMessage = "Applied saved configuration to " + targetName + ". Ctrl+S to persist.";
+    }
+
+    function applySavedConfigurationToAllOthers(id) {
+        const index = savedConfigurationIndex(id);
+        if (index < 0)
+            return;
+        const profile = cloneSnapshot(draftSavedProfiles[index].profile);
+        if (!profile)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        flushActiveProfile();
+
+        const next = Object.assign({}, draftMonitorProfiles);
+        const accents = Object.assign({}, draftMonitorAutoAccents);
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        const screens = Quickshell.screens || [];
+        let applied = 0;
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length === 0 || name === activeMonitorName)
+                continue;
+            next[name] = cloneSnapshot(profile);
+            delete accents[name];
+            delete undo["monitor:" + name];
+            delete redo["monitor:" + name];
+            applied++;
+        }
+        draftMonitorProfiles = next;
+        draftMonitorAutoAccents = accents;
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+        statusMessage = applied > 0
+            ? "Applied saved configuration to all other displays. Ctrl+S to persist."
+            : "No other displays connected";
+    }
+
+
+    function copyConfigurationTo(name) {
+        const targetName = String(name || "");
+        if (targetName.length === 0 || targetName === activeMonitorName
+                || !connectedScreenByName(targetName))
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        flushActiveProfile();
+        const source = cloneSnapshot(profileFromDraftScalars());
+        if (!source)
+            return;
+        const next = Object.assign({}, draftMonitorProfiles);
+        next[targetName] = cloneSnapshot(source);
+        draftMonitorProfiles = next;
+
+        const accentCopies = Object.assign({}, draftMonitorAutoAccents);
+        accentCopies[targetName] = cloneAutoAccents(draftAutoAccents);
+        draftMonitorAutoAccents = accentCopies;
+
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        delete undo["monitor:" + targetName];
+        delete redo["monitor:" + targetName];
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+        statusMessage = "Copied configuration to " + targetName + ". Ctrl+S to persist.";
+    }
+
+    function copyConfigurationToAllOthers() {
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        flushActiveProfile();
+        const source = cloneSnapshot(profileFromDraftScalars());
+        if (!source)
+            return;
+        const next = Object.assign({}, draftMonitorProfiles);
+        const accents = Object.assign({}, draftMonitorAutoAccents);
+        const undo = Object.assign({}, profileUndoStacks);
+        const redo = Object.assign({}, profileRedoStacks);
+        const screens = Quickshell.screens || [];
+        let copied = 0;
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length === 0 || name === activeMonitorName)
+                continue;
+            next[name] = cloneSnapshot(source);
+            accents[name] = cloneAutoAccents(draftAutoAccents);
+            delete undo["monitor:" + name];
+            delete redo["monitor:" + name];
+            copied++;
+        }
+        draftMonitorProfiles = next;
+        draftMonitorAutoAccents = accents;
+        profileUndoStacks = undo;
+        profileRedoStacks = redo;
+        statusMessage = copied > 0
+            ? "Copied configuration to all other displays. Ctrl+S to persist."
+            : "No other displays connected";
+    }
+
+    function switchActiveMonitor(name) {
+        const target = connectedScreenByName(name);
+        if (!target || String(name) === activeMonitorName)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
+        flushActiveProfile();
+
+        activeMonitorName = String(name);
+        editorWindow.screen = target;
+
+        let profile = null;
+        if (draftMonitorProfiles && typeof draftMonitorProfiles === "object"
+                && Object.prototype.hasOwnProperty.call(draftMonitorProfiles, activeMonitorName)) {
+            profile = cloneSnapshot(draftMonitorProfiles[activeMonitorName]);
+        } else {
+            profile = cloneSnapshot(draftLastEditedProfile);
+            if (profile) {
+                const next = Object.assign({}, draftMonitorProfiles);
+                next[activeMonitorName] = cloneSnapshot(profile);
+                draftMonitorProfiles = next;
+            }
+        }
+
+        loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
+        restoreHistoryForActiveProfile();
+        statusMessage = "Editing " + activeMonitorName;
+        Qt.callLater(() => editorFocus.forceActiveFocus());
+    }
+
+    function reconcileActiveMonitor() {
+        if (!open)
+            return;
+
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length > 0)
+                ensureMonitorProfile(name);
+        }
+
+        if (connectedScreenByName(activeMonitorName))
+            return;
+
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        stashAutoAccentsForActiveProfile();
+        flushActiveProfile();
+
+        const target = focusedScreen();
+        if (!target)
+            return;
+        activeMonitorName = String(target.name || "");
+        editorWindow.screen = target;
+        const profile = ensureMonitorProfile(activeMonitorName)
+            || cloneSnapshot(draftLastEditedProfile);
+        loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
+        restoreHistoryForActiveProfile();
+        statusMessage = "Editing " + activeMonitorName;
     }
 
     function editorSnapshot() {
@@ -397,7 +1071,7 @@ Singleton {
             entryTransition: draftEntryTransition,
             entryTransitionDuration: draftEntryTransitionDuration,
             logoSpawnAnimation: draftLogoSpawnAnimation,
-            passwordMaskMode: draftPasswordMaskMode,
+            passwordFeedbackMode: draftPasswordFeedbackMode,
             passwordMaskCharacter: draftPasswordMaskCharacter,
             clockFormat: draftClockFormat,
             wallpaperPath: draftWallpaperPath,
@@ -465,7 +1139,7 @@ Singleton {
         draftEntryTransitionDuration = Number.isFinite(transitionDuration)
             ? Math.max(800, Math.min(6000, transitionDuration)) : 1800;
         draftLogoSpawnAnimation = normalizedLogoSpawn(snapshot.logoSpawnAnimation);
-        draftPasswordMaskMode = normalizedPasswordMaskMode(snapshot.passwordMaskMode);
+        draftPasswordFeedbackMode = normalizedPasswordFeedbackMode(snapshot.passwordFeedbackMode);
         draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(snapshot.passwordMaskCharacter);
         draftClockFormat = normalizedClockFormat(snapshot.clockFormat);
         draftWallpaperPath = typeof snapshot.wallpaperPath === "string"
@@ -662,15 +1336,16 @@ Singleton {
         return 4;
     }
 
-    function normalizedPasswordMaskMode(value) {
+    function normalizedPasswordFeedbackMode(value) {
         const key = String(value === undefined ? "squares" : value);
-        return ["squares", "dots", "custom"].indexOf(key) >= 0 ? key : "squares";
+        return ["squares", "dots", "custom", "sparks", "mini-flash", "hidden"].indexOf(key) >= 0
+            ? key : "squares";
     }
 
-    function passwordMaskIndex(value) {
-        const key = normalizedPasswordMaskMode(value);
-        for (let i = 0; i < passwordMaskPresets.length; ++i) {
-            if (passwordMaskPresets[i].key === key)
+    function passwordFeedbackIndex(value) {
+        const key = normalizedPasswordFeedbackMode(value);
+        for (let i = 0; i < passwordFeedbackPresets.length; ++i) {
+            if (passwordFeedbackPresets[i].key === key)
                 return i;
         }
         return 0;
@@ -702,13 +1377,13 @@ Singleton {
         statusMessage = "Logo spawn animation updated. Use Preview Entry to replay.";
     }
 
-    function setDraftPasswordMaskMode(value) {
-        const key = normalizedPasswordMaskMode(value);
-        if (draftPasswordMaskMode === key)
+    function setDraftPasswordFeedbackMode(value) {
+        const key = normalizedPasswordFeedbackMode(value);
+        if (draftPasswordFeedbackMode === key)
             return;
         recordUndoBeforeChange();
-        draftPasswordMaskMode = key;
-        statusMessage = "Password mask updated";
+        draftPasswordFeedbackMode = key;
+        statusMessage = "Password feedback updated";
     }
 
     function setDraftPasswordMaskCharacter(value) {
@@ -792,14 +1467,14 @@ Singleton {
         next[index].spawn_animation = key;
         draftCustomImages = next;
         selectElement(name, false);
-        statusMessage = "Image spawn animation updated. Use Play Spawn to preview.";
+        statusMessage = "Media spawn animation updated. Use Play Spawn to preview.";
     }
 
     function setDraftCustomImageSpawnTiming(name, value) {
         const index = customImageIndex(name); if (index < 0) return;
         const timing = normalizedCustomImageSpawnTiming(value); if (draftCustomImages[index].spawn_timing === timing) return;
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next[index].spawn_timing = timing; draftCustomImages = next;
-        selectElement(name, false); statusMessage = "Image spawn timing updated. Use Play Spawn to preview.";
+        selectElement(name, false); statusMessage = "Media spawn timing updated. Use Play Spawn to preview.";
     }
 
     function replaySelectedImageSpawn() {
@@ -1227,7 +1902,7 @@ Singleton {
             if (name === "logo")
                 draftLogoSpawnAnimation = "split";
             else if (name === "password") {
-                draftPasswordMaskMode = "squares";
+                draftPasswordFeedbackMode = "squares";
                 draftPasswordMaskCharacter = "•";
             } else if (name === "time")
                 draftClockFormat = "24h";
@@ -1405,7 +2080,7 @@ Singleton {
     function acceptCustomImageSelection(line) {
         if (!open) return;
         const value = String(line || "").trim();
-        if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Awtwall returned an invalid local image"; return; }
+        if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Awtwall returned an invalid local media"; return; }
         addCustomImage(value);
     }
 
@@ -1428,6 +2103,7 @@ Singleton {
             const next = defaultAutoAccents();
             for (const name of elementNames) { const value = String(payload.colors[name] || "").toLowerCase(); next[name] = validHex(value) ? value : "#ffffff"; }
             draftAutoAccents = next;
+            stashAutoAccentsForActiveProfile();
         } catch (error) {}
     }
 
@@ -1454,7 +2130,7 @@ Singleton {
                 scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
-                opacity: Math.max(0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0),
                 spawn_animation: normalizedCustomImageSpawn(raw.spawn_animation),
                 spawn_timing: normalizedCustomImageSpawnTiming(raw.spawn_timing),
@@ -1474,7 +2150,7 @@ Singleton {
             result.push(({id:id, timezone:timezone, format:normalizedClockFormat(raw.format), show_label: raw.show_label !== false, x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),
                 y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.6)), scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),
                 stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)), stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),
-                opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
+                opacity:Math.max(5,Math.min(100,Number.isFinite(opacity)?opacity:100)), rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),
                 color:color==="auto"||validHex(color)?color:"auto", visible:typeof raw.visible==="boolean"?raw.visible:true}));
         }
         return result;
@@ -1492,7 +2168,7 @@ Singleton {
                 alignment:["left","center","right"].indexOf(String(raw.alignment))>=0?String(raw.alignment):"center",
                 x:Math.max(0.05,Math.min(0.95,Number.isFinite(x)?x:0.5)),y:Math.max(0.08,Math.min(0.92,Number.isFinite(y)?y:0.55)),
                 scale:Math.max(0.5,Math.min(elementScaleMaximum,Number.isFinite(scale)?scale:1)),stretch_x:Math.max(0.25,Math.min(4,Number.isFinite(sx)?sx:1)),
-                stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),opacity:Math.max(0,Math.min(100,Number.isFinite(opacity)?opacity:100)),
+                stretch_y:Math.max(0.25,Math.min(4,Number.isFinite(sy)?sy:1)),opacity:Math.max(5,Math.min(100,Number.isFinite(opacity)?opacity:100)),
                 rotation:normalizedRotation(Number.isFinite(rotation)?rotation:0),color:color==="auto"||validHex(color)?color:"auto",visible:typeof raw.visible==="boolean"?raw.visible:true}));
         }
         return result;
@@ -1505,6 +2181,31 @@ Singleton {
     function isTimezoneClock(name) { return timezoneClockIndex(name) >= 0; }
     function isCustomText(name) { return customTextIndex(name) >= 0; }
     function editableElementNames() { const names = elementNames.slice(); names.push("visualizer"); for (const image of draftCustomImages) names.push(String(image.id)); for(const clock of draftTimezoneClocks) names.push("timezone:"+String(clock.id)); for(const item of draftCustomTexts) names.push("text:"+String(item.id)); return names; }
+    function elementSelectorModel() {
+        const result = [];
+        for (const name of editableElementNames()) {
+            if (elementExists(name))
+                result.push(({ key: String(name), label: elementLabel(name) }));
+        }
+        return result;
+    }
+    function elementSelectorIndex() {
+        const model = elementSelectorModel();
+        for (let i = 0; i < model.length; ++i) {
+            if (String(model[i].key) === selectedElement)
+                return i;
+        }
+        return 0;
+    }
+    function selectElementByName(name) {
+        const key = String(name || "");
+        if (!elementExists(key))
+            return;
+        selectElement(key, false);
+        activeDrawer = "element";
+        elementPaletteOpen = false;
+        statusMessage = "Selected " + elementLabel(key);
+    }
     function elementExists(name) { return name === "visualizer" || elementNames.indexOf(name) >= 0 || isCustomImage(name) || isTimezoneClock(name) || isCustomText(name); }
     function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
 
@@ -1540,7 +2241,7 @@ Singleton {
                 scale: Math.max(0.50, Math.min(elementScaleMaximum, Number.isFinite(scale) ? scale : 1)),
                 stretch_x: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchX) ? stretchX : 1)),
                 stretch_y: Math.max(0.25, Math.min(4.00, Number.isFinite(stretchY) ? stretchY : 1)),
-                opacity: Math.max(password ? 20 : 0, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
+                opacity: Math.max(5, Math.min(100, Number.isFinite(opacity) ? opacity : 100)),
                 rotation: normalizedRotation(Number.isFinite(rotation) ? rotation : 0), color: color });
         }
         return result;
@@ -1574,7 +2275,7 @@ Singleton {
     function elementScale(name) { const point = elementPoint(name); const value = point ? Number(point.scale === undefined ? 1 : point.scale) : 1; return Number.isFinite(value) ? Math.max(0.50, Math.min(elementScaleMaximum, value)) : 1; }
     function elementStretchX(name) { const point = elementPoint(name); const value = point ? Number(point.stretch_x === undefined ? 1 : point.stretch_x) : 1; return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1; }
     function elementStretchY(name) { const point = elementPoint(name); const value = point ? Number(point.stretch_y === undefined ? 1 : point.stretch_y) : 1; return Number.isFinite(value) ? Math.max(0.25, Math.min(4.00, value)) : 1; }
-    function elementOpacity(name) { const point = elementPoint(name); const minimum = name === "password" ? 20 : 0; const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100; return Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100; }
+    function elementOpacity(name) { const point = elementPoint(name); const minimum = 5; const value = point ? Number(point.opacity === undefined ? 100 : point.opacity) : 100; return Number.isFinite(value) ? Math.max(minimum, Math.min(100, value)) : 100; }
     function elementColor(name) { if (isCustomImage(name)) return "auto"; const point = elementPoint(name); const value = point ? String(point.color === undefined ? "auto" : point.color) : "auto"; return value === "auto" || /^#[0-9a-fA-F]{6}$/.test(value) ? value.toLowerCase() : "auto"; }
 
     function setDraftColor(name, colorValue) {
@@ -1588,7 +2289,7 @@ Singleton {
 
     function setDraftOpacitySilently(name, opacity) {
         if (!elementExists(name)) return; const numeric = Number(opacity); if (!Number.isFinite(numeric)) return;
-        const minimum = name === "password" ? 20 : 0; const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
+        const minimum = 5; const value = Math.round(Math.max(minimum, Math.min(100, numeric)));
         if (name === "visualizer") { const next = cloneVisualizer(draftVisualizer); next.opacity = value; draftVisualizer = next; }
         else if (isCustomImage(name)) { const next = cloneCustomImages(draftCustomImages); const index = next.findIndex(image => image.id === name); if (index < 0) return; next[index].opacity = value; draftCustomImages = next; }
         else if(isTimezoneClock(name)){const next=cloneTimezoneClocks(draftTimezoneClocks);next[timezoneClockIndex(name)].opacity=value;draftTimezoneClocks=next;}
@@ -1621,14 +2322,14 @@ Singleton {
             return;
         }
         const previous = Number(root.elementOpacityBeforeOpaque[name]);
-        const minimum = name === "password" ? 20 : 0;
+        const minimum = 5;
         if (Number.isFinite(previous) && previous >= minimum && previous < 100)
             root.setDraftOpacity(name, previous);
     }
 
     function setElementOpacityFromPointer(name, pointerX, trackWidth) {
         const width = Number(trackWidth); if (!elementExists(name) || !Number.isFinite(width) || width <= 0) return;
-        const minimum = name === "password" ? 20 : 0;
+        const minimum = 5;
         const ratio = Math.max(0, Math.min(1, Number(pointerX) / width));
         const value = minimum + ratio * (100 - minimum);
         root.setDraftOpacitySilently(name, value);
@@ -1667,13 +2368,13 @@ Singleton {
 
     function nextCustomImageId() { const prefix = "image-" + Date.now().toString(36); let suffix = 0; let candidate = prefix; while (customImageIndex(candidate) >= 0) { suffix += 1; candidate = prefix + "_" + suffix; } return candidate; }
     function addCustomImage(imagePath) {
-        const value = String(imagePath || "").trim(); if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Custom image must be a local absolute path"; return; }
-        if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; }
+        const value = String(imagePath || "").trim(); if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Custom media must be a local absolute path"; return; }
+        if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom media limit reached (" + customImageMaximum + ")"; return; }
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); const id = nextCustomImageId();
         next.push(({ id: id, path: value, x: 0.5, y: 0.5, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true }));
-        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Image added. Save to apply.";
+        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Media added. Save to apply.";
     }
-    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Image removed. Save to apply."; }
+    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Media removed. Save to apply."; }
 
     function setDraftEntryTransition(value) {
         const key = String(value || ""); if (["fade", "pixel", "edges", "wipe"].indexOf(key) < 0) return;
@@ -1687,22 +2388,56 @@ Singleton {
 
     function resetDraft() {
         recordUndoBeforeChange(); draftLayout = defaultLayout(); draftCustomImages = []; draftTimezoneClocks=[]; draftCustomTexts=[]; previewTimezoneValues=({}); draftVisualizer = defaultVisualizer(); draftBackgroundOpacity = 100; draftLastBackgroundOpacity = 100;
-        draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordMaskMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
+        draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordFeedbackMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
         draftVisibility = defaultVisibility(); draftBackgroundMode = "black"; draftBackgroundColor = "#000000"; draftWallpaperPath = "";
         draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 10; draftBlurStyle = "pixelated"; draftWallpaperBlurExplicit = false;
         draftWeatherUnits = "auto"; draftAutoAccents = defaultAutoAccents(); selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "Defaults loaded. Save to apply."; scheduleContrastRefresh();
     }
 
     function loadPersistedDraft() {
-        const state = BarState.data();
-        draftLayout = cloneLayout(BarState.lockscreenLayout()); draftCustomImages = cloneCustomImages(BarState.lockscreenCustomImages()); draftTimezoneClocks=cloneTimezoneClocks(BarState.lockscreenTimezoneClocks()); draftCustomTexts=cloneCustomTexts(BarState.lockscreenCustomTexts()); draftVisualizer = cloneVisualizer(BarState.lockscreenVisualizer()); refreshPreviewTimezoneValues();
-        draftBackgroundOpacity = BarState.lockscreenBackgroundOpacity(); draftLastBackgroundOpacity = BarState.lockscreenPreviousBackgroundOpacity(); draftEntryTransition = BarState.lockscreenEntryTransition(); draftEntryTransitionDuration = BarState.lockscreenEntryTransitionDuration();
-        draftLogoSpawnAnimation = normalizedLogoSpawn(BarState.lockscreenAnimationPreference()); draftPasswordMaskMode = normalizedPasswordMaskMode(state.lockscreen_password_mask_mode); draftPasswordMaskCharacter = normalizedPasswordMaskCharacter(state.lockscreen_password_mask_character); draftClockFormat = normalizedClockFormat(state.lockscreen_clock_format);
-        draftVisibility = cloneVisibility(({ logo: BarState.lockscreenShowLogo(), time: BarState.lockscreenShowTime(), date: BarState.lockscreenShowDate(), username: BarState.lockscreenShowUsername(), weather: BarState.lockscreenShowWeather(), password: true }));
-        draftBackgroundMode = BarState.lockscreenBackground(); draftBackgroundColor = BarState.lockscreenBackgroundColor(); draftWallpaperPath = BarState.lockscreenWallpaperPath(); draftWallpaperFit = BarState.lockscreenWallpaperFit();
-        draftWallpaperFocalX = BarState.lockscreenWallpaperFocalX(); draftWallpaperFocalY = BarState.lockscreenWallpaperFocalY(); draftOverlayMode = BarState.lockscreenOverlayMode(); draftOverlayStrength = BarState.lockscreenOverlayStrength();
-        draftWallpaperBlur = BarState.lockscreenWallpaperBlur(); draftBlurStyle = BarState.lockscreenBlurStyle(); draftWallpaperBlurExplicit = false; draftWeatherUnits = BarState.lockscreenWeatherUnits(); draftAutoAccents = defaultAutoAccents();
-        selectedElement = elementExists(selectedElement) ? selectedElement : "logo"; selectedElements = [selectedElement]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "";
+        const profiles = BarState.lockscreenMonitorProfiles();
+        const lastEdited = BarState.lockscreenLastEditedProfile();
+        const savedProfiles = BarState.lockscreenSavedProfiles();
+
+        draftMonitorProfiles = cloneSnapshot(profiles) || ({});
+        draftLastEditedProfile = cloneSnapshot(lastEdited) || ({});
+        draftSavedProfiles = cloneSnapshot(savedProfiles) || [];
+        selectedSavedConfigurationId = draftSavedProfiles.length > 0
+            ? String(draftSavedProfiles[0].id || "") : "";
+        savedConfigurationNameDialogMode = "";
+        savedConfigurationNameDraft = "";
+        savedConfigurationConfirmMode = "";
+
+        if (activeMonitorName.length === 0 && editorWindow.screen && editorWindow.screen.name)
+            activeMonitorName = String(editorWindow.screen.name);
+
+        const screens = Quickshell.screens || [];
+        for (let i = 0; i < screens.length; ++i) {
+            const name = screens[i] ? String(screens[i].name || "") : "";
+            if (name.length > 0)
+                ensureMonitorProfile(name);
+        }
+
+        const persistedMonitorAccents = ({});
+        for (const name of Object.keys(draftMonitorProfiles))
+            persistedMonitorAccents[name] = cloneAutoAccents(
+                LockscreenContrast.colorsForMonitor(name));
+        draftMonitorAutoAccents = persistedMonitorAccents;
+
+        const profile = ensureMonitorProfile(activeMonitorName)
+            || cloneSnapshot(draftLastEditedProfile);
+        loadProfileIntoDraft(profile);
+        loadAutoAccentsForActiveProfile();
+
+        profileUndoStacks = ({});
+        profileRedoStacks = ({});
+        undoStack = [];
+        redoStack = [];
+        historyTransactionActive = false;
+        historyTransactionSnapshot = null;
+        elementPaletteOpen = false;
+        backgroundPaletteOpen = false;
+        statusMessage = "";
     }
 
     function focusedScreen() { const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : ""; const screens = Quickshell.screens || []; for (let i = 0; i < screens.length; ++i) if (screens[i] && screens[i].name === name) return screens[i]; return screens.length > 0 ? screens[0] : null; }
@@ -1721,7 +2456,12 @@ Singleton {
 
     function openForScreen(target) {
         elementOpacityBeforeOpaque = ({});
-        if (target) editorWindow.screen = target; loadPersistedDraft(); settingsBarOffsetY = 0; undoStack = []; redoStack = []; historyTransactionActive = false; historyTransactionSnapshot = null; inertiaOwner = ""; activeDrawer = ""; pickerSuspended = false;
+        if (target)
+            editorWindow.screen = target;
+        activeMonitorName = target && target.name
+            ? String(target.name) : (editorWindow.screen && editorWindow.screen.name ? String(editorWindow.screen.name) : "");
+        loadPersistedDraft();
+        settingsBarOffsetY = 0; undoStack = []; redoStack = []; historyTransactionActive = false; historyTransactionSnapshot = null; inertiaOwner = ""; activeDrawer = ""; pickerSuspended = false;
         editingActive = true; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 0; editorWindow.visible = false; statusMessage = "Capturing current desktop preview…"; previewCaptureDelay.restart();
     }
     function openFocused() { openForScreen(focusedScreen()); }
@@ -1764,26 +2504,32 @@ Singleton {
     }
 
     function suspendForWallpaperPicker() { if (!open || pickerSuspended || wallpaperPickerProcess.running || customImagePickerProcess.running) return; if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening lockscreen wallpaper picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; wallpaperPickerProcess.exec(["bash", wallpaperPickerBackend]); }
-    function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom image limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom image picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
+    function suspendForCustomImagePicker() { if (!open || pickerSuspended || customImagePickerProcess.running || wallpaperPickerProcess.running) return; if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom media limit reached (" + customImageMaximum + ")"; return; } if (historyTransactionActive) commitHistoryTransaction(); inertiaOwner = ""; pickerSuspended = true; statusMessage = "Opening custom media picker…"; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; customImagePickerProcess.exec(["bash", wallpaperPickerBackend]); }
     function resumeAfterWallpaperPicker() { if (!open || !pickerSuspended) return; pickerSuspended = false; editorWindow.visible = true; editorEntranceOpacity = 1; FlyoutManager.claimOverlay("lockscreen-editor"); scheduleContrastRefresh(); Qt.callLater(() => editorFocus.forceActiveFocus()); }
 
     function close() {
         elementOpacityBeforeOpaque = ({});
         lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
-        const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview); loadPersistedDraft();
+        const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview);
     }
 
     function save() {
-        if (saveProcess.running || contrastPersistProcess.running) return;
+        if (savedConfigurationModalOpen || saveProcess.running || contrastPersistProcess.running
+                || savedProfilesPersistProcess.running)
+            return;
+        if (historyTransactionActive)
+            commitHistoryTransaction();
+        stashHistoryForActiveProfile();
+        flushActiveProfile();
         saveErrorMessage = "";
         statusMessage = "Saving…";
-        saveProcess.exec(["bash", editorSaveBackend, JSON.stringify(draftLayout), JSON.stringify(draftVisibility), draftBackgroundMode, draftBackgroundColor, draftWallpaperPath, draftWallpaperFit,
-            String(draftWallpaperFocalX), String(draftWallpaperFocalY), draftOverlayMode, String(draftOverlayStrength), String(draftWallpaperBlur), draftWeatherUnits, JSON.stringify(draftCustomImages), JSON.stringify(draftVisualizer), String(draftBackgroundOpacity), String(draftEntryTransition), String(draftEntryTransitionDuration), String(draftLastBackgroundOpacity), String(draftBlurStyle),
-            String(draftLogoSpawnAnimation), String(draftPasswordMaskMode), String(draftPasswordMaskCharacter), String(draftClockFormat), JSON.stringify(draftTimezoneClocks), JSON.stringify(draftCustomTexts)]);
+        saveProcess.exec(["bash", editorSaveBackend, "--profiles",
+            JSON.stringify(draftMonitorProfiles), JSON.stringify(draftLastEditedProfile),
+            JSON.stringify(draftSavedProfiles)]);
     }
 
-    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Image " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
+    function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Media " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
 
     Process {
         id: saveProcess
@@ -1807,6 +2553,31 @@ Singleton {
         }
     }
     Process { id: contrastPersistProcess; onExited: (exitCode, exitStatus) => { root.statusMessage = exitCode === 0 ? "Saved" : "Saved; Auto contrast cache could not refresh"; } }
+    Process {
+        id: savedProfilesPersistProcess
+        stderr: SplitParser {
+            onRead: line => {
+                const detail = String(line || "").trim();
+                if (detail.length > 0 && root.savedProfilesPersistError.length === 0)
+                    root.savedProfilesPersistError = detail;
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                BarState.refresh();
+                root.statusMessage = "Configuration deleted";
+            } else {
+                root.draftSavedProfiles = root.cloneSnapshot(root.savedProfilesPersistRollback) || [];
+                root.selectedSavedConfigurationId = root.savedProfilesPersistRollbackSelection;
+                root.statusMessage = root.savedProfilesPersistError.length > 0
+                    ? "Delete failed: " + root.savedProfilesPersistError
+                    : "Could not delete saved configuration";
+            }
+            root.savedProfilesPersistRollback = [];
+            root.savedProfilesPersistRollbackSelection = "";
+            root.savedProfilesPersistError = "";
+        }
+    }
 
     NumberAnimation { id: editorEntranceFade; target: root; property: "editorEntranceOpacity"; from: 0; to: 1; duration: root.editorEntranceFadeDuration; easing.type: Easing.OutCubic }
     NumberAnimation { id: heldScaleAnimation; target: root; property: "heldScaleBoost"; duration: 70; easing.type: Easing.OutCubic }
@@ -1838,32 +2609,184 @@ Singleton {
     Process {
         id: customImagePickerProcess
         stdout: SplitParser { onRead: line => root.acceptCustomImageSelection(line) }
-        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom image picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom image picker…") root.statusMessage = "No image selected."; root.resumeAfterWallpaperPicker(); }
+        onExited: (exitCode, exitStatus) => { if (root.open && exitCode !== 0) root.statusMessage = "Custom media picker closed without a selection"; else if (root.open && root.statusMessage === "Opening custom media picker…") root.statusMessage = "No media selected."; root.resumeAfterWallpaperPicker(); }
     }
-
-    Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
 
     LockPreviewAudioAnalyzer { id: previewAudioAnalyzer; enabled: root.editingActive && !root.pickerSuspended && root.draftVisualizer.enabled; performanceMode: root.draftVisualizer.performance }
 
+    Connections {
+        target: Quickshell
+        function onScreensChanged() {
+            if (root.open)
+                Qt.callLater(() => root.reconcileActiveMonitor());
+        }
+    }
+
     PanelWindow {
         id: editorWindow
-        Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; onActivated: root.selectAllElements() }
+        Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; onActivated: root.selectAllElements() }
+        Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; autoRepeat: false; onActivated: root.save() }
+        Shortcut { id: savedConfigurationConfirmReturnShortcut; sequence: "Return"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
+        Shortcut { id: savedConfigurationConfirmEnterShortcut; sequence: "Enter"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
+        Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
         visible: false; color: "transparent"; WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive; aboveWindows: true; exclusionMode: ExclusionMode.Ignore
         anchors.top: true; anchors.left: true; implicitWidth: Math.max(1, screen ? screen.width : 1920); implicitHeight: Math.max(1, screen ? screen.height : 1080)
 
-        Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
-        Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
-        Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+        Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
+        Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+        Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+
+        Rectangle {
+            id: savedConfigurationNameDialogLayer
+            anchors.fill: parent
+            visible: root.savedConfigurationNameDialogMode.length > 0
+            color: "#99000000"
+            z: 10010
+            onVisibleChanged: {
+                if (!visible)
+                    return;
+                Qt.callLater(() => {
+                    if (!savedConfigurationNameDialogLayer.visible)
+                        return;
+                    savedConfigurationNameField.forceActiveFocus();
+                    if (root.savedConfigurationNameDialogMode === "rename")
+                        savedConfigurationNameField.selectAll();
+                });
+            }
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 480)
+                height: 190
+                radius: 10
+                color: Theme.popupBackground
+                border.width: 1
+                border.color: Theme.active
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 12
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.savedConfigurationNameDialogMode === "rename"
+                            ? "Rename Saved Configuration" : "Save Current Configuration"
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+                    TextField {
+                        id: savedConfigurationNameField
+                        Layout.fillWidth: true
+                        text: root.savedConfigurationNameDraft
+                        maximumLength: 64
+                        selectByMouse: true
+                        placeholderText: "Configuration name"
+                        onTextChanged: root.savedConfigurationNameDraft = text
+                        onAccepted: root.confirmSavedConfigurationNameDialog()
+                    }
+                    Item { Layout.fillHeight: true }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Item { Layout.fillWidth: true }
+                        SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.cancelSavedConfigurationNameDialog() }
+                        SettingsButton {
+                            label: root.savedConfigurationNameDialogMode === "rename" ? "Rename" : "Save Configuration"
+                            textSize: 9
+                            onClicked: root.confirmSavedConfigurationNameDialog()
+                        }
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            id: savedConfigurationConfirmLayer
+            anchors.fill: parent
+            visible: root.savedConfigurationConfirmMode.length > 0
+            color: "#99000000"
+            z: 10020
+
+            MouseArea { anchors.fill: parent }
+
+            Rectangle {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 40, 520)
+                height: 210
+                radius: 10
+                color: Theme.popupBackground
+                border.width: 1
+                border.color: Theme.active
+
+                ColumnLayout {
+                    anchors.fill: parent
+                    anchors.margins: 18
+                    spacing: 12
+                    Text {
+                        visible: root.savedConfigurationConfirmMode === "delete"
+                        Layout.fillWidth: true
+                        text: "Delete Saved Configuration?"
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+                    Text {
+                        visible: root.savedConfigurationConfirmMode === "overwrite"
+                        Layout.fillWidth: true
+                        text: "Overwrite Saved Configuration?"
+                        color: Theme.foreground
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 15
+                        font.bold: true
+                    }
+                    Text {
+                        Layout.fillWidth: true
+                        text: root.savedConfigurationConfirmMode === "delete"
+                            ? "This permanently removes the selected reusable configuration."
+                            : "This replaces the selected reusable configuration with the current display's complete visual configuration."
+                        color: Theme.muted
+                        font.family: Theme.fontFamily
+                        font.pixelSize: 10
+                        wrapMode: Text.WordWrap
+                    }
+                    Item { Layout.fillHeight: true }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        spacing: 8
+                        Item { Layout.fillWidth: true }
+                        SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.cancelSavedConfigurationConfirm() }
+                        SettingsButton {
+                            label: root.savedConfigurationConfirmMode === "delete" ? "Delete" : "Overwrite"
+                            textSize: 9
+                            onClicked: root.confirmSavedConfigurationConfirmDialog()
+                        }
+                    }
+                }
+            }
+        }
 
         Rectangle {
             id: editorFocus; anchors.fill: parent; color: "transparent"; focus: true; opacity: root.editorEntranceOpacity
-            Keys.onPressed: event => { const step = event.modifiers & Qt.ShiftModifier ? root.keyboardNudgeLarge : root.keyboardNudge;
+            Keys.onPressed: event => {
+                const editorMutationKey = event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                    || event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Delete;
+                if (root.savedConfigurationModalOpen && editorMutationKey) {
+                    event.accepted = true;
+                    return;
+                }
+                const step = event.modifiers & Qt.ShiftModifier ? root.keyboardNudgeLarge : root.keyboardNudge;
                 if (event.key === Qt.Key_Left) { root.nudgeSelection(-step, 0); event.accepted = true; } else if (event.key === Qt.Key_Right) { root.nudgeSelection(step, 0); event.accepted = true; }
                 else if (event.key === Qt.Key_Up) { root.nudgeSelection(0, -step); event.accepted = true; } else if (event.key === Qt.Key_Down) { root.nudgeSelection(0, step); event.accepted = true; }
                 else if (event.key === Qt.Key_Delete && root.isCustomImage(root.selectedElement)) { root.removeCustomImage(root.selectedElement); event.accepted = true; }
                 else if (event.key === Qt.Key_Delete && root.isTimezoneClock(root.selectedElement)) { root.removeTimezoneClock(root.selectedElement); event.accepted = true; }
-                else if (event.key === Qt.Key_Delete && root.isCustomText(root.selectedElement)) { root.removeCustomText(root.selectedElement); event.accepted = true; } }
+                else if (event.key === Qt.Key_Delete && root.isCustomText(root.selectedElement)) { root.removeCustomText(root.selectedElement); event.accepted = true; }
+            }
 
             Item { id: editorTransitionStart; x: editorFocus.width + 64; y: 0; width: editorFocus.width; height: editorFocus.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
@@ -1879,7 +2802,7 @@ Singleton {
                 weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor
                 wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY; overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur
                 blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; timezoneClocks: root.draftTimezoneClocks; timezoneValues: root.previewTimezoneValues; customTexts: root.draftCustomTexts; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat
+                passwordMaskMode: root.draftPasswordFeedbackMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; passwordFeedbackEpoch: root.previewPasswordFeedbackEpoch; clockFormat: root.draftClockFormat
                 desktopBackingSource: editorTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility; editorHeldElement: root.heldElement; editorHoldScale: root.heldScaleBoost
             }
             LockPreviewTransitionLayer { id: editorTransitionLayer; anchors.fill: parent; z: 160; startSource: editorTransitionStart; endSource: previewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
@@ -1906,13 +2829,121 @@ Singleton {
                     color: "transparent"; border.width: root.selectedContains(elementName) ? 2 : 1; border.color: root.selectedContains(elementName) ? Theme.focus : Theme.muted; opacity: 0.92; z: root.selectedElement === elementName ? 230 : 200
                     property real lastSampleTime: 0; property real lastSampleX: 0; property real lastSampleY: 0; property real flickVelocityX: 0; property real flickVelocityY: 0; property bool inertiaActive: false
 
-                    MouseArea { id: dragArea; anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.SizeAllCursor; preventStealing: true; property real pressOffsetX: 0; property real pressOffsetY: 0
-                        onPressed: mouse => { if (root.inertiaOwner.length > 0) { root.inertiaOwner = ""; root.commitHistoryTransaction(); } parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0;
-                            const additive = !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)); if (additive) root.selectElement(parent.elementName, true); else if (!root.selectedContains(parent.elementName)) root.selectElement(parent.elementName, false); else root.activeDrawer = "element"; if (!root.selectedContains(parent.elementName)) return;
-                            root.beginHistoryTransaction(); pressOffsetX = mouse.x; pressOffsetY = mouse.y; const point = root.elementPoint(parent.elementName); parent.lastSampleX = Number(point.x); parent.lastSampleY = Number(point.y); parent.lastSampleTime = Date.now(); root.beginEditorHold(parent.elementName); }
-                        onPositionChanged: mouse => { if (!pressed || !root.selectedContains(parent.elementName) || editorFocus.width <= 0 || editorFocus.height <= 0) return; const scenePoint = parent.mapToItem(editorFocus, mouse.x - pressOffsetX + parent.width / 2, mouse.y - pressOffsetY + parent.height / 2); const bypassSnap = !!(mouse.modifiers & Qt.AltModifier); const snapped = root.snapPoint(parent.elementName, scenePoint.x / editorFocus.width, scenePoint.y / editorFocus.height, bypassSnap); const current = root.elementPoint(parent.elementName); root.translateSelectedElements(snapped.x - Number(current.x), snapped.y - Number(current.y), true); const moved = root.elementPoint(parent.elementName); const now = Date.now(); if (parent.lastSampleTime > 0 && now > parent.lastSampleTime) { const dt = Math.max(8, now - parent.lastSampleTime) / 1000; const sampleVX = (Number(moved.x) - parent.lastSampleX) / dt; const sampleVY = (Number(moved.y) - parent.lastSampleY) / dt; parent.flickVelocityX = parent.flickVelocityX * 0.30 + sampleVX * 0.70; parent.flickVelocityY = parent.flickVelocityY * 0.30 + sampleVY * 0.70; } parent.lastSampleX = Number(moved.x); parent.lastSampleY = Number(moved.y); parent.lastSampleTime = now; }
-                        onReleased: mouse => { root.endEditorHold(parent.elementName); root.clearGuides(); if (Date.now() - parent.lastSampleTime > root.flickReleaseFreshnessMs) { parent.flickVelocityX = 0; parent.flickVelocityY = 0; } parent.flickVelocityX = root.cappedFlickVelocity(parent.flickVelocityX); parent.flickVelocityY = root.cappedFlickVelocity(parent.flickVelocityY); if (root.shouldStartFlick(parent.flickVelocityX, parent.flickVelocityY)) { parent.inertiaActive = true; root.inertiaOwner = parent.elementName; } else { parent.flickVelocityX = 0; parent.flickVelocityY = 0; parent.inertiaActive = false; root.commitHistoryTransaction(); } }
-                        onCanceled: { parent.inertiaActive = false; parent.flickVelocityX = 0; parent.flickVelocityY = 0; if (root.inertiaOwner === parent.elementName) root.inertiaOwner = ""; root.endEditorHold(parent.elementName); root.clearGuides(); root.commitHistoryTransaction(); }
+                    MouseArea {
+                        id: dragArea
+                        anchors.fill: parent
+                        hoverEnabled: true
+                        cursorShape: Qt.SizeAllCursor
+                        preventStealing: true
+                        property real pressOffsetX: 0
+                        property real pressOffsetY: 0
+                        property bool dragActivated: false
+
+                        onPressed: mouse => {
+                            if (root.inertiaOwner.length > 0) {
+                                root.inertiaOwner = "";
+                                root.commitHistoryTransaction();
+                            }
+                            parent.inertiaActive = false;
+                            parent.flickVelocityX = 0;
+                            parent.flickVelocityY = 0;
+                            const additive = !!(mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier));
+                            if (additive)
+                                root.selectElement(parent.elementName, true);
+                            else if (!root.selectedContains(parent.elementName))
+                                root.selectElement(parent.elementName, false);
+                            else
+                                root.activeDrawer = "element";
+                            if (!root.selectedContains(parent.elementName))
+                                return;
+                            dragActivated = false;
+                            pressOffsetX = mouse.x;
+                            pressOffsetY = mouse.y;
+                            parent.lastSampleTime = 0;
+                        }
+
+                        onPositionChanged: mouse => {
+                            if (!pressed || !root.selectedContains(parent.elementName)
+                                    || editorFocus.width <= 0 || editorFocus.height <= 0)
+                                return;
+                            if (!dragActivated) {
+                                const deltaX = mouse.x - pressOffsetX;
+                                const deltaY = mouse.y - pressOffsetY;
+                                if (Math.hypot(deltaX, deltaY) < root.dragActivationThresholdPx)
+                                    return;
+                                dragActivated = true;
+                                root.beginHistoryTransaction();
+                                const startPoint = root.elementPoint(parent.elementName);
+                                parent.lastSampleX = Number(startPoint.x);
+                                parent.lastSampleY = Number(startPoint.y);
+                                parent.lastSampleTime = Date.now();
+                                root.beginEditorHold(parent.elementName);
+                            }
+                            const scenePoint = parent.mapToItem(editorFocus,
+                                mouse.x - pressOffsetX + parent.width / 2,
+                                mouse.y - pressOffsetY + parent.height / 2);
+                            const bypassSnap = !!(mouse.modifiers & Qt.AltModifier);
+                            const snapped = root.snapPoint(parent.elementName,
+                                scenePoint.x / editorFocus.width,
+                                scenePoint.y / editorFocus.height,
+                                bypassSnap);
+                            const current = root.elementPoint(parent.elementName);
+                            root.translateSelectedElements(snapped.x - Number(current.x),
+                                snapped.y - Number(current.y), true);
+                            const moved = root.elementPoint(parent.elementName);
+                            const now = Date.now();
+                            if (parent.lastSampleTime > 0 && now > parent.lastSampleTime) {
+                                const dt = Math.max(8, now - parent.lastSampleTime) / 1000;
+                                const sampleVX = (Number(moved.x) - parent.lastSampleX) / dt;
+                                const sampleVY = (Number(moved.y) - parent.lastSampleY) / dt;
+                                parent.flickVelocityX = parent.flickVelocityX * 0.30 + sampleVX * 0.70;
+                                parent.flickVelocityY = parent.flickVelocityY * 0.30 + sampleVY * 0.70;
+                            }
+                            parent.lastSampleX = Number(moved.x);
+                            parent.lastSampleY = Number(moved.y);
+                            parent.lastSampleTime = now;
+                        }
+
+                        onReleased: mouse => {
+                            root.clearGuides();
+                            if (!dragActivated) {
+                                parent.inertiaActive = false;
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                                return;
+                            }
+                            root.endEditorHold(parent.elementName);
+                            if (Date.now() - parent.lastSampleTime > root.flickReleaseFreshnessMs) {
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                            }
+                            parent.flickVelocityX = root.cappedFlickVelocity(parent.flickVelocityX);
+                            parent.flickVelocityY = root.cappedFlickVelocity(parent.flickVelocityY);
+                            if (root.shouldStartFlick(parent.flickVelocityX, parent.flickVelocityY)) {
+                                parent.inertiaActive = true;
+                                root.inertiaOwner = parent.elementName;
+                            } else {
+                                parent.flickVelocityX = 0;
+                                parent.flickVelocityY = 0;
+                                parent.inertiaActive = false;
+                                root.commitHistoryTransaction();
+                            }
+                            dragActivated = false;
+                        }
+
+                        onCanceled: {
+                            parent.inertiaActive = false;
+                            parent.flickVelocityX = 0;
+                            parent.flickVelocityY = 0;
+                            if (root.inertiaOwner === parent.elementName)
+                                root.inertiaOwner = "";
+                            if (dragActivated) {
+                                root.endEditorHold(parent.elementName);
+                                root.commitHistoryTransaction();
+                            }
+                            dragActivated = false;
+                            root.clearGuides();
+                        }
                     }
 
                     Rectangle { id: elementResizeHandle; visible: root.selectedElement === parent.elementName; width: 16; height: 16; radius: 3; x: parent.width - width / 2; y: parent.height - height / 2; color: Theme.focus; border.width: 1; border.color: Theme.foreground; z: 20
@@ -1968,6 +2999,25 @@ Singleton {
                     id: editorDockContent; anchors.fill: parent; anchors.margins: 9; spacing: 6
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7
+                        Text { text: "Display"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Repeater {
+                            model: Quickshell.screens
+                            SettingsButton { required property var modelData; label: String(modelData.name); active: root.activeMonitorName === String(modelData.name); textSize: 9; onClicked: root.switchActiveMonitor(String(modelData.name)) }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7
+                        Text { text: "Copy Configuration To"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Repeater {
+                            model: Quickshell.screens
+                            SettingsButton { required property var modelData; visible: String(modelData.name) !== root.activeMonitorName; label: String(modelData.name); textSize: 9; onClicked: root.copyConfigurationTo(String(modelData.name)) }
+                        }
+                        SettingsButton { label: "All Other Displays"; textSize: 9; available: (Quickshell.screens || []).length > 1; onClicked: root.copyConfigurationToAllOthers() }
+                        Item { Layout.fillWidth: true }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7
                         Text { text: root.elementLabel(root.selectedElement); color: Theme.foreground; font.family: Theme.fontFamily; font.pixelSize: 10; font.bold: true }
                         SettingsButton { label: root.selectedElements.length > 1 ? (root.selectionAllVisible() ? "Hide Selected" : "Show Selected") : root.selectedElement === "logo" ? (root.elementEnabled("logo") ? "Logo visible" : "Logo hidden") : root.elementCanHide(root.selectedElement) ? (root.elementEnabled(root.selectedElement) ? "Visible" : "Hidden") : "Always visible"; active: root.selectedElements.length > 1 ? root.selectionAllVisible() : root.elementEnabled(root.selectedElement); available: root.selectedElements.length > 1 ? root.selectedElements.some(name => name !== "password" && root.elementCanHide(name)) : root.elementCanHide(root.selectedElement); textSize: 9; onClicked: { if (root.selectedElements.length > 1) root.setSelectedVisibility(!root.selectionAllVisible()); else root.setDraftVisible(root.selectedElement, !root.elementEnabled(root.selectedElement)); } }
                         Text { text: "Scale"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
@@ -1996,21 +3046,38 @@ Singleton {
                         SettingsButton { label: "Weather"; active: root.activeDrawer === "weather"; textSize: 9; onClicked: root.toggleDrawer("weather") }
                         Item { Layout.fillWidth: true }
                         Text { visible: root.statusMessage.length > 0; text: root.statusMessage.length > 0 ? root.statusMessage : "Password cannot be hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.maximumWidth: 260 }
+                        Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                         SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }
                         SettingsButton { label: "Save"; active: true; textSize: 9; available: !saveProcess.running && !contrastPersistProcess.running; onClicked: root.save() }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
-                        SettingsButton { label: "Add Image"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
+                        Text { text: "Select Element"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        LockscreenCompactSelector {
+                            popupBoundary: editorFocus
+                            Layout.preferredWidth: 220
+                            model: root.elementSelectorModel()
+                            currentIndex: root.elementSelectorIndex()
+                            onActivated: index => {
+                                if (index >= 0 && index < root.elementSelectorModel().length)
+                                    root.selectElementByName(root.elementSelectorModel()[index].key)
+                            }
+                        }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element"
+                        SettingsButton { label: "Add Media"; textSize: 9; available: root.draftCustomImages.length < root.customImageMaximum && !customImagePickerProcess.running; onClicked: root.suspendForCustomImagePicker() }
                         SettingsButton { label: "Add timezone clock"; textSize: 9; available: root.draftTimezoneClocks.length < root.timezoneClockMaximum; onClicked: root.addTimezoneClock() }
                         SettingsButton { label: "Add custom text"; textSize: 9; available: root.draftCustomTexts.length < root.customTextMaximum; onClicked: root.addCustomText() }
-                        SettingsButton { label: "Remove Image"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
+                        SettingsButton { label: "Remove Media"; textSize: 9; visible: root.isCustomImage(root.selectedElement); available: visible; onClicked: root.removeCustomImage(root.selectedElement) }
                         SettingsButton { label: "Remove clock"; textSize: 9; visible: root.isTimezoneClock(root.selectedElement); available: visible; onClicked: root.removeTimezoneClock(root.selectedElement) }
                         SettingsButton { label: "Remove text"; textSize: 9; visible: root.isCustomText(root.selectedElement); available: visible; onClicked: root.removeCustomText(root.selectedElement) }
                         Text { text: "Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > (root.selectedElement === "password" ? 20 : 0); onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
-                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: root.selectedElement === "password" ? 20 : 0; top: 100 }
+                        SettingsButton { label: "−"; textSize: 9; available: root.elementOpacity(root.selectedElement) > 5; onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) - 5) }
+                        TextField { id: elementOpacityField; Layout.preferredWidth: 52; text: Number(root.elementOpacity(root.selectedElement)).toFixed(0); validator: IntValidator { bottom: 5; top: 100 }
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementOpacity(root.selectedElement) < 100; onClicked: root.setDraftOpacity(root.selectedElement, root.elementOpacity(root.selectedElement) + 5) }
                         Text { text: "Stretch X"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
@@ -2024,13 +3091,13 @@ Singleton {
                              selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), Number(text) / 100) }
                         SettingsButton { label: "+"; textSize: 9; available: root.elementStretchY(root.selectedElement) < 4.00; onClicked: root.setDraftStretch(root.selectedElement, root.elementStretchX(root.selectedElement), root.elementStretchY(root.selectedElement) + 0.10) }
                         Item { Layout.fillWidth: true }
-                        Text { text: root.isCustomImage(root.selectedElement) ? "Custom images are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                        Text { text: root.isCustomImage(root.selectedElement) ? "Custom media are local presentation-only elements." : "Drag the corner handle for direct uniform scaling."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
                     }
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isCustomImage(root.selectedElement)
-                        Text { text: "Image Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
-                        TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 0; top: 100 }
+                        Text { text: "Media Opacity"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField { id: imageOpacityField; Layout.preferredWidth: 46; text: String(Math.round(root.elementOpacity(root.selectedElement))); validator: IntValidator { bottom: 5; top: 100 }
                             selectByMouse: true; font.pixelSize: 9; onEditingFinished: root.setDraftOpacity(root.selectedElement, text) }
                         SettingsButton { label: "Reset"; textSize: 9; onClicked: root.resetSelectedElementOpacity() }
                         SettingsButton { label: "Opaque"; textSize: 9; active: Math.round(root.elementOpacity(root.selectedElement)) === 100; onClicked: root.toggleSelectedElementOpaque() }
@@ -2095,17 +3162,24 @@ Singleton {
 
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.selectedElement === "password"
-                        Text { text: "Password Mask"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Text { text: "Password Feedback"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         LockscreenCompactSelector {
                             popupBoundary: editorFocus
                             Layout.preferredWidth: 190
-                            model: root.passwordMaskPresets
-                            currentIndex: root.passwordMaskIndex(root.draftPasswordMaskMode)
-                            onActivated: index => root.setDraftPasswordMaskMode(root.passwordMaskPresets[index].key)
+                            model: root.passwordFeedbackPresets
+                            currentIndex: root.passwordFeedbackIndex(root.draftPasswordFeedbackMode)
+                            onActivated: index => root.setDraftPasswordFeedbackMode(root.passwordFeedbackPresets[index].key)
                         }
-                        Text { visible: root.draftPasswordMaskMode === "custom"; text: "Character"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        SettingsButton {
+                            visible: root.draftPasswordFeedbackMode === "sparks"
+                                || root.draftPasswordFeedbackMode === "mini-flash"
+                            label: "Preview Feedback"
+                            textSize: 9
+                            onClicked: root.previewPasswordFeedbackEpoch += 1
+                        }
+                        Text { visible: root.draftPasswordFeedbackMode === "custom"; text: "Character"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
                         TextField {
-                            visible: root.draftPasswordMaskMode === "custom"
+                            visible: root.draftPasswordFeedbackMode === "custom"
                             Layout.preferredWidth: 48
                             text: root.draftPasswordMaskCharacter
                             maximumLength: 2
@@ -2115,7 +3189,7 @@ Singleton {
                             onEditingFinished: root.setDraftPasswordMaskCharacter(text)
                         }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Masking is presentation-only; the actual password remains hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                        Text { text: "Feedback is presentation-only; the actual password remains hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout {
@@ -2210,7 +3284,45 @@ Singleton {
                         SettingsButton { label: "Guides"; active: root.showEditorGrid; textSize: 9; onClicked: root.showEditorGrid = !root.showEditorGrid }
                         SettingsButton { label: "Restore Defaults"; textSize: 9; onClicked: root.resetDraft() }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Presets change layout and visibility only."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                        Text { text: "Built-in presets change layout and visibility only."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight }
+                    }
+
+                    RowLayout { Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "layout"
+                        Text { text: "Saved Configurations"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        LockscreenCompactSelector {
+                            popupBoundary: editorFocus
+                            Layout.preferredWidth: 210
+                            model: root.savedConfigurationSelectorModel()
+                            enabled: root.draftSavedProfiles.length > 0
+                            currentIndex: Math.max(0, root.selectedSavedConfigurationIndex())
+                            onActivated: index => {
+                                if (index >= 0 && index < root.draftSavedProfiles.length)
+                                    root.selectedSavedConfigurationId = String(root.draftSavedProfiles[index].id || "");
+                            }
+                        }
+                        SettingsButton { label: "Save Current Configuration"; textSize: 9; available: !savedProfilesPersistProcess.running && root.draftSavedProfiles.length < 32; onClicked: root.openSaveCurrentConfigurationDialog() }
+                        SettingsButton { label: "Rename"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.openRenameSavedConfigurationDialog() }
+                        SettingsButton { label: "Delete"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestDeleteSavedConfiguration() }
+                        SettingsButton { label: "Move Up"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() > 0; onClicked: root.moveSavedConfiguration(-1) }
+                        SettingsButton { label: "Move Down"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0 && root.selectedSavedConfigurationIndex() < root.draftSavedProfiles.length - 1; onClicked: root.moveSavedConfiguration(1) }
+                        SettingsButton { label: "Overwrite"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestOverwriteSavedConfiguration() }
+                        Item { Layout.fillWidth: true }
+                    }
+
+                    RowLayout { Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "layout" && root.selectedSavedConfigurationIndex() >= 0
+                        Text { text: "Apply To"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        Repeater {
+                            model: Quickshell.screens
+                            SettingsButton {
+                                required property var modelData
+                                label: String(modelData.name || "")
+                                textSize: 9
+                                onClicked: root.applySavedConfigurationToMonitor(root.selectedSavedConfigurationId, String(modelData.name || ""))
+                            }
+                        }
+                        SettingsButton { label: "All Other Displays"; textSize: 9; available: (Quickshell.screens || []).length > 1; onClicked: root.applySavedConfigurationToAllOthers(root.selectedSavedConfigurationId) }
+                        Item { Layout.fillWidth: true }
+                        Text { text: "Applying replaces the selected display configuration when you save."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout { Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "background"
@@ -2312,22 +3424,76 @@ Singleton {
     Variants {
         id: editorPreviewVariants; model: Quickshell.screens
         PanelWindow {
-            id: secondaryPreviewWindow; required property var modelData; screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
+            id: secondaryPreviewWindow; required property var modelData; readonly property var monitorProfile: root.effectiveProfileForMonitor(modelData.name); screen: modelData; visible: root.open && !root.pickerSuspended && editorWindow.visible && editorWindow.screen && modelData.name !== editorWindow.screen.name
+            property var monitorTimezoneValues: ({})
+            function refreshMonitorTimezoneValues() {
+                const clocks = secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks || [];
+                if (!Array.isArray(clocks) || clocks.length === 0) {
+                    secondaryPreviewWindow.monitorTimezoneValues = ({});
+                    return;
+                }
+                if (secondaryTimezoneProcess.running)
+                    return;
+                const args = [root.timezoneBackend, "--batch"];
+                for (const clock of clocks)
+                    args.push(String(clock.id), String(clock.timezone), String(clock.format || "24h"));
+                secondaryTimezoneProcess.exec(args);
+            }
+            Process {
+                id: secondaryTimezoneProcess
+                stdout: SplitParser {
+                    onRead: data => {
+                        try {
+                            const parsed = JSON.parse(String(data || "{}"));
+                            secondaryPreviewWindow.monitorTimezoneValues = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
+                        } catch (error) {
+                            secondaryPreviewWindow.monitorTimezoneValues = ({});
+                        }
+                    }
+                }
+            }
+            Timer {
+                interval: 15000
+                repeat: true
+                running: secondaryPreviewWindow.visible
+                    && Array.isArray(secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks)
+                    && secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks.length > 0
+                triggeredOnStart: true
+                onTriggered: secondaryPreviewWindow.refreshMonitorTimezoneValues()
+            }
+            onMonitorProfileChanged: {
+                if (secondaryPreviewWindow.visible)
+                    Qt.callLater(() => secondaryPreviewWindow.refreshMonitorTimezoneValues());
+            }
+            onVisibleChanged: {
+                if (secondaryPreviewWindow.visible)
+                    Qt.callLater(() => secondaryPreviewWindow.refreshMonitorTimezoneValues());
+            }
             color: "transparent"; focusable: false; aboveWindows: true; exclusionMode: ExclusionMode.Ignore; anchors.top: true; anchors.bottom: true; anchors.left: true; anchors.right: true
             Item { id: secondaryPreviewContent; anchors.fill: parent; opacity: root.editorEntranceOpacity }
             Item { id: secondaryTransitionStart; parent: secondaryPreviewContent; x: parent.width + 64; y: 0; width: parent.width; height: parent.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
                 Image { anchors.fill: parent; source: root.previewCaptureSourceForScreen(modelData); fillMode: Image.Stretch; asynchronous: false; cache: false }
             }
-            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: root.draftLogoSpawnAnimation
+            LockPreviewWallpaperState { id: secondaryWallpaperState; path: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_path }
+            LockPreviewScene { id: secondaryPreviewScene; parent: secondaryPreviewContent; anchors.fill: parent; theme: Theme; animationPreference: secondaryPreviewWindow.monitorProfile.lockscreen_animation
                 externalEntryTransitionRunning: secondaryPreviewTransitionLayer.running; presentationReplayToken: root.entryTransitionReplayToken
                 individualImageReplayId: root.previewIndividualImageReplayId; individualImageReplayEpoch: root.previewIndividualImageReplayEpoch
-                randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false; showLogo: root.draftVisibility.logo; showTime: root.draftVisibility.time; showDate: root.draftVisibility.date; showUsername: root.draftVisibility.username; showWeather: root.draftVisibility.weather
-                weatherText: root.draftWeatherUnits === "celsius" ? "22°C · Clear" : "72°F · Clear"; backgroundMode: root.draftBackgroundMode; wallpaperSource: wallpaperState.source; backgroundColor: root.draftBackgroundColor; wallpaperFit: root.draftWallpaperFit; wallpaperFocalX: root.draftWallpaperFocalX; wallpaperFocalY: root.draftWallpaperFocalY
-                overlayMode: root.draftOverlayMode; overlayStrength: root.draftOverlayStrength; wallpaperBlur: root.draftWallpaperBlur; blurStyle: root.draftBlurStyle; autoAccents: root.draftAutoAccents; layout: root.draftLayout; customImages: root.draftCustomImages; visualizer: root.draftVisualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: root.draftBackgroundOpacity
-                passwordMaskMode: root.draftPasswordMaskMode; passwordMaskCharacter: root.draftPasswordMaskCharacter; clockFormat: root.draftClockFormat; desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: root.draftVisibility
+                randomFormationMode: 3; logoPhysicsHz: BarState.lockscreenLogoPhysicsHz(); mouseInteractive: false
+                showLogo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo; showTime: secondaryPreviewWindow.monitorProfile.lockscreen_show_time; showDate: secondaryPreviewWindow.monitorProfile.lockscreen_show_date; showUsername: secondaryPreviewWindow.monitorProfile.lockscreen_show_username; showWeather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather
+                weatherText: secondaryPreviewWindow.monitorProfile.lockscreen_weather_units === "celsius" ? "22°C · Clear" : "72°F · Clear"
+                backgroundMode: secondaryPreviewWindow.monitorProfile.lockscreen_background; wallpaperSource: secondaryWallpaperState.source; backgroundColor: secondaryPreviewWindow.monitorProfile.lockscreen_background_color
+                wallpaperFit: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_fit; wallpaperFocalX: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_x; wallpaperFocalY: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_focal_y
+                overlayMode: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_mode; overlayStrength: secondaryPreviewWindow.monitorProfile.lockscreen_overlay_strength; wallpaperBlur: secondaryPreviewWindow.monitorProfile.lockscreen_wallpaper_blur; blurStyle: secondaryPreviewWindow.monitorProfile.lockscreen_blur_style
+                autoAccents: root.autoAccentsForMonitor(modelData.name); layout: secondaryPreviewWindow.monitorProfile.lockscreen_layout; customImages: secondaryPreviewWindow.monitorProfile.lockscreen_custom_images; timezoneClocks: secondaryPreviewWindow.monitorProfile.lockscreen_timezone_clocks; timezoneValues: secondaryPreviewWindow.monitorTimezoneValues; customTexts: secondaryPreviewWindow.monitorProfile.lockscreen_custom_texts
+                visualizer: secondaryPreviewWindow.monitorProfile.lockscreen_visualizer; audioBands: previewAudioAnalyzer.bands; backgroundOpacity: secondaryPreviewWindow.monitorProfile.lockscreen_background_opacity
+                passwordMaskMode: secondaryPreviewWindow.monitorProfile.lockscreen_password_feedback_mode; passwordMaskCharacter: secondaryPreviewWindow.monitorProfile.lockscreen_password_mask_character; clockFormat: secondaryPreviewWindow.monitorProfile.lockscreen_clock_format
+                desktopBackingSource: secondaryTransitionStart; previewMode: true; editorMode: true; editorVisibility: ({ logo: secondaryPreviewWindow.monitorProfile.lockscreen_show_logo, time: secondaryPreviewWindow.monitorProfile.lockscreen_show_time, date: secondaryPreviewWindow.monitorProfile.lockscreen_show_date, username: secondaryPreviewWindow.monitorProfile.lockscreen_show_username, weather: secondaryPreviewWindow.monitorProfile.lockscreen_show_weather, password: true })
             }
-            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: root.draftEntryTransition; duration: root.draftEntryTransitionDuration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+            LockPreviewTransitionLayer { id: secondaryPreviewTransitionLayer; parent: secondaryPreviewContent; anchors.fill: parent; z: 160; startSource: secondaryTransitionStart; endSource: secondaryPreviewScene; mode: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition; duration: secondaryPreviewWindow.monitorProfile.lockscreen_entry_transition_duration; replayToken: root.entryTransitionReplayToken; autoStart: false }
+
+
+
         }
     }
 }

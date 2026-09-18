@@ -1,6 +1,9 @@
 import QtQuick
 import QtQuick.Effects
+import Quickshell
+import Quickshell.Io
 import Quickshell.Wayland
+import "LockscreenPresentationState.js" as LockscreenPresentationState
 
 WlSessionLockSurface {
     id: root
@@ -8,46 +11,20 @@ WlSessionLockSurface {
     required property var auth
     required property var theme
     required property bool unlocking
-    required property string animationPreference
-    required property string entryTransition
-    required property int entryTransitionDuration
+    required property var monitorProfiles
+    required property var lastEditedProfile
     required property int randomFormationMode
     required property int logoPhysicsHz
     required property bool mouseInteractive
-    required property bool showLogo
-    required property bool showTime
-    required property bool showDate
-    required property bool showUsername
-    required property bool showWeather
-    required property string weatherText
-    required property string backgroundMode
-    required property string wallpaperSource
-    required property color backgroundColor
-    required property string wallpaperFit
-    required property real wallpaperFocalX
-    required property real wallpaperFocalY
-    required property string overlayMode
-    required property real overlayStrength
-    required property real wallpaperBlur
-    required property string blurStyle
-    required property var autoAccents
-    required property var layout
-    required property var customImages
-    required property var timezoneClocks
-    required property var timezoneValues
-    required property var customTexts
-    required property var visualizer
-    required property var audioBands
-    required property int backgroundOpacity
-    required property string passwordMaskMode
-    required property string passwordMaskCharacter
-    required property string clockFormat
     required property string captureDirectory
 
     color: "#000000"
 
-    readonly property string captureOutputName: root.screen && root.screen.name
+    readonly property string monitorName: root.screen && root.screen.name
         ? String(root.screen.name) : ""
+    readonly property var profile: LockscreenPresentationState.profileForMonitor(
+        root.monitorProfiles, root.lastEditedProfile, root.monitorName)
+    readonly property string captureOutputName: root.monitorName
     readonly property string captureSource: root.captureDirectory.length > 0
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
         ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".png"
@@ -56,17 +33,73 @@ WlSessionLockSurface {
         && /^[A-Za-z0-9._-]+$/.test(root.captureOutputName)
         ? "file://" + root.captureDirectory + "/" + root.captureOutputName + ".transition.png"
         : ""
-    readonly property bool transitionComplete: !transitionLayer.running
+    readonly property bool transitionComplete: root.transitionStarted && !transitionLayer.running
     readonly property real uiScale: scene.uiScale
     readonly property real passwordScale: scene.elementScale("password")
     readonly property int maskedCount: root.passwordFailureMaskCount > 0
         ? root.passwordFailureMaskCount : Math.min(password.text.length, 10)
     readonly property real maskSpread: maskedCount === 0 ? 0
         : Math.round((24 + maskedCount * 14) * uiScale * passwordScale)
+    readonly property string passwordFeedbackMode:
+        String(root.profile.lockscreen_password_feedback_mode || "squares")
+    readonly property bool passwordMaskVisible:
+        ["squares", "dots", "custom"].indexOf(root.passwordFeedbackMode) >= 0
 
     property bool entered: false
+    property bool transitionStarted: false
+    property bool preRollSchedulingReady: false
     property int submittedMaskCount: 0
     property int passwordFailureMaskCount: 0
+    property int passwordTypingEpoch: 0
+    property int passwordFailureEpoch: 0
+    property int previousPasswordLength: 0
+
+    onPasswordFailureEpochChanged: {
+        if (passwordFailureEpoch > 0)
+            passwordFailureEdgeAnimation.restart();
+    }
+
+    property var localTimezoneValues: ({})
+    readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
+        || (Quickshell.env("HOME") + "/.config")
+    readonly property string timezoneBackend: configHome
+        + "/hypr/scripts/quickshell_lockscreen_timezones.sh"
+
+    LockWallpaperState {
+        id: lockWallpaperState
+        path: root.profile.lockscreen_wallpaper_path
+    }
+
+    LockContrastCache {
+        id: lockContrastCache
+        monitorName: root.monitorName
+    }
+
+    LockWeatherCache {
+        id: lockWeatherCache
+        enabled: root.profile.lockscreen_show_weather
+        units: root.profile.lockscreen_weather_units
+    }
+
+    LockAudioAnalyzer {
+        id: lockAudioAnalyzer
+        enabled: root.profile.lockscreen_visualizer.enabled
+        performanceMode: root.profile.lockscreen_visualizer.performance
+    }
+
+    function refreshTimezoneValues() {
+        const clocks = root.profile.lockscreen_timezone_clocks || [];
+        if (!Array.isArray(clocks) || clocks.length === 0) {
+            root.localTimezoneValues = ({});
+            return;
+        }
+        if (timezoneProcess.running)
+            return;
+        const args = [root.timezoneBackend, "--batch"];
+        for (const clock of clocks)
+            args.push(String(clock.id), String(clock.timezone), String(clock.format || "24h"));
+        timezoneProcess.exec(args);
+    }
 
     function submitPassword() {
         if ((auth.busy && !auth.responseRequired) || password.text.length === 0)
@@ -87,6 +120,52 @@ WlSessionLockSurface {
                 password.forceActiveFocus();
         });
     }
+
+    function startEntryTransition() {
+        if (!root.preRollSchedulingReady || root.transitionStarted || root.unlocking)
+            return;
+        videoPreRollTimeout.stop();
+        // Keep the pending scene gate asserted until the transition reports
+        // running, then release the frozen pre-roll cover.
+        transitionLayer.restart();
+        root.transitionStarted = true;
+    }
+
+    function scheduleEntryTransition() {
+        if (!root.preRollSchedulingReady || root.transitionStarted || root.unlocking)
+            return;
+        if (!scene.backgroundMediaNeedsPreroll || scene.backgroundMediaPlaybackAdvanced) {
+            root.startEntryTransition();
+            return;
+        }
+        if (!videoPreRollTimeout.running)
+            videoPreRollTimeout.restart();
+    }
+
+    Process {
+        id: timezoneProcess
+        stdout: SplitParser {
+            onRead: data => {
+                try {
+                    const parsed = JSON.parse(String(data || "{}"));
+                    root.localTimezoneValues = parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : ({});
+                } catch (error) {
+                    root.localTimezoneValues = ({});
+                }
+            }
+        }
+    }
+
+    Timer {
+        interval: 15000
+        repeat: true
+        running: Array.isArray(root.profile.lockscreen_timezone_clocks)
+            && root.profile.lockscreen_timezone_clocks.length > 0
+        triggeredOnStart: true
+        onTriggered: root.refreshTimezoneValues()
+    }
+
+    onProfileChanged: Qt.callLater(() => root.refreshTimezoneValues())
 
     PinchHandler {
         target: null
@@ -153,42 +232,64 @@ WlSessionLockSurface {
             anchors.fill: parent
             theme: root.theme
             unlocking: root.unlocking
-            animationPreference: root.animationPreference
+            animationPreference: root.profile.lockscreen_animation
             randomFormationMode: root.randomFormationMode
             logoPhysicsHz: root.logoPhysicsHz
             mouseInteractive: root.mouseInteractive && root.transitionComplete
-            showLogo: root.showLogo
-            showTime: root.showTime
-            showDate: root.showDate
-            showUsername: root.showUsername
-            showWeather: root.showWeather
-            weatherText: root.weatherText
-            backgroundMode: root.backgroundMode
-            wallpaperSource: root.wallpaperSource
-            backgroundColor: root.backgroundColor
-            wallpaperFit: root.wallpaperFit
-            wallpaperFocalX: root.wallpaperFocalX
-            wallpaperFocalY: root.wallpaperFocalY
-            overlayMode: root.overlayMode
-            overlayStrength: root.overlayStrength
-            wallpaperBlur: root.wallpaperBlur
-            blurStyle: root.blurStyle
-            autoAccents: root.autoAccents
-            layout: root.layout
-            customImages: root.customImages
-            timezoneClocks: root.timezoneClocks
-            timezoneValues: root.timezoneValues
-            customTexts: root.customTexts
-            visualizer: root.visualizer
-            audioBands: root.audioBands
-            backgroundOpacity: root.backgroundOpacity
-            passwordMaskMode: root.passwordMaskMode
-            passwordMaskCharacter: root.passwordMaskCharacter
-            clockFormat: root.clockFormat
+            showLogo: root.profile.lockscreen_show_logo
+            showTime: root.profile.lockscreen_show_time
+            showDate: root.profile.lockscreen_show_date
+            showUsername: root.profile.lockscreen_show_username
+            showWeather: root.profile.lockscreen_show_weather
+            weatherText: lockWeatherCache.summary
+            backgroundMode: root.profile.lockscreen_background
+            wallpaperSource: lockWallpaperState.source
+            backgroundColor: root.profile.lockscreen_background_color
+            wallpaperFit: root.profile.lockscreen_wallpaper_fit
+            wallpaperFocalX: root.profile.lockscreen_wallpaper_focal_x
+            wallpaperFocalY: root.profile.lockscreen_wallpaper_focal_y
+            overlayMode: root.profile.lockscreen_overlay_mode
+            overlayStrength: root.profile.lockscreen_overlay_strength
+            wallpaperBlur: root.profile.lockscreen_wallpaper_blur
+            blurStyle: root.profile.lockscreen_blur_style
+            autoAccents: lockContrastCache.colors
+            layout: root.profile.lockscreen_layout
+            customImages: root.profile.lockscreen_custom_images
+            timezoneClocks: root.profile.lockscreen_timezone_clocks
+            timezoneValues: root.localTimezoneValues
+            customTexts: root.profile.lockscreen_custom_texts
+            visualizer: root.profile.lockscreen_visualizer
+            audioBands: lockAudioAnalyzer.bands
+            backgroundOpacity: root.profile.lockscreen_background_opacity
+            passwordMaskMode: root.profile.lockscreen_password_feedback_mode
+            passwordMaskCharacter: root.profile.lockscreen_password_mask_character
+            passwordFeedbackEpoch: root.passwordTypingEpoch
+            clockFormat: root.profile.lockscreen_clock_format
             desktopBackingSource: desktopBacking
             previewMode: false
             externalEntryTransitionRunning: transitionLayer.running
+            externalEntryTransitionPending: !root.transitionStarted
         }
+    }
+
+    // While a video destination decodes its first frames, keep the secure
+    // captured desktop visible. The live destination continues rendering below.
+    ShaderEffectSource {
+        id: preRollCover
+        anchors.fill: parent
+        z: 999
+        sourceItem: transitionBacking
+        live: true
+        recursive: false
+        smooth: true
+        visible: !root.transitionStarted
+    }
+
+    Timer {
+        id: videoPreRollTimeout
+        interval: 750
+        repeat: false
+        onTriggered: root.startEntryTransition()
     }
 
     // Double the active interaction cadence without adding any idle polling.
@@ -210,6 +311,14 @@ WlSessionLockSurface {
                 scene.logoHoverDirty = true;
             }
         }
+
+        function onBackgroundMediaNeedsPrerollChanged() {
+            root.scheduleEntryTransition();
+        }
+
+        function onBackgroundMediaPlaybackAdvancedChanged() {
+            root.scheduleEntryTransition();
+        }
     }
 
     LockTransitionLayer {
@@ -218,9 +327,10 @@ WlSessionLockSurface {
         z: 1000
         startSource: transitionBacking
         endSource: securePresentation
-        mode: root.entryTransition
-        duration: root.entryTransitionDuration
+        mode: root.profile.lockscreen_entry_transition
+        duration: root.profile.lockscreen_entry_transition_duration
         replayToken: 0
+        autoStart: false
 
         onFinished: {
             root.entered = true;
@@ -270,7 +380,9 @@ WlSessionLockSurface {
         }
 
         Row {
+            id: passwordMaskRow
             anchors.centerIn: parent
+            visible: root.passwordMaskVisible
             spacing: Math.round(7 * root.uiScale * root.passwordScale)
 
             Repeater {
@@ -332,7 +444,13 @@ WlSessionLockSurface {
             activeFocusOnTab: true
 
             onTextChanged: {
-                if (text.length > 0) {
+                const nextLength = text.length;
+                if (nextLength > root.previousPasswordLength
+                        && (root.passwordFeedbackMode === "sparks"
+                            || root.passwordFeedbackMode === "mini-flash"))
+                    root.passwordTypingEpoch += 1;
+                root.previousPasswordLength = nextLength;
+                if (nextLength > 0) {
                     root.passwordFailureMaskCount = 0;
                     if (root.auth.statusIsError)
                         root.auth.clearStatus();
@@ -357,10 +475,40 @@ WlSessionLockSurface {
         }
     }
 
+    Rectangle {
+        id: passwordFailureEdge
+        anchors.fill: parent
+        z: 1300
+        color: "transparent"
+        border.color: "#ff3030"
+        border.width: Math.max(3, Math.round(7 * root.uiScale))
+        opacity: 0
+        visible: opacity > 0
+    }
+
+    SequentialAnimation {
+        id: passwordFailureEdgeAnimation
+        running: false
+        PropertyAction {
+            target: passwordFailureEdge
+            property: "opacity"
+            value: 0.72
+        }
+        PauseAnimation { duration: 45 }
+        NumberAnimation {
+            target: passwordFailureEdge
+            property: "opacity"
+            to: 0
+            duration: 380
+            easing.type: Easing.OutCubic
+        }
+    }
+
     Connections {
         target: root.auth
 
         function onAuthenticationFailed() {
+            root.passwordFailureEpoch += 1;
             root.passwordFailureMaskCount = Math.max(1, root.submittedMaskCount);
             password.text = "";
             root.focusPasswordWhenReady();
@@ -379,6 +527,8 @@ WlSessionLockSurface {
 
     Component.onCompleted: {
         root.entered = true;
+        root.preRollSchedulingReady = true;
+        root.scheduleEntryTransition();
         root.focusPasswordWhenReady();
     }
 }

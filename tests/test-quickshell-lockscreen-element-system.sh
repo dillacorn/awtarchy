@@ -67,7 +67,7 @@ jq -e '
 
 # User-facing scaling is effectively unrestricted. A single high defensive
 # bound protects corrupted state without retaining the old 200%/10x ceilings.
-expanded_layout='{"logo":{"x":0.5,"y":0.34,"scale":6,"stretch_x":1.5,"stretch_y":0.75,"opacity":55,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":0.8,"stretch_x":1,"stretch_y":1,"opacity":90,"color":"#ff6600"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":80,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":70,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1.1,"stretch_x":1,"stretch_y":1,"opacity":60,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":2.4,"stretch_x":1.1,"stretch_y":0.9,"opacity":20,"color":"auto"}}'
+expanded_layout='{"logo":{"x":0.5,"y":0.34,"scale":6,"stretch_x":1.5,"stretch_y":0.75,"opacity":55,"color":"auto"},"time":{"x":0.5,"y":0.51,"scale":0.8,"stretch_x":1,"stretch_y":1,"opacity":90,"color":"#ff6600"},"date":{"x":0.5,"y":0.555,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":80,"color":"auto"},"username":{"x":0.5,"y":0.595,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":70,"color":"auto"},"weather":{"x":0.5,"y":0.635,"scale":1.1,"stretch_x":1,"stretch_y":1,"opacity":60,"color":"auto"},"password":{"x":0.5,"y":0.7,"scale":2.4,"stretch_x":1.1,"stretch_y":0.9,"opacity":5,"color":"auto"}}'
 valid_visibility='{"logo":true,"time":true,"date":false,"username":true,"weather":false,"password":true}'
 
 image_path="$TMP/custom image.png"
@@ -87,7 +87,7 @@ jq -e --arg expected "$(readlink -f -- "$image_path")" '
     and .lockscreen_layout.logo.stretch_y == 0.75
     and .lockscreen_layout.logo.opacity == 55
     and .lockscreen_layout.password.scale == 2.4
-    and .lockscreen_layout.password.opacity == 20
+    and .lockscreen_layout.password.opacity == 5
     and (.lockscreen_custom_images | length) == 1
     and .lockscreen_custom_images[0].id == "image-test_1"
     and .lockscreen_custom_images[0].path == $expected
@@ -100,11 +100,11 @@ jq -e --arg expected "$(readlink -f -- "$image_path")" '
 
 state_before="$(sha256sum "$state_file" | awk '{print $1}')"
 
-password_too_faint="${expanded_layout/\"opacity\":20/\"opacity\":19}"
+password_too_faint="$(jq -c '.password.opacity = 4' <<<"$expanded_layout")"
 if run_state save-lockscreen-editor \
     "$password_too_faint" "$valid_visibility" black '#000000' '' \
     cover 0.5 0.5 none 0 0 auto "$custom_images" >/dev/null 2>&1; then
-    fail 'password presentation opacity below 20% was accepted'
+    fail 'password presentation opacity below 5% was accepted'
 fi
 
 bad_path_images='[{"id":"image-bad","path":"https://example.com/a.png","x":0.5,"y":0.5,"scale":1,"stretch_x":1,"stretch_y":1,"opacity":100,"visible":true}]'
@@ -178,16 +178,18 @@ require_text "$SCENE" 'z: 4' \
     'custom images are not pinned below built-in/password presentation'
 cmp -s "$SCENE" "$PREVIEW_SCENE" || fail 'secure/editor lockscreen scene parity drifted'
 
-require_text "$SURFACE" 'required property var customImages' \
-    'secure lock surface does not pass custom images presentation-only'
-require_text "$LOCK_SHELL" 'property var lockCustomImages: []' \
-    'secure shell has no safe custom-image default'
-require_text "$LOCK_SHELL" 'function normalizedCustomImages(value)' \
-    'secure shell does not re-normalize persisted custom images'
-require_text "$LOCK_SHELL" 'scale > 100.00' \
-    'secure shell still uses an old scale ceiling'
-require_text "$LOCK_SHELL" 'customImages: root.lockCustomImages' \
-    'secure shell does not pass normalized images to the surface'
+require_text "$SURFACE" 'required property var monitorProfiles' \
+    'secure lock surface has no per-display presentation snapshot'
+require_text "$SURFACE" 'required property var lastEditedProfile' \
+    'secure lock surface has no last-edited fallback profile'
+require_text "$SURFACE" 'readonly property var profile: LockscreenPresentationState.profileForMonitor(' \
+    'secure lock surface does not resolve a normalized monitor profile'
+require_text "$SURFACE" 'customImages: root.profile.lockscreen_custom_images' \
+    'secure lock surface does not use profile-normalized custom media'
+require_text "$LOCK_SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure shell does not normalize per-display presentation snapshots'
+require_text "$LOCK_SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure shell does not normalize the last-edited fallback profile'
 reject_text "$LOCK_AUTH" 'customImages' \
     'custom images leaked into PAM/authentication owner'
 reject_text "$LOCK_AUTH" 'opacity' \
@@ -213,12 +215,16 @@ require_text "$EDITOR" 'text: "Stretch X"' \
     'editor has no horizontal stretch precision control'
 require_text "$EDITOR" 'text: "Stretch Y"' \
     'editor has no vertical stretch precision control'
-require_text "$EDITOR" 'label: "Add Image"' \
-    'editor has no local custom-image insertion action'
-require_text "$EDITOR" 'label: "Remove Image"' \
-    'editor has no custom-image removal action'
-require_text "$EDITOR" 'JSON.stringify(draftCustomImages)' \
-    'atomic editor save does not include custom images'
+require_text "$EDITOR" 'label: "Add Media"' \
+    'editor has no local custom-media insertion action'
+require_text "$EDITOR" 'label: "Remove Media"' \
+    'editor has no custom-media removal action'
+require_text "$EDITOR" 'lockscreen_custom_images: cloneCustomImages(draftCustomImages)' \
+    'profile-based atomic editor save does not include custom media'
+require_text "$EDITOR" 'JSON.stringify(draftMonitorProfiles)' \
+    'atomic editor save does not serialize per-display profiles'
+require_text "$EDITOR" 'JSON.stringify(draftLastEditedProfile)' \
+    'atomic editor save does not serialize the last-edited profile'
 reject_text "$EDITOR" '< 2.00' 'editor still disables scaling at 200%'
 reject_text "$EDITOR" 'customImageScaleMaximum: 10.0' 'editor still has a custom-image-only 10x ceiling'
 

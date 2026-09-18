@@ -156,11 +156,7 @@ Item {
     }
 
     Component.onCompleted: {
-        if (root.autoStart) {
+        if (root.autoStart)
             root.restart();
-        } else {
-            root.transitionProgress = 1;
-            root.transitionActive = false;
-        }
     }
 }

@@ -104,13 +104,13 @@ terminal_name="$(basename -- "$TERMINAL_CMD")"
 if [[ "$terminal_name" == "alacritty" ]]; then
     "$TERMINAL_CMD" --option window.startup_mode=Fullscreen \
         --class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper \
-        -e "$awtwall_path" --select-only --type images --resume \
+        -e "$awtwall_path" --select-only --type all --resume \
         --select-result "$RESULT_FILE" &
     terminal_pid=$!
 else
     "$TERMINAL_CMD" --class awtarchy-lock-wallpaper \
         --title Awtarchy-Lockscreen-Wallpaper -e "$awtwall_path" \
-        --select-only --type images --resume --select-result "$RESULT_FILE" &
+        --select-only --type all --resume --select-result "$RESULT_FILE" &
     terminal_pid=$!
 fi
 

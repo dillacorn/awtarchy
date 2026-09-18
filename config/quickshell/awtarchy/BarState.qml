@@ -4,6 +4,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Hyprland
 import Quickshell.Io
+import "LockscreenPresentationState.js" as LockscreenPresentationState
 
 Singleton {
     id: root
@@ -408,6 +409,8 @@ Singleton {
             lockscreen_custom_images: [],
             lockscreen_visualizer: root.defaultLockscreenVisualizer,
             lockscreen_background_opacity: 100,
+            lockscreen_monitor_overrides: {},
+            lockscreen_saved_profiles: [],
             monitors: {},
             launcher_sizes: {},
             clipboard_views: {},
@@ -467,6 +470,52 @@ Singleton {
             console.warn("Awtarchy Quickshell: invalid shell state:", error);
             return emptyData();
         }
+    }
+
+    function lockscreenMonitorProfiles() {
+        const dependency = revision;
+        return LockscreenPresentationState.migratedMonitorProfiles(data());
+    }
+
+    function lockscreenLastEditedProfile() {
+        const dependency = revision;
+        return LockscreenPresentationState.lastEditedProfile(data());
+    }
+
+    function lockscreenProfileForMonitor(name) {
+        return LockscreenPresentationState.profileForMonitor(
+            lockscreenMonitorProfiles(), lockscreenLastEditedProfile(), String(name || ""));
+    }
+
+    function lockscreenSavedProfiles() {
+        const dependency = revision;
+        const value = data().lockscreen_saved_profiles;
+        if (!Array.isArray(value) || value.length > 32)
+            return [];
+        const result = [];
+        const ids = ({});
+        const names = ({});
+        for (const raw of value) {
+            if (!raw || typeof raw !== "object" || Array.isArray(raw))
+                return [];
+            const id = String(raw.id || "");
+            const name = String(raw.name || "");
+            const points = Array.from(name);
+            const nameKey = name.toLowerCase();
+            if (!/^profile-[A-Za-z0-9_-]{1,64}$/.test(id) || ids[id]
+                    || points.length < 1 || points.length > 64 || name.trim().length === 0
+                    || /[\u0000-\u001f\u007f-\u009f]/.test(name) || names[nameKey]
+                    || !raw.profile || typeof raw.profile !== "object" || Array.isArray(raw.profile))
+                return [];
+            ids[id] = true;
+            names[nameKey] = true;
+            result.push(({
+                id: id,
+                name: name,
+                profile: LockscreenPresentationState.cloneProfile(raw.profile)
+            }));
+        }
+        return result;
     }
 
     function identityLabelValid(value) {

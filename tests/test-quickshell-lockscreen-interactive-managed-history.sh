@@ -10,8 +10,10 @@ fail() {
 }
 
 managed_files=(
+    'config/hypr/hyprland.lua:.config/hypr/hyprland.lua'
     'config/hypr/scripts/quickshell_application_state.sh:.config/hypr/scripts/quickshell_application_state.sh'
     'config/hypr/scripts/quickshell_lockscreen_editor_save.sh:.config/hypr/scripts/quickshell_lockscreen_editor_save.sh'
+    'config/hypr/scripts/quickshell_lockscreen_editor.sh:.config/hypr/scripts/quickshell_lockscreen_editor.sh'
     'config/hypr/scripts/quickshell_lockscreen_audio.sh:.config/hypr/scripts/quickshell_lockscreen_audio.sh'
     'config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh:.config/hypr/scripts/quickshell_lockscreen_wallpaper_picker.sh'
     'config/hypr/scripts/quickshell_lockscreen_weather.sh:.config/hypr/scripts/quickshell_lockscreen_weather.sh'
@@ -24,6 +26,7 @@ managed_files=(
     'config/quickshell/awtarchy/LockscreenEditor.qml:.config/quickshell/awtarchy/LockscreenEditor.qml'
     'config/quickshell/awtarchy/LockscreenCompactSelector.qml:.config/quickshell/awtarchy/LockscreenCompactSelector.qml'
     'config/quickshell/awtarchy/LockPreviewScene.qml:.config/quickshell/awtarchy/LockPreviewScene.qml'
+    'config/quickshell/awtarchy/LockMedia.qml:.config/quickshell/awtarchy/LockMedia.qml'
     'config/quickshell/awtarchy/LockPreviewTransitionLayer.qml:.config/quickshell/awtarchy/LockPreviewTransitionLayer.qml'
     'config/quickshell/awtarchy/LockPreviewWallpaperState.qml:.config/quickshell/awtarchy/LockPreviewWallpaperState.qml'
     'config/quickshell/awtarchy/LockscreenWeather.qml:.config/quickshell/awtarchy/LockscreenWeather.qml'
@@ -32,6 +35,7 @@ managed_files=(
     'config/quickshell/awtarchy-lock/LockscreenPresentationState.js:.config/quickshell/awtarchy-lock/LockscreenPresentationState.js'
     'config/quickshell/awtarchy-lock/LockSurface.qml:.config/quickshell/awtarchy-lock/LockSurface.qml'
     'config/quickshell/awtarchy-lock/LockScene.qml:.config/quickshell/awtarchy-lock/LockScene.qml'
+    'config/quickshell/awtarchy-lock/LockMedia.qml:.config/quickshell/awtarchy-lock/LockMedia.qml'
     'config/quickshell/awtarchy-lock/LockTransitionLayer.qml:.config/quickshell/awtarchy-lock/LockTransitionLayer.qml'
     'config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml:.config/quickshell/awtarchy-lock/LockAudioAnalyzer.qml'
     'config/quickshell/awtarchy-lock/LockWeatherCache.qml:.config/quickshell/awtarchy-lock/LockWeatherCache.qml'
