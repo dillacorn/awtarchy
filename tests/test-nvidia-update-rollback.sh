@@ -35,8 +35,10 @@ grep -Fq 'NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"' "$RECONCILER" \
   || fail 'production NVIDIA rollback state is not rooted under /var/lib/awtarchy'
 grep -Fq 'validate_nvidia_rollback_storage' "$RECONCILER" \
   || fail 'NVIDIA rollback does not validate privileged restore state'
+# shellcheck disable=SC2016
 grep -Fq 'root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages/$archive_name"' "$RECONCILER" \
   || fail 'NVIDIA rollback archives are not revalidated before pacman -U'
+# shellcheck disable=SC2016
 grep -Fq 'trusted_nvidia_cache_archive "$candidate"' "$RECONCILER" \
   || fail 'NVIDIA rollback snapshot accepts untrusted cache archives'
 if grep -Fq 'AWTARCHY_NVIDIA_ROLLBACK_DIR' "$RECONCILER" \
@@ -45,12 +47,15 @@ if grep -Fq 'AWTARCHY_NVIDIA_ROLLBACK_DIR' "$RECONCILER" \
   fail 'production rollback discovery still accepts user-controlled privileged package-source overrides'
 fi
 
+# shellcheck disable=SC2016
 grep -Fq 'as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER" \
   || fail 'restored rollback status is not persisted through a privileged root-owned write'
+# shellcheck disable=SC2016
 if grep -Fq '>>"$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER"; then
   fail 'rollback metadata still has a direct user-owned append path'
 fi
 
+# shellcheck disable=SC2016
 grep -Fq 'if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then' "$RECONCILER" \
   || fail 'NVIDIA rollback package transaction is not explicitly failure-checked'
 
