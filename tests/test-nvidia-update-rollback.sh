@@ -45,6 +45,9 @@ if grep -Fq '>>"$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER"; then
   fail 'rollback metadata still has a direct user-owned append path'
 fi
 
+grep -Fq 'if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then' "$RECONCILER" \
+  || fail 'NVIDIA rollback package transaction is not explicitly failure-checked'
+
 python3 - "$RECONCILER" <<'PY'
 from pathlib import Path
 import sys
@@ -140,6 +143,7 @@ case "${1:-}" in
     exit "$rc"
     ;;
   -U)
+    [[ ${FAKE_PACMAN_FAIL_U:-0} == 1 ]] && exit 42
     shift
     while (( $# )); do
       case "$1" in
@@ -178,6 +182,25 @@ set -Eeuo pipefail
 exec "$@"
 EOF
 chmod +x "$fakebin/sudo"
+
+if PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_PACMAN_FAIL_U=1 \
+  FAKE_PACMAN_STATE="$state" \
+  "$test_reconciler" --nvidia-rollback >/dev/null 2>&1
+then
+  fail 'NVIDIA rollback ignored a failed pacman -U transaction'
+fi
+grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
+  || fail 'failed rollback transaction unexpectedly changed the NVIDIA package state'
+grep -Fxq 'linux 6.18.2.arch1-1' "$state" \
+  || fail 'failed rollback transaction unexpectedly changed the kernel package state'
+if grep -Fxq 'status=restored' "$rollback/metadata"; then
+  fail 'failed rollback transaction was incorrectly marked restored'
+fi
 
 if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
