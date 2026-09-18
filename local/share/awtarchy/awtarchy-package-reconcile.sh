@@ -1526,8 +1526,12 @@ package_reconciliation_needs_action() {
 }
 
 if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
-  [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
-  apply_nvidia_rollback 0
+  if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+    apply_nvidia_rollback 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
+    apply_nvidia_rollback 0
+  fi
   exit $?
 fi
 
