@@ -529,7 +529,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 local terminal = "alacritty"
 local web_browser = "firefox"
 local calculator = "speedcrunch"
-local yazi = "alacritty -e yazi"
+local yazi = "alacritty -o 'font.normal.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.italic.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold_italic.family=\"JetBrainsMono Nerd Font Mono\"' -e yazi"
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
@@ -777,7 +777,6 @@ for _, bind in ipairs({
     { "ALT + SHIFT + Q", hl.dsp.window.close() },
     { "ALT + F4", hl.dsp.window.close() },
     { "SUPER + ALT + Q", hl.dsp.exec_cmd("hyprctl kill") },
-    { "ALT + Y", hl.dsp.window.pin() },
     { "SUPER + Y", hl.dsp.window.pin() },
     { "ALT + R", hl.dsp.layout("swapsplit") },
     { "ALT + SHIFT + R", hl.dsp.layout("togglesplit") },
@@ -850,6 +849,16 @@ for _, bind in ipairs(workspace_keys) do
 
     hl.bind("ALT + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
     hl.bind("SUPER + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
+end
+
+-- Quick resize (ALT+Y/O/I/U / hold)
+for _, bind in ipairs({
+    { "Y", -30, 0 },
+    { "O", 30, 0 },
+    { "I", 0, 30 },
+    { "U", 0, -30 },
+}) do
+    hl.bind("ALT + " .. bind[1], hl.dsp.window.resize({ x = bind[2], y = bind[3], relative = true }), { repeating = true })
 end
 
 -- Resize (ALT/SUPER+CTRL arrows + hjkl / hold)
