@@ -24,8 +24,22 @@ grep -Fq 'offer_nvidia_post_upgrade_choice' "$RECONCILER" \
   || fail 'package reconciler does not offer post-upgrade keep/rollback choice'
 grep -Fq 'awtarchy nvidia-rollback' "$LAUNCHER" \
   || fail 'launcher does not expose the NVIDIA rollback command'
-grep -Fq 'NVIDIA driver rollback / cached version recovery' "$LAUNCHER" \
+grep -Fq 'NVIDIA driver recovery / rollback' "$LAUNCHER" \
   || fail 'maintenance menu does not expose NVIDIA recovery'
+grep -Fq 'nvidia_recovery_menu()' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery has no submenu'
+grep -Fq 'nvidia_pci_hardware_present()' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery does not detect physical NVIDIA hardware'
+grep -Fq "grep -qi '\\[10de:'" "$LAUNCHER" \
+  || fail 'maintenance NVIDIA hardware detection is not pinned to the NVIDIA PCI vendor ID'
+grep -Fq 'No NVIDIA GPU detected' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery does not warn systems without NVIDIA hardware'
+grep -Fq 'Continue to NVIDIA recovery tools' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery cannot be inspected deliberately without NVIDIA hardware'
+grep -Fq 'Choose cached historical driver version' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery submenu does not expose the cached version picker'
+grep -Fq 'run_current_nvidia_rollback --pick' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery submenu does not route to the cached version picker'
 grep -Fq 'run_current_nvidia_rollback' "$LAUNCHER" \
   || fail 'NVIDIA rollback is not pinned to the current updater reconciler'
 grep -Fq 'awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]' "$LAUNCHER" \
