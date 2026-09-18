@@ -17,11 +17,15 @@ NEEDS_ACTION_ONLY=0
 PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
 NVIDIA_ROLLBACK_ONLY=0
+NVIDIA_ROLLBACK_PICK=0
+NVIDIA_ROLLBACK_LIST=0
+NVIDIA_ROLLBACK_VERSION=""
 NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"
 NVIDIA_ROLLBACK_DIR="${NVIDIA_ROLLBACK_ROOT}/nvidia-driver-rollback"
 NVIDIA_ROLLBACK_PENDING=""
 NVIDIA_ROLLBACK_COMPLETE=0
 PACMAN_CACHE_DIR="/var/cache/pacman/pkg"
+PACMAN_LOG_FILE="/var/log/pacman.log"
 declare -a PACMAN_RECOVERY_RUN_ARGS=()
 
 # Packages required by currently exposed Awtarchy shell/runtime features.
@@ -92,7 +96,7 @@ usage() {
 Usage:
   awtarchy packages
   awtarchy packages --review
-  awtarchy nvidia-rollback
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
 
 Without options, opens an installer-style package reconciliation UI.
 
@@ -108,6 +112,9 @@ Deselecting a current package never uninstalls it.
 On systems with NVIDIA drivers, a full system upgrade requires confirmation.
 Awtarchy saves a rollback point from the currently cached NVIDIA/kernel
 packages when possible so the last driver update can be restored later.
+Use --pick to choose another fully recoverable historical driver version from
+trusted pacman cache/history, --list to inspect those versions, or --version to
+select one directly. Awtarchy refuses incomplete historical package sets.
 EOF
 }
 
@@ -127,6 +134,21 @@ while (( $# )); do
       ;;
     --nvidia-rollback)
       NVIDIA_ROLLBACK_ONLY=1
+      ;;
+    --pick)
+      NVIDIA_ROLLBACK_PICK=1
+      ;;
+    --list)
+      NVIDIA_ROLLBACK_LIST=1
+      ;;
+    --version)
+      shift
+      (( $# > 0 )) || die "--version requires an NVIDIA driver version."
+      NVIDIA_ROLLBACK_VERSION="$1"
+      ;;
+    --version=*)
+      NVIDIA_ROLLBACK_VERSION="${1#*=}"
+      [[ -n "$NVIDIA_ROLLBACK_VERSION" ]] || die "--version requires an NVIDIA driver version."
       ;;
     --pacman-recovery-check)
       PACMAN_RECOVERY_CHECK_ONLY=1
@@ -150,6 +172,20 @@ while (( $# )); do
   esac
   shift
 done
+
+if (( NVIDIA_ROLLBACK_ONLY == 0 )); then
+  if (( NVIDIA_ROLLBACK_PICK == 1 || NVIDIA_ROLLBACK_LIST == 1 )) || [[ -n "$NVIDIA_ROLLBACK_VERSION" ]]; then
+    die "--pick, --list, and --version are valid only with --nvidia-rollback."
+  fi
+fi
+if (( NVIDIA_ROLLBACK_PICK == 1 && NVIDIA_ROLLBACK_LIST == 1 )) \
+  || { (( NVIDIA_ROLLBACK_PICK == 1 || NVIDIA_ROLLBACK_LIST == 1 )) && [[ -n "$NVIDIA_ROLLBACK_VERSION" ]]; };
+then
+  die "Choose only one NVIDIA rollback mode: --pick, --list, or --version."
+fi
+if [[ -n "$NVIDIA_ROLLBACK_VERSION" && ! "$NVIDIA_ROLLBACK_VERSION" =~ ^[0-9]+([.][0-9]+)+$ ]]; then
+  die "NVIDIA driver version must look like 610.57.04."
+fi
 
 if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 )); then
   [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
@@ -682,6 +718,336 @@ find_cached_package_archive() {
   return 1
 }
 
+nvidia_driver_version_from_package_version() {
+  local version="${1#*:}"
+  version="${version%-*}"
+  [[ "$version" =~ ^[0-9]+([.][0-9]+)+$ ]] || return 1
+  printf '%s\n' "$version"
+}
+
+installed_nvidia_driver_version() {
+  local version=""
+  version="$(package_version nvidia-utils || true)"
+  [[ -n "$version" ]] || return 1
+  nvidia_driver_version_from_package_version "$version"
+}
+
+trusted_pacman_history() {
+  [[ -f "$PACMAN_LOG_FILE" && ! -L "$PACMAN_LOG_FILE" ]] \
+    && root_owned_nonwritable_path "$PACMAN_LOG_FILE"
+}
+
+nvidia_history_records() {
+  trusted_pacman_history \
+    || die "Pacman history is unavailable or not trusted: ${PACMAN_LOG_FILE}"
+
+  awk '
+    /\[ALPM\] transaction started$/ {
+      tx++
+      next
+    }
+    match($0, /\[ALPM\] (upgraded|downgraded) ([^ ]+) \(([^ ]+) -> ([^)]+)\)/, m) {
+      if (tx > 0) printf "%d\t%s\t%s\t%s\n", tx, m[2], m[3], m[4]
+      next
+    }
+    match($0, /\[ALPM\] installed ([^ ]+) \(([^)]+)\)/, m) {
+      if (tx > 0) printf "%d\t%s\t(absent)\t%s\n", tx, m[1], m[2]
+      next
+    }
+    match($0, /\[ALPM\] removed ([^ ]+) \(([^)]+)\)/, m) {
+      if (tx > 0) printf "%d\t%s\t%s\t(absent)\n", tx, m[1], m[2]
+    }
+  ' "$PACMAN_LOG_FILE"
+}
+
+nvidia_history_target_points() {
+  local records="$1" target_driver="$2"
+  local tx pkg old_version new_version old_driver="" new_driver=""
+  local points=""
+  points="$(mktemp)"
+
+  while IFS=$'\t' read -r tx pkg old_version new_version; do
+    [[ "$pkg" == nvidia-utils ]] || continue
+    old_driver="$(nvidia_driver_version_from_package_version "$old_version" 2>/dev/null || true)"
+    new_driver="$(nvidia_driver_version_from_package_version "$new_version" 2>/dev/null || true)"
+    [[ "$old_driver" == "$target_driver" ]] && printf '%s\told\n' "$tx" >>"$points"
+    [[ "$new_driver" == "$target_driver" ]] && printf '%s\tnew\n' "$tx" >>"$points"
+  done <"$records"
+
+  if [[ -s "$points" ]]; then
+    tac -- "$points"
+  fi
+  rm -f -- "$points"
+}
+
+historical_package_version() {
+  local records="$1" pkg="$2" selected_tx="$3" side="$4" current_version="$5"
+  local tx record_pkg old_version new_version version="$current_version" reverse=0
+
+  while IFS=$'\t' read -r tx record_pkg old_version new_version; do
+    [[ "$record_pkg" == "$pkg" ]] || continue
+    reverse=0
+    if [[ "$side" == old ]]; then
+      (( tx >= selected_tx )) && reverse=1
+    else
+      (( tx > selected_tx )) && reverse=1
+    fi
+    (( reverse == 1 )) || continue
+
+    [[ "$version" == "$new_version" ]] || return 1
+    version="$old_version"
+  done < <(tac -- "$records")
+
+  [[ "$version" != '(absent)' ]] || return 1
+  printf '%s\n' "$version"
+}
+
+build_nvidia_history_bundle() {
+  local target_driver="$1" output="$2"
+  local current_driver="" tx="" side="" pkg="" current_version="" target_version=""
+  local current_pkg_driver="" target_pkg_driver="" archive="" changes=0 complete=0
+  local records="" points="" attempt=""
+  local -a candidates=()
+
+  current_driver="$(installed_nvidia_driver_version)" || return 1
+  mapfile -t candidates < <(nvidia_rollback_candidate_packages)
+  (( ${#candidates[@]} > 0 )) || return 1
+
+  records="$(mktemp)"
+  points="$(mktemp)"
+  attempt="$(mktemp)"
+  nvidia_history_records >"$records"
+  nvidia_history_target_points "$records" "$target_driver" >"$points"
+  [[ -s "$points" ]] || {
+    rm -f -- "$records" "$points" "$attempt"
+    return 1
+  }
+
+  while IFS=$'\t' read -r tx side; do
+    : >"$attempt"
+    changes=0
+    complete=1
+
+    for pkg in "${candidates[@]}"; do
+      current_version="$(package_version "$pkg" || true)"
+      [[ -n "$current_version" ]] || { complete=0; break; }
+
+      target_version="$(historical_package_version \
+        "$records" "$pkg" "$tx" "$side" "$current_version" 2>/dev/null || true)"
+      [[ -n "$target_version" ]] || { complete=0; break; }
+
+      if nvidia_rollback_package_name "$pkg"; then
+        current_pkg_driver="$(nvidia_driver_version_from_package_version "$current_version" 2>/dev/null || true)"
+        if [[ "$current_pkg_driver" == "$current_driver" ]]; then
+          target_pkg_driver="$(nvidia_driver_version_from_package_version "$target_version" 2>/dev/null || true)"
+          [[ "$target_pkg_driver" == "$target_driver" ]] || { complete=0; break; }
+        fi
+      fi
+
+      [[ "$target_version" != "$current_version" ]] || continue
+      archive="$(find_cached_package_archive "$pkg" "$target_version" 2>/dev/null || true)"
+      [[ -n "$archive" ]] || { complete=0; break; }
+      printf '%s\t%s\t%s\t%s\n' \
+        "$pkg" "$current_version" "$target_version" "$archive" >>"$attempt"
+      changes=1
+    done
+
+    if (( complete == 1 && changes == 1 )); then
+      if awk -F '\t' -v target="$target_driver" '
+        $1 == "nvidia-utils" {
+          version=$3
+          sub(/^[^:]+:/, "", version)
+          sub(/-[^-]+$/, "", version)
+          if (version == target) found=1
+        }
+        END { exit(found ? 0 : 1) }
+      ' "$attempt";
+      then
+        cat -- "$attempt" >"$output"
+        rm -f -- "$records" "$points" "$attempt"
+        return 0
+      fi
+    fi
+  done <"$points"
+
+  rm -f -- "$records" "$points" "$attempt"
+  return 1
+}
+
+recoverable_nvidia_history_versions() {
+  local current_driver="" records="" candidates="" version="" bundle=""
+  local tx pkg old_version new_version
+
+  current_driver="$(installed_nvidia_driver_version)" || return 1
+  records="$(mktemp)"
+  candidates="$(mktemp)"
+  bundle="$(mktemp)"
+  nvidia_history_records >"$records"
+
+  while IFS=$'\t' read -r tx pkg old_version new_version; do
+    [[ "$pkg" == nvidia-utils ]] || continue
+    version="$(nvidia_driver_version_from_package_version "$old_version" 2>/dev/null || true)"
+    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidates"
+    version="$(nvidia_driver_version_from_package_version "$new_version" 2>/dev/null || true)"
+    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidates"
+  done <"$records"
+
+  if [[ -s "$candidates" ]]; then
+    while IFS= read -r version; do
+      [[ -n "$version" && "$version" != "$current_driver" ]] || continue
+      if build_nvidia_history_bundle "$version" "$bundle"; then
+        printf '%s\n' "$version"
+      fi
+    done < <(LC_ALL=C sort -Vu "$candidates")
+  fi
+
+  rm -f -- "$records" "$candidates" "$bundle"
+}
+
+print_recoverable_nvidia_versions() {
+  local current_driver="" version=""
+  local -a versions=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(recoverable_nvidia_history_versions)
+
+  printf 'Current NVIDIA driver: %s\n' "$current_driver"
+  printf 'Recoverable cached historical driver versions:\n'
+  if (( ${#versions[@]} == 0 )); then
+    printf '  (none)\n'
+    return 1
+  fi
+  for version in "${versions[@]}"; do
+    printf '  %s\n' "$version"
+  done
+}
+
+apply_nvidia_history_version() {
+  local target_driver="$1" assume_yes="${2:-0}"
+  local current_driver="" bundle="" pkg current_version target_version archive
+  local snapshot_rc=0 verification_failed=0
+  local -a archives=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  if [[ "$current_driver" == "$target_driver" ]]; then
+    log "NVIDIA driver ${target_driver} is already installed."
+    return 0
+  fi
+
+  bundle="$(mktemp)"
+  if ! build_nvidia_history_bundle "$target_driver" "$bundle"; then
+    rm -f -- "$bundle"
+    die "No complete trusted cached NVIDIA/kernel package set can reconstruct driver ${target_driver}. Awtarchy will not guess or perform a partial rollback."
+  fi
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    printf '\nHistorical NVIDIA rollback plan:\n' >/dev/tty
+    while IFS=$'\t' read -r pkg current_version target_version archive; do
+      printf '  %s: %s -> %s\n' "$pkg" "$current_version" "$target_version" >/dev/tty
+    done <"$bundle"
+    printf '\nAwtarchy will first save the current NVIDIA/kernel packages as the new return point.\n' >/dev/tty
+    printf 'A reboot is recommended after changing driver versions.\n\n' >/dev/tty
+  fi
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no "Switch to cached NVIDIA driver ${target_driver} now?" 0 \
+      || { rm -f -- "$bundle"; log 'NVIDIA driver version switch canceled.'; return 0; }
+  fi
+
+  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      ;;
+    1)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "The current NVIDIA/kernel package set is not fully cached. Refusing the version switch because Awtarchy cannot guarantee a return point."
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "No installed NVIDIA package set is available to protect before the version switch."
+      ;;
+    *)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "Could not prepare the current NVIDIA/kernel return point."
+      ;;
+  esac
+
+  while IFS=$'\t' read -r pkg current_version target_version archive; do
+    [[ "$archive" == "${PACMAN_CACHE_DIR}/"* ]] \
+      || die "Historical NVIDIA archive escaped the trusted pacman cache: ${archive}"
+    trusted_nvidia_cache_archive "$archive" \
+      || die "Historical NVIDIA archive is not trusted for privileged restore: $(basename -- "$archive")"
+    archives+=("$archive")
+  done <"$bundle"
+
+  if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
+    if finalize_nvidia_rollback_snapshot; then
+      warn "The driver transaction failed after package state changed; the pre-switch return point was preserved."
+    fi
+    rm -f -- "$bundle"
+    die "NVIDIA historical driver transaction failed."
+  fi
+
+  while IFS=$'\t' read -r pkg current_version target_version archive; do
+    if [[ "$(package_version "$pkg" || true)" != "$target_version" ]]; then
+      verification_failed=1
+      warn "NVIDIA version switch verification failed for ${pkg}; expected ${target_version}."
+    fi
+  done <"$bundle"
+
+  if (( verification_failed == 1 )); then
+    finalize_nvidia_rollback_snapshot \
+      || warn "Could not finalize the pre-switch NVIDIA return point after verification failure."
+    rm -f -- "$bundle"
+    die "NVIDIA historical driver verification failed. Use the saved rollback point if package state changed."
+  fi
+
+  finalize_nvidia_rollback_snapshot \
+    || { rm -f -- "$bundle"; die "Driver versions changed, but Awtarchy could not save the pre-switch return point."; }
+  rm -f -- "$bundle"
+
+  log "NVIDIA driver ${target_driver} package set applied."
+  log "The pre-switch NVIDIA/kernel versions are now the saved rollback point."
+  log "Reboot before judging the selected driver."
+}
+
+pick_nvidia_history_version() {
+  local current_driver="" answer="" i selected=""
+  local -a versions=()
+
+  [[ -r /dev/tty && -w /dev/tty ]] \
+    || die "NVIDIA driver version selection requires an interactive terminal."
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(recoverable_nvidia_history_versions)
+  (( ${#versions[@]} > 0 )) \
+    || die "No complete historical NVIDIA/kernel package sets are available in the trusted pacman cache."
+
+  printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
+  printf 'Recoverable cached historical driver versions:\n' >/dev/tty
+  for i in "${!versions[@]}"; do
+    printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
+  done
+  printf '  q. Cancel\n\nChoose a driver version: ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=q
+  case "$answer" in
+    q|Q|'')
+      log 'NVIDIA driver version selection canceled.'
+      return 0
+      ;;
+  esac
+  [[ "$answer" =~ ^[0-9]+$ ]] || die "Invalid NVIDIA driver selection."
+  (( answer >= 1 && answer <= ${#versions[@]} )) || die "Invalid NVIDIA driver selection."
+  selected="${versions[answer-1]}"
+  apply_nvidia_history_version "$selected" 0
+}
 validate_nvidia_rollback_storage() {
   root_owned_nonwritable_path "$NVIDIA_ROLLBACK_ROOT" \
     && [[ -d "$NVIDIA_ROLLBACK_ROOT" ]] \
@@ -1634,6 +2000,26 @@ package_reconciliation_needs_action() {
 }
 
 if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
+  if (( NVIDIA_ROLLBACK_LIST == 1 )); then
+    print_recoverable_nvidia_versions
+    exit $?
+  fi
+
+  if [[ -n "$NVIDIA_ROLLBACK_VERSION" ]]; then
+    if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 1
+    else
+      [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA driver version switching requires an interactive terminal."
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 0
+    fi
+    exit $?
+  fi
+
+  if (( NVIDIA_ROLLBACK_PICK == 1 )); then
+    pick_nvidia_history_version
+    exit $?
+  fi
+
   if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
     apply_nvidia_rollback 1
   else
