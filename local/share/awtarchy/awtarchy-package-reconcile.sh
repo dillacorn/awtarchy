@@ -1345,6 +1345,12 @@ package_reconciliation_needs_action() {
   return 1
 }
 
+if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
+  [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
+  apply_nvidia_rollback 0
+  exit $?
+fi
+
 if (( PACMAN_RECOVERY_CHECK_ONLY == 1 )); then
   pacman_sync_db_preflight
   exit $?
@@ -1516,9 +1522,11 @@ confirm_yes_no 'Apply this package plan?' 0 || { log 'Package reconciliation can
 recover_package_disk_headroom
 
 if (( ${#install_arch[@]} )); then
+  confirm_nvidia_system_upgrade || exit 0
   log "Installing Arch packages with a full system upgrade: ${install_arch[*]}"
   pacman_install_with_recovery -Syu --needed --noconfirm "${install_arch[@]}"
   record_managed_packages "${install_arch[@]}"
+  offer_nvidia_post_upgrade_choice
 fi
 
 if (( enable_ly == 1 )); then
