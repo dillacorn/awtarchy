@@ -14,10 +14,10 @@ require_text() {
 # The capture directory must remain alive long enough for the slowest monitor.
 require_text "$SHELL" 'readonly property int captureCleanupTransitionDuration:' \
     'secure shell has no global cleanup duration derived from monitor profiles'
-require_text "$SHELL" 'root.lockSharedProfile.lockscreen_entry_transition_duration' \
-    'capture cleanup does not include the Shared transition duration'
-require_text "$SHELL" 'root.lockMonitorOverrides' \
-    'capture cleanup does not inspect Individual monitor transitions'
+require_text "$SHELL" 'root.lockLastEditedProfile.lockscreen_entry_transition_duration' \
+    'capture cleanup does not include the last-edited fallback transition duration'
+require_text "$SHELL" 'root.lockMonitorProfiles' \
+    'capture cleanup does not inspect per-display monitor transitions'
 require_text "$SHELL" 'Math.max(maximum, Number(profile.lockscreen_entry_transition_duration))' \
     'capture cleanup does not select the slowest monitor transition'
 require_text "$SHELL" 'root.captureCleanupTransitionDuration + 2000' \
