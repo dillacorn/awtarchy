@@ -1712,8 +1712,10 @@ if (( ${#install_arch[@]} )); then
     NVIDIA_ROLLBACK_PENDING=""
     die "Arch package transaction failed."
   fi
-  record_managed_packages "${install_arch[@]}"
+  # Finalize/offer NVIDIA recovery before bookkeeping so a ledger failure cannot
+  # strand a successful driver upgrade without its rollback point.
   offer_nvidia_post_upgrade_choice
+  record_managed_packages "${install_arch[@]}"
 fi
 
 if (( enable_ly == 1 )); then
