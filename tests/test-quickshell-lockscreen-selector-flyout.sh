@@ -137,6 +137,27 @@ if missing:
     raise SystemExit('FAIL: timezone picker is missing representative zones: ' + ', '.join(missing))
 PY
 
+# Timezone selection must be searchable by both friendly label and IANA ID,
+# while custom entries are validated by the existing zoneinfo-backed helper.
+contains "$EDITOR" 'property string timezoneSearchQuery: ""' \
+    'timezone picker has no search state'
+contains "$EDITOR" 'placeholderText: "Search city / IANA zone"' \
+    'timezone picker exposes no city/IANA search field'
+contains "$EDITOR" 'label.toLowerCase().indexOf(query)' \
+    'timezone search does not match friendly city labels'
+contains "$EDITOR" 'key.toLowerCase().indexOf(query)' \
+    'timezone search does not match IANA identifiers'
+contains "$EDITOR" 'label: "Custom · " + current' \
+    'custom timezone values are not represented in the searchable selector'
+contains "$EDITOR" 'SettingsButton { label: "Custom timezone"' \
+    'timezone controls do not expose custom IANA entry'
+contains "$EDITOR" 'customTimezoneValidationProcess.exec(["bash", timezoneBackend, "--validate", value])' \
+    'custom timezone input does not validate through the zoneinfo backend'
+contains "$EDITOR" 'color: Theme.error' \
+    'invalid custom timezone feedback is not rendered inline'
+contains "$EDITOR" 'Regional IANA zones stay DST-aware.' \
+    'timezone UI does not explain the DST-aware regional-zone preference'
+
 # A timezone clock's city/zone label is optional and must survive editor,
 # persistence, preview, and secure normalization with old configs defaulting on.
 contains "$EDITOR" 'show_label: raw.show_label !== false' \
