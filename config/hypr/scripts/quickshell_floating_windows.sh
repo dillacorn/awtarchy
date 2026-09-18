@@ -23,9 +23,18 @@ publish_state() {
 }
 
 notify_state() {
-    local state="$1"
+    local state="$1" title="" body="" timeout=2500
+    if [[ "$state" == "enabled" ]]; then
+        title="Floating windows: ON"
+        body="Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling."
+        timeout=5000
+    else
+        title="Floating windows: OFF"
+        body="Normal tiling is restored for new windows."
+    fi
+
     if [[ -x "$NOTIFY_SEND" ]] || command -v "$NOTIFY_SEND" >/dev/null 2>&1; then
-        "$NOTIFY_SEND" -a Hyprland -t 1000 "Floating windows" "$state" >/dev/null 2>&1 || true
+        "$NOTIFY_SEND" -a Hyprland -t "$timeout" "$title" "$body" >/dev/null 2>&1 || true
     fi
 }
 
