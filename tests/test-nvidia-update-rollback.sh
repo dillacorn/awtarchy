@@ -39,6 +39,12 @@ if grep -Fq 'AWTARCHY_NVIDIA_ROLLBACK_DIR' "$RECONCILER" \
   fail 'production rollback path still accepts user-controlled privileged package sources'
 fi
 
+grep -Fq 'as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER" \
+  || fail 'restored rollback status is not persisted through a privileged root-owned write'
+if grep -Fq '>>"$NVIDIA_ROLLBACK_DIR/metadata"' "$RECONCILER"; then
+  fail 'rollback metadata still has a direct user-owned append path'
+fi
+
 python3 - "$RECONCILER" <<'PY'
 from pathlib import Path
 import sys
@@ -188,6 +194,9 @@ grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
   || fail 'NVIDIA rollback did not restore the saved driver version'
 grep -Fxq 'linux 6.18.1.arch1-1' "$state" \
   || fail 'NVIDIA rollback did not restore the kernel version captured with the driver'
+
+grep -Fxq 'status=restored' "$rollback/metadata" \
+  || fail 'successful NVIDIA rollback did not persist restored metadata status'
 
 cat >"$state" <<'EOF'
 nvidia-utils 620.12.01-1
