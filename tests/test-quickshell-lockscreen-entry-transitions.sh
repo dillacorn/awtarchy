@@ -99,10 +99,10 @@ contains "$BAR_STATE" 'function lockscreenEntryTransition()' \
 contains "$BAR_STATE" 'function lockscreenEntryTransitionDuration()' \
     'BarState duration reader is missing'
 
-contains "$SHELL" 'lockSharedProfile = LockscreenPresentationState.sharedProfile(parsed);' \
-    'secure shell does not snapshot the Shared presentation profile'
-contains "$SHELL" 'lockMonitorOverrides = LockscreenPresentationState.monitorOverrides(parsed);' \
-    'secure shell does not snapshot Individual presentation profiles'
+contains "$SHELL" 'lockMonitorProfiles = LockscreenPresentationState.migratedMonitorProfiles(parsed);' \
+    'secure shell does not snapshot per-display presentation profiles'
+contains "$SHELL" 'lockLastEditedProfile = LockscreenPresentationState.lastEditedProfile(parsed);' \
+    'secure shell does not snapshot the last-edited fallback profile'
 contains "$SURFACE" 'mode: root.profile.lockscreen_entry_transition' \
     'secure surface does not resolve entry transition from its monitor profile'
 contains "$SURFACE" 'duration: root.profile.lockscreen_entry_transition_duration' \
