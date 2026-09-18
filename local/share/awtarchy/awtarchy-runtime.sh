@@ -3739,6 +3739,16 @@ copy_awtarchy_configs_stage() {
     fi
   done
 
+  if [[ -f "${HOME_DIR}/.config/yazi/package.toml" ]]; then
+    if run_as_target env HOME="${HOME_DIR}" XDG_CONFIG_HOME="${HOME_DIR}/.config" sh -c 'command -v ya >/dev/null 2>&1'; then
+      log "Installing Yazi plugins..."
+      run_as_target env HOME="${HOME_DIR}" XDG_CONFIG_HOME="${HOME_DIR}/.config" ya pkg install \
+        || warn "Could not install Yazi plugins automatically. Run 'ya pkg install' after setup."
+    else
+      warn "Yazi package helper 'ya' is unavailable; run 'ya pkg install' after installing Yazi."
+    fi
+  fi
+
   create_directory "${HOME_DIR}/.local/share/nwg-look"
   create_directory "${HOME_DIR}/.local/share/SpeedCrunch"
   create_directory "${HOME_DIR}/.local/share/SpeedCrunch/color-schemes"
@@ -9140,6 +9150,16 @@ main() {
       else
         warn "python3 is unavailable; skipped preserved Hyprmoncfg config migration."
       fi
+    fi
+  fi
+
+  if [[ -f "${HOME_DIR}/.config/yazi/package.toml" ]]; then
+    if run_target sh -c 'command -v ya >/dev/null 2>&1'; then
+      log "Installing Yazi plugins..."
+      run_target env "XDG_CONFIG_HOME=${HOME_DIR}/.config" ya pkg install \
+        || warn "Could not install Yazi plugins automatically. Run 'ya pkg install' after the update."
+    else
+      warn "Yazi package helper 'ya' is unavailable; run 'ya pkg install' after installing Yazi."
     fi
   fi
 
