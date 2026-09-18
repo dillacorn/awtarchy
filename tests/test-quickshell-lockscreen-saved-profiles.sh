@@ -93,6 +93,21 @@ jq -e '.lockscreen_background_color == "#445566"
   and .lockscreen_saved_profiles[0].name == "Work"' "$state_file" >/dev/null \
   || fail 'per-display profile save did not preserve saved configurations'
 
+# Deleting a saved configuration is an immediate library-only write. It must
+# not commit unrelated unsaved editor/profile data.
+saved_only="$(jq -c '.[0:1]' <<<"$saved_profiles")"
+run_save --saved-profiles "$saved_only" >/dev/null \
+  || fail 'saved-profile-only persistence rejected a valid configuration library'
+jq -e '
+  .unrelated_marker == "keep-me"
+  and .lockscreen_background_color == "#445566"
+  and .lockscreen_monitor_profiles["DP-1"].lockscreen_background_color == "#445566"
+  and .lockscreen_last_edited_profile.lockscreen_background_color == "#445566"
+  and (.lockscreen_saved_profiles | length) == 1
+  and .lockscreen_saved_profiles[0].id == "profile-work"
+  and .lockscreen_saved_profiles[0].name == "Work"
+' "$state_file" >/dev/null || fail 'saved-profile-only persistence modified unrelated lockscreen state'
+
 before_hash="$(sha256sum "$state_file" | awk '{print $1}')"
 duplicate_names="$(jq -c '.[1].name="work"' <<<"$saved_profiles")"
 if run_save --profiles "$monitor_profiles" "$shared" "$duplicate_names" >/dev/null 2>&1; then
@@ -121,6 +136,9 @@ require_text "$BAR" 'LockscreenPresentationState.cloneProfile(raw.profile)' 'Bar
 require_text "$EDITOR" 'property var draftSavedProfiles: []' 'editor has no saved-profile session draft'
 require_text "$EDITOR" 'BarState.lockscreenSavedProfiles()' 'editor does not load persisted saved profiles'
 require_text "$EDITOR" 'JSON.stringify(draftSavedProfiles)' 'Ctrl+S does not include saved profiles in the atomic transaction'
+require_text "$STATE" 'save-lockscreen-saved-profiles)' 'state backend has no saved-profile-only atomic command'
+require_text "$EDITOR_SAVE" '--saved-profiles' 'editor save backend has no saved-profile-only mode'
+require_text "$EDITOR" '"bash", editorSaveBackend, "--saved-profiles", JSON.stringify(next)' 'confirmed deletion does not persist the saved-profile library immediately'
 
 # Layout-tab reusable configuration controls and actions.
 require_text "$EDITOR" 'function confirmSaveCurrentConfiguration()' 'editor cannot create a named saved configuration'
@@ -192,6 +210,12 @@ if '"monitor:" + targetName' not in monitor:
 all_others = body("applySavedConfigurationToAllOthers")
 if 'Quickshell.screens' not in all_others or 'draftMonitorProfiles' not in all_others:
     raise SystemExit("FAIL: applying a saved configuration to all other displays does not update the per-display map")
+
+delete = body("confirmDeleteSavedConfiguration")
+if '"--saved-profiles"' not in delete or 'savedProfilesPersistProcess.exec' not in delete:
+    raise SystemExit("FAIL: confirmed saved-configuration deletion is not persisted immediately")
+if 'root.save()' in delete:
+    raise SystemExit("FAIL: saved-configuration deletion still commits the whole editor draft")
 
 if "function applySavedConfigurationToShared(" in text:
     raise SystemExit("FAIL: saved configuration actions still expose Shared mode")

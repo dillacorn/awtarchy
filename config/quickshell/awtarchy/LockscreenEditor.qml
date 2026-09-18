@@ -144,6 +144,9 @@ Singleton {
     property string savedConfigurationNameDialogMode: ""
     property string savedConfigurationNameDraft: ""
     property string savedConfigurationConfirmMode: ""
+    property string savedProfilesPersistError: ""
+    property var savedProfilesPersistRollback: []
+    property string savedProfilesPersistRollbackSelection: ""
     property string activeMonitorName: ""
     property bool profileLoadActive: false
     property var profileUndoStacks: ({})
@@ -710,6 +713,13 @@ Singleton {
         statusMessage = "Configuration renamed. Ctrl+S to persist.";
     }
 
+    function confirmSavedConfigurationNameDialog() {
+        if (savedConfigurationNameDialogMode === "rename")
+            confirmRenameSavedConfiguration();
+        else if (savedConfigurationNameDialogMode === "create")
+            confirmSaveCurrentConfiguration();
+    }
+
     function cancelSavedConfigurationNameDialog() {
         savedConfigurationNameDialogMode = "";
         savedConfigurationNameDraft = "";
@@ -722,20 +732,30 @@ Singleton {
     }
 
     function confirmDeleteSavedConfiguration() {
-        if (savedConfigurationConfirmMode !== "delete")
+        if (savedConfigurationConfirmMode !== "delete"
+                || savedProfilesPersistProcess.running || saveProcess.running
+                || contrastPersistProcess.running)
             return;
         const index = selectedSavedConfigurationIndex();
         if (index < 0) {
             savedConfigurationConfirmMode = "";
             return;
         }
+        const previousProfiles = cloneSnapshot(draftSavedProfiles) || [];
+        const previousSelection = selectedSavedConfigurationId;
         const next = cloneSnapshot(draftSavedProfiles) || [];
         next.splice(index, 1);
         draftSavedProfiles = next;
         selectedSavedConfigurationId = next.length > 0
             ? String(next[Math.min(index, next.length - 1)].id || "") : "";
+        savedProfilesPersistRollback = previousProfiles;
+        savedProfilesPersistRollbackSelection = previousSelection;
+        savedProfilesPersistError = "";
         savedConfigurationConfirmMode = "";
-        statusMessage = "Configuration deleted. Ctrl+S to persist.";
+        statusMessage = "Deleting configuration…";
+        savedProfilesPersistProcess.exec([
+            "bash", editorSaveBackend, "--saved-profiles", JSON.stringify(next)
+        ]);
     }
 
     function requestOverwriteSavedConfiguration() {
@@ -767,6 +787,26 @@ Singleton {
 
     function cancelSavedConfigurationConfirm() {
         savedConfigurationConfirmMode = "";
+    }
+
+    function handleEscape() {
+        if (savedConfigurationNameDialogMode.length > 0) {
+            cancelSavedConfigurationNameDialog();
+            return;
+        }
+        if (savedConfigurationConfirmMode.length > 0) {
+            cancelSavedConfigurationConfirm();
+            return;
+        }
+        if (elementPaletteOpen) {
+            elementPaletteOpen = false;
+            return;
+        }
+        if (backgroundPaletteOpen) {
+            backgroundPaletteOpen = false;
+            return;
+        }
+        close();
     }
 
     function moveSavedConfiguration(offset) {
@@ -2453,7 +2493,8 @@ Singleton {
     }
 
     function save() {
-        if (saveProcess.running || contrastPersistProcess.running)
+        if (saveProcess.running || contrastPersistProcess.running
+                || savedProfilesPersistProcess.running)
             return;
         if (historyTransactionActive)
             commitHistoryTransaction();
@@ -2490,6 +2531,31 @@ Singleton {
         }
     }
     Process { id: contrastPersistProcess; onExited: (exitCode, exitStatus) => { root.statusMessage = exitCode === 0 ? "Saved" : "Saved; Auto contrast cache could not refresh"; } }
+    Process {
+        id: savedProfilesPersistProcess
+        stderr: SplitParser {
+            onRead: line => {
+                const detail = String(line || "").trim();
+                if (detail.length > 0 && root.savedProfilesPersistError.length === 0)
+                    root.savedProfilesPersistError = detail;
+            }
+        }
+        onExited: (exitCode, exitStatus) => {
+            if (exitCode === 0) {
+                BarState.refresh();
+                root.statusMessage = "Configuration deleted";
+            } else {
+                root.draftSavedProfiles = root.cloneSnapshot(root.savedProfilesPersistRollback) || [];
+                root.selectedSavedConfigurationId = root.savedProfilesPersistRollbackSelection;
+                root.statusMessage = root.savedProfilesPersistError.length > 0
+                    ? "Delete failed: " + root.savedProfilesPersistError
+                    : "Could not delete saved configuration";
+            }
+            root.savedProfilesPersistRollback = [];
+            root.savedProfilesPersistRollbackSelection = "";
+            root.savedProfilesPersistError = "";
+        }
+    }
 
     NumberAnimation { id: editorEntranceFade; target: root; property: "editorEntranceOpacity"; from: 0; to: 1; duration: root.editorEntranceFadeDuration; easing.type: Easing.OutCubic }
     NumberAnimation { id: heldScaleAnimation; target: root; property: "heldScaleBoost"; duration: 70; easing.type: Easing.OutCubic }
@@ -2538,7 +2604,7 @@ Singleton {
         id: editorWindow
         Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; onActivated: root.selectAllElements() }
         Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
-        Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }
+        Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }
         WlrLayershell.namespace: "awtarchy-lockscreen-editor"
         visible: false; color: "transparent"; WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive; aboveWindows: true; exclusionMode: ExclusionMode.Ignore
         anchors.top: true; anchors.left: true; implicitWidth: Math.max(1, screen ? screen.width : 1920); implicitHeight: Math.max(1, screen ? screen.height : 1080)
@@ -2586,6 +2652,7 @@ Singleton {
                         selectByMouse: true
                         placeholderText: "Configuration name"
                         onTextChanged: root.savedConfigurationNameDraft = text
+                        onAccepted: root.confirmSavedConfigurationNameDialog()
                     }
                     Item { Layout.fillHeight: true }
                     RowLayout {
@@ -2596,12 +2663,7 @@ Singleton {
                         SettingsButton {
                             label: root.savedConfigurationNameDialogMode === "rename" ? "Rename" : "Save Configuration"
                             textSize: 9
-                            onClicked: {
-                                if (root.savedConfigurationNameDialogMode === "rename")
-                                    root.confirmRenameSavedConfiguration();
-                                else
-                                    root.confirmSaveCurrentConfiguration();
-                            }
+                            onClicked: root.confirmSavedConfigurationNameDialog()
                         }
                     }
                 }
@@ -2651,7 +2713,7 @@ Singleton {
                     Text {
                         Layout.fillWidth: true
                         text: root.savedConfigurationConfirmMode === "delete"
-                            ? "This removes the selected reusable configuration when you save."
+                            ? "This permanently removes the selected reusable configuration."
                             : "This replaces the selected reusable configuration with the current display's complete visual configuration."
                         color: Theme.muted
                         font.family: Theme.fontFamily

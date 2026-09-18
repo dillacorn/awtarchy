@@ -15,8 +15,15 @@ cleanup_tmp() {
 }
 trap cleanup_tmp EXIT
 
+saved_profiles_mode=false
 profile_mode=false
-if [[ "${1:-}" == "--profiles" ]]; then
+if [[ "${1:-}" == "--saved-profiles" ]]; then
+    [[ $# -eq 2 ]] || {
+        printf 'usage: %s --saved-profiles <saved-profiles-json>\n' "${0##*/}" >&2
+        false
+    }
+    saved_profiles_mode=true
+elif [[ "${1:-}" == "--profiles" ]]; then
     [[ $# -eq 3 || $# -eq 4 ]] || {
         printf 'usage: %s --profiles <monitor-profiles-json> <last-edited-profile-json> [saved-profiles-json]\n' "${0##*/}" >&2
         false
@@ -27,7 +34,7 @@ elif [[ $# -ne 23 && $# -ne 25 ]]; then
     false
 fi
 
-if [[ "$profile_mode" == false ]]; then
+if [[ "$profile_mode" == false && "$saved_profiles_mode" == false ]]; then
 layout_input="${1}"
 custom_images_input="${13:-[]}"
 visualizer_input="${14-}"
@@ -287,6 +294,13 @@ repair_saved_profiles() {
     done
     printf '%s' "$result"
 }
+
+if [[ "$saved_profiles_mode" == true ]]; then
+    saved_profiles="$(repair_saved_profiles "$2")"
+    bash "$STATE_BACKEND" save-lockscreen-saved-profiles "$saved_profiles"
+    printf '%s\n' '{"ok":true}'
+    exit 0
+fi
 
 if [[ "$profile_mode" == true ]]; then
     monitor_profiles="$(repair_override_profiles "$2")"

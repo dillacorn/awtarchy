@@ -967,6 +967,17 @@ normalize_lockscreen_saved_profiles_json() {
     printf '%s' "$result"
 }
 
+save_lockscreen_saved_profiles() {
+    local saved_profiles
+
+    saved_profiles="$(normalize_lockscreen_saved_profiles_json "$1")" || return $?
+    new_tmp
+    jq --argjson saved_profiles "$saved_profiles" '
+        .lockscreen_saved_profiles = $saved_profiles
+    ' "$STATE_FILE" >"$TMP_FILE"
+    commit_tmp
+}
+
 save_lockscreen_editor_profiles() {
     local monitor_profiles last_edited saved_profiles=''
     local has_saved_profiles=false
@@ -2045,6 +2056,10 @@ case "$cmd" in
             4) save_lockscreen_editor_profiles "$2" "$3" "$4" ;;
             *) exit 2 ;;
         esac
+        ;;
+    save-lockscreen-saved-profiles)
+        [[ $# -eq 2 ]] || exit 2
+        save_lockscreen_saved_profiles "$2"
         ;;
     reset-lockscreen-presentation)
         reset_lockscreen_presentation

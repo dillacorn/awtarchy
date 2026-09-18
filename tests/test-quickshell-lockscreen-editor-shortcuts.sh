@@ -26,8 +26,16 @@ reject_text() {
 
 require_text "$EDITOR" 'Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }' \
     'Ctrl+S save is not owned by the focused editor window'
-require_text "$EDITOR" 'Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.close() }' \
+require_text "$EDITOR" 'Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }' \
     'Escape cancel is not owned by the focused editor window'
+require_text "$EDITOR" 'function handleEscape() {' \
+    'Escape does not route through modal-aware editor cancellation'
+require_text "$EDITOR" 'if (savedConfigurationNameDialogMode.length > 0) {' \
+    'Escape does not cancel the saved-configuration naming dialog first'
+require_text "$EDITOR" 'if (savedConfigurationConfirmMode.length > 0) {' \
+    'Escape does not cancel saved-configuration confirmations first'
+require_text "$EDITOR" 'onAccepted: root.confirmSavedConfigurationNameDialog()' \
+    'Enter does not submit the saved-configuration naming field'
 reject_text "$EDITOR" 'Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut' \
     'Ctrl+S still relies on a singleton-level application shortcut'
 reject_text "$EDITOR" 'Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut' \

@@ -1,0 +1,31 @@
+name: Feature lockscreen modal regressions
+
+on:
+  push:
+    branches:
+      - feature/lockscreen-media-editor-polish
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Install validation tools
+        run: sudo apt-get update && sudo apt-get install -y jq shellcheck lua5.4
+      - name: Validate lockscreen editor modal fixes
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash tests/test-quickshell-lockscreen-editor-shortcuts.sh
+          bash tests/test-quickshell-lockscreen-saved-profiles.sh
+          bash tests/test-quickshell-lockscreen-profile-save-parity.sh
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          bash tests/test-quickshell-production-readiness.sh
+          bash -n config/hypr/scripts/quickshell_application_state.sh
+          bash -n config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+          shellcheck config/hypr/scripts/quickshell_application_state.sh
+          shellcheck config/hypr/scripts/quickshell_lockscreen_editor_save.sh
+          git diff --check HEAD^ HEAD
