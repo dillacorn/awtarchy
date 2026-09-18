@@ -144,6 +144,8 @@ Singleton {
     property string savedConfigurationNameDialogMode: ""
     property string savedConfigurationNameDraft: ""
     property string savedConfigurationConfirmMode: ""
+    readonly property bool savedConfigurationModalOpen: savedConfigurationNameDialogMode.length > 0
+        || savedConfigurationConfirmMode.length > 0
     property string savedProfilesPersistError: ""
     property var savedProfilesPersistRollback: []
     property string savedProfilesPersistRollbackSelection: ""
@@ -652,6 +654,8 @@ Singleton {
     }
 
     function openSaveCurrentConfigurationDialog() {
+        if (savedProfilesPersistProcess.running)
+            return;
         if (draftSavedProfiles.length >= 32) {
             statusMessage = "Saved configuration limit reached";
             return;
@@ -678,12 +682,13 @@ Singleton {
         next.push(({ id: id, name: name, profile: profile }));
         draftSavedProfiles = next;
         selectedSavedConfigurationId = id;
-        savedConfigurationNameDialogMode = "";
-        savedConfigurationNameDraft = "";
+        cancelSavedConfigurationNameDialog();
         statusMessage = "Saved configuration added. Ctrl+S to persist.";
     }
 
     function openRenameSavedConfigurationDialog() {
+        if (savedProfilesPersistProcess.running)
+            return;
         const index = selectedSavedConfigurationIndex();
         if (index < 0)
             return;
@@ -696,7 +701,7 @@ Singleton {
             return;
         const index = selectedSavedConfigurationIndex();
         if (index < 0) {
-            savedConfigurationNameDialogMode = "";
+            cancelSavedConfigurationNameDialog();
             return;
         }
         const id = String(draftSavedProfiles[index].id || "");
@@ -708,8 +713,7 @@ Singleton {
         const next = cloneSnapshot(draftSavedProfiles) || [];
         next[index].name = name;
         draftSavedProfiles = next;
-        savedConfigurationNameDialogMode = "";
-        savedConfigurationNameDraft = "";
+        cancelSavedConfigurationNameDialog();
         statusMessage = "Configuration renamed. Ctrl+S to persist.";
     }
 
@@ -720,13 +724,21 @@ Singleton {
             confirmSaveCurrentConfiguration();
     }
 
+    function restoreEditorFocusAfterModal() {
+        Qt.callLater(() => {
+            if (open && !pickerSuspended && !savedConfigurationModalOpen)
+                editorFocus.forceActiveFocus();
+        });
+    }
+
     function cancelSavedConfigurationNameDialog() {
         savedConfigurationNameDialogMode = "";
         savedConfigurationNameDraft = "";
+        restoreEditorFocusAfterModal();
     }
 
     function requestDeleteSavedConfiguration() {
-        if (selectedSavedConfigurationIndex() < 0)
+        if (savedProfilesPersistProcess.running || selectedSavedConfigurationIndex() < 0)
             return;
         savedConfigurationConfirmMode = "delete";
     }
@@ -738,7 +750,7 @@ Singleton {
             return;
         const index = selectedSavedConfigurationIndex();
         if (index < 0) {
-            savedConfigurationConfirmMode = "";
+            cancelSavedConfigurationConfirm();
             return;
         }
         const previousProfiles = cloneSnapshot(draftSavedProfiles) || [];
@@ -751,7 +763,7 @@ Singleton {
         savedProfilesPersistRollback = previousProfiles;
         savedProfilesPersistRollbackSelection = previousSelection;
         savedProfilesPersistError = "";
-        savedConfigurationConfirmMode = "";
+        cancelSavedConfigurationConfirm();
         statusMessage = "Deleting configuration…";
         savedProfilesPersistProcess.exec([
             "bash", editorSaveBackend, "--saved-profiles", JSON.stringify(next)
@@ -759,29 +771,29 @@ Singleton {
     }
 
     function requestOverwriteSavedConfiguration() {
-        if (selectedSavedConfigurationIndex() < 0)
+        if (savedProfilesPersistProcess.running || selectedSavedConfigurationIndex() < 0)
             return;
         savedConfigurationConfirmMode = "overwrite";
     }
 
     function confirmOverwriteSavedConfiguration() {
-        if (savedConfigurationConfirmMode !== "overwrite")
+        if (savedConfigurationConfirmMode !== "overwrite" || savedProfilesPersistProcess.running)
             return;
         const index = selectedSavedConfigurationIndex();
         if (index < 0) {
-            savedConfigurationConfirmMode = "";
+            cancelSavedConfigurationConfirm();
             return;
         }
         const profile = cloneSnapshot(profileFromDraftScalars());
         if (!profile) {
-            savedConfigurationConfirmMode = "";
+            cancelSavedConfigurationConfirm();
             statusMessage = "Could not snapshot current configuration";
             return;
         }
         const next = cloneSnapshot(draftSavedProfiles) || [];
         next[index].profile = profile;
         draftSavedProfiles = next;
-        savedConfigurationConfirmMode = "";
+        cancelSavedConfigurationConfirm();
         statusMessage = "Saved configuration overwritten. Ctrl+S to persist.";
     }
 
@@ -794,6 +806,7 @@ Singleton {
 
     function cancelSavedConfigurationConfirm() {
         savedConfigurationConfirmMode = "";
+        restoreEditorFocusAfterModal();
     }
 
     function handleEscape() {
@@ -817,6 +830,8 @@ Singleton {
     }
 
     function moveSavedConfiguration(offset) {
+        if (savedProfilesPersistProcess.running)
+            return;
         const index = selectedSavedConfigurationIndex();
         const target = index + Number(offset);
         if (index < 0 || !Number.isInteger(target) || target < 0 || target >= draftSavedProfiles.length)
@@ -2500,7 +2515,7 @@ Singleton {
     }
 
     function save() {
-        if (saveProcess.running || contrastPersistProcess.running
+        if (savedConfigurationModalOpen || saveProcess.running || contrastPersistProcess.running
                 || savedProfilesPersistProcess.running)
             return;
         if (historyTransactionActive)
@@ -2609,8 +2624,8 @@ Singleton {
 
     PanelWindow {
         id: editorWindow
-        Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; onActivated: root.selectAllElements() }
-        Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }
+        Shortcut { sequence: "Ctrl+A"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; onActivated: root.selectAllElements() }
+        Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; autoRepeat: false; onActivated: root.save() }
         Shortcut { id: savedConfigurationConfirmReturnShortcut; sequence: "Return"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
         Shortcut { id: savedConfigurationConfirmEnterShortcut; sequence: "Enter"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.savedConfigurationConfirmMode.length > 0; autoRepeat: false; onActivated: root.confirmSavedConfigurationConfirmDialog() }
         Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }
@@ -2618,9 +2633,9 @@ Singleton {
         visible: false; color: "transparent"; WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive; aboveWindows: true; exclusionMode: ExclusionMode.Ignore
         anchors.top: true; anchors.left: true; implicitWidth: Math.max(1, screen ? screen.width : 1920); implicitHeight: Math.max(1, screen ? screen.height : 1080)
 
-        Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
-        Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
-        Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+        Shortcut { id: editorUndoShortcut; sequence: "Ctrl+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.undoStack.length > 0; autoRepeat: false; onActivated: root.undo() }
+        Shortcut { id: editorRedoShortcut; sequence: "Ctrl+Shift+Z"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
+        Shortcut { id: editorRedoAlternateShortcut; sequence: "Ctrl+Y"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.redoStack.length > 0; autoRepeat: false; onActivated: root.redo() }
 
         Rectangle {
             id: savedConfigurationNameDialogLayer
@@ -2628,6 +2643,17 @@ Singleton {
             visible: root.savedConfigurationNameDialogMode.length > 0
             color: "#99000000"
             z: 10010
+            onVisibleChanged: {
+                if (!visible)
+                    return;
+                Qt.callLater(() => {
+                    if (!savedConfigurationNameDialogLayer.visible)
+                        return;
+                    savedConfigurationNameField.forceActiveFocus();
+                    if (root.savedConfigurationNameDialogMode === "rename")
+                        savedConfigurationNameField.selectAll();
+                });
+            }
 
             MouseArea { anchors.fill: parent }
 
@@ -2747,12 +2773,20 @@ Singleton {
 
         Rectangle {
             id: editorFocus; anchors.fill: parent; color: "transparent"; focus: true; opacity: root.editorEntranceOpacity
-            Keys.onPressed: event => { const step = event.modifiers & Qt.ShiftModifier ? root.keyboardNudgeLarge : root.keyboardNudge;
+            Keys.onPressed: event => {
+                const editorMutationKey = event.key === Qt.Key_Left || event.key === Qt.Key_Right
+                    || event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Delete;
+                if (root.savedConfigurationModalOpen && editorMutationKey) {
+                    event.accepted = true;
+                    return;
+                }
+                const step = event.modifiers & Qt.ShiftModifier ? root.keyboardNudgeLarge : root.keyboardNudge;
                 if (event.key === Qt.Key_Left) { root.nudgeSelection(-step, 0); event.accepted = true; } else if (event.key === Qt.Key_Right) { root.nudgeSelection(step, 0); event.accepted = true; }
                 else if (event.key === Qt.Key_Up) { root.nudgeSelection(0, -step); event.accepted = true; } else if (event.key === Qt.Key_Down) { root.nudgeSelection(0, step); event.accepted = true; }
                 else if (event.key === Qt.Key_Delete && root.isCustomImage(root.selectedElement)) { root.removeCustomImage(root.selectedElement); event.accepted = true; }
                 else if (event.key === Qt.Key_Delete && root.isTimezoneClock(root.selectedElement)) { root.removeTimezoneClock(root.selectedElement); event.accepted = true; }
-                else if (event.key === Qt.Key_Delete && root.isCustomText(root.selectedElement)) { root.removeCustomText(root.selectedElement); event.accepted = true; } }
+                else if (event.key === Qt.Key_Delete && root.isCustomText(root.selectedElement)) { root.removeCustomText(root.selectedElement); event.accepted = true; }
+            }
 
             Item { id: editorTransitionStart; x: editorFocus.width + 64; y: 0; width: editorFocus.width; height: editorFocus.height
                 Rectangle { anchors.fill: parent; color: "#000000" }
@@ -3266,12 +3300,12 @@ Singleton {
                                     root.selectedSavedConfigurationId = String(root.draftSavedProfiles[index].id || "");
                             }
                         }
-                        SettingsButton { label: "Save Current Configuration"; textSize: 9; available: root.draftSavedProfiles.length < 32; onClicked: root.openSaveCurrentConfigurationDialog() }
-                        SettingsButton { label: "Rename"; textSize: 9; available: root.selectedSavedConfigurationIndex() >= 0; onClicked: root.openRenameSavedConfigurationDialog() }
-                        SettingsButton { label: "Delete"; textSize: 9; available: root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestDeleteSavedConfiguration() }
-                        SettingsButton { label: "Move Up"; textSize: 9; available: root.selectedSavedConfigurationIndex() > 0; onClicked: root.moveSavedConfiguration(-1) }
-                        SettingsButton { label: "Move Down"; textSize: 9; available: root.selectedSavedConfigurationIndex() >= 0 && root.selectedSavedConfigurationIndex() < root.draftSavedProfiles.length - 1; onClicked: root.moveSavedConfiguration(1) }
-                        SettingsButton { label: "Overwrite"; textSize: 9; available: root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestOverwriteSavedConfiguration() }
+                        SettingsButton { label: "Save Current Configuration"; textSize: 9; available: !savedProfilesPersistProcess.running && root.draftSavedProfiles.length < 32; onClicked: root.openSaveCurrentConfigurationDialog() }
+                        SettingsButton { label: "Rename"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.openRenameSavedConfigurationDialog() }
+                        SettingsButton { label: "Delete"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestDeleteSavedConfiguration() }
+                        SettingsButton { label: "Move Up"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() > 0; onClicked: root.moveSavedConfiguration(-1) }
+                        SettingsButton { label: "Move Down"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0 && root.selectedSavedConfigurationIndex() < root.draftSavedProfiles.length - 1; onClicked: root.moveSavedConfiguration(1) }
+                        SettingsButton { label: "Overwrite"; textSize: 9; available: !savedProfilesPersistProcess.running && root.selectedSavedConfigurationIndex() >= 0; onClicked: root.requestOverwriteSavedConfiguration() }
                         Item { Layout.fillWidth: true }
                     }
 

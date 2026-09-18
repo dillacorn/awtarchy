@@ -24,8 +24,8 @@ reject_text() {
     fi
 }
 
-require_text "$EDITOR" 'Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.save() }' \
-    'Ctrl+S save is not owned by the focused editor window'
+require_text "$EDITOR" 'Shortcut { id: editorSaveShortcut; sequence: "Ctrl+S"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; autoRepeat: false; onActivated: root.save() }' \
+    'Ctrl+S save is not isolated from saved-configuration modals'
 require_text "$EDITOR" 'Shortcut { id: editorCancelShortcut; sequence: "Escape"; context: Qt.WindowShortcut; enabled: root.open && !root.pickerSuspended; autoRepeat: false; onActivated: root.handleEscape() }' \
     'Escape cancel is not owned by the focused editor window'
 require_text "$EDITOR" 'function handleEscape() {' \
@@ -42,6 +42,20 @@ require_text "$EDITOR" 'Shortcut { id: savedConfigurationConfirmEnterShortcut; s
     'Enter does not confirm saved-configuration delete/overwrite dialogs'
 require_text "$EDITOR" 'function confirmSavedConfigurationConfirmDialog() {' \
     'saved-configuration confirmation dialogs have no shared keyboard-confirm action'
+require_text "$EDITOR" 'readonly property bool savedConfigurationModalOpen:' \
+    'saved-configuration dialogs do not expose a shared modal state'
+require_text "$EDITOR" 'if (root.savedConfigurationModalOpen && editorMutationKey) {' \
+    'arrow/Delete editor mutations are not blocked behind saved-configuration modals'
+require_text "$EDITOR" 'savedConfigurationNameField.forceActiveFocus()' \
+    'saved-configuration naming dialog does not automatically focus its text field'
+require_text "$EDITOR" 'savedConfigurationNameField.selectAll()' \
+    'rename dialog does not select the existing configuration name'
+require_text "$EDITOR" 'function restoreEditorFocusAfterModal() {' \
+    'saved-configuration dialogs do not restore editor keyboard focus after closing'
+require_text "$EDITOR" 'enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen && root.undoStack.length > 0' \
+    'editor undo remains active behind saved-configuration modals'
+require_text "$EDITOR" 'enabled: root.open && !root.pickerSuspended && !root.savedConfigurationModalOpen; onActivated: root.selectAllElements()' \
+    'editor Ctrl+A remains active behind the naming dialog'
 reject_text "$EDITOR" 'Shortcut { sequence: "Ctrl+S"; context: Qt.ApplicationShortcut' \
     'Ctrl+S still relies on a singleton-level application shortcut'
 reject_text "$EDITOR" 'Shortcut { sequence: "Escape"; context: Qt.ApplicationShortcut' \
