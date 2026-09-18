@@ -21,7 +21,13 @@ jq -n --argjson layout "$layout" '
   lockscreen_background_color:"#000000",
   lockscreen_wallpaper_path:"",
   lockscreen_layout:$layout,
-  lockscreen_monitor_overrides:{
+  lockscreen_last_edited_profile:{
+    lockscreen_background:"black",
+    lockscreen_background_color:"#000000",
+    lockscreen_wallpaper_path:"",
+    lockscreen_layout:$layout
+  },
+  lockscreen_monitor_profiles:{
     "DP-1":{
       lockscreen_background:"color",
       lockscreen_background_color:"#ffffff",
@@ -40,10 +46,10 @@ jq -e '
     and .colors.password == "#ffffff"
     and .monitor_colors["DP-1"].logo == "#000000"
     and .monitor_colors["DP-1"].password == "#000000"
-' "$cache" >/dev/null || fail 'persisted contrast cache does not resolve Shared and DP-1 independently'
+' "$cache" >/dev/null || fail 'persisted contrast cache does not resolve fallback and DP-1 independently'
 
 require_text "$HELPER" 'monitor_colors' 'contrast helper does not persist monitor color maps'
-require_text "$HELPER" 'lockscreen_monitor_overrides' 'contrast helper ignores persisted monitor overrides'
+require_text "$HELPER" 'lockscreen_monitor_profiles' 'contrast helper ignores persisted per-display profiles'
 require_text "$HELPER" 'function prepare_wallpaper_sample()' 'one-shot animated-media sampling was removed'
 require_text "$HELPER" 'magick "${image}[0]" "$output"' 'GIF contrast no longer samples one deterministic first frame'
 require_text "$HELPER" 'ffmpeg -v error -nostdin -i "$image" -map 0:v:0 -frames:v 1 -y "$output"' 'MP4 contrast no longer samples exactly one deterministic frame'
@@ -56,15 +62,15 @@ require_text "$DESKTOP_CACHE" 'parsed.monitor_colors' 'unlocked contrast service
 require_text "$SECURE_CACHE" 'property string monitorName: ""' 'secure contrast cache has no monitor identity'
 require_text "$SECURE_CACHE" 'parsed.monitor_colors' 'secure contrast cache ignores monitor colors'
 require_text "$SECURE_CACHE" 'parsed.monitor_colors[root.monitorName]' 'secure contrast cache does not select by monitor name'
-require_text "$SECURE_CACHE" 'parsed.colors' 'secure contrast cache lost v2/Shared fallback'
+require_text "$SECURE_CACHE" 'parsed.colors' 'secure contrast cache lost last-edited/fallback colors'
 
-require_text "$EDITOR" 'property var draftSharedAutoAccents:' 'editor has no Shared derived accent state'
+reject_text "$EDITOR" 'draftSharedAutoAccents' 'editor still carries retired Shared derived accent state'
 require_text "$EDITOR" 'property var draftMonitorAutoAccents:' 'editor has no per-monitor derived accent map'
 require_text "$EDITOR" 'function stashAutoAccentsForActiveProfile()' 'editor cannot stash active derived accents by profile'
 require_text "$EDITOR" 'function loadAutoAccentsForActiveProfile()' 'editor cannot load target-profile derived accents'
 require_text "$EDITOR" 'function autoAccentsForMonitor(name)' 'passive previews cannot resolve their own derived accents'
 require_text "$EDITOR" 'autoAccents: root.autoAccentsForMonitor(modelData.name)' 'passive preview still uses active-monitor contrast'
-require_text "$EDITOR" 'draftSharedAutoAccents = cloneAutoAccents(LockscreenContrast.accents)' 'editor does not initialize Shared accents from persisted cache'
+require_text "$EDITOR" 'draftMonitorAutoAccents = persistedMonitorAccents;' 'editor does not initialize per-display accents from persisted cache'
 require_text "$EDITOR" 'LockscreenContrast.colorsForMonitor(name)' 'editor does not initialize persisted per-monitor accents'
 
 printf '%s\n' 'PASS: lockscreen per-monitor Auto Contrast contracts'
