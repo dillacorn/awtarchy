@@ -13,6 +13,7 @@ bash -n "$RUNTIME"
 
 python3 - "$RUNTIME" <<'PY'
 from pathlib import Path
+import re
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -76,5 +77,20 @@ for token in required:
     if token not in text:
         raise SystemExit(f"FAIL: launcher does not consume user rollback status safely: {token}")
 
-print("PASS: launcher suppresses post-update reconciliation after a user rollback.")
+menu_start = text.find("maintenance_menu() {")
+menu_end = text.find("\n}\n", menu_start)
+if menu_start < 0 or menu_end < 0:
+    raise SystemExit("FAIL: could not bound maintenance menu")
+menu = text[menu_start:menu_end]
+if re.search(r"(?m)^\s*rc=0\s*$", menu):
+    raise SystemExit("FAIL: successful maintenance update still stores rc=0 and exits the menu")
+for token in (
+    "update_rc=0",
+    'run_runtime update-reset-backup --mode preserve || update_rc=$?',
+    'rc="$update_rc"',
+):
+    if token not in menu:
+        raise SystemExit(f"FAIL: maintenance update status handling is missing {token}")
+
+print("PASS: launcher suppresses post-update reconciliation after rollback without exiting the maintenance menu on success.")
 PY
