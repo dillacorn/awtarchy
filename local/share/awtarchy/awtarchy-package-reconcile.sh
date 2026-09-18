@@ -849,6 +849,7 @@ print_nvidia_rollback_changes() {
 
 apply_nvidia_rollback() {
   local assume_yes="${1:-0}" complete="" pkg old_version saved_current_version archive_name installed_version
+  local metadata_tmp=""
   local -a archives=()
 
   [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
@@ -908,10 +909,17 @@ apply_nvidia_rollback() {
     fi
   done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
 
+  metadata_tmp="$(mktemp)"
+  cat -- "$NVIDIA_ROLLBACK_DIR/metadata" >"$metadata_tmp"
   {
     printf 'restored_at=%s\n' "$(date -Iseconds)"
     printf 'status=restored\n'
-  } >>"$NVIDIA_ROLLBACK_DIR/metadata"
+  } >>"$metadata_tmp"
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be updated."
+  fi
+  rm -f -- "$metadata_tmp"
 
   log 'NVIDIA/kernel rollback completed. Reboot before judging the restored driver.'
 }
