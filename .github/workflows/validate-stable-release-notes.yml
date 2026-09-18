@@ -39,3 +39,127 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v371:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.ref == 'release-v3.7.1-bridge' &&
+      github.event.pull_request.title == 'Release v3.7.1 bridge'
+    needs: release-notes-contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: v3.7.1
+      RELEASE_TITLE: Awtarchy v3.7.1 Quickshell
+      TARGET_SHA: 7e9ab52d16dce4339261ad7e383c71861c23a0e7
+      BRIDGE_BRANCH: release-v3.7.1-bridge
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 7e9ab52d16dce4339261ad7e383c71861c23a0e7
+          fetch-depth: 0
+      - name: Validate, publish, and verify v3.7.1
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          proposed=/tmp/awtarchy-v3.7.1-release.md
+          previous=/tmp/awtarchy-v3.7.0-release.md
+          published=/tmp/awtarchy-v3.7.1-published.md
+
+          actual_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$actual_main" == "$TARGET_SHA" ]] || {
+            printf 'main moved: expected %s, got %s\n' "$TARGET_SHA" "$actual_main" >&2
+            exit 1
+          }
+
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf '%s already exists\n' "$VERSION" >&2
+            exit 1
+          fi
+
+          printf '%s\n' \
+            '# Awtarchy v3.7.1 Quickshell' \
+            '' \
+            'Awtarchy v3.7.1 refines the lockscreen editor and fixes Yazi multi-key shortcuts.' \
+            '' \
+            '## Install and update' \
+            '' \
+            'Fresh installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)' \
+            '' \
+            'Existing Awtarchy installations and stable updates: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)' \
+            '' \
+            'Quick update:' \
+            '' \
+            '```bash' \
+            'awtarchy update' \
+            '```' \
+            '' \
+            '## Improvements' \
+            '' \
+            '- Refined lockscreen editor keyboard controls, saved configurations, per-display profiles, and media/background handling.' \
+            '- Fixed Yazi multi-key shortcuts including `g g` and `d d`.' \
+            '' \
+            '## Validation' \
+            '' \
+            '- Exact release target: `7e9ab52d16dce4339261ad7e383c71861c23a0e7`.' \
+            '- The maintainer runtime-tested the lockscreen changes on Hyprland.' \
+            '- Full pull-request CI and all `main` push checks passed before release.' \
+            '' \
+            '## Post-release updates' \
+            '' \
+            '_Placeholder for possible tested post-release patches to v3.7.1._' \
+            >"$proposed"
+
+          gh release view v3.7.0 --repo "$GITHUB_REPOSITORY" --json body --jq '.body' >"$previous"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --notes "$proposed" \
+            --previous "$previous"
+
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes-file "$proposed"
+
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' >"$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --notes "$published" \
+            --previous "$previous"
+
+          cmp -s "$proposed" "$published" || {
+            printf 'published release body differs from validated body\n' >&2
+            exit 1
+          }
+
+          release_json="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,isDraft,isPrerelease,targetCommitish,url)"
+          jq -e \
+            --arg version "$VERSION" \
+            --arg title "$RELEASE_TITLE" \
+            --arg target "$TARGET_SHA" \
+            '.tagName == $version
+             and .name == $title
+             and .isDraft == false
+             and .isPrerelease == false
+             and .targetCommitish == $target' \
+            <<<"$release_json" >/dev/null
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" --jq '.object.sha')"
+          [[ "$tag_sha" == "$TARGET_SHA" ]] || {
+            printf 'tag %s points to %s, expected %s\n' "$VERSION" "$tag_sha" "$TARGET_SHA" >&2
+            exit 1
+          }
+
+          latest_tag="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          [[ "$latest_tag" == "$VERSION" ]] || {
+            printf 'latest release is %s, expected %s\n' "$latest_tag" "$VERSION" >&2
+            exit 1
+          }
+
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRIDGE_BRANCH}"
