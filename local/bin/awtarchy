@@ -929,6 +929,11 @@ run_package_reconciler() {
   AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" "$@"
 }
 
+run_current_nvidia_rollback() {
+  require_package_reconciler
+  AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --nvidia-rollback
+}
+
 run_failure_reports() {
   local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
   [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]] \
@@ -1307,7 +1312,7 @@ maintenance_menu() {
       4)
         ensure_latest_updater nvidia-rollback
         clear_screen
-        run_package_reconciler --nvidia-rollback || rc=$?
+        run_current_nvidia_rollback || rc=$?
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
@@ -1433,7 +1438,7 @@ main() {
       ensure_latest_updater "$@"
       shift
       (( $# == 0 )) || die "nvidia-rollback does not accept options."
-      run_package_reconciler --nvidia-rollback
+      run_current_nvidia_rollback
       ;;
     update)
       reject_stable_testing_overrides "$@"
