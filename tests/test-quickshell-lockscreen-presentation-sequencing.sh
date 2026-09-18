@@ -75,10 +75,10 @@ require_text "$EDITOR" 'LockscreenCompactSelector' \
 require_text "$EDITOR" 'root.selectedElement === "logo"' \
     'logo selection has no editor-specific spawn controls'
 
-# Password-mask presentation and clock format are draftable and flow through
+# Password-feedback presentation and clock format are draftable and flow through
 # the shared scene path. Password submission itself must remain in LockAuth.
-require_text "$EDITOR" 'property string draftPasswordMaskMode: "squares"' \
-    'password mask does not default to current square behavior'
+require_text "$EDITOR" 'property string draftPasswordFeedbackMode: "squares"' \
+    'password feedback does not default to current square behavior'
 require_text "$EDITOR" 'property string draftPasswordMaskCharacter: "•"' \
     'editor has no normalized custom password mask character'
 require_text "$EDITOR" 'property string draftClockFormat: "24h"' \
@@ -86,15 +86,15 @@ require_text "$EDITOR" 'property string draftClockFormat: "24h"' \
 require_absent "$EDITOR" 'Preview: 14:59' \
     'editor still uses a hardcoded one-off clock preview string'
 require_text "$SCENE" 'required property string passwordMaskMode' \
-    'shared scene has no password mask mode'
+    'shared scene has no password feedback mode input'
 require_text "$SCENE" 'required property string passwordMaskCharacter' \
     'shared scene has no custom password mask character'
 require_text "$SCENE" 'required property string clockFormat' \
     'shared scene has no clock format preference'
 require_text "$SCENE" 'root.clockFormat === "12h" ? "h:mm AP" : "HH:mm"' \
     'shared scene does not format both 24-hour and 12-hour AM/PM clocks'
-require_text "$SURFACE" 'passwordMaskMode: root.profile.lockscreen_password_mask_mode' \
-    'secure surface does not resolve password-mask presentation from the effective monitor profile'
+require_text "$SURFACE" 'passwordMaskMode: root.profile.lockscreen_password_feedback_mode' \
+    'secure surface does not resolve password feedback from the effective monitor profile'
 require_text "$SURFACE" 'passwordMaskCharacter: root.profile.lockscreen_password_mask_character' \
     'secure surface does not resolve custom password-mask presentation from the effective monitor profile'
 require_text "$SURFACE" 'clockFormat: root.profile.lockscreen_clock_format' \
@@ -102,8 +102,8 @@ require_text "$SURFACE" 'clockFormat: root.profile.lockscreen_clock_format' \
 
 # Secure settings loading must migrate legacy state by falling back to the old
 # presentation defaults when the new keys are absent or malformed.
-require_text "$SECURE_SHELL" 'property string lockPasswordMaskMode: "squares"' \
-    'secure shell does not default legacy configs to square masking'
+require_text "$SECURE_SHELL" 'lockPasswordMaskMode = normalizedPasswordMaskMode(parsed.lockscreen_password_feedback_mode);' \
+    'secure shell does not read the migrated password feedback field'
 require_text "$SECURE_SHELL" 'property string lockPasswordMaskCharacter: "•"' \
     'secure shell has no safe custom mask default'
 require_text "$SECURE_SHELL" 'property string lockClockFormat: "24h"' \
@@ -148,7 +148,8 @@ save_editor
 state_file="$work/cache/awtarchy/quickshell-state.json"
 jq -e '
     .lockscreen_animation == "edges"
-    and .lockscreen_password_mask_mode == "dots"
+    and .lockscreen_password_feedback_mode == "dots"
+    and (has("lockscreen_password_mask_mode") | not)
     and .lockscreen_password_mask_character == "A"
     and .lockscreen_clock_format == "12h"
     and (has("password") | not)
