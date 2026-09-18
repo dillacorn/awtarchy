@@ -931,7 +931,7 @@ run_package_reconciler() {
 
 run_current_nvidia_rollback() {
   require_package_reconciler
-  AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --nvidia-rollback
+  AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --nvidia-rollback "$@"
 }
 
 run_failure_reports() {
@@ -1261,7 +1261,7 @@ maintenance_menu() {
       "Update configs (preserve Hyprland customizations)" \
       "Reset configs (clean-slate managed files)" \
       "Reconcile packages (install current / remove replaced)" \
-      "Rollback last NVIDIA driver update" \
+      "NVIDIA driver rollback / cached version recovery" \
       "Review config changes without applying" \
       "Clean Awtarchy backup files" \
       "Version information" \
@@ -1348,7 +1348,7 @@ Usage:
   awtarchy update [--tag <tag>] [update options]
   awtarchy reset [--tag <tag>] [update options]
   awtarchy packages [--review]
-  awtarchy nvidia-rollback
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
   awtarchy review [--tag <tag>]
   awtarchy report
   awtarchy git
@@ -1373,6 +1373,9 @@ preselected only when Awtarchy recorded ownership of that package. On systems
 with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
 rollback point when the current NVIDIA/kernel package archives are available.
 Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable cached historical driver,
+'--list' to inspect available versions, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
 
 Git testing is explicit. The selected Awtarchy remote branch is resolved to an
 exact revision, and an exact --commit is accepted only when it belongs to that
@@ -1437,8 +1440,7 @@ main() {
     nvidia-rollback)
       ensure_latest_updater "$@"
       shift
-      (( $# == 0 )) || die "nvidia-rollback does not accept options."
-      run_current_nvidia_rollback
+      run_current_nvidia_rollback "$@"
       ;;
     update)
       reject_stable_testing_overrides "$@"
