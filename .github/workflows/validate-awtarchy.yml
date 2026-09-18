@@ -73,6 +73,7 @@ jobs:
           bash -n tests/test-awtarchy-command-shim.sh
           bash -n tests/test-awtarchy-legacy-cleanup.sh
           bash -n tests/test-awtarchy-update-notifications.sh
+          bash -n tests/test-update-diff-viewer.sh
           bash -n tests/test-installer-aur-scanner-delegation.sh
           bash -n tests/test-aur-scanner-updater-migration.sh
           bash -n tests/test-aur-helper-policy.sh
@@ -276,6 +277,7 @@ jobs:
           bash tests/test-awtarchy-command-shim.sh
           bash tests/test-awtarchy-legacy-cleanup.sh
           bash tests/test-awtarchy-update-notifications.sh
+          bash tests/test-update-diff-viewer.sh
           bash tests/test-installer-aur-scanner-delegation.sh
           bash tests/test-aur-scanner-updater-migration.sh
           bash tests/test-aur-helper-policy.sh
