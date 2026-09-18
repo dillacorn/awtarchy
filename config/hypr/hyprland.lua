@@ -627,11 +627,11 @@ local movement_keys = {
 local resize_keys = {
     { "right", 30, 0 },
     { "left", -30, 0 },
-    { "up", 0, -30 },
-    { "down", 0, 30 },
+    { "up", 0, 30 },
+    { "down", 0, -30 },
     { "h", -30, 0 },
-    { "j", 0, 30 },
-    { "k", 0, -30 },
+    { "j", 0, -30 },
+    { "k", 0, 30 },
     { "l", 30, 0 },
 }
 
@@ -777,7 +777,6 @@ for _, bind in ipairs({
     { "ALT + SHIFT + Q", hl.dsp.window.close() },
     { "ALT + F4", hl.dsp.window.close() },
     { "SUPER + ALT + Q", hl.dsp.exec_cmd("hyprctl kill") },
-    { "ALT + Y", hl.dsp.window.pin() },
     { "SUPER + Y", hl.dsp.window.pin() },
     { "ALT + R", hl.dsp.layout("swapsplit") },
     { "ALT + SHIFT + R", hl.dsp.layout("togglesplit") },
@@ -850,6 +849,16 @@ for _, bind in ipairs(workspace_keys) do
 
     hl.bind("ALT + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
     hl.bind("SUPER + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
+end
+
+-- Quick resize (ALT+Y/O/I/U / hold)
+for _, bind in ipairs({
+    { "Y", -30, 0 },
+    { "O", 30, 0 },
+    { "I", 0, 30 },
+    { "U", 0, -30 },
+}) do
+    hl.bind("ALT + " .. bind[1], hl.dsp.window.resize({ x = bind[2], y = bind[3], relative = true }), { repeating = true })
 end
 
 -- Resize (ALT/SUPER+CTRL arrows + hjkl / hold)
