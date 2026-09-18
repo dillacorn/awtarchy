@@ -19,7 +19,6 @@ PACMAN_RECOVERY_RUN_ONLY=0
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_DIR="${AWTARCHY_NVIDIA_ROLLBACK_DIR:-${STATE_DIR}/nvidia-driver-rollback}"
 NVIDIA_ROLLBACK_PENDING=""
-NVIDIA_ROLLBACK_CHANGED=0
 NVIDIA_ROLLBACK_COMPLETE=0
 PACMAN_CACHE_DIR="${AWTARCHY_PACMAN_CACHE_DIR:-/var/cache/pacman/pkg}"
 YAY_CACHE_HOME="${AWTARCHY_YAY_CACHE_HOME:-${HOME}/.cache/yay}"
@@ -744,12 +743,10 @@ finalize_nvidia_rollback_snapshot() {
   if (( changed == 0 )); then
     cleanup_nvidia_pending_snapshot
     NVIDIA_ROLLBACK_PENDING=""
-    NVIDIA_ROLLBACK_CHANGED=0
     NVIDIA_ROLLBACK_COMPLETE=0
     return 1
   fi
 
-  NVIDIA_ROLLBACK_CHANGED=1
   NVIDIA_ROLLBACK_COMPLETE="$complete"
   {
     printf 'status=available\n'
