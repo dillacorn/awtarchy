@@ -618,11 +618,6 @@ installed_nvidia_package_names() {
 current_kernel_package_names() {
   local pkgbase_file pkg
 
-  if [[ -n "${AWTARCHY_KERNEL_PKGBASES:-}" ]]; then
-    tr ' ' '\n' <<<"$AWTARCHY_KERNEL_PKGBASES" | sed '/^$/d' | LC_ALL=C sort -u
-    return 0
-  fi
-
   shopt -s nullglob
   for pkgbase_file in /usr/lib/modules/*/pkgbase; do
     [[ -r "$pkgbase_file" ]] || continue
