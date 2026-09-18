@@ -155,7 +155,7 @@ contains "$EDITOR" 'saveProcess.exec(["bash", editorSaveBackend, "--profiles",' 
     'editor does not save reversible Opaque metadata through the atomic profile path'
 contains "$STATE" 'save-lockscreen-editor-profiles)' \
     'state backend does not expose the atomic Shared/monitor profile save dispatcher'
-contains "$STATE" 'save_lockscreen_editor_profiles "$2" "$3"' \
+contains "$STATE" "save_lockscreen_editor_profiles \"\$2\" \"\$3\"" \
     'atomic profile dispatcher does not persist both Shared and monitor profiles'
 
 # Every percentage-based lockscreen editor control discovered in the current UI
