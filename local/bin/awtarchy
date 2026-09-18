@@ -1249,7 +1249,7 @@ git_menu() {
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
-  local choice rc
+  local choice rc update_rc
   while true; do
     choice="$(single_select_menu "Awtarchy Maintenance" 0 \
       "Refresh Awtarchy updater from main" \
@@ -1271,15 +1271,17 @@ maintenance_menu() {
         protect_git_state_before_updater_refresh
         ensure_latest_updater update
         if config_release_ready_or_noop; then
-          rc=0
-          run_runtime update-reset-backup --mode preserve || rc=$?
-          case "$rc" in
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
             0)
               reconcile_quickshell_ui_after_update
               ;;
             20)
               log "Update was rolled back by the user; skipping post-update UI reconciliation."
-              rc=0
+              ;;
+            *)
+              rc="$update_rc"
               ;;
           esac
         fi
