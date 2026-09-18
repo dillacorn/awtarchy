@@ -891,6 +891,7 @@ offer_nvidia_post_upgrade_choice() {
     printf 'Some NVIDIA problems only appear after reboot or when launching a game.\n' >/dev/tty
     if ! confirm_yes_no 'Keep the new NVIDIA/kernel versions for now?' 1; then
       apply_nvidia_rollback 1
+      return 20
     fi
   else
     warn 'NVIDIA/kernel packages changed, but the saved rollback point is incomplete.'
@@ -1714,8 +1715,19 @@ if (( ${#install_arch[@]} )); then
   fi
   # Finalize/offer NVIDIA recovery before bookkeeping so a ledger failure cannot
   # strand a successful driver upgrade without its rollback point.
-  offer_nvidia_post_upgrade_choice
+  nvidia_post_rc=0
+  offer_nvidia_post_upgrade_choice || nvidia_post_rc=$?
   record_managed_packages "${install_arch[@]}"
+  case "$nvidia_post_rc" in
+    0) ;;
+    20)
+      log 'NVIDIA/kernel rollback completed; stopping package reconciliation so the system can be rebooted cleanly.'
+      exit 0
+      ;;
+    *)
+      exit "$nvidia_post_rc"
+      ;;
+  esac
 fi
 
 if (( enable_ly == 1 )); then
