@@ -501,7 +501,7 @@ Singleton {
         scheduleContrastRefresh();
     }
 
-    
+
     function stashAutoAccentsForActiveProfile() {
         if (activeMonitorName.length === 0)
             return;
@@ -528,8 +528,8 @@ Singleton {
         return cloneAutoAccents(stored || LockscreenContrast.colorsForMonitor(key));
     }
 
-    
-    
+
+
     function activeProfileKey() {
         return "monitor:" + activeMonitorName;
     }
@@ -601,11 +601,11 @@ Singleton {
         return null;
     }
 
-    
-    
-    
-    
-    
+
+
+
+
+
     function savedConfigurationIndex(id) {
         const key = String(id || "");
         for (let i = 0; i < draftSavedProfiles.length; ++i) {
@@ -929,7 +929,7 @@ Singleton {
             : "No other displays connected";
     }
 
-    
+
     function copyConfigurationTo(name) {
         const targetName = String(name || "");
         if (targetName.length === 0 || targetName === activeMonitorName
