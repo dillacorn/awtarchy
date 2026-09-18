@@ -196,6 +196,14 @@ run_as_target() {
   fi
 }
 
+is_legacy_yazi_clipboard_plugin() {
+  local plugin_dir="$1"
+  local plugin_main="${plugin_dir}/main.lua"
+
+  [[ -d "$plugin_dir" && ! -L "$plugin_dir" && -f "$plugin_main" && ! -L "$plugin_main" ]] || return 1
+  grep -Fq -- '---@class ClipboardJobArgs' "$plugin_main"     && grep -Fq -- 'function M:path_to_file_uri' "$plugin_main"
+}
+
 create_directory() {
   local dir="$1"
   retry_command run_as_target install -d -m 0755 -- "$dir" \
@@ -3738,6 +3746,15 @@ copy_awtarchy_configs_stage() {
       warn "Missing config/${dir}; skipping."
     fi
   done
+
+  local legacy_yazi_clipboard="${HOME_DIR}/.config/yazi/plugins/clipboard.yazi"
+  if is_legacy_yazi_clipboard_plugin "$legacy_yazi_clipboard"; then
+    log "Removing deprecated Awtarchy Yazi clipboard plugin..."
+    run_as_target rm -rf -- "$legacy_yazi_clipboard" \
+      || warn "Could not remove deprecated Yazi clipboard plugin: ${legacy_yazi_clipboard}"
+  elif [[ -e "$legacy_yazi_clipboard" ]]; then
+    warn "A custom Yazi clipboard.yazi plugin remains at ${legacy_yazi_clipboard}; Awtarchy left it untouched."
+  fi
 
   if [[ -f "${HOME_DIR}/.config/yazi/package.toml" ]]; then
     if run_as_target env HOME="${HOME_DIR}" XDG_CONFIG_HOME="${HOME_DIR}/.config" sh -c 'command -v ya >/dev/null 2>&1'; then
@@ -9217,6 +9234,15 @@ main() {
         warn "python3 is unavailable; skipped preserved Hyprmoncfg config migration."
       fi
     fi
+  fi
+
+  local legacy_yazi_clipboard="${HOME_DIR}/.config/yazi/plugins/clipboard.yazi"
+  if is_legacy_yazi_clipboard_plugin "$legacy_yazi_clipboard"; then
+    log "Removing deprecated Awtarchy Yazi clipboard plugin..."
+    run_target rm -rf -- "$legacy_yazi_clipboard" \
+      || warn "Could not remove deprecated Yazi clipboard plugin: ${legacy_yazi_clipboard}"
+  elif [[ -e "$legacy_yazi_clipboard" ]]; then
+    warn "A custom Yazi clipboard.yazi plugin remains at ${legacy_yazi_clipboard}; Awtarchy left it untouched."
   fi
 
   if [[ -f "${HOME_DIR}/.config/yazi/package.toml" ]]; then
