@@ -529,7 +529,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 local terminal = "alacritty"
 local web_browser = "firefox"
 local calculator = "speedcrunch"
-local yazi = "alacritty -e yazi"
+local yazi = "alacritty -o 'font.normal.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.italic.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold_italic.family=\"JetBrainsMono Nerd Font Mono\"' -e yazi"
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
