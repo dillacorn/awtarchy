@@ -1138,10 +1138,22 @@ run_git_operation() {
   printf 'Selected remote branch: %s\n' "$branch"
   printf 'Exact revision: %s\n' "$revision"
   printf 'Git testing action: %s\n' "$action"
-  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}"
-  if [[ "$action" == update ]]; then
-    reconcile_quickshell_ui_after_update
-  fi
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
 }
 
 git_cli() {
@@ -1259,10 +1271,17 @@ maintenance_menu() {
         protect_git_state_before_updater_refresh
         ensure_latest_updater update
         if config_release_ready_or_noop; then
+          rc=0
           run_runtime update-reset-backup --mode preserve || rc=$?
-          if [[ -z ${rc:-} ]]; then
-            reconcile_quickshell_ui_after_update
-          fi
+          case "$rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              rc=0
+              ;;
+          esac
         fi
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
@@ -1423,8 +1442,20 @@ main() {
       if ! config_release_ready_or_noop "$@"; then
         return 0
       fi
-      run_runtime update-reset-backup --mode preserve "$@"
-      reconcile_quickshell_ui_after_update
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
       ;;
     reset)
       reject_stable_testing_overrides "$@"
