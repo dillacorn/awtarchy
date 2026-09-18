@@ -239,12 +239,15 @@ if [[ -s "$STATE_FILE" ]] && jq -e 'type == "object"' "$STATE_FILE" >/dev/null 2
     state="$(cat -- "$STATE_FILE")"
 fi
 
-shared_profile="$(jq -c '.' <<<"$state")"
-shared_fields="$(profile_fields "$shared_profile")"
-background="$(jq -r '.background' <<<"$shared_fields")"
-background_color="$(jq -r '.background_color' <<<"$shared_fields")"
-wallpaper="$(jq -r '.wallpaper' <<<"$shared_fields")"
-layout="$(jq -c '.layout' <<<"$shared_fields")"
+last_edited_profile="$(jq -c '
+    if (.lockscreen_last_edited_profile | type) == "object"
+    then .lockscreen_last_edited_profile else . end
+' <<<"$state")"
+fallback_fields="$(profile_fields "$last_edited_profile")"
+background="$(jq -r '.background' <<<"$fallback_fields")"
+background_color="$(jq -r '.background_color' <<<"$fallback_fields")"
+wallpaper="$(jq -r '.wallpaper' <<<"$fallback_fields")"
+layout="$(jq -c '.layout' <<<"$fallback_fields")"
 
 [[ -z "$OVERRIDE_BACKGROUND" ]] || background="$OVERRIDE_BACKGROUND"
 [[ -z "$OVERRIDE_BACKGROUND_COLOR" ]] || background_color="$OVERRIDE_BACKGROUND_COLOR"
@@ -267,13 +270,17 @@ if ((OUTPUT_STDOUT == 1)); then
 fi
 
 monitor_colors='{}'
-monitor_overrides="$(jq -c '
-    if (.lockscreen_monitor_overrides | type) == "object"
-    then .lockscreen_monitor_overrides else {} end
+monitor_profiles="$(jq -c '
+    if has("lockscreen_monitor_profiles") then
+        if (.lockscreen_monitor_profiles | type) == "object"
+        then .lockscreen_monitor_profiles else {} end
+    elif (.lockscreen_monitor_overrides | type) == "object" then
+        .lockscreen_monitor_overrides
+    else {} end
 ' <<<"$state")"
 while IFS= read -r monitor; do
     [[ -n "$monitor" ]] || continue
-    profile="$(jq -c --arg monitor "$monitor" '.[$monitor]' <<<"$monitor_overrides")"
+    profile="$(jq -c --arg monitor "$monitor" '.[$monitor]' <<<"$monitor_profiles")"
     fields="$(profile_fields "$profile")"
     monitor_background="$(jq -r '.background' <<<"$fields")"
     monitor_background_color="$(jq -r '.background_color' <<<"$fields")"
@@ -282,7 +289,7 @@ while IFS= read -r monitor; do
     monitor_profile_colors="$(profile_colors "$monitor_background" "$monitor_background_color" "$monitor_wallpaper" "$monitor_layout")"
     monitor_colors="$(jq -c --arg monitor "$monitor" --argjson colors "$monitor_profile_colors" \
         '. + {($monitor): $colors}' <<<"$monitor_colors")"
-done < <(jq -r 'keys[]' <<<"$monitor_overrides")
+done < <(jq -r 'keys[]' <<<"$monitor_profiles")
 
 payload="$(jq -cn \
     --arg provider 'awtarchy-local-contrast' \
