@@ -91,6 +91,26 @@ grep -Fq 'commits/${UPDATER_BRANCH}' "$LAUNCHER_SOURCE" \
   || fail "maintenance command does not resolve the main updater head"
 grep -Fq 'archive/${commit}.tar.gz' "$LAUNCHER_SOURCE" \
   || fail "maintenance command does not pin updater downloads to an exact main commit"
+grep -Fq 'refresh_menu_updater_if_available()' "$LAUNCHER_SOURCE" \
+  || fail "bare maintenance menu has no main-head refresh check"
+grep -Fq '[[ $installed == "$remote" ]] && return 0' "$LAUNCHER_SOURCE" \
+  || fail "bare maintenance menu does not avoid downloads when the installed hash matches main"
+grep -Fq 'AWTARCHY_SKIP_UPDATE_CHECK=1 exec "${TARGET_HOME}/.local/bin/awtarchy"' "$LAUNCHER_SOURCE" \
+  || fail "bare maintenance menu performs a redundant second main-head check after refreshing"
+
+python3 - "$LAUNCHER_SOURCE" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+case_start = text.index('    "")\n')
+case_end = text.index('      ;;', case_start)
+case = text[case_start:case_end]
+refresh = case.find('refresh_menu_updater_if_available')
+menu = case.find('maintenance_menu')
+if refresh < 0 or menu < 0 or refresh >= menu:
+    raise SystemExit('bare awtarchy must refresh the maintenance launcher before drawing the menu')
+PY
 
 release_root="${TMP}/awtarchy-${TEST_RELEASE_COMMIT}"
 mkdir -p "$release_root"

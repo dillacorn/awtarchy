@@ -710,6 +710,23 @@ ensure_latest_updater() {
   fi
 }
 
+refresh_menu_updater_if_available() {
+  [[ ${AWTARCHY_SKIP_UPDATE_CHECK:-0} == 1 ]] && return 0
+
+  local installed remote=""
+  installed="$(installed_updater_commit)"
+  remote="$(updater_branch_head 2>/dev/null || true)"
+  if [[ -z $remote ]]; then
+    printf 'WARN: Could not check Awtarchy main for maintenance-command updates; opening the installed menu.\n' >&2
+    return 0
+  fi
+
+  [[ $installed == "$remote" ]] && return 0
+
+  self_update "$remote"
+  AWTARCHY_SKIP_UPDATE_CHECK=1 exec "${TARGET_HOME}/.local/bin/awtarchy"
+}
+
 print_version_status() {
   local installed remote="" updater_status="Remote main unavailable"
   local config latest="" config_status="Latest release unavailable"
@@ -1098,6 +1115,64 @@ pause_menu() {
   read_key >/dev/null || true
 }
 
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Choose cached historical driver version"       "List recoverable cached driver versions"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      2)
+        run_current_nvidia_rollback --list || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
 reject_stable_testing_overrides() {
   local arg
   for arg in "$@"; do
@@ -1261,7 +1336,7 @@ maintenance_menu() {
       "Update configs (preserve Hyprland customizations)" \
       "Reset configs (clean-slate managed files)" \
       "Reconcile packages (install current / remove replaced)" \
-      "NVIDIA driver rollback / cached version recovery" \
+      "NVIDIA driver recovery / rollback" \
       "Review config changes without applying" \
       "Clean Awtarchy backup files" \
       "Version information" \
@@ -1310,11 +1385,8 @@ maintenance_menu() {
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
       4)
-        ensure_latest_updater nvidia-rollback
-        clear_screen
-        run_current_nvidia_rollback || rc=$?
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
+        ensure_latest_updater
+        nvidia_recovery_menu
         ;;
       5)
         protect_git_state_before_updater_refresh
@@ -1507,6 +1579,7 @@ main() {
       die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
       ;;
     "")
+      refresh_menu_updater_if_available
       local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
       if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
         bash "$report_helper" prompt-pending || true
