@@ -41,10 +41,10 @@ Singleton {
             }
         }
 
-        addProfile(BarState.lockscreenSharedProfile());
-        const overrides = BarState.lockscreenMonitorOverrides();
-        for (const name of Object.keys(overrides || ({})))
-            addProfile(overrides[name]);
+        addProfile(BarState.lockscreenLastEditedProfile());
+        const profiles = BarState.lockscreenMonitorProfiles();
+        for (const name of Object.keys(profiles || ({})))
+            addProfile(profiles[name]);
         return modes;
     }
 
