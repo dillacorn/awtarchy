@@ -33,6 +33,13 @@ Singleton {
     readonly property int customImageMaximum: 12
     readonly property int timezoneClockMaximum: 12
     readonly property int customTextMaximum: 12
+    property string timezoneSearchQuery: ""
+    property bool customTimezoneEditorOpen: false
+    property string customTimezoneDraft: ""
+    property string customTimezoneError: ""
+    property string customTimezonePendingElement: ""
+    property string customTimezonePendingValue: ""
+    property string customTimezoneValidationOutput: ""
     readonly property var timezonePresets: [
         { key: "UTC", label: "UTC" },
         { key: "America/New_York", label: "New York" },
@@ -2210,12 +2217,103 @@ Singleton {
     function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
 
     function nextDynamicId(prefix, values) { const stem=prefix+Date.now().toString(36); let n=0,candidate=stem; while(values.some(item=>String(item.id||"")===candidate)){n++;candidate=stem+"_"+n;} return candidate; }
-    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",show_label: true,x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
+    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",show_label: true,x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; timezoneSearchQuery=""; customTimezoneEditorOpen=false; customTimezoneError=""; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
     function removeTimezoneClock(name) { const i=timezoneClockIndex(name); if(i<0)return; recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); next.splice(i,1); draftTimezoneClocks=next; selectedElement="logo";selectedElements=["logo"];refreshPreviewTimezoneValues();statusMessage="Timezone clock removed."; }
     function addCustomText() { if(draftCustomTexts.length>=customTextMaximum){statusMessage="Custom text limit reached";return;} recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);const id=nextDynamicId("text-",next);next.push(({id:id,text:"Custom Text",variants:[],randomize:false,alignment:"center",x:0.5,y:0.55,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true}));draftCustomTexts=next;selectedElement="text:"+id;selectedElements=[selectedElement];activeDrawer="element";statusMessage="Custom text added. Save to apply."; }
     function removeCustomText(name) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next.splice(i,1);draftCustomTexts=next;selectedElement="logo";selectedElements=["logo"];statusMessage="Custom text removed."; }
-    function timezonePresetIndex(zone) { for(let i=0;i<timezonePresets.length;++i)if(timezonePresets[i].key===String(zone))return i;return 0; }
-    function setTimezoneClockZone(name, zone) { const i=timezoneClockIndex(name);if(i<0||timezonePresets.every(item=>item.key!==String(zone)))return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].timezone=String(zone);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
+    function timezoneSelectorModel(zone) {
+        const current = String(zone || "UTC");
+        const query = String(timezoneSearchQuery || "").trim().toLowerCase();
+        const result = [];
+        let currentIsPreset = false;
+        for (const item of timezonePresets) {
+            const key = String(item.key || "");
+            const label = String(item.label || key);
+            if (key === current)
+                currentIsPreset = true;
+            if (query.length === 0 || label.toLowerCase().indexOf(query) >= 0 || key.toLowerCase().indexOf(query) >= 0)
+                result.push(({ key: key, label: label + " · " + key }));
+        }
+        if (!currentIsPreset && (query.length === 0 || current.toLowerCase().indexOf(query) >= 0))
+            result.unshift(({ key: current, label: "Custom · " + current }));
+        return result;
+    }
+    function timezoneModelIndex(zone, model) {
+        const values = Array.isArray(model) ? model : [];
+        const target = String(zone || "");
+        for (let i = 0; i < values.length; ++i) {
+            if (String(values[i].key || "") === target)
+                return i;
+        }
+        return -1;
+    }
+    function chooseTimezoneModelItem(name, model, index) {
+        const values = Array.isArray(model) ? model : [];
+        if (index < 0 || index >= values.length)
+            return;
+        setTimezoneClockZone(name, String(values[index].key || ""));
+        timezoneSearchQuery = "";
+        customTimezoneEditorOpen = false;
+        customTimezoneError = "";
+    }
+    function setTimezoneClockZone(name, zone) {
+        const i = timezoneClockIndex(name);
+        const value = String(zone || "").trim();
+        if (i < 0 || value.length === 0 || value.startsWith("/") || value.indexOf("..") >= 0 || /[\u0000-\u001f\u007f-\u009f]/.test(value))
+            return;
+        recordUndoBeforeChange();
+        const next = cloneTimezoneClocks(draftTimezoneClocks);
+        next[i].timezone = value;
+        draftTimezoneClocks = next;
+        refreshPreviewTimezoneValues();
+    }
+    function openCustomTimezoneEditor(name) {
+        if (!isTimezoneClock(name))
+            return;
+        customTimezoneDraft = String(elementPoint(name).timezone || "");
+        customTimezoneError = "";
+        customTimezoneValidationOutput = "";
+        customTimezoneEditorOpen = true;
+    }
+    function cancelCustomTimezoneEditor() {
+        customTimezoneEditorOpen = false;
+        customTimezoneError = "";
+        customTimezonePendingElement = "";
+        customTimezonePendingValue = "";
+        customTimezoneValidationOutput = "";
+    }
+    function submitCustomTimezone(name) {
+        if (!isTimezoneClock(name) || customTimezoneValidationProcess.running)
+            return;
+        const value = String(customTimezoneDraft || "").trim();
+        if (value.length === 0) {
+            customTimezoneError = "Enter an IANA timezone such as Europe/London.";
+            return;
+        }
+        customTimezonePendingElement = name;
+        customTimezonePendingValue = value;
+        customTimezoneError = "";
+        customTimezoneValidationOutput = "";
+        customTimezoneValidationProcess.exec(["bash", timezoneBackend, "--validate", value]);
+    }
+    function finishCustomTimezoneValidation(exitCode) {
+        const name = customTimezonePendingElement;
+        const value = customTimezonePendingValue;
+        customTimezonePendingElement = "";
+        customTimezonePendingValue = "";
+        if (exitCode === 0 && isTimezoneClock(name)) {
+            setTimezoneClockZone(name, value);
+            timezoneSearchQuery = "";
+            customTimezoneEditorOpen = false;
+            customTimezoneError = "";
+            statusMessage = "Timezone set to " + value;
+            return;
+        }
+        const message = String(customTimezoneValidationOutput || "").trim();
+        customTimezoneError = message.length > 0
+            ? message.split("\n")[0]
+            : "Timezone not found. Use an installed IANA zone such as Europe/London.";
+    }
     function setTimezoneClockFormat(name, format) { const i=timezoneClockIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].format=normalizedClockFormat(format);draftTimezoneClocks=next;refreshPreviewTimezoneValues(); }
     function setTimezoneClockShowLabel(name, visible) { const i=timezoneClockIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneTimezoneClocks(draftTimezoneClocks);next[i].show_label=!!visible;draftTimezoneClocks=next; }
     function setCustomTextContent(name, value) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next[i].text=String(value).slice(0,4096);draftCustomTexts=next; }
@@ -2595,6 +2693,13 @@ Singleton {
     }
     Timer { id: contrastRefreshDelay; interval: 120; repeat: false; onTriggered: root.refreshPreviewContrast() }
     Process { id: timezonePreviewProcess; stdout: SplitParser { onRead: line => root.applyPreviewTimezoneValues(line) } }
+    Process {
+        id: customTimezoneValidationProcess
+        stderr: StdioCollector {
+            onStreamFinished: root.customTimezoneValidationOutput = text.trim()
+        }
+        onExited: (exitCode, exitStatus) => root.finishCustomTimezoneValidation(exitCode)
+    }
     Timer { interval: 15000; repeat: true; running: root.open && root.draftTimezoneClocks.length > 0; triggeredOnStart: true; onTriggered: root.refreshPreviewTimezoneValues() }
     Process {
         id: previewContrastProcess
@@ -3208,13 +3313,67 @@ Singleton {
                     RowLayout {
                         Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement)
                         Text { text: "Timezone"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField {
+                            id: timezoneSearchField
+                            Layout.preferredWidth: 160
+                            placeholderText: "Search city / IANA zone"
+                            text: root.timezoneSearchQuery
+                            selectByMouse: true
+                            font.pixelSize: 9
+                            onTextEdited: root.timezoneSearchQuery = text
+                        }
                         LockscreenCompactSelector {
+                            id: timezoneSelector
                             popupBoundary: editorFocus
-                            Layout.preferredWidth: 180; model: root.timezonePresets; currentIndex: root.timezonePresetIndex(root.elementPoint(root.selectedElement).timezone); onActivated: index => root.setTimezoneClockZone(root.selectedElement, root.timezonePresets[index].key) }
+                            Layout.preferredWidth: 270
+                            model: root.timezoneSelectorModel(root.elementPoint(root.selectedElement).timezone)
+                            currentIndex: root.timezoneModelIndex(root.elementPoint(root.selectedElement).timezone, model)
+                            onActivated: index => root.chooseTimezoneModelItem(root.selectedElement, model, index)
+                        }
+                        Text {
+                            visible: timezoneSelector.model.length === 0
+                            text: "No matches"
+                            color: Theme.muted
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 8
+                        }
+                        SettingsButton { label: "Custom timezone"; textSize: 9; active: root.customTimezoneEditorOpen; onClicked: root.openCustomTimezoneEditor(root.selectedElement) }
                         SettingsButton { label: root.elementPoint(root.selectedElement).format === "12h" ? "12-hour" : "24-hour"; active: root.elementPoint(root.selectedElement).format === "12h"; textSize: 9; onClicked: root.setTimezoneClockFormat(root.selectedElement, root.elementPoint(root.selectedElement).format === "12h" ? "24h" : "12h") }
                         SettingsButton { label: root.elementPoint(root.selectedElement).show_label === false ? "Label Off" : "Label On"; active: root.elementPoint(root.selectedElement).show_label !== false; textSize: 9; onClicked: root.setTimezoneClockShowLabel(root.selectedElement, root.elementPoint(root.selectedElement).show_label === false) }
                         Item { Layout.fillWidth: true }
-                        Text { text: "Each extra clock has independent timezone, label, format, position, scale, color, opacity, and rotation."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7
+                        visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement) && root.customTimezoneEditorOpen
+                        Text { text: "Custom IANA"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9 }
+                        TextField {
+                            id: customTimezoneField
+                            Layout.preferredWidth: 300
+                            placeholderText: "Europe/London"
+                            text: root.customTimezoneDraft
+                            selectByMouse: true
+                            font.pixelSize: 9
+                            onTextEdited: { root.customTimezoneDraft = text; root.customTimezoneError = ""; }
+                            Keys.onReturnPressed: event => { root.submitCustomTimezone(root.selectedElement); event.accepted = true; }
+                        }
+                        SettingsButton { label: customTimezoneValidationProcess.running ? "Validating…" : "Apply"; textSize: 9; available: !customTimezoneValidationProcess.running; onClicked: root.submitCustomTimezone(root.selectedElement) }
+                        SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.cancelCustomTimezoneEditor() }
+                        Text {
+                            Layout.fillWidth: true
+                            visible: root.customTimezoneError.length > 0
+                            text: root.customTimezoneError
+                            color: Theme.error
+                            font.family: Theme.fontFamily
+                            font.pixelSize: 8
+                            elide: Text.ElideRight
+                        }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true; spacing: 7; visible: root.activeDrawer === "element" && root.isTimezoneClock(root.selectedElement)
+                        Item { Layout.fillWidth: true }
+                        Text { text: "Search by city or IANA identifier. Regional IANA zones stay DST-aware."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8; elide: Text.ElideRight }
                     }
 
                     RowLayout {
