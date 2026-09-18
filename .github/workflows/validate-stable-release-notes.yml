@@ -40,7 +40,7 @@ jobs:
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
 
-  publish-v371:
+  verify-v371-and-cleanup:
     if: >-
       github.event_name == 'pull_request' &&
       github.event.pull_request.head.ref == 'release-v3.7.1-bridge' &&
@@ -60,12 +60,11 @@ jobs:
         with:
           ref: 7e9ab52d16dce4339261ad7e383c71861c23a0e7
           fetch-depth: 0
-      - name: Validate, publish, and verify v3.7.1
+      - name: Verify published v3.7.1 and remove helper branch
         shell: bash
         run: |
           set -euo pipefail
 
-          proposed=/tmp/awtarchy-v3.7.1-release.md
           previous=/tmp/awtarchy-v3.7.0-release.md
           published=/tmp/awtarchy-v3.7.1-published.md
 
@@ -75,67 +74,13 @@ jobs:
             exit 1
           }
 
-          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            printf '%s already exists\n' "$VERSION" >&2
-            exit 1
-          fi
-
-          printf '%s\n' \
-            '# Awtarchy v3.7.1 Quickshell' \
-            '' \
-            'Awtarchy v3.7.1 refines the lockscreen editor and fixes Yazi multi-key shortcuts.' \
-            '' \
-            '## Install and update' \
-            '' \
-            'Fresh installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)' \
-            '' \
-            'Existing Awtarchy installations and stable updates: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)' \
-            '' \
-            'Quick update:' \
-            '' \
-            '```bash' \
-            'awtarchy update' \
-            '```' \
-            '' \
-            '## Improvements' \
-            '' \
-            '- Refined lockscreen editor keyboard controls, saved configurations, per-display profiles, and media/background handling.' \
-            '- Fixed Yazi multi-key shortcuts including `g g` and `d d`.' \
-            '' \
-            '## Validation' \
-            '' \
-            '- Exact release target: `7e9ab52d16dce4339261ad7e383c71861c23a0e7`.' \
-            '- The maintainer runtime-tested the lockscreen changes on Hyprland.' \
-            '- Full pull-request CI and all `main` push checks passed before release.' \
-            '' \
-            '## Post-release updates' \
-            '' \
-            '_Placeholder for possible tested post-release patches to v3.7.1._' \
-            >"$proposed"
-
           gh release view v3.7.0 --repo "$GITHUB_REPOSITORY" --json body --jq '.body' >"$previous"
-
-          python3 .github/scripts/validate-stable-release-notes.py \
-            --version "$VERSION" \
-            --notes "$proposed" \
-            --previous "$previous"
-
-          gh release create "$VERSION" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$TARGET_SHA" \
-            --title "$RELEASE_TITLE" \
-            --notes-file "$proposed"
-
           gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' >"$published"
+
           python3 .github/scripts/validate-stable-release-notes.py \
             --version "$VERSION" \
             --notes "$published" \
             --previous "$previous"
-
-          cmp -s "$proposed" "$published" || {
-            printf 'published release body differs from validated body\n' >&2
-            exit 1
-          }
 
           release_json="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" \
             --json tagName,name,isDraft,isPrerelease,targetCommitish,url)"
