@@ -92,6 +92,8 @@ contains "$SAVE" 'lockscreen_custom_texts' \
 test -x "$TZ_HELPER" || fail 'timezone helper is missing or not executable'
 contains "$TZ_HELPER" '/usr/share/zoneinfo' \
     'timezone helper does not validate against local zoneinfo data'
+# This assertion intentionally searches for a literal shell expression.
+# shellcheck disable=SC2016
 contains "$TZ_HELPER" 'if [[ "${1:-}" == "--validate" ]]' \
     'timezone helper has no explicit custom-zone validation mode'
 "$TZ_HELPER" --validate UTC >/dev/null \
