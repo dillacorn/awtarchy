@@ -8326,6 +8326,31 @@ PY_V355_CLIPBOARD
   log "Applied v3.5.5 clipboard thumbnail resource hardening to release source."
 }
 
+
+repair_v373_yazi_default_editor_target() {
+  local target_home="$1" tag="$2"
+  local yazi_dir="${target_home}/.config/yazi"
+  local yazi_config="${yazi_dir}/yazi.toml"
+
+  [[ "$tag" == "v3.7.3" ]] || return 0
+  [[ -d "$yazi_dir" && ! -L "$yazi_dir" ]] \
+    || die "v3.7.3 Yazi config directory is unavailable for the stable repair."
+  [[ ! -e "$yazi_config" && ! -L "$yazi_config" ]] \
+    || die "v3.7.3 stable repair found an unexpected yazi.toml in the immutable release target."
+
+  cat >"$yazi_config" <<'EOF_V373_YAZI_EDITOR'
+# github.com/dillacorn/awtarchy/tree/main/config/yazi
+# ~/.config/yazi/yazi.toml
+
+[opener]
+edit = [
+  { run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" },
+]
+EOF_V373_YAZI_EDITOR
+
+  log "Applied v3.7.3 Yazi default-editor post-release repair to generated target."
+}
+
 prepare_quickshell_update_target() {
   local target_home="$1" rel
 
@@ -9070,6 +9095,7 @@ main() {
   target_home="${TMPD}/target-home"
   TARGET_STAGE_HOME="$target_home"
   build_target_home "$repo_dir" "$target_home"
+  repair_v373_yazi_default_editor_target "$target_home" "$tag"
 
   active_theme="$(infer_active_theme "$repo_dir" || true)"
   if [[ -n "$active_theme" ]]; then
