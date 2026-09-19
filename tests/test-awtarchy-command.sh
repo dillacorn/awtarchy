@@ -50,11 +50,12 @@ def function_body(text: str, name: str) -> str:
     start = text.find(f"{name}() {{")
     if start < 0:
         raise SystemExit(f"missing shell function: {name}")
+    search_from = start + len(f"{name}() {{")
     next_function = re.search(
         r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\) \{$",
-        text[start + 1 :],
+        text[search_from:],
     )
-    end = len(text) if next_function is None else start + 1 + next_function.start()
+    end = len(text) if next_function is None else search_from + next_function.start()
     return text[start:end]
 
 
