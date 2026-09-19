@@ -35,6 +35,8 @@ Singleton {
     property var stateCommandQueue: []
     property bool openPreparing: false
     property bool panelPresented: false
+    property string preparedOpenKey: ""
+    property string pendingPrewarmKey: ""
     readonly property int panelFadeDuration: 140
     property var flyoutScreen: null
 
@@ -277,30 +279,88 @@ Singleton {
         ]);
     }
 
+    function preparationForScreen(targetScreen) {
+        if (!targetScreen)
+            return null;
+        const targetPlacement = placementForScreen(targetScreen);
+        const view = BarState.bluetoothViewFor(targetScreen.name);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const maxWidth = Math.max(1, screenWidth - 20);
+        const maxHeight = Math.max(1, screenHeight - 20);
+        const width = Math.max(Math.min(360, maxWidth),
+            Math.min(maxWidth, Math.round(Number(view.width) || BarState.defaultBluetoothWidth)));
+        const height = Math.max(Math.min(360, maxHeight),
+            Math.min(maxHeight, Math.round(Number(view.height) || BarState.defaultBluetoothHeight)));
+        const vertical = targetPlacement === "left" || targetPlacement === "right";
+        const barSize = targetPlacement === "center"
+            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const key = [
+            targetScreen.name, targetPlacement, width, height,
+            barSize, screenWidth, screenHeight
+        ].join("|");
+        return ({
+            key: key,
+            placement: targetPlacement,
+            args: [
+                "bash", prepareScript, "bluetooth", targetScreen.name, targetPlacement,
+                String(width), String(height), String(barSize), "-1",
+                String(screenWidth), String(screenHeight)
+            ]
+        });
+    }
+
+    function prewarmForScreen(targetScreen) {
+        if (bluetoothWindow.visible || openPreparing || prewarmProcess.running)
+            return;
+        const preparation = preparationForScreen(targetScreen);
+        if (!preparation || preparedOpenKey === preparation.key)
+            return;
+        pendingPrewarmKey = preparation.key;
+        prewarmProcess.exec(preparation.args);
+    }
+
+    function finishPrewarm(exitCode) {
+        if (exitCode === 0 && pendingPrewarmKey.length > 0)
+            preparedOpenKey = pendingPrewarmKey;
+        pendingPrewarmKey = "";
+    }
+
     function prepareWindowOpen(targetScreen) {
         if (!targetScreen)
             return;
-        const vertical = placement === "left" || placement === "right";
-        const barSize = placement === "center"
-            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const preparation = preparationForScreen(targetScreen);
+        if (!preparation)
+            return;
+
+        placement = preparation.placement;
         openPreparing = true;
-        prepareProcess.exec([
-            "bash", prepareScript, "bluetooth", targetScreen.name, placement,
-            String(configuredPanelWidth), String(configuredPanelHeight),
-            String(barSize), "-1",
-            String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
-        ]);
+        if (preparedOpenKey === preparation.key) {
+            finishPreparedOpen(0, true);
+            return;
+        }
+
+        if (prewarmProcess.running)
+            prewarmProcess.running = false;
+        prepareProcess.exec(preparation.args);
     }
 
-    function finishPreparedOpen() {
+    function finishPreparedOpen(exitCode, usedPrewarm) {
         if (!openPreparing)
             return;
+
+        if (!usedPrewarm && exitCode === 0) {
+            const preparation = preparationForScreen(activeScreen);
+            if (preparation)
+                preparedOpenKey = preparation.key;
+        }
 
         const wasVisible = bluetoothWindow.visible;
 
         openPreparing = false;
-        panelPresented = true;
+        panelPresented = false;
         bluetoothWindow.visible = true;
+        panelPresented = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
         const current = adapter;
@@ -536,7 +596,12 @@ Singleton {
 
     Process {
         id: prepareProcess
-        onExited: root.finishPreparedOpen()
+        onExited: (exitCode, exitStatus) => root.finishPreparedOpen(exitCode, false)
+    }
+
+    Process {
+        id: prewarmProcess
+        onExited: (exitCode, exitStatus) => root.finishPrewarm(exitCode)
     }
 
     Process {
