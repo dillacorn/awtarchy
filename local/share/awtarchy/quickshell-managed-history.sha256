@@ -1480,3 +1480,6 @@ d98e678330dba2814f931418853d8362a01d0245876d0824f63aa22e6ff0bf2e	.config/quicksh
 
 # 2026-09-18 launcher-style Quick Settings presentation after latency optimization.
 28f6133b45b7e0bf72c97fea21ac5735637b45bc50159c3c80c03a0833453305	.config/quickshell/awtarchy/QuickSettings.qml
+
+# 2026-09-18 visible Quick Settings fade timing.
+cc25a3ad744e1c6a376e1a4e048136ff672e744e0cc65c7758bc8dd7eb0f3317	.config/quickshell/awtarchy/QuickSettings.qml
