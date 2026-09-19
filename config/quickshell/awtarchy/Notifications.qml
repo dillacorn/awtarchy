@@ -51,6 +51,11 @@ Singleton {
     property bool privacyRemapPending: false
     property bool openPreparing: false
     property bool panelPresented: false
+    property string preparedOpenKey: ""
+    property string pendingPrewarmKey: ""
+    property bool prewarmEnabled: false
+    property string preparedStateMonitor: ""
+    property int preparedStateRevision: -1
     readonly property int panelFadeDuration: 140
     property var centerScreen: null
 
@@ -171,21 +176,112 @@ Singleton {
         ]);
     }
 
+    function ensurePreparedState(targetScreen) {
+        if (!targetScreen || !targetScreen.name)
+            return;
+        const monitorName = String(targetScreen.name);
+        if (preparedStateMonitor === monitorName
+            && preparedStateRevision === BarState.revision)
+            return;
+        loadSavedView(targetScreen);
+        preparedStateMonitor = monitorName;
+        preparedStateRevision = BarState.revision;
+    }
+
+    function notificationPreparation(targetScreen, targetPlacement, targetAnchor) {
+        if (!targetScreen)
+            return null;
+        const targetView = BarState.notificationViewFor(targetScreen.name);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const maxWidth = Math.max(1, screenWidth - 20);
+        const maxHeight = Math.max(1, screenHeight - 20);
+        const width = Math.max(Math.min(360, maxWidth),
+            Math.min(maxWidth, Math.round(Number(targetView.width) || BarState.defaultNotificationWidth)));
+        const height = Math.max(Math.min(360, maxHeight),
+            Math.min(maxHeight, Math.round(Number(targetView.height) || BarState.defaultNotificationHeight)));
+        const vertical = targetPlacement === "left" || targetPlacement === "right";
+        const barSize = targetPlacement === "center"
+            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const anchor = Math.round(Number(targetAnchor));
+        const resolvedAnchor = Number.isFinite(anchor) ? anchor : -1;
+        const key = [
+            targetScreen.name, targetPlacement, width, height,
+            barSize, resolvedAnchor, screenWidth, screenHeight
+        ].join("|");
+
+        return ({
+            key: key,
+            args: [
+                "bash", prepareScript, "notifications", targetScreen.name, targetPlacement,
+                String(width), String(height), String(barSize), String(resolvedAnchor),
+                String(screenWidth), String(screenHeight)
+            ]
+        });
+    }
+
+    function centeredPreparationForScreen(targetScreen) {
+        if (!targetScreen)
+            return null;
+        const targetPlacement = placementForScreen(targetScreen);
+        const view = BarState.notificationViewFor(targetScreen.name);
+        let anchor = -1;
+        if (targetPlacement === "top" || targetPlacement === "bottom")
+            anchor = Math.round((targetScreen.width + view.width) / 2);
+        else if (targetPlacement === "left" || targetPlacement === "right")
+            anchor = Math.round((targetScreen.height + view.height) / 2);
+        return notificationPreparation(targetScreen, targetPlacement, anchor);
+    }
+
+    function prewarmFocused() {
+        if (centerWindow.visible || openPreparing || prewarmProcess.running)
+            return;
+        const targetScreen = focusedScreen();
+        const preparation = centeredPreparationForScreen(targetScreen);
+        if (!targetScreen || !preparation)
+            return;
+        centerScreen = targetScreen;
+        placement = placementForScreen(targetScreen);
+        ensurePreparedState(targetScreen);
+        if (preparedOpenKey === preparation.key)
+            return;
+        pendingPrewarmKey = preparation.key;
+        prewarmProcess.exec(preparation.args);
+    }
+
+    function finishPrewarm(exitCode) {
+        if (exitCode === 0 && pendingPrewarmKey.length > 0)
+            preparedOpenKey = pendingPrewarmKey;
+        pendingPrewarmKey = "";
+    }
+
     function prepareCenterOpen(targetScreen) {
         if (!targetScreen)
             return;
+        const preparation = notificationPreparation(
+            targetScreen, placement, anchorAlongEdge);
+        if (!preparation)
+            return;
         openPreparing = true;
-        prepareProcess.exec([
-            "bash", prepareScript, "notifications", targetScreen.name, placement,
-            String(configuredPanelWidth), String(configuredPanelHeight),
-            String(activeBarSize), String(Math.round(anchorAlongEdge)),
-            String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
-        ]);
+        if (preparedOpenKey === preparation.key) {
+            finishPreparedCenterOpen(0, true);
+            return;
+        }
+        if (prewarmProcess.running)
+            prewarmProcess.running = false;
+        prepareProcess.exec(preparation.args);
     }
 
-    function finishPreparedCenterOpen() {
+    function finishPreparedCenterOpen(exitCode, usedPrewarm) {
         if (!openPreparing)
             return;
+
+        if (!usedPrewarm && exitCode === 0) {
+            const preparation = notificationPreparation(
+                activeScreen, placement, anchorAlongEdge);
+            if (preparation)
+                preparedOpenKey = preparation.key;
+        }
 
         const wasVisible = centerWindow.visible;
 
@@ -617,7 +713,7 @@ Singleton {
         settingsOpen = false;
         settingsPanel.resetCopySelection();
         settingsMessage = "";
-        loadSavedView(targetScreen);
+        ensurePreparedState(targetScreen);
         edgeCentered = !anchorItem && placement !== "center";
         anchorAlongEdge = edgeCentered
             ? centeredAnchorForScreen(targetScreen) : anchorCoordinate(anchorItem);
@@ -776,7 +872,48 @@ Singleton {
 
     Process {
         id: prepareProcess
-        onExited: root.finishPreparedCenterOpen()
+        onExited: (exitCode, exitStatus) => root.finishPreparedCenterOpen(exitCode, false)
+    }
+
+    Process {
+        id: prewarmProcess
+        onExited: (exitCode, exitStatus) => root.finishPrewarm(exitCode)
+    }
+
+    Timer {
+        id: notificationsStartupPrewarm
+        interval: 1900
+        repeat: false
+        running: true
+        onTriggered: {
+            root.prewarmEnabled = true;
+            root.prewarmFocused();
+        }
+    }
+
+    Timer {
+        id: notificationsPrewarmRefresh
+        interval: 220
+        repeat: false
+        onTriggered: root.prewarmFocused()
+    }
+
+    Connections {
+        target: BarState
+        function onRevisionChanged() {
+            if (root.prewarmEnabled && !centerWindow.visible && !root.openPreparing)
+                notificationsPrewarmRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (!root.prewarmEnabled || !event || centerWindow.visible || root.openPreparing)
+                return;
+            if (event.name === "focusedmon" || event.name === "focusedmonv2")
+                notificationsPrewarmRefresh.restart();
+        }
     }
 
     Process {
