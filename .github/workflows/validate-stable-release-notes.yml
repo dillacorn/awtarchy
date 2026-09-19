@@ -7,6 +7,7 @@ on:
       - README.md
       - INSTALL.md
       - UPDATING.md
+      - .github/release-v3.7.3.md
       - .github/scripts/validate-stable-release-notes.py
       - .github/workflows/validate-stable-release-notes.yml
       - tests/test-stable-release-notes-validator.sh
@@ -39,3 +40,82 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v3-7-3:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Release v3.7.3 bridge' &&
+      github.head_ref == 'release/v3.7.3-bridge' &&
+      github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      EXPECTED_TARGET: e9c5048722c6a2c46c14ab51e0d6c4c1f9473c7c
+      RELEASE_TAG: v3.7.3
+      RELEASE_TITLE: Awtarchy v3.7.3 Quickshell
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Verify exact release target
+        run: |
+          actual_target="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          test "$actual_target" = "$EXPECTED_TARGET"
+
+      - name: Save previous stable release body
+        run: |
+          gh release view v3.7.2 \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body \
+            --jq '.body' > /tmp/previous-stable-release.md
+
+      - name: Validate proposed stable release notes
+        run: |
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" \
+            --notes .github/release-v3.7.3.md \
+            --previous /tmp/previous-stable-release.md
+
+      - name: Refuse an existing v3.7.3 artifact
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo "Tag $RELEASE_TAG already exists" >&2
+            exit 1
+          fi
+
+      - name: Publish v3.7.3
+        run: |
+          gh release create "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$EXPECTED_TARGET" \
+            --title "$RELEASE_TITLE" \
+            --notes-file .github/release-v3.7.3.md
+
+      - name: Verify published stable release
+        run: |
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json body \
+            --jq '.body' > /tmp/published-release.md
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" \
+            --notes /tmp/published-release.md \
+            --previous /tmp/previous-stable-release.md
+
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json name --jq '.name')" = "$RELEASE_TITLE"
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')" = "false"
+          test "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')" = "$EXPECTED_TARGET"
+
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-list -n1 "refs/tags/$RELEASE_TAG")" = "$EXPECTED_TARGET"
+
+      - name: Remove one-use helper branch
+        run: |
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_HEAD_REF}"
