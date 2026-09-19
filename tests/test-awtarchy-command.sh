@@ -40,6 +40,46 @@ bash -n "$INSTALLER_SOURCE"
 bash -n "$RUNTIME_SOURCE"
 bash -n "$LAUNCHER_SOURCE"
 
+python3 - "$LAUNCHER_SOURCE" "$RUNTIME_SOURCE" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+
+def function_body(text: str, name: str) -> str:
+    start = text.find(f"{name}() {{")
+    if start < 0:
+        raise SystemExit(f"missing shell function: {name}")
+    next_function = re.search(
+        r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\) \{$",
+        text[start + 1 :],
+    )
+    end = len(text) if next_function is None else start + 1 + next_function.start()
+    return text[start:end]
+
+
+def assert_wrap(text: str, name: str, count_expr: str) -> None:
+    body = function_body(text, name)
+    up_wrap = f"else\n          index=$(({count_expr} - 1))"
+    down_wrap = "else\n          index=0"
+    if up_wrap not in body or down_wrap not in body:
+        raise SystemExit(f"{name} does not wrap Up/Down navigation")
+
+
+launcher = Path(sys.argv[1]).read_text(encoding="utf-8")
+runtime = Path(sys.argv[2]).read_text(encoding="utf-8")
+
+assert_wrap(launcher, "single_select_menu", "${#items[@]}")
+for function, count_expr in (
+    ("single_select_menu", "${#items[@]}"),
+    ("summary_toggle_menu", "${#labels_ref[@]}"),
+    ("edit_package_group", "${#view_indices[@]}"),
+    ("package_picker", "${#view_indices[@]}"),
+    ("review_plan", "${#classes[@]}"),
+):
+    assert_wrap(runtime, function, count_expr)
+PY
+
 grep -Fq 'install_awtarchy_command_stage()' "$RUNTIME_SOURCE" \
   || fail "runtime is missing the command installation stage"
 grep -Fq 'install_awtarchy_command_stage' "$RUNTIME_SOURCE" \
