@@ -359,8 +359,14 @@ Singleton {
         const wasVisible = quickSettingsWindow.visible;
 
         openPreparing = false;
-        panelPresented = true;
+
+        // Start the presentation transition only after the native window is
+        // mapped. With the cached/prewarmed path this function can complete
+        // synchronously, so presenting before visible=true can let the fade
+        // finish off-screen.
+        panelPresented = false;
         quickSettingsWindow.visible = true;
+        panelPresented = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
         // The startup prewarm already populated status. Give the mapped window
