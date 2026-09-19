@@ -56,13 +56,18 @@ grep -Fq 'text/plain=micro.desktop' "$MIMEAPPS" \
   || fail 'Awtarchy default text/plain association is no longer Micro'
 grep -Fq 'repair_v373_yazi_default_editor_target()' "$RUNTIME" \
   || fail 'runtime has no v3.7.3 Yazi default-editor delivery repair'
+# These assertions intentionally search for literal shell variables in runtime source.
+# shellcheck disable=SC2016
 grep -Fq '[[ "$tag" == "v3.7.3" ]] || return 0' "$RUNTIME" \
   || fail 'v3.7.3 Yazi default-editor repair is not tag scoped'
+# shellcheck disable=SC2016
 grep -Fq 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" \
   || fail 'stable update path does not apply the v3.7.3 Yazi default-editor repair'
 grep -Fq '{ run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" }' "$RUNTIME" \
   || fail 'v3.7.3 stable repair does not install the default-editor Yazi opener'
+# shellcheck disable=SC2016
 build_line="$(grep -nF 'build_target_home "$repo_dir" "$target_home"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+# shellcheck disable=SC2016
 repair_line="$(grep -nF 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
 [[ "$build_line" =~ ^[0-9]+$ && "$repair_line" =~ ^[0-9]+$ && "$repair_line" -gt "$build_line" ]] \
   || fail 'v3.7.3 Yazi default-editor repair does not run after the stable target is built'
