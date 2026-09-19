@@ -884,7 +884,7 @@ archlinux_archive_package_versions() {
   curl --fail --silent --show-error --location \
     --connect-timeout 4 --max-time 25 -- "$index_url" \
     | grep -oE "$pattern" \
-    | sed -E "s#^${pkg}-##; s#-x86_64\\.pkg\\.tar\\.(zst|xz|gz)$##" \
+    | sed -E "s#^${pkg}-##; s#-x86_64\\.pkg\\.tar\\.(zst|xz|gz)\$##" \
     | LC_ALL=C sort -Vu
 }
 
