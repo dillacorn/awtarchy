@@ -138,8 +138,11 @@ test_reconciler="$TMP/awtarchy-package-reconcile.test.sh"
 fakebin="$TMP/bin"
 state="$TMP/pacman-state"
 runtime="$TMP/runtime.sh"
+verify_log="$TMP/pacman-key-verify.log"
 mkdir -p "$rollback/packages" "$cache" "$fakebin" "$TMP/home"
 : >"$runtime"
+: >"$pacman_log"
+: >"$verify_log"
 
 python3 - "$RECONCILER" "$test_reconciler" "$rollback_root" "$cache" "$pacman_log" <<'PY'
 from pathlib import Path
@@ -179,26 +182,31 @@ PY
 chmod +x "$test_reconciler"
 bash -n "$test_reconciler"
 
-cat >"$rollback/metadata" <<'EOF'
-status=available
-rollback_complete=1
-EOF
-cat >"$rollback/changes.tsv" <<'EOF'
-nvidia-utils	610.57.04-1	615.71.09-1	nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst
-linux	6.18.1.arch1-1	6.18.2.arch1-1	linux-6.18.1.arch1-1-x86_64.pkg.tar.zst
-EOF
-: >"$rollback/packages/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst"
-: >"$rollback/packages/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst"
-
-cat >"$state" <<'EOF'
-nvidia-utils 615.71.09-1
-linux 6.18.2.arch1-1
-EOF
+set_pkg() {
+  local pkg="$1" version="$2"
+  awk -v p="$pkg" '$1 != p' "$state" >"${state}.tmp"
+  printf '%s\n' "$pkg $version" >>"${state}.tmp"
+  mv "${state}.tmp" "$state"
+}
 
 cat >"$fakebin/pacman" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 state="${FAKE_PACMAN_STATE:?}"
+
+set_pkg() {
+  local pkg="$1" version="$2"
+  awk -v p="$pkg" '$1 != p' "$state" >"${state}.tmp"
+  printf '%s\n' "$pkg $version" >>"${state}.tmp"
+  mv "${state}.tmp" "$state"
+}
+
+remove_pkg() {
+  local pkg="$1"
+  awk -v p="$pkg" '$1 != p' "$state" >"${state}.tmp"
+  mv "${state}.tmp" "$state"
+}
+
 case "${1:-}" in
   -Qq)
     awk '{print $1}' "$state"
@@ -220,9 +228,31 @@ case "${1:-}" in
     done
     exit "$rc"
     ;;
-  -U)
-    [[ ${FAKE_PACMAN_FAIL_U:-0} == 1 ]] && exit 42
+  -R)
     shift
+    while (( $# )); do
+      case "$1" in
+        --noconfirm|--) shift ;;
+        *)
+          remove_pkg "$1"
+          shift
+          ;;
+      esac
+    done
+    ;;
+  -U)
+    shift
+    target_switch=0
+    for arg in "$@"; do
+      case "$(basename -- "$arg")" in
+        nvidia-utils-610.57.04-1-*.pkg.tar.*|nvidia-open-dkms-610.57.04-1-*.pkg.tar.*)
+          target_switch=1
+          ;;
+      esac
+    done
+    [[ ${FAKE_PACMAN_FAIL_U:-0} == 1 ]] && exit 42
+    [[ ${FAKE_PACMAN_FAIL_TARGET:-0} == 1 && $target_switch == 1 ]] && exit 43
+
     while (( $# )); do
       case "$1" in
         --needed|--noconfirm) shift ;;
@@ -230,44 +260,41 @@ case "${1:-}" in
           base="$(basename -- "$1")"
           case "$base" in
             nvidia-utils-610.57.04-1-*.pkg.tar.*)
-              awk '$1 != "nvidia-utils"' "$state" >"${state}.tmp"
-              printf '%s\n' 'nvidia-utils 610.57.04-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+              set_pkg nvidia-utils 610.57.04-1
               ;;
-            linux-6.18.1.arch1-1-*.pkg.tar.*)
-              awk '$1 != "linux"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux 6.18.1.arch1-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+            nvidia-open-dkms-610.57.04-1-*.pkg.tar.*)
+              set_pkg nvidia-open-dkms 610.57.04-1
+              ;;
+            lib32-nvidia-utils-610.57.04-1-*.pkg.tar.*)
+              set_pkg lib32-nvidia-utils 610.57.04-1
               ;;
             nvidia-utils-615.71.09-1-*.pkg.tar.*)
-              awk '$1 != "nvidia-utils"' "$state" >"${state}.tmp"
-              printf '%s\n' 'nvidia-utils 615.71.09-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+              set_pkg nvidia-utils 615.71.09-1
+              ;;
+            lib32-nvidia-utils-615.71.09-1-*.pkg.tar.*)
+              set_pkg lib32-nvidia-utils 615.71.09-1
+              ;;
+            nvidia-open-615.71.09-3-*.pkg.tar.*)
+              set_pkg nvidia-open 615.71.09-3
+              ;;
+            linux-6.18.1.arch1-1-*.pkg.tar.*)
+              set_pkg linux 6.18.1.arch1-1
               ;;
             linux-6.18.2.arch1-1-*.pkg.tar.*)
-              awk '$1 != "linux"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux 6.18.2.arch1-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+              set_pkg linux 6.18.2.arch1-1
               ;;
-            linux-cachyos-lts-6.18.42-1-*.pkg.tar.*)
-              awk '$1 != "linux-cachyos-lts"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux-cachyos-lts 6.18.42-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+            linux-cachyos-lts-7.2.5-1-*.pkg.tar.*)
+              set_pkg linux-cachyos-lts 7.2.5-1
               ;;
-            linux-cachyos-lts-6.18.50-3-*.pkg.tar.*)
-              awk '$1 != "linux-cachyos-lts"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux-cachyos-lts 6.18.50-3' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+            linux-cachyos-lts-headers-7.2.5-1-*.pkg.tar.*)
+              set_pkg linux-cachyos-lts-headers 7.2.5-1
               ;;
-            linux-cachyos-lts-nvidia-open-6.18.42-1-*.pkg.tar.*)
-              awk '$1 != "linux-cachyos-lts-nvidia-open"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux-cachyos-lts-nvidia-open 6.18.42-1' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+            linux-cachyos-lts-nvidia-open-7.2.5-1-*.pkg.tar.*)
+              set_pkg linux-cachyos-lts-nvidia-open 7.2.5-1
               ;;
-            linux-cachyos-lts-nvidia-open-6.18.50-3-*.pkg.tar.*)
-              awk '$1 != "linux-cachyos-lts-nvidia-open"' "$state" >"${state}.tmp"
-              printf '%s\n' 'linux-cachyos-lts-nvidia-open 6.18.50-3' >>"${state}.tmp"
-              mv "${state}.tmp" "$state"
+            *)
+              printf 'unexpected package in fake pacman -U: %s\n' "$base" >&2
+              exit 91
               ;;
           esac
           shift
@@ -291,23 +318,148 @@ exec "$@"
 EOF
 chmod +x "$fakebin/sudo"
 
+cat >"$fakebin/pacman-key" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ "${1:-}" == "--verify" ]] || exit 92
+printf '%s\n' "$*" >>"${FAKE_VERIFY_LOG:?}"
+EOF
+chmod +x "$fakebin/pacman-key"
+
+cat >"$fakebin/dkms" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+state="${FAKE_PACMAN_STATE:?}"
+case "${1:-}" in
+  autoinstall)
+    [[ ${FAKE_DKMS_FAIL:-0} == 1 ]] && exit 44
+    exit 0
+    ;;
+  status)
+    version=""
+    while (( $# )); do
+      case "$1" in
+        -v)
+          shift
+          version="${1:-}"
+          ;;
+      esac
+      shift || true
+    done
+    if awk -v v="$version" '$1 == "nvidia-open-dkms" && $2 ~ ("^" v "-") { found=1 } END { exit(found ? 0 : 1) }' "$state"; then
+      printf 'nvidia/%s, fake-kernel, x86_64: installed\n' "$version"
+      exit 0
+    fi
+    exit 1
+    ;;
+  *)
+    exit 93
+    ;;
+esac
+EOF
+chmod +x "$fakebin/dkms"
+
+cat >"$fakebin/mkinitcpio" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+[[ "${1:-}" == "-P" ]]
+EOF
+chmod +x "$fakebin/mkinitcpio"
+
 cat >"$fakebin/curl" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 url="${!#}"
+output=""
+head_only=0
+args=("$@")
+for ((i=0; i<${#args[@]}; i++)); do
+  case "${args[i]}" in
+    --output)
+      ((i++))
+      output="${args[i]}"
+      ;;
+    --head)
+      head_only=1
+      ;;
+  esac
+done
+
+case "$url" in
+  https://archive.archlinux.org/packages/n/nvidia-open-dkms/)
+    cat <<'INDEX'
+nvidia-open-dkms-595.71.05-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-610.43.03-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-610.57.04-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-615.71.09-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-620.12.01-1-x86_64.pkg.tar.zst
+INDEX
+    exit 0
+    ;;
+  https://archive.archlinux.org/packages/n/nvidia-utils/)
+    cat <<'INDEX'
+nvidia-utils-595.71.05-1-x86_64.pkg.tar.zst
+nvidia-utils-610.43.03-1-x86_64.pkg.tar.zst
+nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst
+nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst
+nvidia-utils-620.12.01-1-x86_64.pkg.tar.zst
+INDEX
+    exit 0
+    ;;
+  https://archive.archlinux.org/packages/l/lib32-nvidia-utils/)
+    cat <<'INDEX'
+lib32-nvidia-utils-595.71.05-1-x86_64.pkg.tar.zst
+lib32-nvidia-utils-610.43.03-1-x86_64.pkg.tar.zst
+lib32-nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst
+lib32-nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst
+INDEX
+    exit 0
+    ;;
+esac
+
 case "$url" in
   https://archive.archlinux.org/packages/n/nvidia-utils/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst|\
-  https://archive.archlinux.org/packages/l/linux/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst|\
-  https://archive.cachyos.org/archive/cachyos/linux-cachyos-lts-6.18.42-1-x86_64.pkg.tar.zst|\
-  https://archive.cachyos.org/archive/cachyos/linux-cachyos-lts-nvidia-open-6.18.42-1-x86_64.pkg.tar.zst)
-    exit 0
+  https://archive.archlinux.org/packages/n/nvidia-open-dkms/nvidia-open-dkms-610.57.04-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/l/lib32-nvidia-utils/lib32-nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/n/nvidia-utils/nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/l/lib32-nvidia-utils/lib32-nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/n/nvidia-open/nvidia-open-615.71.09-3-x86_64.pkg.tar.zst|\
+  https://archive.cachyos.org/archive/cachyos-v3/linux-cachyos-lts-7.2.5-1-x86_64_v3.pkg.tar.zst|\
+  https://archive.cachyos.org/archive/cachyos-v3/linux-cachyos-lts-headers-7.2.5-1-x86_64_v3.pkg.tar.zst|\
+  https://archive.cachyos.org/archive/cachyos-v3/linux-cachyos-lts-nvidia-open-7.2.5-1-x86_64_v3.pkg.tar.zst)
+    ;;
+  *.pkg.tar.zst.sig)
     ;;
   *)
     exit 22
     ;;
 esac
+
+if (( head_only == 1 )); then
+  exit 0
+fi
+if [[ -n "$output" ]]; then
+  printf 'fake archive payload for %s\n' "$url" >"$output"
+fi
 EOF
 chmod +x "$fakebin/curl"
+
+# Existing saved rollback remains fail-closed and transaction-checked.
+cat >"$rollback/metadata" <<'EOF'
+status=available
+rollback_complete=1
+EOF
+cat >"$rollback/changes.tsv" <<'EOF'
+nvidia-utils	610.57.04-1	615.71.09-1	nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst
+linux	6.18.1.arch1-1	6.18.2.arch1-1	linux-6.18.1.arch1-1-x86_64.pkg.tar.zst
+EOF
+: >"$rollback/packages/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst"
+: >"$rollback/packages/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst"
+
+cat >"$state" <<'EOF'
+nvidia-utils 615.71.09-1
+linux 6.18.2.arch1-1
+EOF
 
 if PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
@@ -316,17 +468,13 @@ if PATH="$fakebin:/usr/bin:/bin" \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
   FAKE_PACMAN_FAIL_U=1 \
   FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
   "$test_reconciler" --nvidia-rollback >/dev/null 2>&1
 then
-  fail 'NVIDIA rollback ignored a failed pacman -U transaction'
+  fail 'saved NVIDIA rollback ignored a failed pacman -U transaction'
 fi
 grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
-  || fail 'failed rollback transaction unexpectedly changed the NVIDIA package state'
-grep -Fxq 'linux 6.18.2.arch1-1' "$state" \
-  || fail 'failed rollback transaction unexpectedly changed the kernel package state'
-if grep -Fxq 'status=restored' "$rollback/metadata"; then
-  fail 'failed rollback transaction was incorrectly marked restored'
-fi
+  || fail 'failed saved rollback unexpectedly changed the NVIDIA package state'
 
 if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
@@ -334,56 +482,31 @@ if ! PATH="$fakebin:/usr/bin:/bin" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
   FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
   "$test_reconciler" --nvidia-rollback >/dev/null
 then
   fail 'saved NVIDIA rollback command failed'
 fi
-
 grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
-  || fail 'NVIDIA rollback did not restore the saved driver version'
+  || fail 'saved NVIDIA rollback did not restore the driver version'
 grep -Fxq 'linux 6.18.1.arch1-1' "$state" \
-  || fail 'NVIDIA rollback did not restore the kernel version captured with the driver'
-
+  || fail 'saved NVIDIA rollback did not restore the captured kernel version'
 grep -Fxq 'status=restored' "$rollback/metadata" \
-  || fail 'successful NVIDIA rollback did not persist restored metadata status'
+  || fail 'successful saved NVIDIA rollback did not persist restored status'
 
-cat >"$state" <<'EOF'
-nvidia-utils 620.12.01-1
-linux 6.18.3.arch1-1
-EOF
-
-if PATH="$fakebin:/usr/bin:/bin" \
-  HOME="$TMP/home" \
-  AWTARCHY_RUNTIME="$runtime" \
-  AWTARCHY_TEST_MODE=1 \
-  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
-  FAKE_PACMAN_STATE="$state" \
-  "$test_reconciler" --nvidia-rollback >/dev/null 2>&1
-then
-  fail 'stale NVIDIA rollback point was accepted after later package changes'
-fi
-
-grep -Fxq 'nvidia-utils 620.12.01-1' "$state" \
-  || fail 'stale rollback mutated the newer NVIDIA package before refusing'
-grep -Fxq 'linux 6.18.3.arch1-1' "$state" \
-  || fail 'stale rollback mutated the newer kernel package before refusing'
-
-cat >"$pacman_log" <<'EOF'
-[2026-09-10T12:00:00-0400] [ALPM] transaction started
-[2026-09-10T12:00:01-0400] [ALPM] upgraded linux (6.18.1.arch1-1 -> 6.18.2.arch1-1)
-[2026-09-10T12:00:02-0400] [ALPM] upgraded nvidia-utils (610.57.04-1 -> 615.71.09-1)
-[2026-09-10T12:00:03-0400] [ALPM] transaction completed
-EOF
-
-# Simulate Ascending's recovery case: pacman history records 610, but the
-# old 610/kernel archives have been cleaned from /var/cache/pacman/pkg.
-# Only the currently installed 615 return-point packages remain cached.
-: >"$cache/nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst"
-: >"$cache/linux-6.18.2.arch1-1-x86_64.pkg.tar.zst"
+# New release picker is archive-backed and independent from pacman history.
+rm -rf -- "$rollback"
+mkdir -p -- "$rollback/packages"
+rm -f -- "$cache"/*
+: >"$pacman_log"
+: >"$verify_log"
 
 cat >"$state" <<'EOF'
 nvidia-utils 615.71.09-1
-linux 6.18.2.arch1-1
+lib32-nvidia-utils 615.71.09-1
+linux-cachyos-lts 7.2.5-1
+linux-cachyos-lts-headers 7.2.5-1
+linux-cachyos-lts-nvidia-open 7.2.5-1
 EOF
 
 list_output="$(
@@ -391,96 +514,155 @@ list_output="$(
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
   FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
   "$test_reconciler" --nvidia-rollback --list
 )"
 grep -Fq '610.57.04' <<<"$list_output" \
-  || fail 'NVIDIA history does not list recoverable 610.57.04 when only the Arch Linux Archive has the old package set'
+  || fail 'archived NVIDIA release picker does not list 610.57.04'
+grep -Fq '610.43.03' <<<"$list_output" \
+  || fail 'archived NVIDIA release picker does not list multiple previous releases'
+if grep -Fq '620.12.01' <<<"$list_output"; then
+  fail 'archived NVIDIA release picker exposes a release newer than the installed driver'
+fi
 
 if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
   FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
   "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null
 then
-  fail 'Arch Linux Archive-backed NVIDIA historical version switch failed'
+  fail 'archive-backed NVIDIA 610 release switch failed'
 fi
 
 grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
-  || fail 'historical version switch did not select NVIDIA 610.57.04'
-grep -Fxq 'linux 6.18.1.arch1-1' "$state" \
-  || fail 'historical version switch did not reconstruct the matching kernel state'
-grep -Fq $'nvidia-utils\t615.71.09-1\t610.57.04-1' "$rollback/changes.tsv" \
-  || fail 'historical version switch did not preserve the pre-switch NVIDIA return point'
+  || fail 'NVIDIA release switch did not install nvidia-utils 610.57.04'
+grep -Fxq 'lib32-nvidia-utils 610.57.04-1' "$state" \
+  || fail 'NVIDIA release switch did not keep lib32 userspace aligned'
+grep -Fxq 'nvidia-open-dkms 610.57.04-1' "$state" \
+  || fail 'NVIDIA release switch did not install the matching open DKMS module source'
+if grep -q '^linux-cachyos-lts-nvidia-open ' "$state"; then
+  fail 'NVIDIA release switch left the conflicting CachyOS prebuilt module package installed'
+fi
+grep -Fxq 'linux-cachyos-lts 7.2.5-1' "$state" \
+  || fail 'NVIDIA release switch unexpectedly downgraded the current CachyOS kernel'
+grep -Fxq 'linux-cachyos-lts-headers 7.2.5-1' "$state" \
+  || fail 'NVIDIA release switch disturbed matching current kernel headers'
 
+grep -Fq $'nvidia-open-dkms\t(not installed)\t610.57.04-1' "$rollback/changes.tsv" \
+  || fail 'return point does not record the temporary DKMS package as originally absent'
+grep -Fq $'linux-cachyos-lts-nvidia-open\t7.2.5-1\t(not installed)' "$rollback/changes.tsv" \
+  || fail 'return point does not record the original prebuilt module removal'
+[[ -f "$rollback/packages/linux-cachyos-lts-nvidia-open-7.2.5-1-x86_64_v3.pkg.tar.zst" ]] \
+  || fail 'return point did not stage the original CachyOS prebuilt module package from archive'
+[[ -s "$verify_log" ]] \
+  || fail 'archive-backed return point did not verify detached package signatures'
+
+# A later package mutation must still invalidate the saved return point.
+set_pkg nvidia-utils 620.12.01-1
+if PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
+  FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
+  "$test_reconciler" --nvidia-rollback >/dev/null 2>&1
+then
+  fail 'saved return point was accepted after an unrelated later NVIDIA mutation'
+fi
+set_pkg nvidia-utils 610.57.04-1
+
+# Normal rollback removes temporary DKMS and restores the original 615/prebuilt stack.
 if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
   FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
   "$test_reconciler" --nvidia-rollback >/dev/null
 then
-  fail 'saved rollback could not restore the pre-switch NVIDIA version after historical testing'
+  fail 'saved return point could not restore the original NVIDIA stack'
 fi
 
 grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
-  || fail 'saved rollback did not return from historical NVIDIA testing to 615.71.09'
-grep -Fxq 'linux 6.18.2.arch1-1' "$state" \
-  || fail 'saved rollback did not restore the matching pre-switch kernel'
-rm -rf -- "$rollback"
-mkdir -p -- "$rollback/packages"
-rm -f -- "$cache"/*
+  || fail 'return point did not restore NVIDIA 615.71.09'
+grep -Fxq 'lib32-nvidia-utils 615.71.09-1' "$state" \
+  || fail 'return point did not restore matching lib32 NVIDIA userspace'
+grep -Fxq 'linux-cachyos-lts-nvidia-open 7.2.5-1' "$state" \
+  || fail 'return point did not restore the original CachyOS prebuilt NVIDIA module'
+if grep -q '^nvidia-open-dkms ' "$state"; then
+  fail 'return point did not remove the temporary historical nvidia-open-dkms package'
+fi
+grep -Fxq 'linux-cachyos-lts 7.2.5-1' "$state" \
+  || fail 'return point changed the kernel even though release switching is DKMS-based'
 
-cat >"$pacman_log" <<'EOF'
-[2026-08-09T18:00:00-0400] [ALPM] transaction started
-[2026-08-09T18:00:01-0400] [ALPM] upgraded linux-cachyos-lts (6.18.42-1 -> 6.18.50-3)
-[2026-08-09T18:00:02-0400] [ALPM] upgraded linux-cachyos-lts-nvidia-open (6.18.42-1 -> 6.18.50-3)
-[2026-08-09T18:00:03-0400] [ALPM] upgraded nvidia-utils (610.57.04-1 -> 615.71.09-1)
-[2026-08-09T18:00:04-0400] [ALPM] transaction completed
-EOF
-
-: >"$cache/nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst"
-: >"$cache/linux-cachyos-lts-6.18.50-3-x86_64.pkg.tar.zst"
-: >"$cache/linux-cachyos-lts-nvidia-open-6.18.50-3-x86_64.pkg.tar.zst"
-
-cat >"$state" <<'EOF'
+reset_current_stack() {
+  rm -rf -- "$rollback"
+  mkdir -p -- "$rollback/packages"
+  rm -f -- "$cache"/*
+  : >"$verify_log"
+  cat >"$state" <<'EOF'
 nvidia-utils 615.71.09-1
-linux-cachyos-lts 6.18.50-3
-linux-cachyos-lts-nvidia-open 6.18.50-3
+lib32-nvidia-utils 615.71.09-1
+linux-cachyos-lts 7.2.5-1
+linux-cachyos-lts-headers 7.2.5-1
+linux-cachyos-lts-nvidia-open 7.2.5-1
 EOF
+}
 
-cachy_list_output="$(
-  PATH="$fakebin:/usr/bin:/bin" \
-  HOME="$TMP/home" \
-  AWTARCHY_RUNTIME="$runtime" \
-  AWTARCHY_TEST_MODE=1 \
-  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
-  FAKE_PACMAN_STATE="$state" \
-  "$test_reconciler" --nvidia-rollback --list
-)"
-grep -Fq '610.57.04' <<<"$cachy_list_output" \
-  || fail 'CachyOS historical NVIDIA recovery does not list 610.57.04 when kernel/module packages are only in the CachyOS archive'
-
-if ! PATH="$fakebin:/usr/bin:/bin" \
+# If the historical package transaction fails after module replacement, restore automatically.
+reset_current_stack
+if PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
   AWTARCHY_TEST_MODE=1 \
   AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_PACMAN_FAIL_TARGET=1 \
   FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
   FAKE_PACMAN_STATE="$state" \
-  "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null
+  FAKE_VERIFY_LOG="$verify_log" \
+  "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null 2>&1
 then
-  fail 'CachyOS archive-backed NVIDIA historical version switch failed'
+  fail 'failed NVIDIA target transaction unexpectedly returned success'
+fi
+grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
+  || fail 'failed target transaction did not preserve/restore NVIDIA 615'
+grep -Fxq 'linux-cachyos-lts-nvidia-open 7.2.5-1' "$state" \
+  || fail 'failed target transaction did not automatically restore the prebuilt NVIDIA module'
+if grep -q '^nvidia-open-dkms ' "$state"; then
+  fail 'failed target transaction left the temporary DKMS package installed'
 fi
 
-grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
-  || fail 'CachyOS historical version switch did not select NVIDIA 610.57.04'
-grep -Fxq 'linux-cachyos-lts 6.18.42-1' "$state" \
-  || fail 'CachyOS historical version switch did not reconstruct the matching CachyOS kernel'
-grep -Fxq 'linux-cachyos-lts-nvidia-open 6.18.42-1' "$state" \
-  || fail 'CachyOS historical version switch did not reconstruct the matching prebuilt NVIDIA-open module package'
+# If DKMS build/verification fails after package install, restore automatically too.
+reset_current_stack
+if PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_DKMS_FAIL=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
+  FAKE_PACMAN_STATE="$state" \
+  FAKE_VERIFY_LOG="$verify_log" \
+  "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null 2>&1
+then
+  fail 'failed NVIDIA DKMS build unexpectedly returned success'
+fi
+grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
+  || fail 'failed DKMS build did not automatically restore NVIDIA 615'
+grep -Fxq 'linux-cachyos-lts-nvidia-open 7.2.5-1' "$state" \
+  || fail 'failed DKMS build did not automatically restore the original prebuilt module'
+if grep -q '^nvidia-open-dkms ' "$state"; then
+  fail 'failed DKMS build left the temporary historical DKMS package installed'
+fi
 
-printf '%s\n' 'PASS: NVIDIA upgrades require consent, saved rollback is recoverable, Arch/Cachy historical archives are supported, and stale rollback points fail closed.'
+printf '%s\n' 'PASS: NVIDIA release picker, DKMS rollback, trusted return-point staging, failure recovery, and saved rollback all pass.'
