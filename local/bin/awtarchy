@@ -1149,7 +1149,7 @@ nvidia_recovery_menu() {
   confirm_nvidia_recovery_without_hardware || return 0
 
   while true; do
-    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Choose previous NVIDIA driver version"       "List recoverable NVIDIA driver versions"       "Back")" || return 0
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Choose previous NVIDIA driver version"       "List previous NVIDIA driver releases"       "Back")" || return 0
 
     clear_screen
     rc=0
