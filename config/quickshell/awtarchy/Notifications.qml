@@ -225,11 +225,19 @@ Singleton {
             return null;
         const targetPlacement = placementForScreen(targetScreen);
         const view = BarState.notificationViewFor(targetScreen.name);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const maxWidth = Math.max(1, screenWidth - 20);
+        const maxHeight = Math.max(1, screenHeight - 20);
+        const width = Math.max(Math.min(360, maxWidth),
+            Math.min(maxWidth, Math.round(Number(view.width) || BarState.defaultNotificationWidth)));
+        const height = Math.max(Math.min(360, maxHeight),
+            Math.min(maxHeight, Math.round(Number(view.height) || BarState.defaultNotificationHeight)));
         let anchor = -1;
         if (targetPlacement === "top" || targetPlacement === "bottom")
-            anchor = Math.round((targetScreen.width + view.width) / 2);
+            anchor = Math.round((screenWidth + width) / 2);
         else if (targetPlacement === "left" || targetPlacement === "right")
-            anchor = Math.round((targetScreen.height + view.height) / 2);
+            anchor = Math.round((screenHeight + height) / 2);
         return notificationPreparation(targetScreen, targetPlacement, anchor);
     }
 
