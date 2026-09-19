@@ -49,6 +49,7 @@ jobs:
           bash -n config/hypr/scripts/quickshell_bar_restore.sh
           bash -n config/hypr/scripts/quickshell_battery_care.sh
           bash -n config/hypr/scripts/quickshell_battery_health.sh
+          bash -n config/hypr/scripts/quickshell_launcher.sh
           bash -n config/hypr/scripts/quickshell_launcher_position.sh
           bash -n config/hypr/scripts/quickshell_notification_layout_demo.sh
           bash -n config/hypr/scripts/quickshell_notifications_toggle.sh
@@ -114,6 +115,7 @@ jobs:
           bash -n tests/test-flyout-toggle-debounce.sh
           bash -n tests/test-flyout-edge-layout.sh
           bash -n tests/test-flyout-runtime-centering.sh
+          bash -n tests/test-launcher-fast-path.sh
           bash -n tests/test-launcher-keyboard-focus.sh
           bash -n tests/test-desktop-candidate-validation.sh
           bash -n tests/test-lua-validation.sh
@@ -172,6 +174,7 @@ jobs:
             config/hypr/scripts/quickshell_battery_care.sh \
             config/hypr/scripts/quickshell_battery_health.sh \
             config/hypr/scripts/quickshell_clipboard.sh \
+            config/hypr/scripts/quickshell_launcher.sh \
             config/hypr/scripts/quickshell_launcher_position.sh \
             config/hypr/scripts/quickshell_update_notifications.sh \
             config/hypr/scripts/quickshell_notification_layout_demo.sh \
@@ -325,6 +328,7 @@ jobs:
           bash tests/test-flyout-toggle-debounce.sh
           bash tests/test-flyout-edge-layout.sh
           bash tests/test-flyout-runtime-centering.sh
+          bash tests/test-launcher-fast-path.sh
           bash tests/test-launcher-keyboard-focus.sh
           bash tests/test-desktop-candidate-validation.sh
           python3 tests/test-keyring-pam-cleanup.py
