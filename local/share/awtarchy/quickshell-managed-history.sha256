@@ -1455,3 +1455,7 @@ dc68c1d19634123ad114fb16aa53111d93b538d0a8edf87d0b8020b471b0d675	.config/hypr/sc
 2a55121857c71100df30c5c394c63d6580a76d185b0f4e02c1a45382f9d30cf3	.config/quickshell/awtarchy/ClipboardMenu.qml
 d5d7cc94f4d95ee7d78bb525acf7056f709bad9dbd8e97e095add796221146d8	.config/quickshell/awtarchy/BarState.qml
 4420091ddad0f0c51901c25edd5ceb085351fb34e9b6fe1c98ebf141add61b62	.config/quickshell/awtarchy/shell.qml
+
+# 2026-09-18 theme picker wrapper managed migration.
+78c1fda78ccc4286903e60b8769804797e8287663ad0fe2bf29f42bba4f04e74	.config/hypr/scripts/theme_select.sh
+3802142241e8a9f4bad66f8c68a2efce3e5bd20cbcf1e1e50b478836739eedc4	.config/hypr/scripts/theme_select.sh
