@@ -6,6 +6,9 @@ QML_DIR="${ROOT}/config/quickshell/awtarchy"
 MANAGER="${QML_DIR}/FlyoutManager.qml"
 SHELL="${QML_DIR}/shell.qml"
 LAUNCHER="${QML_DIR}/Launcher.qml"
+QUICK_SETTINGS="${QML_DIR}/QuickSettings.qml"
+NOTIFICATIONS="${QML_DIR}/Notifications.qml"
+CLIPBOARD="${QML_DIR}/ClipboardMenu.qml"
 TOGGLE="${ROOT}/config/hypr/scripts/toggle_animations.sh"
 
 fail() {
@@ -57,6 +60,24 @@ require_source "${QML_DIR}/ClipboardMenu.qml" \
 require_source "${QML_DIR}/Notifications.qml" \
   'FlyoutManager.acceptToggle("notifications")' \
   'notifications flyout bypasses the toggle gate'
+
+python3 - "$QUICK_SETTINGS" "$NOTIFICATIONS" "$CLIPBOARD" <<'PY'
+import re
+import sys
+
+for path in sys.argv[1:]:
+    text = open(path, encoding="utf-8").read()
+    match = re.search(r'function toggleFocused\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+    if match is None:
+        raise SystemExit(f"FAIL: {path} is missing toggleFocused()")
+    if 'FlyoutManager.acceptToggle(' in match.group("body"):
+        raise SystemExit(f"FAIL: {path} keyboard/IPC toggle is still debounced")
+
+for path in sys.argv[1:3]:
+    text = open(path, encoding="utf-8").read()
+    if 'function toggle(): void { root.toggleFocused(); }' not in text:
+        raise SystemExit(f"FAIL: {path} IPC toggle does not use the undebounced focused path")
+PY
 require_source "${QML_DIR}/PowerMenu.qml" \
   'FlyoutManager.acceptToggle("power")' \
   'power menu bypasses the toggle gate'
