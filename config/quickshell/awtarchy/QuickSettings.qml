@@ -74,6 +74,7 @@ Singleton {
     property bool prewarmEnabled: false
     property string preparedStateMonitor: ""
     property int preparedStateRevision: -1
+    property bool secondaryCardsActive: false
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -369,6 +370,7 @@ Singleton {
             quickSettingsOpenStatusRefresh.restart();
         else
             refreshStatus();
+        quickSettingsSecondaryCardsRefresh.restart();
     }
 
     function scaledText(baseSize) {
@@ -921,7 +923,9 @@ Singleton {
 
     function close() {
         openPreparing = false;
+        secondaryCardsActive = false;
         quickSettingsOpenStatusRefresh.stop();
+        quickSettingsSecondaryCardsRefresh.stop();
         if (prepareProcess.running)
             prepareProcess.running = false;
         if (settingsDirty)
@@ -1046,6 +1050,16 @@ Singleton {
         onTriggered: {
             if (quickSettingsWindow.visible)
                 root.refreshStatus();
+        }
+    }
+
+    Timer {
+        id: quickSettingsSecondaryCardsRefresh
+        interval: 320
+        repeat: false
+        onTriggered: {
+            if (quickSettingsWindow.visible)
+                root.secondaryCardsActive = true;
         }
     }
 
@@ -1232,7 +1246,7 @@ Singleton {
             }
 
             PowerModeCard {
-                active: quickSettingsWindow.visible
+                active: root.secondaryCardsActive
                 textScale: root.effectiveTextScale
                 iconScale: root.effectiveIconScale
             }
@@ -2930,13 +2944,13 @@ Singleton {
                   spacing: 8
 
                   TitleBarsCard {
-                      active: quickSettingsWindow.visible
+                      active: root.secondaryCardsActive
                       textScale: root.effectiveTextScale
                       iconScale: root.effectiveIconScale
                   }
 
                   FloatingWindowsCard {
-                      active: quickSettingsWindow.visible
+                      active: root.secondaryCardsActive
                       textScale: root.effectiveTextScale
                       iconScale: root.effectiveIconScale
                   }
@@ -2945,7 +2959,7 @@ Singleton {
               ScreenShareGuardCard {
                   Layout.row: root.visibleQuickSettingsSectionOrder().length
                   Layout.fillWidth: true
-                  active: quickSettingsWindow.visible
+                  active: root.secondaryCardsActive
                   textScale: root.effectiveTextScale
                   iconScale: root.effectiveIconScale
               }
