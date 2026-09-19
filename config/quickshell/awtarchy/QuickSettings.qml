@@ -76,7 +76,6 @@ Singleton {
     property int preparedStateRevision: -1
     property bool secondaryCardsActive: false
     property bool fastPresentation: false
-    property bool postMapPositionRequired: true
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -361,7 +360,6 @@ Singleton {
         const wasVisible = quickSettingsWindow.visible;
 
         openPreparing = false;
-        postMapPositionRequired = exitCode !== 0;
         panelPresented = true;
         quickSettingsWindow.visible = true;
         if (wasVisible)
@@ -903,7 +901,6 @@ Singleton {
         if (!targetScreen)
             return;
         fastPresentation = Boolean(fastOpen);
-        postMapPositionRequired = true;
         FlyoutManager.claim("quick-settings", targetScreen.name);
         flyoutScreen = targetScreen;
         if (!quickSettingsWindow.visible)
@@ -931,7 +928,6 @@ Singleton {
     function close() {
         openPreparing = false;
         fastPresentation = false;
-        postMapPositionRequired = true;
         secondaryCardsActive = false;
         quickSettingsOpenStatusRefresh.stop();
         quickSettingsSecondaryCardsRefresh.stop();
@@ -1228,8 +1224,7 @@ Singleton {
         onClosed: root.close()
         onVisibleChanged: {
             if (visible) {
-                if (root.postMapPositionRequired)
-                    Qt.callLater(() => root.positionWindow());
+                Qt.callLater(() => root.positionWindow());
                 Qt.callLater(() => root.alignContentToBar());
             }
         }
