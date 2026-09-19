@@ -241,20 +241,28 @@ Singleton {
         return notificationPreparation(targetScreen, targetPlacement, anchor);
     }
 
-    function prewarmFocused() {
+    function prewarmForItem(targetScreen, anchorItem) {
         if (centerWindow.visible || openPreparing || prewarmProcess.running)
             return;
-        const targetScreen = focusedScreen();
-        const preparation = centeredPreparationForScreen(targetScreen);
-        if (!targetScreen || !preparation)
+        if (!targetScreen)
+            return;
+        const targetPlacement = placementForScreen(targetScreen);
+        const preparation = anchorItem
+            ? notificationPreparation(targetScreen, targetPlacement, anchorCoordinate(anchorItem))
+            : centeredPreparationForScreen(targetScreen);
+        if (!preparation)
             return;
         centerScreen = targetScreen;
-        placement = placementForScreen(targetScreen);
+        placement = targetPlacement;
         ensurePreparedState(targetScreen);
         if (preparedOpenKey === preparation.key)
             return;
         pendingPrewarmKey = preparation.key;
         prewarmProcess.exec(preparation.args);
+    }
+
+    function prewarmFocused() {
+        prewarmForItem(focusedScreen(), null);
     }
 
     function finishPrewarm(exitCode) {
