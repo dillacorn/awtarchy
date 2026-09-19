@@ -5,6 +5,7 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
+YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
 fail() {
@@ -23,6 +24,36 @@ if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
 
+python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi text opener is not pinned to blocking Micro'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+rules = config.get("opener", {}).get("edit", [])
+if not isinstance(rules, list):
+    raise SystemExit(1)
+
+if not any(
+    isinstance(rule, dict)
+    and rule.get("run") == "/usr/bin/micro %s"
+    and rule.get("block") is True
+    and rule.get("for") == "unix"
+    for rule in rules
+):
+    raise SystemExit(1)
+
+if any(
+    isinstance(rule, dict)
+    and ("$EDITOR" in str(rule.get("run", "")) or "${EDITOR" in str(rule.get("run", "")))
+    for rule in rules
+):
+    raise SystemExit(1)
+PY
+
+grep -Fq '"Terminal Apps:nano micro ' "$RUNTIME" \
+  || fail 'Micro is no longer part of the managed Terminal Apps package set'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
   || fail 'wl-clipboard is no longer part of the managed Window Management package set'
 grep -Fq 'is_legacy_yazi_clipboard_plugin()' "$RUNTIME" \
@@ -42,4 +73,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi clipboard copy uses wl-clipboard and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi uses Micro for text editing, wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
