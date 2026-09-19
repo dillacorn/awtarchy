@@ -204,6 +204,7 @@ Singleton {
     // responsive while persistent JSON writes complete in the background.
     property var livePositions: ({})
     property var liveEnabled: ({})
+    property var liveAutoHide: ({})
     property var liveBarSizes: ({})
     property var liveIconScales: ({})
     property var liveBarTransparencies: ({})
@@ -305,6 +306,13 @@ Singleton {
         revision++;
     }
 
+    function setLiveAutoHide(name, value) {
+        const next = Object.assign({}, liveAutoHide);
+        next[name] = !!value;
+        liveAutoHide = next;
+        revision++;
+    }
+
     function setLiveBarSize(name, value) {
         const next = Object.assign({}, liveBarSizes);
         next[name] = Number(value);
@@ -344,20 +352,53 @@ Singleton {
     function clearLiveOverrides(name) {
         const positions = Object.assign({}, livePositions);
         const enabled = Object.assign({}, liveEnabled);
+        const autoHide = Object.assign({}, liveAutoHide);
         const sizes = Object.assign({}, liveBarSizes);
         const scales = Object.assign({}, liveIconScales);
         const transparencies = Object.assign({}, liveBarTransparencies);
         delete positions[name];
         delete enabled[name];
+        delete autoHide[name];
         delete sizes[name];
         delete scales[name];
         delete transparencies[name];
         livePositions = positions;
         liveEnabled = enabled;
+        liveAutoHide = autoHide;
         liveBarSizes = sizes;
         liveIconScales = scales;
         liveBarTransparencies = transparencies;
         revision++;
+    }
+
+    function reconcileHotkeyOverrides() {
+        const positions = Object.assign({}, livePositions);
+        const autoHide = Object.assign({}, liveAutoHide);
+        let changed = false;
+
+        for (const name of Object.keys(positions)) {
+            const mon = monitorState(name);
+            const persisted = ["top", "bottom", "left", "right"].indexOf(mon.position) >= 0
+                ? mon.position : "top";
+            if (positions[name] === persisted) {
+                delete positions[name];
+                changed = true;
+            }
+        }
+
+        for (const name of Object.keys(autoHide)) {
+            const persisted = monitorState(name).auto_hide === true;
+            if (!!autoHide[name] === persisted) {
+                delete autoHide[name];
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            livePositions = positions;
+            liveAutoHide = autoHide;
+            revision++;
+        }
     }
 
     FileView {
@@ -366,7 +407,10 @@ Singleton {
         watchChanges: true
         blockLoading: false
         printErrors: false
-        onLoaded: root.revision++
+        onLoaded: {
+            root.reconcileHotkeyOverrides();
+            root.revision++;
+        }
         onFileChanged: root.refresh()
     }
 
@@ -1147,6 +1191,8 @@ Singleton {
 
     function autoHideFor(name) {
         const dependency = revision;
+        if (liveAutoHide[name] !== undefined)
+            return !!liveAutoHide[name];
         return monitorState(name).auto_hide === true;
     }
 
