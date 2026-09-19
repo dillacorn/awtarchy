@@ -1252,11 +1252,56 @@ cleanup_nvidia_pending_snapshot() {
   fi
 }
 
+stage_nvidia_rollback_archive() {
+  local pkg="$1" version="$2" source="" archive_name="" sig_name="" tmp=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    archive_name="$(basename -- "$source")"
+    as_root install -m 0644 -- \
+      "$source" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" || return 1
+    if [[ -f "${source}.sig" && ! -L "${source}.sig" ]]; then
+      as_root install -m 0644 -- \
+        "${source}.sig" "$NVIDIA_ROLLBACK_PENDING/packages/${archive_name}.sig" || return 1
+    fi
+    printf '%s\n' "$archive_name"
+    return 0
+  fi
+
+  source="$(find_historical_package_source "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  trusted_nvidia_history_source "$source" || return 1
+  have curl || return 1
+  have pacman-key || return 1
+
+  archive_name="$(basename -- "$source")"
+  sig_name="${archive_name}.sig"
+  tmp="$(mktemp -d)"
+  if ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 180 --output "$tmp/$archive_name" -- "$source" \
+    || ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 30 --output "$tmp/$sig_name" -- "${source}.sig" \
+    || ! as_root pacman-key --verify "$tmp/$sig_name" "$tmp/$archive_name" >/dev/null 2>&1 \
+    || ! as_root install -m 0644 -- "$tmp/$archive_name" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" \
+    || ! as_root install -m 0644 -- "$tmp/$sig_name" "$NVIDIA_ROLLBACK_PENDING/packages/$sig_name";
+  then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  rm -rf -- "$tmp"
+
+  printf '%s\n' "$archive_name"
+}
+
 prepare_nvidia_rollback_snapshot() {
-  local pkg version archive="" archive_name="" missing=0 metadata_tmp="" before_tmp=""
+  local pkg="" version="" archive_name="" missing=0 metadata_tmp="" before_tmp=""
   local -a candidates=() missing_packages=()
 
-  mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
+  if (( $# > 0 )); then
+    candidates=("$@")
+  else
+    mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
+  fi
   (( ${#candidates[@]} )) || return 2
 
   NVIDIA_ROLLBACK_PENDING="${NVIDIA_ROLLBACK_DIR}.pending.$$"
@@ -1279,21 +1324,17 @@ prepare_nvidia_rollback_snapshot() {
   : >"$before_tmp"
 
   for pkg in "${candidates[@]}"; do
+    [[ -n "$pkg" ]] || continue
     version="$(package_version "$pkg" || true)"
-    [[ -n "$version" ]] || continue
-    archive=""
     archive_name=""
-    if archive="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null)"; then
-      archive_name="$(basename -- "$archive")"
-      if ! as_root install -m 0644 -- \
-        "$archive" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name";
-      then
-        rm -f -- "$metadata_tmp" "$before_tmp"
-        cleanup_nvidia_pending_snapshot
-        NVIDIA_ROLLBACK_PENDING=""
-        return 3
-      fi
-    else
+
+    if [[ -z "$version" ]]; then
+      printf '%s\t%s\t%s\n' "$pkg" '(not installed)' '' >>"$before_tmp"
+      continue
+    fi
+
+    archive_name="$(stage_nvidia_rollback_archive "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -z "$archive_name" ]]; then
       missing=1
       missing_packages+=("$pkg")
     fi
@@ -1317,7 +1358,7 @@ prepare_nvidia_rollback_snapshot() {
   rm -f -- "$metadata_tmp" "$before_tmp"
 
   if (( missing == 1 )); then
-    warn "NVIDIA rollback point is missing trusted cached package archives for: ${missing_packages[*]}"
+    warn "NVIDIA rollback point could not stage trusted package archives for: ${missing_packages[*]}"
     return 1
   fi
 
@@ -1325,7 +1366,7 @@ prepare_nvidia_rollback_snapshot() {
 }
 
 finalize_nvidia_rollback_snapshot() {
-  local pkg old_version archive_name current_version complete=1 changed=0
+  local pkg="" old_version="" archive_name="" current_version="" complete=1 changed=0
   local changes_tmp="" metadata_tmp=""
 
   [[ -n "$NVIDIA_ROLLBACK_PENDING" && -d "$NVIDIA_ROLLBACK_PENDING" ]] || return 1
@@ -1341,8 +1382,10 @@ finalize_nvidia_rollback_snapshot() {
     [[ "$current_version" != "$old_version" ]] || continue
 
     changed=1
-    if [[ -z "$archive_name" || ! -f "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" ]]; then
-      complete=0
+    if [[ "$old_version" != '(not installed)' ]]; then
+      if [[ -z "$archive_name" || ! -f "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" ]]; then
+        complete=0
+      fi
     fi
     printf '%s\t%s\t%s\t%s\n' "$pkg" "$old_version" "$current_version" "$archive_name" >>"$changes_tmp"
   done <"$NVIDIA_ROLLBACK_PENDING/before.tsv"
@@ -1397,7 +1440,7 @@ finalize_nvidia_rollback_snapshot() {
 }
 
 print_nvidia_rollback_changes() {
-  local pkg old_version current_version archive_name
+  local pkg="" old_version="" current_version="" archive_name=""
 
   [[ -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] || return 1
   printf '%s\n' 'NVIDIA/kernel packages changed:' >/dev/tty
@@ -1408,9 +1451,10 @@ print_nvidia_rollback_changes() {
 }
 
 apply_nvidia_rollback() {
-  local assume_yes="${1:-0}" complete="" pkg old_version saved_current_version archive_name installed_version
+  local assume_yes="${1:-0}" complete="" pkg="" old_version="" saved_current_version="" archive_name="" installed_version=""
   local metadata_tmp=""
-  local -a archives=()
+  local changed=0
+  local -a removals=() archives=()
 
   [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
     || die "No saved NVIDIA rollback point is available."
@@ -1423,7 +1467,7 @@ apply_nvidia_rollback() {
 
   if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
     print_nvidia_rollback_changes
-    printf '\nRollback restores the saved NVIDIA packages and any kernel packages that changed with them.\n' >/dev/tty
+    printf '\nRollback restores the saved package versions and removes NVIDIA packages that were added by the switch.\n' >/dev/tty
     printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
   fi
 
@@ -1437,7 +1481,7 @@ apply_nvidia_rollback() {
   done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
 
   if (( assume_yes == 0 )); then
-    confirm_yes_no 'Restore the saved NVIDIA/kernel package versions now?' 0 \
+    confirm_yes_no 'Restore the saved NVIDIA package state now?' 0 \
       || { log 'NVIDIA rollback canceled.'; return 0; }
   fi
 
@@ -1446,6 +1490,12 @@ apply_nvidia_rollback() {
     installed_version="$(package_version "$pkg" || true)"
     [[ -n "$installed_version" ]] || installed_version='(not installed)'
     [[ "$installed_version" != "$old_version" ]] || continue
+
+    if [[ "$old_version" == '(not installed)' ]]; then
+      [[ "$installed_version" == '(not installed)' ]] || removals+=("$pkg")
+      continue
+    fi
+
     [[ -n "$archive_name" && "$archive_name" == "$(basename -- "$archive_name")" ]] \
       || die "Rollback archive name is invalid for ${pkg} ${old_version}."
     [[ -f "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" && ! -L "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" ]] \
@@ -1455,21 +1505,36 @@ apply_nvidia_rollback() {
     archives+=("$NVIDIA_ROLLBACK_DIR/packages/$archive_name")
   done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
 
-  if (( ${#archives[@]} == 0 )); then
-    log 'Saved NVIDIA/kernel versions are already restored.'
-    return 0
+  if (( ${#removals[@]} > 0 )); then
+    if ! as_root pacman -R --noconfirm -- "${removals[@]}"; then
+      die "NVIDIA rollback could not remove packages introduced by the driver switch."
+    fi
+    changed=1
   fi
 
-  if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
-    die "NVIDIA rollback package transaction failed."
+  if (( ${#archives[@]} > 0 )); then
+    if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
+      die "NVIDIA rollback package transaction failed."
+    fi
+    changed=1
+  fi
+
+  if (( changed == 0 )); then
+    log 'Saved NVIDIA package state is already restored.'
+    return 0
   fi
 
   while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
     [[ -n "$pkg" && -n "$old_version" ]] || continue
-    if [[ "$(package_version "$pkg" || true)" != "$old_version" ]]; then
-      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}."
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" ]]; then
+      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}, found ${installed_version}."
     fi
   done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA packages were restored, but initramfs refresh failed; inspect the system before rebooting."
 
   metadata_tmp="$(mktemp)"
   if ! cat -- "$NVIDIA_ROLLBACK_DIR/metadata" >"$metadata_tmp"; then
@@ -1486,7 +1551,7 @@ apply_nvidia_rollback() {
   fi
   rm -f -- "$metadata_tmp"
 
-  log 'NVIDIA/kernel rollback completed. Reboot before judging the restored driver.'
+  log 'NVIDIA rollback completed. Reboot before judging the restored driver.'
 }
 
 confirm_nvidia_system_upgrade() {
