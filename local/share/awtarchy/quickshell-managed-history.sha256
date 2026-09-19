@@ -1471,3 +1471,6 @@ d98e678330dba2814f931418853d8362a01d0245876d0824f63aa22e6ff0bf2e	.config/quicksh
 530232c0779be72fe29847801374f4e379481e560c62be522afc93efea713340	.config/quickshell/awtarchy/Launcher.qml
 1c10181e9f313a2968c4317a62bc216b3c4d903335ee03f6ee1fd8f572ba0ed4	.config/quickshell/awtarchy/ClipboardMenu.qml
 32a6d2f39627680daa34723c9eff1308561038a1ed86fdc71988a0792efa7f30	.config/quickshell/awtarchy/Notifications.qml
+
+# 2026-09-18 instant Quick Settings keyboard presentation.
+33b7b7989e72afffabf8c06f98bc02a29bd0a6023a0e5ffdafd70e0f088440c0	.config/quickshell/awtarchy/QuickSettings.qml
