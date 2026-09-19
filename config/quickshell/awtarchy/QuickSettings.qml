@@ -67,6 +67,10 @@ Singleton {
     property bool privacyRemapPending: false
     property bool openPreparing: false
     property bool panelPresented: false
+    property string preparedOpenKey: ""
+    property string pendingPrepareKey: ""
+    property string pendingPrewarmKey: ""
+    property bool initialStatusWarmDone: false
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -182,6 +186,73 @@ Singleton {
         return BarState.positionFor(targetScreen.name);
     }
 
+    function preparationForScreen(targetScreen) {
+        if (!targetScreen)
+            return null;
+
+        const targetPlacement = placementForScreen(targetScreen);
+        const vertical = targetPlacement === "left" || targetPlacement === "right";
+        const view = BarState.quickSettingsViewFor(targetScreen.name);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const maxWidth = Math.max(1, screenWidth - 20);
+        const maxHeight = Math.max(1, screenHeight - 20);
+        const minWidth = Math.min(520, maxWidth);
+        const minHeight = Math.min(460, maxHeight);
+        const width = Math.max(minWidth,
+            Math.min(maxWidth, Math.round(Number(view.width) || BarState.defaultQuickSettingsWidth)));
+        const height = Math.max(minHeight,
+            Math.min(maxHeight, Math.round(Number(view.height) || BarState.defaultQuickSettingsHeight)));
+        const barSize = targetPlacement === "center"
+            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const key = [
+            targetScreen.name, targetPlacement, width, height,
+            barSize, screenWidth, screenHeight
+        ].join("|");
+
+        return ({
+            key: key,
+            placement: targetPlacement,
+            args: [
+                "bash", prepareScript, "quick-settings", targetScreen.name, targetPlacement,
+                String(width), String(height), String(barSize), "-1",
+                String(screenWidth), String(screenHeight)
+            ]
+        });
+    }
+
+    function prewarmFocused() {
+        if (quickSettingsWindow.visible || openPreparing || prewarmProcess.running)
+            return;
+
+        const targetScreen = focusedScreen();
+        const preparation = preparationForScreen(targetScreen);
+        if (!targetScreen || !preparation)
+            return;
+
+        flyoutScreen = targetScreen;
+        placement = preparation.placement;
+        brightnessTarget = targetScreen.name;
+        loadSavedView(targetScreen);
+
+        if (!initialStatusWarmDone && !statusReader.running) {
+            initialStatusWarmDone = true;
+            requestStatus(targetScreen);
+        }
+
+        if (preparedOpenKey === preparation.key)
+            return;
+
+        pendingPrewarmKey = preparation.key;
+        prewarmProcess.exec(preparation.args);
+    }
+
+    function finishPrewarm(exitCode) {
+        if (exitCode === 0 && pendingPrewarmKey.length > 0)
+            preparedOpenKey = pendingPrewarmKey;
+        pendingPrewarmKey = "";
+    }
+
     function clampWidth(value) {
         return Math.max(minimumPanelWidth, Math.min(maximumPanelWidth, Math.round(value)));
     }
@@ -239,20 +310,32 @@ Singleton {
     function prepareWindowOpen(targetScreen) {
         if (!targetScreen)
             return;
-        const vertical = placement === "left" || placement === "right";
-        const barSize = placement === "center"
-            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+
+        const preparation = preparationForScreen(targetScreen);
+        if (!preparation)
+            return;
+
+        placement = preparation.placement;
         openPreparing = true;
-        prepareProcess.exec([
-            "bash", prepareScript, "quick-settings", targetScreen.name, placement,
-            String(configuredPanelWidth), String(configuredPanelHeight),
-            String(barSize), "-1",
-            String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
-        ]);
+        pendingPrepareKey = preparation.key;
+
+        if (preparedOpenKey === preparation.key) {
+            finishPreparedOpen(0, true);
+            return;
+        }
+
+        if (prewarmProcess.running)
+            prewarmProcess.running = false;
+        prepareProcess.exec(preparation.args);
     }
-    function finishPreparedOpen() {
+
+    function finishPreparedOpen(exitCode, usedPrewarm) {
         if (!openPreparing)
             return;
+
+        if (!usedPrewarm && exitCode === 0 && pendingPrepareKey.length > 0)
+            preparedOpenKey = pendingPrepareKey;
+        pendingPrepareKey = "";
 
         const wasVisible = quickSettingsWindow.visible;
 
@@ -422,21 +505,28 @@ Singleton {
             queueAction(["scheduler-start", name], "Switching to " + name + "…");
     }
 
-    function refreshStatus() {
-        if (!quickSettingsWindow.visible)
+    function requestStatus(targetScreen) {
+        if (!targetScreen || !targetScreen.name)
             return;
         if (statusReader.running) {
             refreshPending = true;
             return;
         }
+        const monitorName = String(targetScreen.name);
         statusLoading = true;
         refreshPending = false;
         statusReader.exec([
             backend,
             "--status-json",
-            activeMonitorName,
-            brightnessTarget.length > 0 ? brightnessTarget : activeMonitorName
+            monitorName,
+            monitorName
         ]);
+    }
+
+    function refreshStatus() {
+        if (!quickSettingsWindow.visible)
+            return;
+        requestStatus(activeScreen);
     }
 
     function queueAction(commandArgs, message) {
@@ -900,7 +990,45 @@ Singleton {
 
     Process {
         id: prepareProcess
-        onExited: root.finishPreparedOpen()
+        onExited: (exitCode, exitStatus) => root.finishPreparedOpen(exitCode, false)
+    }
+
+    Process {
+        id: prewarmProcess
+        onExited: (exitCode, exitStatus) => root.finishPrewarm(exitCode)
+    }
+
+    Timer {
+        id: quickSettingsStartupPrewarm
+        interval: 2400
+        repeat: false
+        running: true
+        onTriggered: root.prewarmFocused()
+    }
+
+    Timer {
+        id: quickSettingsPrewarmRefresh
+        interval: 250
+        repeat: false
+        onTriggered: root.prewarmFocused()
+    }
+
+    Connections {
+        target: BarState
+        function onRevisionChanged() {
+            if (!quickSettingsWindow.visible && !root.openPreparing)
+                quickSettingsPrewarmRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (!event || quickSettingsWindow.visible || root.openPreparing)
+                return;
+            if (event.name === "focusedmon" || event.name === "focusedmonv2")
+                quickSettingsPrewarmRefresh.restart();
+        }
     }
 
     Process {
