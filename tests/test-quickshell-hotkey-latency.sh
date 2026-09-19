@@ -128,6 +128,7 @@ grep -Fq -- 'manager start' "$LOG" \
 
 SHELL_QML="$ROOT/config/quickshell/awtarchy/shell.qml"
 BAR_STATE="$ROOT/config/quickshell/awtarchy/BarState.qml"
+QUICK_SETTINGS="$ROOT/config/quickshell/awtarchy/QuickSettings.qml"
 
 for method in flipBarFocused rotateBarFocused toggleBarAutoHideFocused; do
     grep -Fq -- "function ${method}()" "$SHELL_QML" \
@@ -142,5 +143,60 @@ grep -Fq -- 'property var liveAutoHide: ({})' "$BAR_STATE" \
     || fail 'BarState is missing the live auto-hide override'
 grep -Fq -- 'function reconcileHotkeyOverrides()' "$BAR_STATE" \
     || fail 'BarState does not reconcile hotkey overrides after persistence'
+grep -Fq -- 'property var stateCache: ({})' "$BAR_STATE" \
+    || fail 'BarState does not cache parsed shell state'
+grep -Fq -- 'function rebuildStateCache()' "$BAR_STATE" \
+    || fail 'BarState has no state-cache refresh path'
+grep -Fq -- 'return stateCacheReady ? stateCache : emptyData();' "$BAR_STATE" \
+    || fail 'BarState.data() still reparses state instead of returning the cache'
 
-printf '%s\n' 'PASS: Quickshell hotkeys use direct IPC with recovery fallbacks'
+python3 - "$BAR_STATE" "$QUICK_SETTINGS" <<'PY'
+import re
+import sys
+
+bar_state = open(sys.argv[1], encoding="utf-8").read()
+quick = open(sys.argv[2], encoding="utf-8").read()
+
+for name in (
+    "setLivePosition",
+    "setLiveEnabled",
+    "setLiveAutoHide",
+    "setLiveBarSize",
+    "setLiveIconScale",
+    "setLiveBarTransparency",
+):
+    match = re.search(
+        rf"function {name}\([^)]*\) \{{(?P<body>.*?)\n    \}}",
+        bar_state,
+        re.S,
+    )
+    if match is None:
+        raise SystemExit(f"FAIL: BarState is missing {name}()")
+    if "revision++" in match.group("body"):
+        raise SystemExit(f"FAIL: {name}() still invalidates global BarState revision")
+
+if bar_state.count("JSON.parse(text)") != 1:
+    raise SystemExit("FAIL: BarState shell state is parsed in more than one path")
+
+required_quick = (
+    "property string preparedOpenKey:",
+    "function preparationForScreen(targetScreen)",
+    "function prewarmFocused()",
+    "id: prewarmProcess",
+    "id: quickSettingsStartupPrewarm",
+    "interval: 2400",
+    "if (preparedOpenKey === preparation.key)",
+    "finishPreparedOpen(0, true);",
+    "function requestStatus(targetScreen)",
+)
+for needle in required_quick:
+    if needle not in quick:
+        raise SystemExit(f"FAIL: Quick Settings preload contract missing: {needle}")
+
+if 'prepareProcess.exec(preparation.args);' not in quick:
+    raise SystemExit("FAIL: Quick Settings lost blocking prepare fallback for stale cache")
+if 'root.prewarmEnabled = true;' not in quick:
+    raise SystemExit("FAIL: Quick Settings startup warmup is not gated until login settles")
+PY
+
+printf '%s\n' 'PASS: Quickshell hotkeys use direct IPC, cached state, and Quick Settings prewarm'
