@@ -72,6 +72,8 @@ Singleton {
     property string pendingPrewarmKey: ""
     property bool initialStatusWarmDone: false
     property bool prewarmEnabled: false
+    property string preparedStateMonitor: ""
+    property int preparedStateRevision: -1
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -187,6 +189,21 @@ Singleton {
         return BarState.positionFor(targetScreen.name);
     }
 
+    function ensurePreparedState(targetScreen) {
+        if (!targetScreen || !targetScreen.name)
+            return;
+        const monitorName = String(targetScreen.name);
+        if (preparedStateMonitor === monitorName
+            && preparedStateRevision === BarState.revision)
+            return;
+
+        lockscreenWeatherLocationDraft = BarState.lockscreenWeatherLocation();
+        lockscreenWeatherLocationError = "";
+        loadSavedView(targetScreen);
+        preparedStateMonitor = monitorName;
+        preparedStateRevision = BarState.revision;
+    }
+
     function preparationForScreen(targetScreen) {
         if (!targetScreen)
             return null;
@@ -234,7 +251,7 @@ Singleton {
         flyoutScreen = targetScreen;
         placement = preparation.placement;
         brightnessTarget = targetScreen.name;
-        loadSavedView(targetScreen);
+        ensurePreparedState(targetScreen);
 
         if (!initialStatusWarmDone && !statusReader.running) {
             initialStatusWarmDone = true;
@@ -345,7 +362,13 @@ Singleton {
         quickSettingsWindow.visible = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
-        refreshStatus();
+
+        // The startup prewarm already populated status. Give the mapped window
+        // its first frame before spawning the heavier live-status backend.
+        if (initialStatusWarmDone)
+            quickSettingsOpenStatusRefresh.restart();
+        else
+            refreshStatus();
     }
 
     function scaledText(baseSize) {
@@ -890,9 +913,7 @@ Singleton {
         schedulerArgsDirty = false;
         nightLightScheduleEditorOpen = false;
         nightLightScheduleError = "";
-        lockscreenWeatherLocationDraft = BarState.lockscreenWeatherLocation();
-        lockscreenWeatherLocationError = "";
-        loadSavedView(targetScreen);
+        ensurePreparedState(targetScreen);
         prepareWindowOpen(targetScreen);
     }
 
@@ -900,6 +921,7 @@ Singleton {
 
     function close() {
         openPreparing = false;
+        quickSettingsOpenStatusRefresh.stop();
         if (prepareProcess.running)
             prepareProcess.running = false;
         if (settingsDirty)
@@ -1015,6 +1037,16 @@ Singleton {
         interval: 250
         repeat: false
         onTriggered: root.prewarmFocused()
+    }
+
+    Timer {
+        id: quickSettingsOpenStatusRefresh
+        interval: 160
+        repeat: false
+        onTriggered: {
+            if (quickSettingsWindow.visible)
+                root.refreshStatus();
+        }
     }
 
     Connections {
