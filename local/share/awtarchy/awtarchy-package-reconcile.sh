@@ -593,14 +593,3886 @@ multi_select() {
 
     key="$(read_key)" || return 1
     case "$key" in
-      $'\033[A'|k)
+      
+      ' ')
+        if (( selected[current] == 1 )); then selected[current]=0; else selected[current]=1; fi
+        ;;
+      a|A)
+        for i in "${!selected[@]}"; do selected[i]=1; done
+        ;;
+      c|C)
+        for i in "${!selected[@]}"; do selected[i]=0; done
+        ;;
+      ''|$'\n'|$'\r')
+        return 0
+        ;;
+      $'\033'|q|Q)
+        return 1
+        ;;
+    esac
+  done
+}
+
+confirm_yes_no() {
+  local prompt="$1" default_yes="${2:-0}" answer=""
+  local suffix='[y/N]'
+  (( default_yes == 1 )) && suffix='[Y/n]'
+  printf '%s %s ' "$prompt" "$suffix" >/dev/tty
+  IFS= read -r answer </dev/tty || return 1
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    n|N|no|NO) return 1 ;;
+    '') (( default_yes == 1 )) ;;
+    *) return 1 ;;
+  esac
+}
+
+
+nvidia_rollback_package_name() {
+  case "$1" in
+    nvidia|nvidia-*|lib32-nvidia-*|opencl-nvidia*|lib32-opencl-nvidia*|libva-nvidia-driver|linux-*-nvidia*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+installed_nvidia_package_names() {
+  local pkg
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_rollback_package_name "$pkg" && printf '%s\n' "$pkg"
+  done < <(pacman -Qq 2>/dev/null || true)
+}
+
+current_kernel_package_names() {
+  local pkgbase_file pkg
+
+  shopt -s nullglob
+  for pkgbase_file in /usr/lib/modules/*/pkgbase; do
+    [[ -r "$pkgbase_file" ]] || continue
+    pkg="$(tr -d '\r\n' <"$pkgbase_file")"
+    [[ -n "$pkg" ]] && printf '%s\n' "$pkg"
+  done
+  shopt -u nullglob
+}
+
+nvidia_rollback_candidate_packages() {
+  local pkg
+  local -a packages=()
+
+  mapfile -t packages < <(installed_nvidia_package_names)
+  (( ${#packages[@]} )) || return 1
+
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    packages+=("$pkg")
+    package_installed "${pkg}-headers" && packages+=("${pkg}-headers")
+  done < <(current_kernel_package_names)
+
+  printf '%s\n' "${packages[@]}" | sed '/^$/d' | LC_ALL=C sort -u
+}
+
+package_version() {
+  pacman -Q "$1" 2>/dev/null | awk 'NR == 1 { print $2 }'
+}
+
+root_owned_nonwritable_path() {
+  local path="$1" owner="" mode=""
+
+  [[ -e "$path" && ! -L "$path" ]] || return 1
+  owner="$(/usr/bin/stat -Lc '%u' -- "$path" 2>/dev/null)" || return 1
+  mode="$(/usr/bin/stat -Lc '%a' -- "$path" 2>/dev/null)" || return 1
+  [[ "$owner" == 0 && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 0022) == 0 ))
+}
+
+trusted_nvidia_cache_archive() {
+  local archive="$1"
+  [[ -f "$archive" && ! -L "$archive" ]] || return 1
+  root_owned_nonwritable_path "$archive"
+}
+
+find_cached_package_archive() {
+  local pkg="$1" version="$2" candidate
+  local -a matches=()
+
+  shopt -s nullglob
+  matches=(
+    "${PACMAN_CACHE_DIR}/${pkg}-${version}-"*.pkg.tar.*
+  )
+  shopt -u nullglob
+
+  for candidate in "${matches[@]}"; do
+    [[ "$candidate" != *.sig ]] || continue
+    trusted_nvidia_cache_archive "$candidate" || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+valid_archive_package_component() {
+  [[ "$1" =~ ^[A-Za-z0-9@._+:-]+$ ]]
+}
+
+archive_url_exists() {
+  local url="$1"
+  have curl || return 1
+  curl --fail --silent --show-error --location --head \
+    --connect-timeout 4 --max-time 12 -- "$url" >/dev/null 2>&1
+}
+
+find_archlinux_archive_package_url() {
+  local pkg="$1" version="$2" first="" arch="" extension="" filename="" url=""
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
+
+  for arch in x86_64 any; do
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/${filename}"
+      if archive_url_exists "$url"; then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+find_cachyos_archive_package_url() {
+  local pkg="$1" version="$2" repo="" arch="" extension="" filename="" url=""
+  local -a repo_arch_pairs=(
+    "cachyos|x86_64"
+    "cachyos-v3|x86_64_v3"
+    "cachyos-v4|x86_64_v4"
+  )
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+
+  local pair
+  for pair in "${repo_arch_pairs[@]}"; do
+    repo="${pair%%|*}"
+    arch="${pair#*|}"
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${CACHY_PACKAGE_ARCHIVE_BASE}/${repo}/${filename}"
+      if archive_url_exists "$url"; then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+trusted_nvidia_history_source() {
+  local source="$1"
+
+  if [[ "$source" == "${PACMAN_CACHE_DIR}/"* ]]; then
+    trusted_nvidia_cache_archive "$source"
+    return $?
+  fi
+
+  if [[ "$source" == "${ARCH_PACKAGE_ARCHIVE_BASE}/"* \
+    || "$source" == "${CACHY_PACKAGE_ARCHIVE_BASE}/"* ]];
+  then
+    [[ "$source" != *$'\n'* && "$source" != *$'\r'* && "$source" != *' '* ]]
+    return $?
+  fi
+  return 1
+}
+
+find_historical_package_source() {
+  local pkg="$1" version="$2" source=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  if [[ "$pkg" == linux-cachyos* ]]; then
+    source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -n "$source" ]]; then
+      printf '%s\n' "$source"
+      return 0
+    fi
+  fi
+
+  source="$(find_archlinux_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  printf '%s\n' "$source"
+}
+
+nvidia_driver_version_from_package_version() {
+  local version="${1#*:}"
+  version="${version%-*}"
+  [[ "$version" =~ ^[0-9]+([.][0-9]+)+$ ]] || return 1
+  printf '%s\n' "$version"
+}
+
+installed_nvidia_driver_version() {
+  local version=""
+  version="$(package_version nvidia-utils || true)"
+  [[ -n "$version" ]] || return 1
+  nvidia_driver_version_from_package_version "$version"
+}
+
+nvidia_module_package_name() {
+  case "$1" in
+    nvidia|nvidia-lts|nvidia-dkms|nvidia-open|nvidia-open-lts|nvidia-lts-open|nvidia-open-dkms|linux-*-nvidia|linux-*-nvidia-open)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+nvidia_driver_switch_package_name() {
+  case "$1" in
+    nvidia-utils|lib32-nvidia-utils|opencl-nvidia|lib32-opencl-nvidia)
+      return 0
+      ;;
+    *)
+      nvidia_module_package_name "$1"
+      ;;
+  esac
+}
+
+installed_nvidia_driver_switch_packages() {
+  local pkg
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_driver_switch_package_name "$pkg" && printf '%s\n' "$pkg"
+  done < <(pacman -Qq 2>/dev/null || true)
+}
+
+archlinux_archive_package_versions() {
+  local pkg="$1" first="" index_url="" pattern=""
+
+  valid_archive_package_component "$pkg" || return 1
+  have curl || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
+  index_url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/"
+  pattern="${pkg}-[^\"<>[:space:]]+-x86_64\\.pkg\\.tar\\.(zst|xz|gz)"
+
+  curl --fail --silent --show-error --location \
+    --connect-timeout 4 --max-time 25 -- "$index_url" \
+    | grep -oE "$pattern" \
+    | sed -E "s#^${pkg}-##; s#-x86_64\\.pkg\\.tar\\.(zst|xz|gz)\$##" \
+    | LC_ALL=C sort -Vu
+}
+
+archlinux_archive_version_for_driver() {
+  local pkg="$1" driver="$2" version="" parsed=""
+  local -a matches=()
+
+  while IFS= read -r version; do
+    [[ -n "$version" ]] || continue
+    parsed="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ "$parsed" == "$driver" ]] || continue
+    matches+=("$version")
+  done < <(archlinux_archive_package_versions "$pkg" 2>/dev/null || true)
+
+  (( ${#matches[@]} > 0 )) || return 1
+  printf '%s\n' "${matches[@]}" | LC_ALL=C sort -V | tail -n1
+}
+
+driver_version_is_older() {
+  local candidate="$1" current="$2" first=""
+  [[ "$candidate" != "$current" ]] || return 1
+  first="$(printf '%s\n%s\n' "$candidate" "$current" | LC_ALL=C sort -V | head -n1)"
+  [[ "$first" == "$candidate" ]]
+}
+
+available_nvidia_driver_releases() {
+  local current_driver="" version="" driver=""
+  local module_versions="" utils_versions="" common_versions=""
+  local module_drivers="" utils_drivers=""
+
+  current_driver="$(installed_nvidia_driver_version)" || return 1
+  module_versions="$(mktemp)"
+  utils_versions="$(mktemp)"
+  module_drivers="$(mktemp)"
+  utils_drivers="$(mktemp)"
+  common_versions="$(mktemp)"
+
+  if ! archlinux_archive_package_versions nvidia-open-dkms >"$module_versions" \
+    || ! archlinux_archive_package_versions nvidia-utils >"$utils_versions";
+  then
+    rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions"
+    return 1
+  fi
+
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$module_drivers"
+  done <"$module_versions"
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$utils_drivers"
+  done <"$utils_versions"
+
+  awk 'NR == FNR { available[$0] = 1; next } available[$0]' \
+    "$module_drivers" "$utils_drivers" \
+    | LC_ALL=C sort -u >"$common_versions"
+
+  local older_versions=""
+  local driver_major=0 count=0
+  older_versions="$(mktemp)"
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    driver_major="${driver%%.*}"
+    [[ "$driver_major" =~ ^[0-9]+$ ]] || continue
+    (( driver_major >= 590 )) || continue
+    driver_version_is_older "$driver" "$current_driver" || continue
+    printf '%s\n' "$driver" >>"$older_versions"
+  done <"$common_versions"
+
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    printf '%s\n' "$driver"
+    (( ++count >= 20 )) && break
+  done < <(LC_ALL=C sort -Vr "$older_versions")
+
+  rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions" "$older_versions"
+}
+
+build_nvidia_release_bundle() {
+  local target_driver="$1" output="$2"
+  local pkg="" target_version="" current_version="" source=""
+  local -a packages=(nvidia-utils nvidia-open-dkms)
+
+  for pkg in lib32-nvidia-utils opencl-nvidia lib32-opencl-nvidia; do
+    package_installed "$pkg" && packages+=("$pkg")
+  done
+
+  : >"$output"
+  for pkg in "${packages[@]}"; do
+    target_version="$(archlinux_archive_version_for_driver "$pkg" "$target_driver" 2>/dev/null || true)"
+    [[ -n "$target_version" ]] || return 1
+    source="$(find_archlinux_archive_package_url "$pkg" "$target_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] || return 1
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    printf '%s\t%s\t%s\t%s\n' \
+      "$pkg" "$current_version" "$target_version" "$source" >>"$output"
+  done
+}
+
+ensure_nvidia_dkms_kernel_headers() {
+  local kernel_pkg="" kernel_version="" header_pkg="" header_version="" source=""
+  local -a sources=()
+
+  while IFS= read -r kernel_pkg; do
+    [[ -n "$kernel_pkg" ]] || continue
+    kernel_version="$(package_version "$kernel_pkg" || true)"
+    [[ -n "$kernel_version" ]] \
+      || die "Cannot determine installed kernel package version for ${kernel_pkg}."
+
+    header_pkg="${kernel_pkg}-headers"
+    header_version="$(package_version "$header_pkg" || true)"
+    if [[ "$header_version" == "$kernel_version" ]]; then
+      continue
+    fi
+
+    source="$(find_historical_package_source "$header_pkg" "$kernel_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] \
+      || die "Matching headers are unavailable for ${kernel_pkg} ${kernel_version}; refusing an NVIDIA DKMS switch."
+    trusted_nvidia_history_source "$source" \
+      || die "Kernel header source is not trusted: ${source}"
+    sources+=("$source")
+  done < <(current_kernel_package_names)
+
+  if (( ${#sources[@]} > 0 )); then
+    log 'Installing exact kernel headers required for the NVIDIA DKMS rollback...'
+    as_root pacman -U --needed --noconfirm "${sources[@]}" \
+      || die "Could not install matching kernel headers required for NVIDIA DKMS."
+  fi
+}
+
+remove_nvidia_module_conflicts_for_dkms() {
+  local pkg
+  local -a conflicts=()
+
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_module_package_name "$pkg" || continue
+    [[ "$pkg" == nvidia-open-dkms ]] && continue
+    conflicts+=("$pkg")
+  done < <(pacman -Qq 2>/dev/null || true)
+
+  (( ${#conflicts[@]} > 0 )) || return 0
+  log "Temporarily replacing NVIDIA module packages with nvidia-open-dkms: ${conflicts[*]}"
+  as_root pacman -R --noconfirm -- "${conflicts[@]}"
+}
+
+refresh_nvidia_initramfs() {
+  if have mkinitcpio; then
+    as_root mkinitcpio -P
+  elif have dracut; then
+    as_root dracut --regenerate-all --force
+  fi
+}
+
+verify_nvidia_dkms_release() {
+  local target_driver="$1" status=""
+
+  [[ "$(installed_nvidia_driver_version 2>/dev/null || true)" == "$target_driver" ]] || return 1
+  [[ "$(nvidia_driver_version_from_package_version "$(package_version nvidia-open-dkms || true)" 2>/dev/null || true)" == "$target_driver" ]] \
+    || return 1
+
+  if have dkms; then
+    status="$(dkms status -m nvidia -v "$target_driver" 2>/dev/null || true)"
+    [[ "$status" == *installed* ]] || return 1
+  fi
+}
+
+prepare_nvidia_driver_switch_snapshot() {
+  local tmp=""
+  local -a candidates=()
+
+  mapfile -t candidates < <(installed_nvidia_driver_switch_packages)
+  candidates+=(nvidia-open-dkms)
+  tmp="$(mktemp)"
+  printf '%s\n' "${candidates[@]}" | sed '/^$/d' | LC_ALL=C sort -u >"$tmp"
+  mapfile -t candidates <"$tmp"
+  rm -f -- "$tmp"
+
+  prepare_nvidia_rollback_snapshot "${candidates[@]}"
+}
+
+restore_failed_nvidia_switch() {
+  local reason="$1"
+
+  if finalize_nvidia_rollback_snapshot; then
+    warn "${reason}; restoring the pre-switch NVIDIA package set now."
+    apply_nvidia_rollback 1
+    refresh_nvidia_initramfs || true
+    die "${reason}; the previous NVIDIA package set was restored."
+  fi
+
+  cleanup_nvidia_pending_snapshot
+  NVIDIA_ROLLBACK_PENDING=""
+  die "${reason}; Awtarchy could not finalize the return point, so automatic recovery was unavailable."
+}
+
+print_recoverable_nvidia_versions() {
+  local current_driver="" version=""
+  local -a versions=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(available_nvidia_driver_releases)
+
+  printf 'Current NVIDIA driver: %s\n' "$current_driver"
+  printf 'Available previous NVIDIA driver releases (Arch Linux Archive):\n'
+  if (( ${#versions[@]} == 0 )); then
+    printf '  (none)\n'
+    return 1
+  fi
+  for version in "${versions[@]}"; do
+    printf '  %s\n' "$version"
+  done
+}
+
+apply_nvidia_history_version() {
+  local target_driver="$1" assume_yes="${2:-0}"
+  local current_driver="" bundle="" pkg="" current_version="" target_version="" source=""
+  local snapshot_rc=0 verification_failed=0 source_invalid=0
+  local -a sources=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  [[ "${current_driver%%.*}" =~ ^[0-9]+$ && "${current_driver%%.*}" -ge 590 ]] \
+    || die "Archived release switching is supported only for the modern NVIDIA 590+ open-module stack."
+  [[ "${target_driver%%.*}" =~ ^[0-9]+$ && "${target_driver%%.*}" -ge 590 ]] \
+    || die "NVIDIA driver ${target_driver} predates Awtarchy's supported open-module rollback range."
+  if [[ "$current_driver" == "$target_driver" ]]; then
+    log "NVIDIA driver ${target_driver} is already installed."
+    return 0
+  fi
+
+  bundle="$(mktemp)"
+  if ! build_nvidia_release_bundle "$target_driver" "$bundle"; then
+    rm -f -- "$bundle"
+    die "NVIDIA driver ${target_driver} is not available as a complete nvidia-open-dkms/userspace release in the official Arch Linux Archive."
+  fi
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    printf '\nNVIDIA driver rollback plan:\n' >/dev/tty
+    while IFS=$'\t' read -r pkg current_version target_version source; do
+      printf '  %s: %s -> %s\n' "$pkg" "$current_version" "$target_version" >/dev/tty
+    done <"$bundle"
+    printf '\nCurrent kernels stay installed; Awtarchy will use nvidia-open-dkms for the selected release.\n' >/dev/tty
+    printf 'A complete return point for the current NVIDIA package set is staged before anything is removed.\n' >/dev/tty
+    printf 'If installation or verification fails, Awtarchy attempts to restore that return point automatically.\n' >/dev/tty
+    printf 'A reboot is required before judging the selected driver.\n\n' >/dev/tty
+  fi
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no "Switch NVIDIA driver from ${current_driver} to ${target_driver}?" 0 \
+      || { rm -f -- "$bundle"; log 'NVIDIA driver version switch canceled.'; return 0; }
+  fi
+
+  prepare_nvidia_driver_switch_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      ;;
+    1)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "A complete return point for the current NVIDIA package set could not be staged. No packages were changed."
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "No installed NVIDIA package set is available to protect before the version switch."
+      ;;
+    *)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "Could not prepare the NVIDIA return point. No packages were changed."
+      ;;
+  esac
+
+  ensure_nvidia_dkms_kernel_headers
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    if ! trusted_nvidia_history_source "$source"; then
+      source_invalid=1
+      break
+    fi
+    sources+=("$source")
+  done <"$bundle"
+  if (( source_invalid == 1 )); then
+    rm -f -- "$bundle"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Historical NVIDIA source validation failed. No NVIDIA packages were changed."
+  fi
+
+  if ! remove_nvidia_module_conflicts_for_dkms; then
+    rm -f -- "$bundle"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Could not replace the current NVIDIA kernel-module package. No driver release was installed."
+  fi
+
+  if ! as_root pacman -U --needed --noconfirm "${sources[@]}"; then
+    rm -f -- "$bundle"
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} package transaction failed"
+  fi
+
+  if have dkms; then
+    if ! as_root dkms autoinstall -m nvidia -v "$target_driver"; then
+      rm -f -- "$bundle"
+      restore_failed_nvidia_switch "NVIDIA ${target_driver} DKMS build failed"
+    fi
+  fi
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    if [[ "$(package_version "$pkg" || true)" != "$target_version" ]]; then
+      verification_failed=1
+      warn "NVIDIA version switch verification failed for ${pkg}; expected ${target_version}."
+    fi
+  done <"$bundle"
+  verify_nvidia_dkms_release "$target_driver" || verification_failed=1
+
+  if (( verification_failed == 1 )); then
+    rm -f -- "$bundle"
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} verification failed"
+  fi
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    rm -f -- "$bundle"
+    die "NVIDIA ${target_driver} was installed, but Awtarchy could not preserve the pre-switch return point."
+  fi
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA ${target_driver} is installed, but initramfs refresh failed; inspect the system before rebooting."
+  rm -f -- "$bundle"
+
+  log "NVIDIA driver ${target_driver} is installed through nvidia-open-dkms."
+  log "The previous NVIDIA package set is saved as the rollback point."
+  log "Reboot before judging the selected driver."
+}
+
+pick_nvidia_history_version() {
+  local current_driver="" answer="" i="" selected_driver=""
+  local -a versions=()
+
+  [[ -r /dev/tty && -w /dev/tty ]] \
+    || die "NVIDIA driver version selection requires an interactive terminal."
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(available_nvidia_driver_releases)
+  (( ${#versions[@]} > 0 )) \
+    || die "No previous nvidia-open-dkms releases were found in the official Arch Linux Archive."
+
+  printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
+  printf 'Available previous NVIDIA driver releases:\n' >/dev/tty
+  for i in "${!versions[@]}"; do
+    printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
+  done
+  printf '  q. Cancel\n\nChoose a driver version: ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=q
+  case "$answer" in
+    q|Q|'')
+      log 'NVIDIA driver version selection canceled.'
+      return 0
+      ;;
+  esac
+  [[ "$answer" =~ ^[0-9]+$ ]] || die "Invalid NVIDIA driver selection."
+  (( answer >= 1 && answer <= ${#versions[@]} )) || die "Invalid NVIDIA driver selection."
+  selected_driver="${versions[answer-1]}"
+  apply_nvidia_history_version "$selected_driver" 0
+}
+
+validate_nvidia_rollback_storage() {
+  root_owned_nonwritable_path "$NVIDIA_ROLLBACK_ROOT" \
+    && [[ -d "$NVIDIA_ROLLBACK_ROOT" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR" \
+    && [[ -d "$NVIDIA_ROLLBACK_DIR" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages" \
+    && [[ -d "$NVIDIA_ROLLBACK_DIR/packages" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/metadata" \
+    && [[ -f "$NVIDIA_ROLLBACK_DIR/metadata" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/changes.tsv" \
+    && [[ -f "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]]
+}
+
+cleanup_nvidia_pending_snapshot() {
+  if [[ -n "${NVIDIA_ROLLBACK_PENDING:-}" && -e "$NVIDIA_ROLLBACK_PENDING" ]]; then
+    as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING" \
+      || warn "Could not remove pending NVIDIA rollback state: $NVIDIA_ROLLBACK_PENDING"
+  fi
+}
+
+stage_nvidia_rollback_archive() {
+  local pkg="$1" version="$2" source="" archive_name="" sig_name="" tmp=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    archive_name="$(basename -- "$source")"
+    as_root install -m 0644 -- \
+      "$source" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" || return 1
+    if [[ -f "${source}.sig" && ! -L "${source}.sig" ]]; then
+      as_root install -m 0644 -- \
+        "${source}.sig" "$NVIDIA_ROLLBACK_PENDING/packages/${archive_name}.sig" || return 1
+    fi
+    printf '%s\n' "$archive_name"
+    return 0
+  fi
+
+  source="$(find_historical_package_source "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  trusted_nvidia_history_source "$source" || return 1
+  have curl || return 1
+  have pacman-key || return 1
+
+  archive_name="$(basename -- "$source")"
+  sig_name="${archive_name}.sig"
+  tmp="$(mktemp -d)"
+  if ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 180 --output "$tmp/$archive_name" -- "$source" \
+    || ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 30 --output "$tmp/$sig_name" -- "${source}.sig" \
+    || ! as_root pacman-key --verify "$tmp/$sig_name" "$tmp/$archive_name" >/dev/null 2>&1 \
+    || ! as_root install -m 0644 -- "$tmp/$archive_name" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" \
+    || ! as_root install -m 0644 -- "$tmp/$sig_name" "$NVIDIA_ROLLBACK_PENDING/packages/$sig_name";
+  then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  rm -rf -- "$tmp"
+
+  printf '%s\n' "$archive_name"
+}
+
+prepare_nvidia_rollback_snapshot() {
+  local pkg="" version="" archive_name="" missing=0 metadata_tmp="" before_tmp=""
+  local -a candidates=() missing_packages=()
+
+  if (( $# > 0 )); then
+    candidates=("$@")
+  else
+    mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
+  fi
+  (( ${#candidates[@]} )) || return 2
+
+  NVIDIA_ROLLBACK_PENDING="${NVIDIA_ROLLBACK_DIR}.pending.$$"
+  if ! as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING" \
+    || ! as_root install -d -m 0755 -- \
+      "$NVIDIA_ROLLBACK_ROOT" \
+      "$NVIDIA_ROLLBACK_PENDING" \
+      "$NVIDIA_ROLLBACK_PENDING/packages";
+  then
+    NVIDIA_ROLLBACK_PENDING=""
+    return 3
+  fi
+
+  metadata_tmp="$(mktemp)"
+  before_tmp="$(mktemp)"
+  {
+    printf 'created_at=%s\n' "$(date -Iseconds)"
+    printf 'status=pending\n'
+  } >"$metadata_tmp"
+  : >"$before_tmp"
+
+  for pkg in "${candidates[@]}"; do
+    [[ -n "$pkg" ]] || continue
+    version="$(package_version "$pkg" || true)"
+    archive_name=""
+
+    if [[ -z "$version" ]]; then
+      printf '%s\t%s\t%s\n' "$pkg" '(not installed)' '' >>"$before_tmp"
+      continue
+    fi
+
+    archive_name="$(stage_nvidia_rollback_archive "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -z "$archive_name" ]]; then
+      missing=1
+      missing_packages+=("$pkg")
+    fi
+    printf '%s\t%s\t%s\n' "$pkg" "$version" "$archive_name" >>"$before_tmp"
+  done
+
+  if (( missing == 1 )); then
+    printf 'snapshot_complete=0\n' >>"$metadata_tmp"
+  else
+    printf 'snapshot_complete=1\n' >>"$metadata_tmp"
+  fi
+
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_PENDING/metadata" \
+    || ! as_root install -m 0644 -- "$before_tmp" "$NVIDIA_ROLLBACK_PENDING/before.tsv";
+  then
+    rm -f -- "$metadata_tmp" "$before_tmp"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    return 3
+  fi
+  rm -f -- "$metadata_tmp" "$before_tmp"
+
+  if (( missing == 1 )); then
+    warn "NVIDIA rollback point could not stage trusted package archives for: ${missing_packages[*]}"
+    return 1
+  fi
+
+  return 0
+}
+
+finalize_nvidia_rollback_snapshot() {
+  local pkg="" old_version="" archive_name="" current_version="" complete=1 changed=0
+  local changes_tmp="" metadata_tmp=""
+
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" && -d "$NVIDIA_ROLLBACK_PENDING" ]] || return 1
+
+  changes_tmp="$(mktemp)"
+  metadata_tmp="$(mktemp)"
+  : >"$changes_tmp"
+
+  while IFS=$'\t' read -r pkg old_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    [[ "$current_version" != "$old_version" ]] || continue
+
+    changed=1
+    if [[ "$old_version" != '(not installed)' ]]; then
+      if [[ -z "$archive_name" || ! -f "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" ]]; then
+        complete=0
+      fi
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$pkg" "$old_version" "$current_version" "$archive_name" >>"$changes_tmp"
+  done <"$NVIDIA_ROLLBACK_PENDING/before.tsv"
+
+  if (( changed == 0 )); then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    NVIDIA_ROLLBACK_COMPLETE=0
+    return 1
+  fi
+
+  NVIDIA_ROLLBACK_COMPLETE="$complete"
+  if ! cat -- "$NVIDIA_ROLLBACK_PENDING/metadata" >"$metadata_tmp"; then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    die "Could not read pending NVIDIA rollback metadata."
+  fi
+  {
+    printf 'status=available\n'
+    printf 'finalized_at=%s\n' "$(date -Iseconds)"
+    printf 'rollback_complete=%s\n' "$complete"
+  } >>"$metadata_tmp"
+
+  if ! as_root install -m 0644 -- "$changes_tmp" "$NVIDIA_ROLLBACK_PENDING/changes.tsv" \
+    || ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_PENDING/metadata";
+  then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    die "Could not finalize the NVIDIA rollback point."
+  fi
+  rm -f -- "$changes_tmp" "$metadata_tmp"
+
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    die "Could not clear the previous NVIDIA rollback staging path."
+  fi
+  if [[ -e "$NVIDIA_ROLLBACK_DIR" ]]; then
+    if ! as_root mv -- "$NVIDIA_ROLLBACK_DIR" "${NVIDIA_ROLLBACK_DIR}.previous"; then
+      die "Could not preserve the previous NVIDIA rollback point."
+    fi
+  fi
+  if ! as_root mv -- "$NVIDIA_ROLLBACK_PENDING" "$NVIDIA_ROLLBACK_DIR"; then
+    if [[ -e "${NVIDIA_ROLLBACK_DIR}.previous" ]]; then
+      as_root mv -- "${NVIDIA_ROLLBACK_DIR}.previous" "$NVIDIA_ROLLBACK_DIR" \
+        || warn "Could not restore the previous NVIDIA rollback point after persistence failure."
+    fi
+    die "Could not save the NVIDIA rollback point."
+  fi
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    warn "Saved the new NVIDIA rollback point, but could not remove the previous snapshot staging directory."
+  fi
+  NVIDIA_ROLLBACK_PENDING=""
+  return 0
+}
+
+print_nvidia_rollback_changes() {
+  local pkg="" old_version="" current_version="" archive_name=""
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] || return 1
+  printf '%s\n' 'NVIDIA/kernel packages changed:' >/dev/tty
+  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+    [[ -n "$pkg" ]] || continue
+    printf '  %s: %s -> %s\n' "$pkg" "$old_version" "$current_version" >/dev/tty
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+}
+
+apply_nvidia_rollback() {
+  local assume_yes="${1:-0}" complete="" pkg="" old_version="" saved_current_version="" archive_name="" installed_version=""
+  local metadata_tmp=""
+  local changed=0
+  local -a removals=() archives=()
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
+    || die "No saved NVIDIA rollback point is available."
+  validate_nvidia_rollback_storage \
+    || die "Saved NVIDIA rollback state is not root-owned and immutable enough for privileged package restore."
+
+  complete="$(sed -n 's/^rollback_complete=//p' "$NVIDIA_ROLLBACK_DIR/metadata" | tail -n1)"
+  [[ "$complete" == 1 ]] \
+    || die "The saved NVIDIA rollback point is incomplete; refusing an automatic partial driver rollback."
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    print_nvidia_rollback_changes
+    printf '\nRollback restores the saved package versions and removes NVIDIA packages that were added by the switch.\n' >/dev/tty
+    printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" && -n "$saved_current_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" && "$installed_version" != "$saved_current_version" ]]; then
+      die "Saved NVIDIA rollback point no longer matches ${pkg}: expected ${saved_current_version} (or already-restored ${old_version}), found ${installed_version}. Refusing an automatic rollback after later package changes."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no 'Restore the saved NVIDIA package state now?' 0 \
+      || { log 'NVIDIA rollback canceled.'; return 0; }
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    [[ "$installed_version" != "$old_version" ]] || continue
+
+    if [[ "$old_version" == '(not installed)' ]]; then
+      [[ "$installed_version" == '(not installed)' ]] || removals+=("$pkg")
+      continue
+    fi
+
+    [[ -n "$archive_name" && "$archive_name" == "$(basename -- "$archive_name")" ]] \
+      || die "Rollback archive name is invalid for ${pkg} ${old_version}."
+    [[ -f "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" && ! -L "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" ]] \
+      || die "Rollback archive is missing for ${pkg} ${old_version}."
+    root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" \
+      || die "Rollback archive is not trusted for privileged restore: ${archive_name}."
+    archives+=("$NVIDIA_ROLLBACK_DIR/packages/$archive_name")
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  if (( ${#removals[@]} > 0 )); then
+    if ! as_root pacman -R --noconfirm -- "${removals[@]}"; then
+      die "NVIDIA rollback could not remove packages introduced by the driver switch."
+    fi
+    changed=1
+  fi
+
+  if (( ${#archives[@]} > 0 )); then
+    if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
+      die "NVIDIA rollback package transaction failed."
+    fi
+    changed=1
+  fi
+
+  if (( changed == 0 )); then
+    log 'Saved NVIDIA package state is already restored.'
+    return 0
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" ]]; then
+      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}, found ${installed_version}."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA packages were restored, but initramfs refresh failed; inspect the system before rebooting."
+
+  metadata_tmp="$(mktemp)"
+  if ! cat -- "$NVIDIA_ROLLBACK_DIR/metadata" >"$metadata_tmp"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be read for status update."
+  fi
+  {
+    printf 'restored_at=%s\n' "$(date -Iseconds)"
+    printf 'status=restored\n'
+  } >>"$metadata_tmp"
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be updated."
+  fi
+  rm -f -- "$metadata_tmp"
+
+  log 'NVIDIA rollback completed. Reboot before judging the restored driver.'
+}
+
+confirm_nvidia_system_upgrade() {
+  local snapshot_rc=0
+  local -a nvidia_packages=()
+
+  mapfile -t nvidia_packages < <(installed_nvidia_package_names)
+  (( ${#nvidia_packages[@]} )) || return 0
+
+  printf '\nNVIDIA drivers are installed on this system.\n' >/dev/tty
+  printf 'This package plan requires a full system upgrade, which may update the NVIDIA driver and kernel.\n' >/dev/tty
+  printf 'Awtarchy will save the currently cached driver/kernel packages first so they can be restored later.\n\n' >/dev/tty
+  printf 'Current NVIDIA packages:\n' >/dev/tty
+  pacman -Q "${nvidia_packages[@]}" 2>/dev/null | sed 's/^/  /' >/dev/tty || true
+  printf '\n' >/dev/tty
+
+  confirm_yes_no 'Allow the full system upgrade, including any available NVIDIA update?' 0 \
+    || { log 'Package reconciliation canceled before NVIDIA/system upgrade.'; return 1; }
+
+  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      log 'Saved a complete pre-upgrade NVIDIA/kernel rollback snapshot.'
+      ;;
+    1)
+      printf '\nAwtarchy could not cache every currently installed NVIDIA/kernel package.\n' >/dev/tty
+      printf 'A one-command rollback may be unavailable if one of those uncached packages changes.\n' >/dev/tty
+      confirm_yes_no 'Continue with the NVIDIA/system upgrade anyway?' 0 \
+        || {
+          cleanup_nvidia_pending_snapshot
+          NVIDIA_ROLLBACK_PENDING=""
+          log 'Package reconciliation canceled because a complete rollback point was unavailable.'
+          return 1
+        }
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      ;;
+    *)
+      die 'Could not prepare the NVIDIA rollback point.'
+      ;;
+  esac
+  return 0
+}
+
+offer_nvidia_post_upgrade_choice() {
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" ]] || return 0
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    log 'NVIDIA/kernel package versions did not change during the system upgrade.'
+    return 0
+  fi
+
+  printf '\n' >/dev/tty
+  print_nvidia_rollback_changes
+  printf '\n' >/dev/tty
+
+  if (( NVIDIA_ROLLBACK_COMPLETE == 1 )); then
+    printf 'Rollback point saved. If a problem appears after reboot, run: awtarchy nvidia-rollback\n' >/dev/tty
+    printf 'Some NVIDIA problems only appear after reboot or when launching a game.\n' >/dev/tty
+    if ! confirm_yes_no 'Keep the new NVIDIA/kernel versions for now?' 1; then
+      apply_nvidia_rollback 1
+      return 20
+    fi
+  else
+    warn 'NVIDIA/kernel packages changed, but the saved rollback point is incomplete.'
+    warn 'Awtarchy will not attempt an unsafe partial automatic rollback.'
+  fi
+}
+
+choose_ly_action() {
+  install_ly=0
+  enable_ly=0
+
+  case "$LY_STATUS" in
+    'not installed')
+      if confirm_yes_no 'Install and enable Ly on tty2?' 0; then
+        install_ly=1
+        enable_ly=1
+      fi
+      ;;
+    'installed, not enabled on tty2')
+      if confirm_yes_no 'Enable installed Ly on tty2?' 0; then
+        enable_ly=1
+      fi
+      ;;
+    'installed and enabled on tty2')
+      printf '\nLy is already installed and enabled on tty2; leaving it unchanged.\n' >/dev/tty
+      ;;
+    *)
+      printf '\nLy state is %s; leaving it unchanged.\n' "$LY_STATUS" >/dev/tty
+      ;;
+  esac
+}
+
+selected_values() {
+  local values_name="$1" flags_name="$2" output_name="$3"
+  local -n values="$values_name"
+  local -n flags="$flags_name"
+  local -n output="$output_name"
+  local i
+  output=()
+  for i in "${!values[@]}"; do
+    (( flags[i] == 1 )) && output+=("${values[$i]}")
+  done
+}
+
+root_free_mib() {
+  local available_kib=""
+  available_kib="$(/usr/bin/df -Pk / 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  [[ $available_kib =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$(( available_kib / 1024 ))"
+}
+
+recover_package_disk_headroom() {
+  local preferred_mib="${AWTARCHY_UPDATE_PREFERRED_FREE_MIB:-4096}"
+  local required_mib="${AWTARCHY_UPDATE_REQUIRED_FREE_MIB:-1024}"
+  local free_mib="" paccache_bin=""
+
+  [[ $preferred_mib =~ ^[0-9]+$ && $required_mib =~ ^[0-9]+$ ]] \
+    || die "Invalid update disk-space threshold override."
+  (( preferred_mib >= required_mib )) \
+    || die "Preferred update disk-space threshold cannot be below the required threshold."
+
+  free_mib="$(root_free_mib)" \
+    || die "Could not determine free space on the root filesystem."
+  (( free_mib >= preferred_mib )) && return 0
+
+  for paccache_bin in /usr/bin/paccache /usr/sbin/paccache; do
+    [[ -x $paccache_bin ]] && break
+    paccache_bin=""
+  done
+
+  if [[ -n $paccache_bin ]]; then
+    log "Root filesystem has ${free_mib} MiB free; pruning old pacman cache entries while keeping two package versions..."
+    if ! as_root "$paccache_bin" -rk2; then
+      die "Automatic pacman cache pruning failed."
+    fi
+    free_mib="$(root_free_mib)" \
+      || die "Could not re-check free space after pacman cache pruning."
+  fi
+
+  (( free_mib >= required_mib )) \
+    || die "Root filesystem has only ${free_mib} MiB free; at least ${required_mib} MiB is required before continuing package installation."
+
+  if (( free_mib < preferred_mib )); then
+    warn "Root filesystem has ${free_mib} MiB free; continuing above the ${required_mib} MiB hard minimum."
+  fi
+}
+
+as_root() {
+  if (( EUID == 0 )); then
+    "$@"
+  else
+    sudo -- "$@"
+  fi
+}
+
+pacman_recovery_supported_runtime() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    return 0
+  fi
+  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+}
+
+pacman_recovery_configure() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
+    PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
+    PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
+    PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
+  else
+    PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_CONF=/etc/pacman.conf
+    PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
+    PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
+    PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
+  fi
+
+  [[ -x $PACMAN_RECOVERY_PACMAN ]] \
+    || { warn "Pacman recovery binary is unavailable: ${PACMAN_RECOVERY_PACMAN}"; return 1; }
+  [[ -r $PACMAN_RECOVERY_CONF ]] \
+    || { warn "Pacman recovery configuration is unavailable: ${PACMAN_RECOVERY_CONF}"; return 1; }
+}
+
+pacman_recovery_as_root() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    "$@"
+  else
+    as_root "$@"
+  fi
+}
+
+pacman_recovery_run_capture() {
+  local root_mode="$1" error_file="$2"
+  shift 2
+  local rc=0
+
+  : >"$error_file"
+  if [[ $root_mode == root ]]; then
+    if pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    if "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  fi
+
+  if [[ -s $error_file ]]; then
+    cat -- "$error_file" >&2
+  fi
+  return "$rc"
+}
+
+pacman_recovery_parse_repos() {
+  local error_file="$1" line
+  local saw_sync_failure=0
+  local -a repos=()
+
+  grep -Fq 'failed to synchronize all databases' "$error_file" \
+    && saw_sync_failure=1
+
+  while IFS= read -r line; do
+    if [[ $line =~ ^error:\ database\ \'([A-Za-z0-9@._+:-]+)\'\ is\ not\ valid\ \(invalid\ or\ corrupted\ database\ \(PGP\ signature\)\)$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+      continue
+    fi
+    if (( saw_sync_failure == 1 )) \
+      && [[ $line =~ ^error:\ ([A-Za-z0-9@._+:-]+):\ signature\ from\ .+\ is\ invalid$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+    fi
+  done <"$error_file"
+
+  (( ${#repos[@]} > 0 )) || return 1
+  printf '%s\n' "${repos[@]}" | LC_ALL=C sort -u
+}
+
+pacman_recovery_repo_is_cachyos() {
+  [[ $1 == cachyos || $1 == cachyos-* ]]
+}
+
+pacman_recovery_repo_is_arch() {
+  [[ $1 =~ ^(core|extra|multilib)(-testing|-staging)?$ ]]
+}
+
+pacman_recovery_repo_in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ $item == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+pacman_recovery_write_config_without_repos() {
+  local destination="$1"
+  shift
+  local -a blocked=("$@")
+  local line section="" skip=0
+
+  : >"$destination"
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^\[([A-Za-z0-9@._+:-]+)\][[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      if pacman_recovery_repo_in_list "$section" "${blocked[@]}"; then
+        skip=1
+      else
+        skip=0
+      fi
+    fi
+    (( skip == 1 )) || printf '%s\n' "$line" >>"$destination"
+  done <"$PACMAN_RECOVERY_CONF"
+}
+
+pacman_recovery_bootstrap_tool() {
+  local kind="$1"
+  shift
+  local -a repos=("$@")
+  local tmp_conf
+
+  tmp_conf="$(mktemp)"
+  pacman_recovery_write_config_without_repos "$tmp_conf" "${repos[@]}"
+
+  case "$kind" in
+    cachyos)
+      log "CachyOS mirror tool is missing; bootstrapping rate-mirrors and cachyos-rate-mirrors without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm rate-mirrors cachyos-rate-mirrors; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap cachyos-rate-mirrors; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    arch)
+      log "Arch mirror tool is missing; trying to bootstrap reflector without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm reflector; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap reflector; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    *)
+      rm -f -- "$tmp_conf"
+      return 1
+      ;;
+  esac
+
+  rm -f -- "$tmp_conf"
+}
+
+pacman_recovery_refresh_mirrors() {
+  local -a repos=("$@")
+  local repo need_cachy=0 need_arch=0
+
+  [[ $PACMAN_RECOVERY_SKIP_MIRROR_REFRESH == 1 ]] && return 0
+
+  for repo in "${repos[@]}"; do
+    pacman_recovery_repo_is_cachyos "$repo" && need_cachy=1
+    pacman_recovery_repo_is_arch "$repo" && need_arch=1
+  done
+
+  if (( need_cachy == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      pacman_recovery_bootstrap_tool cachyos "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      log "Refreshing CachyOS mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" \
+        || warn "CachyOS mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+
+  if (( need_arch == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      pacman_recovery_bootstrap_tool arch "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      log "Refreshing standard Arch mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+        --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist \
+        || warn "Arch mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+}
+
+pacman_recovery_confirm() {
+  local answer=""
+  local -a repos=("$@")
+
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    case "${AWTARCHY_ASSUME_PACMAN_REPAIR:-no}" in
+      y|Y|yes|YES) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    warn "Pacman has an invalid signed repository database, but no interactive terminal is available for repair approval."
+    return 1
+  fi
+
+  printf '\nAwtarchy detected an invalid signed pacman repository database:\n' >/dev/tty
+  printf '  - %s\n' "${repos[@]}" >/dev/tty
+  printf '\nAwtarchy can refresh supported mirrors, remove only the affected cached\n' >/dev/tty
+  printf 'repository database/signature files, force a fresh sync, and retry once.\n' >/dev/tty
+  printf 'It will not disable signature checking or reset your pacman keyring.\n\n' >/dev/tty
+  printf 'Attempt this repair? [y/N] ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=''
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *)
+      printf 'Pacman repository repair skipped.\n' >/dev/tty
+      return 1
+      ;;
+  esac
+}
+
+pacman_recovery_clear_sync_databases() {
+  local repo
+  for repo in "$@"; do
+    pacman_recovery_as_root rm -f -- \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db" \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db.sig"
+  done
+}
+
+pacman_recovery_repair() {
+  local -a repos=("$@")
+  local error_file rc=0
+
+  (( ${#repos[@]} > 0 )) || return 1
+  pacman_recovery_confirm "${repos[@]}" || return 1
+
+  pacman_recovery_refresh_mirrors "${repos[@]}"
+  pacman_recovery_clear_sync_databases "${repos[@]}"
+
+  error_file="$(mktemp)"
+  log "Forcing a fresh pacman database sync..."
+  if pacman_recovery_run_capture root "$error_file" -Syy; then
+    rm -f -- "$error_file"
+    log "Pacman repository database recovery completed."
+    return 0
+  else
+    rc=$?
+  fi
+  rm -f -- "$error_file"
+  warn "Pacman database resync still failed; no signature checks were bypassed and no keyring changes were made."
+  return "$rc"
+}
+
+pacman_sync_db_preflight() {
+  local error_file rc=0
+  local -a repos=()
+
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture user "$error_file" -Slq >/dev/null; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+  pacman_recovery_repair "${repos[@]}"
+}
+
+pacman_recovery_run_command() {
+  local error_file rc=0 retry_rc=0
+  local -a repos=() args=("$@")
+
+  pacman_recovery_supported_runtime || {
+    as_root pacman "${args[@]}"
+    return $?
+  }
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+
+  if ! pacman_recovery_repair "${repos[@]}"; then
+    return "$rc"
+  fi
+
+  error_file="$(mktemp)"
+  log "Retrying the original pacman command once..."
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    retry_rc=0
+  else
+    retry_rc=$?
+  fi
+  rm -f -- "$error_file"
+  return "$retry_rc"
+}
+
+pacman_install_with_recovery() {
+  pacman_recovery_run_command "$@"
+}
+
+ensure_aur_scanner() {
+  if [[ -x "$AUR_SCAN_BIN" ]] && "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "$AUR_SCAN_BIN" != /usr/bin/aur-scan ]]; then
+    warn "Configured aur-scan test binary is unavailable: ${AUR_SCAN_BIN}"
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/yay ]] || ! /usr/bin/yay --version >/dev/null 2>&1; then
+    warn "aur-scanner is missing and a usable /usr/bin/yay is unavailable for the one-time bootstrap."
+    return 1
+  fi
+
+  log "Installing stable aur-scanner through yay for the one-time bootstrap..."
+  if ! /usr/bin/yay -S --noconfirm --pgpfetch aur-scanner; then
+    warn "Failed to bootstrap stable aur-scanner."
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/aur-scan ]] || ! /usr/bin/aur-scan --version >/dev/null 2>&1; then
+    warn "aur-scanner installed without a usable /usr/bin/aur-scan."
+    return 1
+  fi
+
+  AUR_SCAN_BIN="/usr/bin/aur-scan"
+}
+
+install_selected_aur_packages() {
+  local pkg
+
+  for pkg in "$@"; do
+    if aur_package_satisfied "$pkg"; then
+      log "${pkg} or an equivalent installation is already present; skipping."
+      continue
+    fi
+
+    if (( EUID != 0 )); then
+      sudo -k
+    fi
+    log "Installing AUR package through upstream aur-scanner: ${pkg}"
+    if ! "$AUR_SCAN_BIN" install "$pkg" --noconfirm; then
+      warn "AUR package failed: ${pkg}. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! aur_package_satisfied "$pkg"; then
+      warn "aur-scanner returned success but ${pkg} is still not detected. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! record_managed_packages "$pkg"; then
+      warn "${pkg} installed, but Awtarchy could not update its managed-package ledger."
+    fi
+  done
+
+  return 0
+}
+
+record_managed_packages() {
+  local -a add=("$@")
+  local tmp pkg
+  (( ${#add[@]} )) || return 0
+  tmp="$(mktemp)"
+  if [[ -r "$MANAGED_PACKAGES_FILE" ]]; then
+    cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  else
+    : >"$tmp"
+  fi
+  for pkg in "${add[@]}"; do
+    package_installed "$pkg" && printf '%s\n' "$pkg" >>"$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -d -m 0755 -- "$(dirname -- "$MANAGED_PACKAGES_FILE")"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+forget_managed_packages() {
+  local -a remove=("$@")
+  local tmp pkg
+  (( ${#remove[@]} )) || return 0
+  [[ -r "$MANAGED_PACKAGES_FILE" ]] || return 0
+  tmp="$(mktemp)"
+  cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  for pkg in "${remove[@]}"; do
+    sed -i "/^$(printf '%s' "$pkg" | sed 's/[][\\.^$*+?{}|()]/\\&/g')$/d" "$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+apply_cheese_snapshot_replacement() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) || return 0
+
+  log "Replacing retired Cheese camera app with Snapshot..."
+  if ! package_installed snapshot; then
+    pacman_install_with_recovery -S --needed --noconfirm snapshot
+  fi
+  record_managed_packages snapshot
+  as_root pacman -R --noconfirm cheese
+  forget_managed_packages cheese
+  CHEESE_REPLACEMENT_NEEDED=0
+  log "Replaced Cheese with Snapshot."
+}
+
+apply_bibata_cursor_replacement() {
+  array_contains bibata-cursor-theme-bin "${AUR_CATALOG[@]}" || return 0
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    if [[ ! -x "$AUR_SCAN_BIN" ]] || ! "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+      warn "Bibata cursor migration requires a usable aur-scan; leaving the existing cursor package untouched."
+      return 0
+    fi
+    log "Installing Bibata cursor theme through upstream aur-scanner..."
+    install_selected_aur_packages bibata-cursor-theme-bin
+  fi
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    warn "Bibata cursor theme is not installed; leaving the existing cursor package untouched."
+    return 0
+  fi
+
+  package_installed xcursor-comix || return 0
+  local ownership_recorded=0
+  managed_package xcursor-comix && ownership_recorded=1
+  log "Removing retired xcursor-comix package after Bibata replacement..."
+
+  if ! as_root pacman -R --noconfirm xcursor-comix; then
+    warn "Could not remove retired xcursor-comix; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed xcursor-comix; then
+    warn "xcursor-comix is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages xcursor-comix; then
+      warn "xcursor-comix was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Replaced retired xcursor-comix with Bibata."
+}
+
+migrate_lockscreen_retirement() {
+  [[ "${AWTARCHY_LOCKSCREEN_RETIRE_CONFIRMED:-0}" == 1 ]] \
+    || die "Lockscreen retirement requires an explicitly confirmed target."
+
+  if array_contains hyprlock "${ARCH_CATALOG[@]}"; then
+    die "Target runtime still requires Hyprlock; refusing package retirement."
+  fi
+
+  package_installed hyprlock || return 0
+  local ownership_recorded=0
+  managed_package hyprlock && ownership_recorded=1
+  log "Removing retired Hyprlock package after Quickshell lockscreen cutover..."
+
+  if ! as_root pacman -R --noconfirm hyprlock; then
+    warn "Could not remove retired Hyprlock; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed hyprlock; then
+    warn "hyprlock is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages hyprlock; then
+      warn "Hyprlock was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Removed retired Hyprlock package."
+}
+
+flatpak_scope() {
+  local fs=""
+  if have findmnt; then
+    fs="$(findmnt -n -o FSTYPE / 2>/dev/null || true)"
+  fi
+  if [[ $fs == btrfs ]]; then printf '%s\n' system; else printf '%s\n' user; fi
+}
+
+install_flatpak_apps() {
+  local scope="$1"
+  shift
+  local -a apps=("$@") cmd=()
+  (( ${#apps[@]} )) || return 0
+
+  if [[ $scope == user ]]; then
+    cmd=(flatpak --user)
+  else
+    cmd=(as_root flatpak --system)
+  fi
+
+  if ! "${cmd[@]}" remotes --columns=name 2>/dev/null | grep -Fxq flathub; then
+    "${cmd[@]}" remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  fi
+  "${cmd[@]}" install -y flathub "${apps[@]}"
+}
+
+package_reconciliation_needs_action() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) && return 0
+  (( ${#MISSING_REQUIRED[@]} > 0 )) && return 0
+  (( ${#MISSING_ARCH[@]} > 0 )) && return 0
+  (( ${#MISSING_AUR[@]} > 0 )) && return 0
+  (( ${#MISSING_FLATPAK_IDS[@]} > 0 )) && return 0
+  (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
+  return 1
+}
+
+if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
+  if (( NVIDIA_ROLLBACK_LIST == 1 )); then
+    print_recoverable_nvidia_versions
+    exit $?
+  fi
+
+  if [[ -n "$NVIDIA_ROLLBACK_VERSION" ]]; then
+    if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 1
+    else
+      [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA driver version switching requires an interactive terminal."
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 0
+    fi
+    exit $?
+  fi
+
+  if (( NVIDIA_ROLLBACK_PICK == 1 )); then
+    pick_nvidia_history_version
+    exit $?
+  fi
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+    apply_nvidia_rollback 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
+    apply_nvidia_rollback 0
+  fi
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_CHECK_ONLY == 1 )); then
+  pacman_sync_db_preflight
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_RUN_ONLY == 1 )); then
+  pacman_recovery_run_command "${PACMAN_RECOVERY_RUN_ARGS[@]}"
+  exit $?
+fi
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  pacman_sync_db_preflight || true
+fi
+
+collect_state
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  if package_reconciliation_needs_action; then
+    exit 10
+  fi
+  exit 0
+fi
+
+if (( MIGRATE_REPLACEMENTS_ONLY == 1 )); then
+  apply_cheese_snapshot_replacement
+  apply_bibata_cursor_replacement
+  exit 0
+fi
+
+if (( MIGRATE_LOCKSCREEN_RETIREMENT_ONLY == 1 )); then
+  migrate_lockscreen_retirement
+  exit 0
+fi
+
+if (( REVIEW_ONLY == 1 )); then
+  print_review
+  exit 0
+fi
+
+[[ -r /dev/tty && -w /dev/tty ]] || die "Interactive package reconciliation requires a terminal."
+
+print_review >/dev/tty
+printf '\nOptional choices are listed first and start unchecked.\n' >/dev/tty
+printf 'Missing default packages start selected; Space opts out.\n' >/dev/tty
+printf 'Installed current packages are preserved even when not selected here.\n\n' >/dev/tty
+confirm_yes_no 'Continue to package choices?' 1 || { log 'Package reconciliation canceled.'; exit 0; }
+
+# Optional Arch packages are shown first and unchecked; missing defaults follow selected.
+declare -a arch_labels=()
+declare -a arch_values=()
+declare -a arch_flags=()
+declare -a selected_arch=()
+for pkg in "${MISSING_OPTIONAL_ARCH[@]}"; do
+  arch_labels+=("${pkg} (optional)")
+  arch_values+=("$pkg")
+  arch_flags+=(0)
+done
+for pkg in "${MISSING_ARCH[@]}"; do
+  arch_labels+=("$pkg")
+  arch_values+=("$pkg")
+  arch_flags+=(1)
+done
+if (( ${#arch_labels[@]} )); then
+  multi_select 'Arch packages to install' arch_labels arch_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values arch_values arch_flags selected_arch
+
+# Optional AUR packages are shown first and unchecked; missing defaults follow selected.
+declare -a aur_labels=()
+declare -a aur_values=()
+declare -a aur_flags=()
+declare -a selected_aur=()
+for pkg in "${MISSING_OPTIONAL_AUR[@]}"; do
+  aur_labels+=("${pkg} (optional)")
+  aur_values+=("$pkg")
+  aur_flags+=(0)
+done
+for pkg in "${MISSING_AUR[@]}"; do
+  aur_labels+=("$pkg")
+  aur_values+=("$pkg")
+  aur_flags+=(1)
+done
+if (( ${#aur_labels[@]} )); then
+  multi_select 'AUR packages to install' aur_labels aur_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values aur_values aur_flags selected_aur
+
+# Optional Flatpaks are shown first and unchecked; missing defaults follow selected.
+declare -a flatpak_labels=()
+declare -a flatpak_values=()
+declare -a flatpak_flags=()
+declare -a selected_flatpak=()
+for i in "${!MISSING_OPTIONAL_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_OPTIONAL_FLATPAK_NAMES[$i]} (${MISSING_OPTIONAL_FLATPAK_IDS[$i]}) (optional)")
+  flatpak_values+=("${MISSING_OPTIONAL_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(0)
+done
+for i in "${!MISSING_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_FLATPAK_NAMES[$i]} (${MISSING_FLATPAK_IDS[$i]})")
+  flatpak_values+=("${MISSING_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(1)
+done
+if (( ${#flatpak_labels[@]} )); then
+  multi_select 'Flatpak apps to install' flatpak_labels flatpak_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values flatpak_values flatpak_flags selected_flatpak
+
+install_ly=0
+enable_ly=0
+choose_ly_action
+
+# Retired packages: Awtarchy-owned defaults selected; unowned defaults kept.
+declare -a retired_labels=()
+declare -a retired_values=()
+declare -a retired_flags=()
+declare -a selected_retired=()
+for pkg in "${RETIRED_MANAGED[@]}"; do
+  retired_labels+=("${pkg} (Awtarchy-owned, replaced)")
+  retired_values+=("$pkg")
+  retired_flags+=(1)
+done
+for pkg in "${RETIRED_UNOWNED[@]}"; do
+  retired_labels+=("${pkg} (not Awtarchy-owned, keep unless selected)")
+  retired_values+=("$pkg")
+  retired_flags+=(0)
+done
+if (( ${#retired_labels[@]} )); then
+  multi_select 'Retired/replaced packages to remove' retired_labels retired_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values retired_values retired_flags selected_retired
+
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )); then
+  array_contains cheese "${selected_retired[@]}" || selected_retired+=(cheese)
+fi
+
+install_arch=("${MISSING_REQUIRED[@]}" "${selected_arch[@]}")
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )) && ! package_installed snapshot; then
+  install_arch+=(snapshot)
+fi
+sort_unique_array install_arch
+if (( install_ly == 1 )); then install_arch+=(ly); fi
+if (( ${#selected_flatpak[@]} )) && ! have flatpak; then
+  install_arch+=(flatpak)
+fi
+sort_unique_array install_arch
+
+printf '\033[H\033[2J' >/dev/tty
+printf '%s\n\n' 'Awtarchy package reconciliation plan' >/dev/tty
+print_list 'Install from Arch repositories:' "${install_arch[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install from AUR:' "${selected_aur[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install Flatpak apps:' "${selected_flatpak[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Remove retired/replaced packages:' "${selected_retired[@]}" >/dev/tty
+if (( enable_ly == 1 )); then printf '\nLy: enable ly@tty2.service and disable getty@tty2.service\n' >/dev/tty; fi
+printf '\nNo current installed package will be removed merely because it was not selected; explicit replacements may be migrated.\n\n' >/dev/tty
+
+if (( ${#install_arch[@]} == 0 && ${#selected_aur[@]} == 0 && ${#selected_flatpak[@]} == 0 && ${#selected_retired[@]} == 0 && enable_ly == 0 )); then
+  log 'No package changes selected.'
+  exit 0
+fi
+
+confirm_yes_no 'Apply this package plan?' 0 || { log 'Package reconciliation canceled.'; exit 0; }
+recover_package_disk_headroom
+
+if (( ${#install_arch[@]} )); then
+  confirm_nvidia_system_upgrade || exit 0
+  log "Installing Arch packages with a full system upgrade: ${install_arch[*]}"
+  if ! pacman_install_with_recovery -Syu --needed --noconfirm "${install_arch[@]}"; then
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Arch package transaction failed."
+  fi
+  # Finalize/offer NVIDIA recovery before bookkeeping so a ledger failure cannot
+  # strand a successful driver upgrade without its rollback point.
+  nvidia_post_rc=0
+  offer_nvidia_post_upgrade_choice || nvidia_post_rc=$?
+  record_managed_packages "${install_arch[@]}"
+  case "$nvidia_post_rc" in
+    0) ;;
+    20)
+      log 'NVIDIA/kernel rollback completed; stopping package reconciliation so the system can be rebooted cleanly.'
+      exit 0
+      ;;
+    *)
+      exit "$nvidia_post_rc"
+      ;;
+  esac
+fi
+
+if (( enable_ly == 1 )); then
+  have systemctl || die "Ly is installed but systemctl is unavailable for tty2 setup."
+  as_root systemctl disable getty@tty2.service >/dev/null 2>&1 || true
+  as_root systemctl enable ly@tty2.service
+  log 'Ly enabled on tty2; getty@tty2 disabled.'
+fi
+
+if (( ${#selected_aur[@]} )); then
+  log 'AUR build privilege isolation enabled; makepkg may request sudo independently.'
+  if ensure_aur_scanner; then
+    install_selected_aur_packages "${selected_aur[@]}"
+  else
+    warn 'aur-scanner is unavailable; recording selected AUR packages as failed and continuing with remaining package actions.'
+    FAILED_AUR+=("${selected_aur[@]}")
+  fi
+fi
+
+if (( ${#selected_flatpak[@]} )); then
+  have flatpak || die "Flatpak installation was selected but flatpak is unavailable after package installation."
+  scope="$(flatpak_scope)"
+  log "Installing Flatpak apps in ${scope} scope: ${selected_flatpak[*]}"
+  install_flatpak_apps "$scope" "${selected_flatpak[@]}"
+fi
+
+if (( ${#selected_retired[@]} )); then
+  log "Removing selected retired packages: ${selected_retired[*]}"
+  as_root pacman -R --noconfirm "${selected_retired[@]}"
+  forget_managed_packages "${selected_retired[@]}"
+fi
+
+if (( ${#FAILED_AUR[@]} )); then
+  sort_unique_array FAILED_AUR
+  printf '\n'
+  print_list 'AUR packages that could not be installed:' "${FAILED_AUR[@]}"
+  warn 'AUR failures do not stop package reconciliation; all other selected package actions were still processed.'
+  log 'Package reconciliation completed with AUR package failures.'
+else
+  log 'Package reconciliation complete.'
+fi
+\033[A'|k)
         if (( current > 0 )); then
           ((current--))
+        else
+          current=$((${#labels[@]} - 1))
         fi
         ;;
-      $'\033[B'|j)
+      
+      ' ')
+        if (( selected[current] == 1 )); then selected[current]=0; else selected[current]=1; fi
+        ;;
+      a|A)
+        for i in "${!selected[@]}"; do selected[i]=1; done
+        ;;
+      c|C)
+        for i in "${!selected[@]}"; do selected[i]=0; done
+        ;;
+      ''|$'\n'|$'\r')
+        return 0
+        ;;
+      $'\033'|q|Q)
+        return 1
+        ;;
+    esac
+  done
+}
+
+confirm_yes_no() {
+  local prompt="$1" default_yes="${2:-0}" answer=""
+  local suffix='[y/N]'
+  (( default_yes == 1 )) && suffix='[Y/n]'
+  printf '%s %s ' "$prompt" "$suffix" >/dev/tty
+  IFS= read -r answer </dev/tty || return 1
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    n|N|no|NO) return 1 ;;
+    '') (( default_yes == 1 )) ;;
+    *) return 1 ;;
+  esac
+}
+
+
+nvidia_rollback_package_name() {
+  case "$1" in
+    nvidia|nvidia-*|lib32-nvidia-*|opencl-nvidia*|lib32-opencl-nvidia*|libva-nvidia-driver|linux-*-nvidia*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+installed_nvidia_package_names() {
+  local pkg
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_rollback_package_name "$pkg" && printf '%s\n' "$pkg"
+  done < <(pacman -Qq 2>/dev/null || true)
+}
+
+current_kernel_package_names() {
+  local pkgbase_file pkg
+
+  shopt -s nullglob
+  for pkgbase_file in /usr/lib/modules/*/pkgbase; do
+    [[ -r "$pkgbase_file" ]] || continue
+    pkg="$(tr -d '\r\n' <"$pkgbase_file")"
+    [[ -n "$pkg" ]] && printf '%s\n' "$pkg"
+  done
+  shopt -u nullglob
+}
+
+nvidia_rollback_candidate_packages() {
+  local pkg
+  local -a packages=()
+
+  mapfile -t packages < <(installed_nvidia_package_names)
+  (( ${#packages[@]} )) || return 1
+
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    packages+=("$pkg")
+    package_installed "${pkg}-headers" && packages+=("${pkg}-headers")
+  done < <(current_kernel_package_names)
+
+  printf '%s\n' "${packages[@]}" | sed '/^$/d' | LC_ALL=C sort -u
+}
+
+package_version() {
+  pacman -Q "$1" 2>/dev/null | awk 'NR == 1 { print $2 }'
+}
+
+root_owned_nonwritable_path() {
+  local path="$1" owner="" mode=""
+
+  [[ -e "$path" && ! -L "$path" ]] || return 1
+  owner="$(/usr/bin/stat -Lc '%u' -- "$path" 2>/dev/null)" || return 1
+  mode="$(/usr/bin/stat -Lc '%a' -- "$path" 2>/dev/null)" || return 1
+  [[ "$owner" == 0 && "$mode" =~ ^[0-7]{3,4}$ ]] || return 1
+  (( (8#$mode & 0022) == 0 ))
+}
+
+trusted_nvidia_cache_archive() {
+  local archive="$1"
+  [[ -f "$archive" && ! -L "$archive" ]] || return 1
+  root_owned_nonwritable_path "$archive"
+}
+
+find_cached_package_archive() {
+  local pkg="$1" version="$2" candidate
+  local -a matches=()
+
+  shopt -s nullglob
+  matches=(
+    "${PACMAN_CACHE_DIR}/${pkg}-${version}-"*.pkg.tar.*
+  )
+  shopt -u nullglob
+
+  for candidate in "${matches[@]}"; do
+    [[ "$candidate" != *.sig ]] || continue
+    trusted_nvidia_cache_archive "$candidate" || continue
+    printf '%s\n' "$candidate"
+    return 0
+  done
+  return 1
+}
+
+valid_archive_package_component() {
+  [[ "$1" =~ ^[A-Za-z0-9@._+:-]+$ ]]
+}
+
+archive_url_exists() {
+  local url="$1"
+  have curl || return 1
+  curl --fail --silent --show-error --location --head \
+    --connect-timeout 4 --max-time 12 -- "$url" >/dev/null 2>&1
+}
+
+find_archlinux_archive_package_url() {
+  local pkg="$1" version="$2" first="" arch="" extension="" filename="" url=""
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
+
+  for arch in x86_64 any; do
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/${filename}"
+      if archive_url_exists "$url"; then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+find_cachyos_archive_package_url() {
+  local pkg="$1" version="$2" repo="" arch="" extension="" filename="" url=""
+  local -a repo_arch_pairs=(
+    "cachyos|x86_64"
+    "cachyos-v3|x86_64_v3"
+    "cachyos-v4|x86_64_v4"
+  )
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+
+  local pair
+  for pair in "${repo_arch_pairs[@]}"; do
+    repo="${pair%%|*}"
+    arch="${pair#*|}"
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${CACHY_PACKAGE_ARCHIVE_BASE}/${repo}/${filename}"
+      if archive_url_exists "$url"; then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+trusted_nvidia_history_source() {
+  local source="$1"
+
+  if [[ "$source" == "${PACMAN_CACHE_DIR}/"* ]]; then
+    trusted_nvidia_cache_archive "$source"
+    return $?
+  fi
+
+  if [[ "$source" == "${ARCH_PACKAGE_ARCHIVE_BASE}/"* \
+    || "$source" == "${CACHY_PACKAGE_ARCHIVE_BASE}/"* ]];
+  then
+    [[ "$source" != *$'\n'* && "$source" != *$'\r'* && "$source" != *' '* ]]
+    return $?
+  fi
+  return 1
+}
+
+find_historical_package_source() {
+  local pkg="$1" version="$2" source=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  if [[ "$pkg" == linux-cachyos* ]]; then
+    source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -n "$source" ]]; then
+      printf '%s\n' "$source"
+      return 0
+    fi
+  fi
+
+  source="$(find_archlinux_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  printf '%s\n' "$source"
+}
+
+nvidia_driver_version_from_package_version() {
+  local version="${1#*:}"
+  version="${version%-*}"
+  [[ "$version" =~ ^[0-9]+([.][0-9]+)+$ ]] || return 1
+  printf '%s\n' "$version"
+}
+
+installed_nvidia_driver_version() {
+  local version=""
+  version="$(package_version nvidia-utils || true)"
+  [[ -n "$version" ]] || return 1
+  nvidia_driver_version_from_package_version "$version"
+}
+
+nvidia_module_package_name() {
+  case "$1" in
+    nvidia|nvidia-lts|nvidia-dkms|nvidia-open|nvidia-open-lts|nvidia-lts-open|nvidia-open-dkms|linux-*-nvidia|linux-*-nvidia-open)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+nvidia_driver_switch_package_name() {
+  case "$1" in
+    nvidia-utils|lib32-nvidia-utils|opencl-nvidia|lib32-opencl-nvidia)
+      return 0
+      ;;
+    *)
+      nvidia_module_package_name "$1"
+      ;;
+  esac
+}
+
+installed_nvidia_driver_switch_packages() {
+  local pkg
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_driver_switch_package_name "$pkg" && printf '%s\n' "$pkg"
+  done < <(pacman -Qq 2>/dev/null || true)
+}
+
+archlinux_archive_package_versions() {
+  local pkg="$1" first="" index_url="" pattern=""
+
+  valid_archive_package_component "$pkg" || return 1
+  have curl || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
+  index_url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/"
+  pattern="${pkg}-[^\"<>[:space:]]+-x86_64\\.pkg\\.tar\\.(zst|xz|gz)"
+
+  curl --fail --silent --show-error --location \
+    --connect-timeout 4 --max-time 25 -- "$index_url" \
+    | grep -oE "$pattern" \
+    | sed -E "s#^${pkg}-##; s#-x86_64\\.pkg\\.tar\\.(zst|xz|gz)\$##" \
+    | LC_ALL=C sort -Vu
+}
+
+archlinux_archive_version_for_driver() {
+  local pkg="$1" driver="$2" version="" parsed=""
+  local -a matches=()
+
+  while IFS= read -r version; do
+    [[ -n "$version" ]] || continue
+    parsed="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ "$parsed" == "$driver" ]] || continue
+    matches+=("$version")
+  done < <(archlinux_archive_package_versions "$pkg" 2>/dev/null || true)
+
+  (( ${#matches[@]} > 0 )) || return 1
+  printf '%s\n' "${matches[@]}" | LC_ALL=C sort -V | tail -n1
+}
+
+driver_version_is_older() {
+  local candidate="$1" current="$2" first=""
+  [[ "$candidate" != "$current" ]] || return 1
+  first="$(printf '%s\n%s\n' "$candidate" "$current" | LC_ALL=C sort -V | head -n1)"
+  [[ "$first" == "$candidate" ]]
+}
+
+available_nvidia_driver_releases() {
+  local current_driver="" version="" driver=""
+  local module_versions="" utils_versions="" common_versions=""
+  local module_drivers="" utils_drivers=""
+
+  current_driver="$(installed_nvidia_driver_version)" || return 1
+  module_versions="$(mktemp)"
+  utils_versions="$(mktemp)"
+  module_drivers="$(mktemp)"
+  utils_drivers="$(mktemp)"
+  common_versions="$(mktemp)"
+
+  if ! archlinux_archive_package_versions nvidia-open-dkms >"$module_versions" \
+    || ! archlinux_archive_package_versions nvidia-utils >"$utils_versions";
+  then
+    rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions"
+    return 1
+  fi
+
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$module_drivers"
+  done <"$module_versions"
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$utils_drivers"
+  done <"$utils_versions"
+
+  awk 'NR == FNR { available[$0] = 1; next } available[$0]' \
+    "$module_drivers" "$utils_drivers" \
+    | LC_ALL=C sort -u >"$common_versions"
+
+  local older_versions=""
+  local driver_major=0 count=0
+  older_versions="$(mktemp)"
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    driver_major="${driver%%.*}"
+    [[ "$driver_major" =~ ^[0-9]+$ ]] || continue
+    (( driver_major >= 590 )) || continue
+    driver_version_is_older "$driver" "$current_driver" || continue
+    printf '%s\n' "$driver" >>"$older_versions"
+  done <"$common_versions"
+
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    printf '%s\n' "$driver"
+    (( ++count >= 20 )) && break
+  done < <(LC_ALL=C sort -Vr "$older_versions")
+
+  rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions" "$older_versions"
+}
+
+build_nvidia_release_bundle() {
+  local target_driver="$1" output="$2"
+  local pkg="" target_version="" current_version="" source=""
+  local -a packages=(nvidia-utils nvidia-open-dkms)
+
+  for pkg in lib32-nvidia-utils opencl-nvidia lib32-opencl-nvidia; do
+    package_installed "$pkg" && packages+=("$pkg")
+  done
+
+  : >"$output"
+  for pkg in "${packages[@]}"; do
+    target_version="$(archlinux_archive_version_for_driver "$pkg" "$target_driver" 2>/dev/null || true)"
+    [[ -n "$target_version" ]] || return 1
+    source="$(find_archlinux_archive_package_url "$pkg" "$target_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] || return 1
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    printf '%s\t%s\t%s\t%s\n' \
+      "$pkg" "$current_version" "$target_version" "$source" >>"$output"
+  done
+}
+
+ensure_nvidia_dkms_kernel_headers() {
+  local kernel_pkg="" kernel_version="" header_pkg="" header_version="" source=""
+  local -a sources=()
+
+  while IFS= read -r kernel_pkg; do
+    [[ -n "$kernel_pkg" ]] || continue
+    kernel_version="$(package_version "$kernel_pkg" || true)"
+    [[ -n "$kernel_version" ]] \
+      || die "Cannot determine installed kernel package version for ${kernel_pkg}."
+
+    header_pkg="${kernel_pkg}-headers"
+    header_version="$(package_version "$header_pkg" || true)"
+    if [[ "$header_version" == "$kernel_version" ]]; then
+      continue
+    fi
+
+    source="$(find_historical_package_source "$header_pkg" "$kernel_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] \
+      || die "Matching headers are unavailable for ${kernel_pkg} ${kernel_version}; refusing an NVIDIA DKMS switch."
+    trusted_nvidia_history_source "$source" \
+      || die "Kernel header source is not trusted: ${source}"
+    sources+=("$source")
+  done < <(current_kernel_package_names)
+
+  if (( ${#sources[@]} > 0 )); then
+    log 'Installing exact kernel headers required for the NVIDIA DKMS rollback...'
+    as_root pacman -U --needed --noconfirm "${sources[@]}" \
+      || die "Could not install matching kernel headers required for NVIDIA DKMS."
+  fi
+}
+
+remove_nvidia_module_conflicts_for_dkms() {
+  local pkg
+  local -a conflicts=()
+
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_module_package_name "$pkg" || continue
+    [[ "$pkg" == nvidia-open-dkms ]] && continue
+    conflicts+=("$pkg")
+  done < <(pacman -Qq 2>/dev/null || true)
+
+  (( ${#conflicts[@]} > 0 )) || return 0
+  log "Temporarily replacing NVIDIA module packages with nvidia-open-dkms: ${conflicts[*]}"
+  as_root pacman -R --noconfirm -- "${conflicts[@]}"
+}
+
+refresh_nvidia_initramfs() {
+  if have mkinitcpio; then
+    as_root mkinitcpio -P
+  elif have dracut; then
+    as_root dracut --regenerate-all --force
+  fi
+}
+
+verify_nvidia_dkms_release() {
+  local target_driver="$1" status=""
+
+  [[ "$(installed_nvidia_driver_version 2>/dev/null || true)" == "$target_driver" ]] || return 1
+  [[ "$(nvidia_driver_version_from_package_version "$(package_version nvidia-open-dkms || true)" 2>/dev/null || true)" == "$target_driver" ]] \
+    || return 1
+
+  if have dkms; then
+    status="$(dkms status -m nvidia -v "$target_driver" 2>/dev/null || true)"
+    [[ "$status" == *installed* ]] || return 1
+  fi
+}
+
+prepare_nvidia_driver_switch_snapshot() {
+  local tmp=""
+  local -a candidates=()
+
+  mapfile -t candidates < <(installed_nvidia_driver_switch_packages)
+  candidates+=(nvidia-open-dkms)
+  tmp="$(mktemp)"
+  printf '%s\n' "${candidates[@]}" | sed '/^$/d' | LC_ALL=C sort -u >"$tmp"
+  mapfile -t candidates <"$tmp"
+  rm -f -- "$tmp"
+
+  prepare_nvidia_rollback_snapshot "${candidates[@]}"
+}
+
+restore_failed_nvidia_switch() {
+  local reason="$1"
+
+  if finalize_nvidia_rollback_snapshot; then
+    warn "${reason}; restoring the pre-switch NVIDIA package set now."
+    apply_nvidia_rollback 1
+    refresh_nvidia_initramfs || true
+    die "${reason}; the previous NVIDIA package set was restored."
+  fi
+
+  cleanup_nvidia_pending_snapshot
+  NVIDIA_ROLLBACK_PENDING=""
+  die "${reason}; Awtarchy could not finalize the return point, so automatic recovery was unavailable."
+}
+
+print_recoverable_nvidia_versions() {
+  local current_driver="" version=""
+  local -a versions=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(available_nvidia_driver_releases)
+
+  printf 'Current NVIDIA driver: %s\n' "$current_driver"
+  printf 'Available previous NVIDIA driver releases (Arch Linux Archive):\n'
+  if (( ${#versions[@]} == 0 )); then
+    printf '  (none)\n'
+    return 1
+  fi
+  for version in "${versions[@]}"; do
+    printf '  %s\n' "$version"
+  done
+}
+
+apply_nvidia_history_version() {
+  local target_driver="$1" assume_yes="${2:-0}"
+  local current_driver="" bundle="" pkg="" current_version="" target_version="" source=""
+  local snapshot_rc=0 verification_failed=0 source_invalid=0
+  local -a sources=()
+
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  [[ "${current_driver%%.*}" =~ ^[0-9]+$ && "${current_driver%%.*}" -ge 590 ]] \
+    || die "Archived release switching is supported only for the modern NVIDIA 590+ open-module stack."
+  [[ "${target_driver%%.*}" =~ ^[0-9]+$ && "${target_driver%%.*}" -ge 590 ]] \
+    || die "NVIDIA driver ${target_driver} predates Awtarchy's supported open-module rollback range."
+  if [[ "$current_driver" == "$target_driver" ]]; then
+    log "NVIDIA driver ${target_driver} is already installed."
+    return 0
+  fi
+
+  bundle="$(mktemp)"
+  if ! build_nvidia_release_bundle "$target_driver" "$bundle"; then
+    rm -f -- "$bundle"
+    die "NVIDIA driver ${target_driver} is not available as a complete nvidia-open-dkms/userspace release in the official Arch Linux Archive."
+  fi
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    printf '\nNVIDIA driver rollback plan:\n' >/dev/tty
+    while IFS=$'\t' read -r pkg current_version target_version source; do
+      printf '  %s: %s -> %s\n' "$pkg" "$current_version" "$target_version" >/dev/tty
+    done <"$bundle"
+    printf '\nCurrent kernels stay installed; Awtarchy will use nvidia-open-dkms for the selected release.\n' >/dev/tty
+    printf 'A complete return point for the current NVIDIA package set is staged before anything is removed.\n' >/dev/tty
+    printf 'If installation or verification fails, Awtarchy attempts to restore that return point automatically.\n' >/dev/tty
+    printf 'A reboot is required before judging the selected driver.\n\n' >/dev/tty
+  fi
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no "Switch NVIDIA driver from ${current_driver} to ${target_driver}?" 0 \
+      || { rm -f -- "$bundle"; log 'NVIDIA driver version switch canceled.'; return 0; }
+  fi
+
+  prepare_nvidia_driver_switch_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      ;;
+    1)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "A complete return point for the current NVIDIA package set could not be staged. No packages were changed."
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "No installed NVIDIA package set is available to protect before the version switch."
+      ;;
+    *)
+      cleanup_nvidia_pending_snapshot
+      NVIDIA_ROLLBACK_PENDING=""
+      rm -f -- "$bundle"
+      die "Could not prepare the NVIDIA return point. No packages were changed."
+      ;;
+  esac
+
+  ensure_nvidia_dkms_kernel_headers
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    if ! trusted_nvidia_history_source "$source"; then
+      source_invalid=1
+      break
+    fi
+    sources+=("$source")
+  done <"$bundle"
+  if (( source_invalid == 1 )); then
+    rm -f -- "$bundle"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Historical NVIDIA source validation failed. No NVIDIA packages were changed."
+  fi
+
+  if ! remove_nvidia_module_conflicts_for_dkms; then
+    rm -f -- "$bundle"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Could not replace the current NVIDIA kernel-module package. No driver release was installed."
+  fi
+
+  if ! as_root pacman -U --needed --noconfirm "${sources[@]}"; then
+    rm -f -- "$bundle"
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} package transaction failed"
+  fi
+
+  if have dkms; then
+    if ! as_root dkms autoinstall -m nvidia -v "$target_driver"; then
+      rm -f -- "$bundle"
+      restore_failed_nvidia_switch "NVIDIA ${target_driver} DKMS build failed"
+    fi
+  fi
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    if [[ "$(package_version "$pkg" || true)" != "$target_version" ]]; then
+      verification_failed=1
+      warn "NVIDIA version switch verification failed for ${pkg}; expected ${target_version}."
+    fi
+  done <"$bundle"
+  verify_nvidia_dkms_release "$target_driver" || verification_failed=1
+
+  if (( verification_failed == 1 )); then
+    rm -f -- "$bundle"
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} verification failed"
+  fi
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    rm -f -- "$bundle"
+    die "NVIDIA ${target_driver} was installed, but Awtarchy could not preserve the pre-switch return point."
+  fi
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA ${target_driver} is installed, but initramfs refresh failed; inspect the system before rebooting."
+  rm -f -- "$bundle"
+
+  log "NVIDIA driver ${target_driver} is installed through nvidia-open-dkms."
+  log "The previous NVIDIA package set is saved as the rollback point."
+  log "Reboot before judging the selected driver."
+}
+
+pick_nvidia_history_version() {
+  local current_driver="" answer="" i="" selected_driver=""
+  local -a versions=()
+
+  [[ -r /dev/tty && -w /dev/tty ]] \
+    || die "NVIDIA driver version selection requires an interactive terminal."
+  current_driver="$(installed_nvidia_driver_version)" \
+    || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  mapfile -t versions < <(available_nvidia_driver_releases)
+  (( ${#versions[@]} > 0 )) \
+    || die "No previous nvidia-open-dkms releases were found in the official Arch Linux Archive."
+
+  printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
+  printf 'Available previous NVIDIA driver releases:\n' >/dev/tty
+  for i in "${!versions[@]}"; do
+    printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
+  done
+  printf '  q. Cancel\n\nChoose a driver version: ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=q
+  case "$answer" in
+    q|Q|'')
+      log 'NVIDIA driver version selection canceled.'
+      return 0
+      ;;
+  esac
+  [[ "$answer" =~ ^[0-9]+$ ]] || die "Invalid NVIDIA driver selection."
+  (( answer >= 1 && answer <= ${#versions[@]} )) || die "Invalid NVIDIA driver selection."
+  selected_driver="${versions[answer-1]}"
+  apply_nvidia_history_version "$selected_driver" 0
+}
+
+validate_nvidia_rollback_storage() {
+  root_owned_nonwritable_path "$NVIDIA_ROLLBACK_ROOT" \
+    && [[ -d "$NVIDIA_ROLLBACK_ROOT" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR" \
+    && [[ -d "$NVIDIA_ROLLBACK_DIR" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages" \
+    && [[ -d "$NVIDIA_ROLLBACK_DIR/packages" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/metadata" \
+    && [[ -f "$NVIDIA_ROLLBACK_DIR/metadata" ]] \
+    && root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/changes.tsv" \
+    && [[ -f "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]]
+}
+
+cleanup_nvidia_pending_snapshot() {
+  if [[ -n "${NVIDIA_ROLLBACK_PENDING:-}" && -e "$NVIDIA_ROLLBACK_PENDING" ]]; then
+    as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING" \
+      || warn "Could not remove pending NVIDIA rollback state: $NVIDIA_ROLLBACK_PENDING"
+  fi
+}
+
+stage_nvidia_rollback_archive() {
+  local pkg="$1" version="$2" source="" archive_name="" sig_name="" tmp=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    archive_name="$(basename -- "$source")"
+    as_root install -m 0644 -- \
+      "$source" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" || return 1
+    if [[ -f "${source}.sig" && ! -L "${source}.sig" ]]; then
+      as_root install -m 0644 -- \
+        "${source}.sig" "$NVIDIA_ROLLBACK_PENDING/packages/${archive_name}.sig" || return 1
+    fi
+    printf '%s\n' "$archive_name"
+    return 0
+  fi
+
+  source="$(find_historical_package_source "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  trusted_nvidia_history_source "$source" || return 1
+  have curl || return 1
+  have pacman-key || return 1
+
+  archive_name="$(basename -- "$source")"
+  sig_name="${archive_name}.sig"
+  tmp="$(mktemp -d)"
+  if ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 180 --output "$tmp/$archive_name" -- "$source" \
+    || ! curl --fail --silent --show-error --location \
+      --connect-timeout 4 --max-time 30 --output "$tmp/$sig_name" -- "${source}.sig" \
+    || ! as_root pacman-key --verify "$tmp/$sig_name" "$tmp/$archive_name" >/dev/null 2>&1 \
+    || ! as_root install -m 0644 -- "$tmp/$archive_name" "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" \
+    || ! as_root install -m 0644 -- "$tmp/$sig_name" "$NVIDIA_ROLLBACK_PENDING/packages/$sig_name";
+  then
+    rm -rf -- "$tmp"
+    return 1
+  fi
+  rm -rf -- "$tmp"
+
+  printf '%s\n' "$archive_name"
+}
+
+prepare_nvidia_rollback_snapshot() {
+  local pkg="" version="" archive_name="" missing=0 metadata_tmp="" before_tmp=""
+  local -a candidates=() missing_packages=()
+
+  if (( $# > 0 )); then
+    candidates=("$@")
+  else
+    mapfile -t candidates < <(nvidia_rollback_candidate_packages) || return 2
+  fi
+  (( ${#candidates[@]} )) || return 2
+
+  NVIDIA_ROLLBACK_PENDING="${NVIDIA_ROLLBACK_DIR}.pending.$$"
+  if ! as_root rm -rf -- "$NVIDIA_ROLLBACK_PENDING" \
+    || ! as_root install -d -m 0755 -- \
+      "$NVIDIA_ROLLBACK_ROOT" \
+      "$NVIDIA_ROLLBACK_PENDING" \
+      "$NVIDIA_ROLLBACK_PENDING/packages";
+  then
+    NVIDIA_ROLLBACK_PENDING=""
+    return 3
+  fi
+
+  metadata_tmp="$(mktemp)"
+  before_tmp="$(mktemp)"
+  {
+    printf 'created_at=%s\n' "$(date -Iseconds)"
+    printf 'status=pending\n'
+  } >"$metadata_tmp"
+  : >"$before_tmp"
+
+  for pkg in "${candidates[@]}"; do
+    [[ -n "$pkg" ]] || continue
+    version="$(package_version "$pkg" || true)"
+    archive_name=""
+
+    if [[ -z "$version" ]]; then
+      printf '%s\t%s\t%s\n' "$pkg" '(not installed)' '' >>"$before_tmp"
+      continue
+    fi
+
+    archive_name="$(stage_nvidia_rollback_archive "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -z "$archive_name" ]]; then
+      missing=1
+      missing_packages+=("$pkg")
+    fi
+    printf '%s\t%s\t%s\n' "$pkg" "$version" "$archive_name" >>"$before_tmp"
+  done
+
+  if (( missing == 1 )); then
+    printf 'snapshot_complete=0\n' >>"$metadata_tmp"
+  else
+    printf 'snapshot_complete=1\n' >>"$metadata_tmp"
+  fi
+
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_PENDING/metadata" \
+    || ! as_root install -m 0644 -- "$before_tmp" "$NVIDIA_ROLLBACK_PENDING/before.tsv";
+  then
+    rm -f -- "$metadata_tmp" "$before_tmp"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    return 3
+  fi
+  rm -f -- "$metadata_tmp" "$before_tmp"
+
+  if (( missing == 1 )); then
+    warn "NVIDIA rollback point could not stage trusted package archives for: ${missing_packages[*]}"
+    return 1
+  fi
+
+  return 0
+}
+
+finalize_nvidia_rollback_snapshot() {
+  local pkg="" old_version="" archive_name="" current_version="" complete=1 changed=0
+  local changes_tmp="" metadata_tmp=""
+
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" && -d "$NVIDIA_ROLLBACK_PENDING" ]] || return 1
+
+  changes_tmp="$(mktemp)"
+  metadata_tmp="$(mktemp)"
+  : >"$changes_tmp"
+
+  while IFS=$'\t' read -r pkg old_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    [[ "$current_version" != "$old_version" ]] || continue
+
+    changed=1
+    if [[ "$old_version" != '(not installed)' ]]; then
+      if [[ -z "$archive_name" || ! -f "$NVIDIA_ROLLBACK_PENDING/packages/$archive_name" ]]; then
+        complete=0
+      fi
+    fi
+    printf '%s\t%s\t%s\t%s\n' "$pkg" "$old_version" "$current_version" "$archive_name" >>"$changes_tmp"
+  done <"$NVIDIA_ROLLBACK_PENDING/before.tsv"
+
+  if (( changed == 0 )); then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    NVIDIA_ROLLBACK_COMPLETE=0
+    return 1
+  fi
+
+  NVIDIA_ROLLBACK_COMPLETE="$complete"
+  if ! cat -- "$NVIDIA_ROLLBACK_PENDING/metadata" >"$metadata_tmp"; then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    die "Could not read pending NVIDIA rollback metadata."
+  fi
+  {
+    printf 'status=available\n'
+    printf 'finalized_at=%s\n' "$(date -Iseconds)"
+    printf 'rollback_complete=%s\n' "$complete"
+  } >>"$metadata_tmp"
+
+  if ! as_root install -m 0644 -- "$changes_tmp" "$NVIDIA_ROLLBACK_PENDING/changes.tsv" \
+    || ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_PENDING/metadata";
+  then
+    rm -f -- "$changes_tmp" "$metadata_tmp"
+    die "Could not finalize the NVIDIA rollback point."
+  fi
+  rm -f -- "$changes_tmp" "$metadata_tmp"
+
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    die "Could not clear the previous NVIDIA rollback staging path."
+  fi
+  if [[ -e "$NVIDIA_ROLLBACK_DIR" ]]; then
+    if ! as_root mv -- "$NVIDIA_ROLLBACK_DIR" "${NVIDIA_ROLLBACK_DIR}.previous"; then
+      die "Could not preserve the previous NVIDIA rollback point."
+    fi
+  fi
+  if ! as_root mv -- "$NVIDIA_ROLLBACK_PENDING" "$NVIDIA_ROLLBACK_DIR"; then
+    if [[ -e "${NVIDIA_ROLLBACK_DIR}.previous" ]]; then
+      as_root mv -- "${NVIDIA_ROLLBACK_DIR}.previous" "$NVIDIA_ROLLBACK_DIR" \
+        || warn "Could not restore the previous NVIDIA rollback point after persistence failure."
+    fi
+    die "Could not save the NVIDIA rollback point."
+  fi
+  if ! as_root rm -rf -- "${NVIDIA_ROLLBACK_DIR}.previous"; then
+    warn "Saved the new NVIDIA rollback point, but could not remove the previous snapshot staging directory."
+  fi
+  NVIDIA_ROLLBACK_PENDING=""
+  return 0
+}
+
+print_nvidia_rollback_changes() {
+  local pkg="" old_version="" current_version="" archive_name=""
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] || return 1
+  printf '%s\n' 'NVIDIA/kernel packages changed:' >/dev/tty
+  while IFS=$'\t' read -r pkg old_version current_version archive_name; do
+    [[ -n "$pkg" ]] || continue
+    printf '  %s: %s -> %s\n' "$pkg" "$old_version" "$current_version" >/dev/tty
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+}
+
+apply_nvidia_rollback() {
+  local assume_yes="${1:-0}" complete="" pkg="" old_version="" saved_current_version="" archive_name="" installed_version=""
+  local metadata_tmp=""
+  local changed=0
+  local -a removals=() archives=()
+
+  [[ -r "$NVIDIA_ROLLBACK_DIR/metadata" && -r "$NVIDIA_ROLLBACK_DIR/changes.tsv" ]] \
+    || die "No saved NVIDIA rollback point is available."
+  validate_nvidia_rollback_storage \
+    || die "Saved NVIDIA rollback state is not root-owned and immutable enough for privileged package restore."
+
+  complete="$(sed -n 's/^rollback_complete=//p' "$NVIDIA_ROLLBACK_DIR/metadata" | tail -n1)"
+  [[ "$complete" == 1 ]] \
+    || die "The saved NVIDIA rollback point is incomplete; refusing an automatic partial driver rollback."
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    print_nvidia_rollback_changes
+    printf '\nRollback restores the saved package versions and removes NVIDIA packages that were added by the switch.\n' >/dev/tty
+    printf 'A reboot is recommended after rollback.\n\n' >/dev/tty
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" && -n "$saved_current_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" && "$installed_version" != "$saved_current_version" ]]; then
+      die "Saved NVIDIA rollback point no longer matches ${pkg}: expected ${saved_current_version} (or already-restored ${old_version}), found ${installed_version}. Refusing an automatic rollback after later package changes."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  if (( assume_yes == 0 )); then
+    confirm_yes_no 'Restore the saved NVIDIA package state now?' 0 \
+      || { log 'NVIDIA rollback canceled.'; return 0; }
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    [[ "$installed_version" != "$old_version" ]] || continue
+
+    if [[ "$old_version" == '(not installed)' ]]; then
+      [[ "$installed_version" == '(not installed)' ]] || removals+=("$pkg")
+      continue
+    fi
+
+    [[ -n "$archive_name" && "$archive_name" == "$(basename -- "$archive_name")" ]] \
+      || die "Rollback archive name is invalid for ${pkg} ${old_version}."
+    [[ -f "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" && ! -L "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" ]] \
+      || die "Rollback archive is missing for ${pkg} ${old_version}."
+    root_owned_nonwritable_path "$NVIDIA_ROLLBACK_DIR/packages/$archive_name" \
+      || die "Rollback archive is not trusted for privileged restore: ${archive_name}."
+    archives+=("$NVIDIA_ROLLBACK_DIR/packages/$archive_name")
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  if (( ${#removals[@]} > 0 )); then
+    if ! as_root pacman -R --noconfirm -- "${removals[@]}"; then
+      die "NVIDIA rollback could not remove packages introduced by the driver switch."
+    fi
+    changed=1
+  fi
+
+  if (( ${#archives[@]} > 0 )); then
+    if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
+      die "NVIDIA rollback package transaction failed."
+    fi
+    changed=1
+  fi
+
+  if (( changed == 0 )); then
+    log 'Saved NVIDIA package state is already restored.'
+    return 0
+  fi
+
+  while IFS=$'\t' read -r pkg old_version saved_current_version archive_name; do
+    [[ -n "$pkg" && -n "$old_version" ]] || continue
+    installed_version="$(package_version "$pkg" || true)"
+    [[ -n "$installed_version" ]] || installed_version='(not installed)'
+    if [[ "$installed_version" != "$old_version" ]]; then
+      die "NVIDIA rollback verification failed for ${pkg}; expected ${old_version}, found ${installed_version}."
+    fi
+  done <"$NVIDIA_ROLLBACK_DIR/changes.tsv"
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA packages were restored, but initramfs refresh failed; inspect the system before rebooting."
+
+  metadata_tmp="$(mktemp)"
+  if ! cat -- "$NVIDIA_ROLLBACK_DIR/metadata" >"$metadata_tmp"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be read for status update."
+  fi
+  {
+    printf 'restored_at=%s\n' "$(date -Iseconds)"
+    printf 'status=restored\n'
+  } >>"$metadata_tmp"
+  if ! as_root install -m 0644 -- "$metadata_tmp" "$NVIDIA_ROLLBACK_DIR/metadata"; then
+    rm -f -- "$metadata_tmp"
+    die "NVIDIA packages were restored, but rollback metadata could not be updated."
+  fi
+  rm -f -- "$metadata_tmp"
+
+  log 'NVIDIA rollback completed. Reboot before judging the restored driver.'
+}
+
+confirm_nvidia_system_upgrade() {
+  local snapshot_rc=0
+  local -a nvidia_packages=()
+
+  mapfile -t nvidia_packages < <(installed_nvidia_package_names)
+  (( ${#nvidia_packages[@]} )) || return 0
+
+  printf '\nNVIDIA drivers are installed on this system.\n' >/dev/tty
+  printf 'This package plan requires a full system upgrade, which may update the NVIDIA driver and kernel.\n' >/dev/tty
+  printf 'Awtarchy will save the currently cached driver/kernel packages first so they can be restored later.\n\n' >/dev/tty
+  printf 'Current NVIDIA packages:\n' >/dev/tty
+  pacman -Q "${nvidia_packages[@]}" 2>/dev/null | sed 's/^/  /' >/dev/tty || true
+  printf '\n' >/dev/tty
+
+  confirm_yes_no 'Allow the full system upgrade, including any available NVIDIA update?' 0 \
+    || { log 'Package reconciliation canceled before NVIDIA/system upgrade.'; return 1; }
+
+  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  case "$snapshot_rc" in
+    0)
+      log 'Saved a complete pre-upgrade NVIDIA/kernel rollback snapshot.'
+      ;;
+    1)
+      printf '\nAwtarchy could not cache every currently installed NVIDIA/kernel package.\n' >/dev/tty
+      printf 'A one-command rollback may be unavailable if one of those uncached packages changes.\n' >/dev/tty
+      confirm_yes_no 'Continue with the NVIDIA/system upgrade anyway?' 0 \
+        || {
+          cleanup_nvidia_pending_snapshot
+          NVIDIA_ROLLBACK_PENDING=""
+          log 'Package reconciliation canceled because a complete rollback point was unavailable.'
+          return 1
+        }
+      ;;
+    2)
+      NVIDIA_ROLLBACK_PENDING=""
+      ;;
+    *)
+      die 'Could not prepare the NVIDIA rollback point.'
+      ;;
+  esac
+  return 0
+}
+
+offer_nvidia_post_upgrade_choice() {
+  [[ -n "$NVIDIA_ROLLBACK_PENDING" ]] || return 0
+
+  if ! finalize_nvidia_rollback_snapshot; then
+    log 'NVIDIA/kernel package versions did not change during the system upgrade.'
+    return 0
+  fi
+
+  printf '\n' >/dev/tty
+  print_nvidia_rollback_changes
+  printf '\n' >/dev/tty
+
+  if (( NVIDIA_ROLLBACK_COMPLETE == 1 )); then
+    printf 'Rollback point saved. If a problem appears after reboot, run: awtarchy nvidia-rollback\n' >/dev/tty
+    printf 'Some NVIDIA problems only appear after reboot or when launching a game.\n' >/dev/tty
+    if ! confirm_yes_no 'Keep the new NVIDIA/kernel versions for now?' 1; then
+      apply_nvidia_rollback 1
+      return 20
+    fi
+  else
+    warn 'NVIDIA/kernel packages changed, but the saved rollback point is incomplete.'
+    warn 'Awtarchy will not attempt an unsafe partial automatic rollback.'
+  fi
+}
+
+choose_ly_action() {
+  install_ly=0
+  enable_ly=0
+
+  case "$LY_STATUS" in
+    'not installed')
+      if confirm_yes_no 'Install and enable Ly on tty2?' 0; then
+        install_ly=1
+        enable_ly=1
+      fi
+      ;;
+    'installed, not enabled on tty2')
+      if confirm_yes_no 'Enable installed Ly on tty2?' 0; then
+        enable_ly=1
+      fi
+      ;;
+    'installed and enabled on tty2')
+      printf '\nLy is already installed and enabled on tty2; leaving it unchanged.\n' >/dev/tty
+      ;;
+    *)
+      printf '\nLy state is %s; leaving it unchanged.\n' "$LY_STATUS" >/dev/tty
+      ;;
+  esac
+}
+
+selected_values() {
+  local values_name="$1" flags_name="$2" output_name="$3"
+  local -n values="$values_name"
+  local -n flags="$flags_name"
+  local -n output="$output_name"
+  local i
+  output=()
+  for i in "${!values[@]}"; do
+    (( flags[i] == 1 )) && output+=("${values[$i]}")
+  done
+}
+
+root_free_mib() {
+  local available_kib=""
+  available_kib="$(/usr/bin/df -Pk / 2>/dev/null | awk 'NR == 2 { print $4 }')"
+  [[ $available_kib =~ ^[0-9]+$ ]] || return 1
+  printf '%s\n' "$(( available_kib / 1024 ))"
+}
+
+recover_package_disk_headroom() {
+  local preferred_mib="${AWTARCHY_UPDATE_PREFERRED_FREE_MIB:-4096}"
+  local required_mib="${AWTARCHY_UPDATE_REQUIRED_FREE_MIB:-1024}"
+  local free_mib="" paccache_bin=""
+
+  [[ $preferred_mib =~ ^[0-9]+$ && $required_mib =~ ^[0-9]+$ ]] \
+    || die "Invalid update disk-space threshold override."
+  (( preferred_mib >= required_mib )) \
+    || die "Preferred update disk-space threshold cannot be below the required threshold."
+
+  free_mib="$(root_free_mib)" \
+    || die "Could not determine free space on the root filesystem."
+  (( free_mib >= preferred_mib )) && return 0
+
+  for paccache_bin in /usr/bin/paccache /usr/sbin/paccache; do
+    [[ -x $paccache_bin ]] && break
+    paccache_bin=""
+  done
+
+  if [[ -n $paccache_bin ]]; then
+    log "Root filesystem has ${free_mib} MiB free; pruning old pacman cache entries while keeping two package versions..."
+    if ! as_root "$paccache_bin" -rk2; then
+      die "Automatic pacman cache pruning failed."
+    fi
+    free_mib="$(root_free_mib)" \
+      || die "Could not re-check free space after pacman cache pruning."
+  fi
+
+  (( free_mib >= required_mib )) \
+    || die "Root filesystem has only ${free_mib} MiB free; at least ${required_mib} MiB is required before continuing package installation."
+
+  if (( free_mib < preferred_mib )); then
+    warn "Root filesystem has ${free_mib} MiB free; continuing above the ${required_mib} MiB hard minimum."
+  fi
+}
+
+as_root() {
+  if (( EUID == 0 )); then
+    "$@"
+  else
+    sudo -- "$@"
+  fi
+}
+
+pacman_recovery_supported_runtime() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    return 0
+  fi
+  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+}
+
+pacman_recovery_configure() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
+    PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
+    PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
+    PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
+  else
+    PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_CONF=/etc/pacman.conf
+    PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
+    PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
+    PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
+  fi
+
+  [[ -x $PACMAN_RECOVERY_PACMAN ]] \
+    || { warn "Pacman recovery binary is unavailable: ${PACMAN_RECOVERY_PACMAN}"; return 1; }
+  [[ -r $PACMAN_RECOVERY_CONF ]] \
+    || { warn "Pacman recovery configuration is unavailable: ${PACMAN_RECOVERY_CONF}"; return 1; }
+}
+
+pacman_recovery_as_root() {
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    "$@"
+  else
+    as_root "$@"
+  fi
+}
+
+pacman_recovery_run_capture() {
+  local root_mode="$1" error_file="$2"
+  shift 2
+  local rc=0
+
+  : >"$error_file"
+  if [[ $root_mode == root ]]; then
+    if pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  else
+    if "$PACMAN_RECOVERY_PACMAN" "$@" 2>"$error_file"; then
+      rc=0
+    else
+      rc=$?
+    fi
+  fi
+
+  if [[ -s $error_file ]]; then
+    cat -- "$error_file" >&2
+  fi
+  return "$rc"
+}
+
+pacman_recovery_parse_repos() {
+  local error_file="$1" line
+  local saw_sync_failure=0
+  local -a repos=()
+
+  grep -Fq 'failed to synchronize all databases' "$error_file" \
+    && saw_sync_failure=1
+
+  while IFS= read -r line; do
+    if [[ $line =~ ^error:\ database\ \'([A-Za-z0-9@._+:-]+)\'\ is\ not\ valid\ \(invalid\ or\ corrupted\ database\ \(PGP\ signature\)\)$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+      continue
+    fi
+    if (( saw_sync_failure == 1 )) \
+      && [[ $line =~ ^error:\ ([A-Za-z0-9@._+:-]+):\ signature\ from\ .+\ is\ invalid$ ]]; then
+      repos+=("${BASH_REMATCH[1]}")
+    fi
+  done <"$error_file"
+
+  (( ${#repos[@]} > 0 )) || return 1
+  printf '%s\n' "${repos[@]}" | LC_ALL=C sort -u
+}
+
+pacman_recovery_repo_is_cachyos() {
+  [[ $1 == cachyos || $1 == cachyos-* ]]
+}
+
+pacman_recovery_repo_is_arch() {
+  [[ $1 =~ ^(core|extra|multilib)(-testing|-staging)?$ ]]
+}
+
+pacman_recovery_repo_in_list() {
+  local needle="$1" item
+  shift
+  for item in "$@"; do
+    [[ $item == "$needle" ]] && return 0
+  done
+  return 1
+}
+
+pacman_recovery_write_config_without_repos() {
+  local destination="$1"
+  shift
+  local -a blocked=("$@")
+  local line section="" skip=0
+
+  : >"$destination"
+  while IFS= read -r line || [[ -n $line ]]; do
+    if [[ $line =~ ^\[([A-Za-z0-9@._+:-]+)\][[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      if pacman_recovery_repo_in_list "$section" "${blocked[@]}"; then
+        skip=1
+      else
+        skip=0
+      fi
+    fi
+    (( skip == 1 )) || printf '%s\n' "$line" >>"$destination"
+  done <"$PACMAN_RECOVERY_CONF"
+}
+
+pacman_recovery_bootstrap_tool() {
+  local kind="$1"
+  shift
+  local -a repos=("$@")
+  local tmp_conf
+
+  tmp_conf="$(mktemp)"
+  pacman_recovery_write_config_without_repos "$tmp_conf" "${repos[@]}"
+
+  case "$kind" in
+    cachyos)
+      log "CachyOS mirror tool is missing; bootstrapping rate-mirrors and cachyos-rate-mirrors without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm rate-mirrors cachyos-rate-mirrors; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap cachyos-rate-mirrors; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    arch)
+      log "Arch mirror tool is missing; trying to bootstrap reflector without the broken repository."
+      if ! pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" \
+        --config "$tmp_conf" -S --needed --noconfirm reflector; then
+        rm -f -- "$tmp_conf"
+        warn "Could not bootstrap reflector; continuing with targeted database resync only."
+        return 1
+      fi
+      ;;
+    *)
+      rm -f -- "$tmp_conf"
+      return 1
+      ;;
+  esac
+
+  rm -f -- "$tmp_conf"
+}
+
+pacman_recovery_refresh_mirrors() {
+  local -a repos=("$@")
+  local repo need_cachy=0 need_arch=0
+
+  [[ $PACMAN_RECOVERY_SKIP_MIRROR_REFRESH == 1 ]] && return 0
+
+  for repo in "${repos[@]}"; do
+    pacman_recovery_repo_is_cachyos "$repo" && need_cachy=1
+    pacman_recovery_repo_is_arch "$repo" && need_arch=1
+  done
+
+  if (( need_cachy == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      pacman_recovery_bootstrap_tool cachyos "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_CACHY_RATE ]]; then
+      log "Refreshing CachyOS mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" \
+        || warn "CachyOS mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+
+  if (( need_arch == 1 )); then
+    if [[ ! -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      pacman_recovery_bootstrap_tool arch "${repos[@]}" || true
+    fi
+    if [[ -x $PACMAN_RECOVERY_REFLECTOR ]]; then
+      log "Refreshing standard Arch mirrors before retrying pacman..."
+      pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+        --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist \
+        || warn "Arch mirror refresh failed; continuing with targeted database resync only."
+    fi
+  fi
+}
+
+pacman_recovery_confirm() {
+  local answer=""
+  local -a repos=("$@")
+
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    case "${AWTARCHY_ASSUME_PACMAN_REPAIR:-no}" in
+      y|Y|yes|YES) return 0 ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  if [[ ! -r /dev/tty || ! -w /dev/tty ]]; then
+    warn "Pacman has an invalid signed repository database, but no interactive terminal is available for repair approval."
+    return 1
+  fi
+
+  printf '\nAwtarchy detected an invalid signed pacman repository database:\n' >/dev/tty
+  printf '  - %s\n' "${repos[@]}" >/dev/tty
+  printf '\nAwtarchy can refresh supported mirrors, remove only the affected cached\n' >/dev/tty
+  printf 'repository database/signature files, force a fresh sync, and retry once.\n' >/dev/tty
+  printf 'It will not disable signature checking or reset your pacman keyring.\n\n' >/dev/tty
+  printf 'Attempt this repair? [y/N] ' >/dev/tty
+  IFS= read -r answer </dev/tty || answer=''
+  case "$answer" in
+    y|Y|yes|YES) return 0 ;;
+    *)
+      printf 'Pacman repository repair skipped.\n' >/dev/tty
+      return 1
+      ;;
+  esac
+}
+
+pacman_recovery_clear_sync_databases() {
+  local repo
+  for repo in "$@"; do
+    pacman_recovery_as_root rm -f -- \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db" \
+      "${PACMAN_RECOVERY_SYNC_DIR}/${repo}.db.sig"
+  done
+}
+
+pacman_recovery_repair() {
+  local -a repos=("$@")
+  local error_file rc=0
+
+  (( ${#repos[@]} > 0 )) || return 1
+  pacman_recovery_confirm "${repos[@]}" || return 1
+
+  pacman_recovery_refresh_mirrors "${repos[@]}"
+  pacman_recovery_clear_sync_databases "${repos[@]}"
+
+  error_file="$(mktemp)"
+  log "Forcing a fresh pacman database sync..."
+  if pacman_recovery_run_capture root "$error_file" -Syy; then
+    rm -f -- "$error_file"
+    log "Pacman repository database recovery completed."
+    return 0
+  else
+    rc=$?
+  fi
+  rm -f -- "$error_file"
+  warn "Pacman database resync still failed; no signature checks were bypassed and no keyring changes were made."
+  return "$rc"
+}
+
+pacman_sync_db_preflight() {
+  local error_file rc=0
+  local -a repos=()
+
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture user "$error_file" -Slq >/dev/null; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+  pacman_recovery_repair "${repos[@]}"
+}
+
+pacman_recovery_run_command() {
+  local error_file rc=0 retry_rc=0
+  local -a repos=() args=("$@")
+
+  pacman_recovery_supported_runtime || {
+    as_root pacman "${args[@]}"
+    return $?
+  }
+  pacman_recovery_configure || return 1
+
+  error_file="$(mktemp)"
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    rm -f -- "$error_file"
+    return 0
+  else
+    rc=$?
+  fi
+
+  mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  rm -f -- "$error_file"
+  (( ${#repos[@]} > 0 )) || return "$rc"
+
+  if ! pacman_recovery_repair "${repos[@]}"; then
+    return "$rc"
+  fi
+
+  error_file="$(mktemp)"
+  log "Retrying the original pacman command once..."
+  if pacman_recovery_run_capture root "$error_file" "${args[@]}"; then
+    retry_rc=0
+  else
+    retry_rc=$?
+  fi
+  rm -f -- "$error_file"
+  return "$retry_rc"
+}
+
+pacman_install_with_recovery() {
+  pacman_recovery_run_command "$@"
+}
+
+ensure_aur_scanner() {
+  if [[ -x "$AUR_SCAN_BIN" ]] && "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+    return 0
+  fi
+
+  if [[ "$AUR_SCAN_BIN" != /usr/bin/aur-scan ]]; then
+    warn "Configured aur-scan test binary is unavailable: ${AUR_SCAN_BIN}"
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/yay ]] || ! /usr/bin/yay --version >/dev/null 2>&1; then
+    warn "aur-scanner is missing and a usable /usr/bin/yay is unavailable for the one-time bootstrap."
+    return 1
+  fi
+
+  log "Installing stable aur-scanner through yay for the one-time bootstrap..."
+  if ! /usr/bin/yay -S --noconfirm --pgpfetch aur-scanner; then
+    warn "Failed to bootstrap stable aur-scanner."
+    return 1
+  fi
+
+  if [[ ! -x /usr/bin/aur-scan ]] || ! /usr/bin/aur-scan --version >/dev/null 2>&1; then
+    warn "aur-scanner installed without a usable /usr/bin/aur-scan."
+    return 1
+  fi
+
+  AUR_SCAN_BIN="/usr/bin/aur-scan"
+}
+
+install_selected_aur_packages() {
+  local pkg
+
+  for pkg in "$@"; do
+    if aur_package_satisfied "$pkg"; then
+      log "${pkg} or an equivalent installation is already present; skipping."
+      continue
+    fi
+
+    if (( EUID != 0 )); then
+      sudo -k
+    fi
+    log "Installing AUR package through upstream aur-scanner: ${pkg}"
+    if ! "$AUR_SCAN_BIN" install "$pkg" --noconfirm; then
+      warn "AUR package failed: ${pkg}. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! aur_package_satisfied "$pkg"; then
+      warn "aur-scanner returned success but ${pkg} is still not detected. Continuing with remaining package actions."
+      FAILED_AUR+=("$pkg")
+      continue
+    fi
+
+    if ! record_managed_packages "$pkg"; then
+      warn "${pkg} installed, but Awtarchy could not update its managed-package ledger."
+    fi
+  done
+
+  return 0
+}
+
+record_managed_packages() {
+  local -a add=("$@")
+  local tmp pkg
+  (( ${#add[@]} )) || return 0
+  tmp="$(mktemp)"
+  if [[ -r "$MANAGED_PACKAGES_FILE" ]]; then
+    cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  else
+    : >"$tmp"
+  fi
+  for pkg in "${add[@]}"; do
+    package_installed "$pkg" && printf '%s\n' "$pkg" >>"$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -d -m 0755 -- "$(dirname -- "$MANAGED_PACKAGES_FILE")"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+forget_managed_packages() {
+  local -a remove=("$@")
+  local tmp pkg
+  (( ${#remove[@]} )) || return 0
+  [[ -r "$MANAGED_PACKAGES_FILE" ]] || return 0
+  tmp="$(mktemp)"
+  cat -- "$MANAGED_PACKAGES_FILE" >"$tmp"
+  for pkg in "${remove[@]}"; do
+    sed -i "/^$(printf '%s' "$pkg" | sed 's/[][\\.^$*+?{}|()]/\\&/g')$/d" "$tmp"
+  done
+  LC_ALL=C sort -u -o "$tmp" "$tmp"
+  as_root install -m 0644 -- "$tmp" "$MANAGED_PACKAGES_FILE"
+  rm -f -- "$tmp"
+}
+
+apply_cheese_snapshot_replacement() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) || return 0
+
+  log "Replacing retired Cheese camera app with Snapshot..."
+  if ! package_installed snapshot; then
+    pacman_install_with_recovery -S --needed --noconfirm snapshot
+  fi
+  record_managed_packages snapshot
+  as_root pacman -R --noconfirm cheese
+  forget_managed_packages cheese
+  CHEESE_REPLACEMENT_NEEDED=0
+  log "Replaced Cheese with Snapshot."
+}
+
+apply_bibata_cursor_replacement() {
+  array_contains bibata-cursor-theme-bin "${AUR_CATALOG[@]}" || return 0
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    if [[ ! -x "$AUR_SCAN_BIN" ]] || ! "$AUR_SCAN_BIN" --version >/dev/null 2>&1; then
+      warn "Bibata cursor migration requires a usable aur-scan; leaving the existing cursor package untouched."
+      return 0
+    fi
+    log "Installing Bibata cursor theme through upstream aur-scanner..."
+    install_selected_aur_packages bibata-cursor-theme-bin
+  fi
+
+  if ! aur_package_satisfied bibata-cursor-theme-bin; then
+    warn "Bibata cursor theme is not installed; leaving the existing cursor package untouched."
+    return 0
+  fi
+
+  package_installed xcursor-comix || return 0
+  local ownership_recorded=0
+  managed_package xcursor-comix && ownership_recorded=1
+  log "Removing retired xcursor-comix package after Bibata replacement..."
+
+  if ! as_root pacman -R --noconfirm xcursor-comix; then
+    warn "Could not remove retired xcursor-comix; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed xcursor-comix; then
+    warn "xcursor-comix is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages xcursor-comix; then
+      warn "xcursor-comix was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Replaced retired xcursor-comix with Bibata."
+}
+
+migrate_lockscreen_retirement() {
+  [[ "${AWTARCHY_LOCKSCREEN_RETIRE_CONFIRMED:-0}" == 1 ]] \
+    || die "Lockscreen retirement requires an explicitly confirmed target."
+
+  if array_contains hyprlock "${ARCH_CATALOG[@]}"; then
+    die "Target runtime still requires Hyprlock; refusing package retirement."
+  fi
+
+  package_installed hyprlock || return 0
+  local ownership_recorded=0
+  managed_package hyprlock && ownership_recorded=1
+  log "Removing retired Hyprlock package after Quickshell lockscreen cutover..."
+
+  if ! as_root pacman -R --noconfirm hyprlock; then
+    warn "Could not remove retired Hyprlock; leaving it installed for a later retry."
+    return 0
+  fi
+  if package_installed hyprlock; then
+    warn "hyprlock is still detected after package removal."
+    return 0
+  fi
+  if (( ownership_recorded == 1 )); then
+    if ! forget_managed_packages hyprlock; then
+      warn "Hyprlock was removed, but Awtarchy could not update its managed-package ledger."
+      return 0
+    fi
+  fi
+  log "Removed retired Hyprlock package."
+}
+
+flatpak_scope() {
+  local fs=""
+  if have findmnt; then
+    fs="$(findmnt -n -o FSTYPE / 2>/dev/null || true)"
+  fi
+  if [[ $fs == btrfs ]]; then printf '%s\n' system; else printf '%s\n' user; fi
+}
+
+install_flatpak_apps() {
+  local scope="$1"
+  shift
+  local -a apps=("$@") cmd=()
+  (( ${#apps[@]} )) || return 0
+
+  if [[ $scope == user ]]; then
+    cmd=(flatpak --user)
+  else
+    cmd=(as_root flatpak --system)
+  fi
+
+  if ! "${cmd[@]}" remotes --columns=name 2>/dev/null | grep -Fxq flathub; then
+    "${cmd[@]}" remote-add --if-not-exists flathub https://flathub.org/repo/flathub.flatpakrepo
+  fi
+  "${cmd[@]}" install -y flathub "${apps[@]}"
+}
+
+package_reconciliation_needs_action() {
+  (( CHEESE_REPLACEMENT_NEEDED == 1 )) && return 0
+  (( ${#MISSING_REQUIRED[@]} > 0 )) && return 0
+  (( ${#MISSING_ARCH[@]} > 0 )) && return 0
+  (( ${#MISSING_AUR[@]} > 0 )) && return 0
+  (( ${#MISSING_FLATPAK_IDS[@]} > 0 )) && return 0
+  (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
+  return 1
+}
+
+if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
+  if (( NVIDIA_ROLLBACK_LIST == 1 )); then
+    print_recoverable_nvidia_versions
+    exit $?
+  fi
+
+  if [[ -n "$NVIDIA_ROLLBACK_VERSION" ]]; then
+    if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 1
+    else
+      [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA driver version switching requires an interactive terminal."
+      apply_nvidia_history_version "$NVIDIA_ROLLBACK_VERSION" 0
+    fi
+    exit $?
+  fi
+
+  if (( NVIDIA_ROLLBACK_PICK == 1 )); then
+    pick_nvidia_history_version
+    exit $?
+  fi
+
+  if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && ${AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES:-0} == 1 ]]; then
+    apply_nvidia_rollback 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
+    apply_nvidia_rollback 0
+  fi
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_CHECK_ONLY == 1 )); then
+  pacman_sync_db_preflight
+  exit $?
+fi
+
+if (( PACMAN_RECOVERY_RUN_ONLY == 1 )); then
+  pacman_recovery_run_command "${PACMAN_RECOVERY_RUN_ARGS[@]}"
+  exit $?
+fi
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  pacman_sync_db_preflight || true
+fi
+
+collect_state
+
+if (( NEEDS_ACTION_ONLY == 1 )); then
+  if package_reconciliation_needs_action; then
+    exit 10
+  fi
+  exit 0
+fi
+
+if (( MIGRATE_REPLACEMENTS_ONLY == 1 )); then
+  apply_cheese_snapshot_replacement
+  apply_bibata_cursor_replacement
+  exit 0
+fi
+
+if (( MIGRATE_LOCKSCREEN_RETIREMENT_ONLY == 1 )); then
+  migrate_lockscreen_retirement
+  exit 0
+fi
+
+if (( REVIEW_ONLY == 1 )); then
+  print_review
+  exit 0
+fi
+
+[[ -r /dev/tty && -w /dev/tty ]] || die "Interactive package reconciliation requires a terminal."
+
+print_review >/dev/tty
+printf '\nOptional choices are listed first and start unchecked.\n' >/dev/tty
+printf 'Missing default packages start selected; Space opts out.\n' >/dev/tty
+printf 'Installed current packages are preserved even when not selected here.\n\n' >/dev/tty
+confirm_yes_no 'Continue to package choices?' 1 || { log 'Package reconciliation canceled.'; exit 0; }
+
+# Optional Arch packages are shown first and unchecked; missing defaults follow selected.
+declare -a arch_labels=()
+declare -a arch_values=()
+declare -a arch_flags=()
+declare -a selected_arch=()
+for pkg in "${MISSING_OPTIONAL_ARCH[@]}"; do
+  arch_labels+=("${pkg} (optional)")
+  arch_values+=("$pkg")
+  arch_flags+=(0)
+done
+for pkg in "${MISSING_ARCH[@]}"; do
+  arch_labels+=("$pkg")
+  arch_values+=("$pkg")
+  arch_flags+=(1)
+done
+if (( ${#arch_labels[@]} )); then
+  multi_select 'Arch packages to install' arch_labels arch_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values arch_values arch_flags selected_arch
+
+# Optional AUR packages are shown first and unchecked; missing defaults follow selected.
+declare -a aur_labels=()
+declare -a aur_values=()
+declare -a aur_flags=()
+declare -a selected_aur=()
+for pkg in "${MISSING_OPTIONAL_AUR[@]}"; do
+  aur_labels+=("${pkg} (optional)")
+  aur_values+=("$pkg")
+  aur_flags+=(0)
+done
+for pkg in "${MISSING_AUR[@]}"; do
+  aur_labels+=("$pkg")
+  aur_values+=("$pkg")
+  aur_flags+=(1)
+done
+if (( ${#aur_labels[@]} )); then
+  multi_select 'AUR packages to install' aur_labels aur_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values aur_values aur_flags selected_aur
+
+# Optional Flatpaks are shown first and unchecked; missing defaults follow selected.
+declare -a flatpak_labels=()
+declare -a flatpak_values=()
+declare -a flatpak_flags=()
+declare -a selected_flatpak=()
+for i in "${!MISSING_OPTIONAL_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_OPTIONAL_FLATPAK_NAMES[$i]} (${MISSING_OPTIONAL_FLATPAK_IDS[$i]}) (optional)")
+  flatpak_values+=("${MISSING_OPTIONAL_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(0)
+done
+for i in "${!MISSING_FLATPAK_IDS[@]}"; do
+  flatpak_labels+=("${MISSING_FLATPAK_NAMES[$i]} (${MISSING_FLATPAK_IDS[$i]})")
+  flatpak_values+=("${MISSING_FLATPAK_IDS[$i]}")
+  flatpak_flags+=(1)
+done
+if (( ${#flatpak_labels[@]} )); then
+  multi_select 'Flatpak apps to install' flatpak_labels flatpak_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values flatpak_values flatpak_flags selected_flatpak
+
+install_ly=0
+enable_ly=0
+choose_ly_action
+
+# Retired packages: Awtarchy-owned defaults selected; unowned defaults kept.
+declare -a retired_labels=()
+declare -a retired_values=()
+declare -a retired_flags=()
+declare -a selected_retired=()
+for pkg in "${RETIRED_MANAGED[@]}"; do
+  retired_labels+=("${pkg} (Awtarchy-owned, replaced)")
+  retired_values+=("$pkg")
+  retired_flags+=(1)
+done
+for pkg in "${RETIRED_UNOWNED[@]}"; do
+  retired_labels+=("${pkg} (not Awtarchy-owned, keep unless selected)")
+  retired_values+=("$pkg")
+  retired_flags+=(0)
+done
+if (( ${#retired_labels[@]} )); then
+  multi_select 'Retired/replaced packages to remove' retired_labels retired_flags \
+    || { log 'Package reconciliation canceled.'; exit 0; }
+fi
+selected_values retired_values retired_flags selected_retired
+
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )); then
+  array_contains cheese "${selected_retired[@]}" || selected_retired+=(cheese)
+fi
+
+install_arch=("${MISSING_REQUIRED[@]}" "${selected_arch[@]}")
+if (( CHEESE_REPLACEMENT_NEEDED == 1 )) && ! package_installed snapshot; then
+  install_arch+=(snapshot)
+fi
+sort_unique_array install_arch
+if (( install_ly == 1 )); then install_arch+=(ly); fi
+if (( ${#selected_flatpak[@]} )) && ! have flatpak; then
+  install_arch+=(flatpak)
+fi
+sort_unique_array install_arch
+
+printf '\033[H\033[2J' >/dev/tty
+printf '%s\n\n' 'Awtarchy package reconciliation plan' >/dev/tty
+print_list 'Install from Arch repositories:' "${install_arch[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install from AUR:' "${selected_aur[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Install Flatpak apps:' "${selected_flatpak[@]}" >/dev/tty
+printf '\n' >/dev/tty
+print_list 'Remove retired/replaced packages:' "${selected_retired[@]}" >/dev/tty
+if (( enable_ly == 1 )); then printf '\nLy: enable ly@tty2.service and disable getty@tty2.service\n' >/dev/tty; fi
+printf '\nNo current installed package will be removed merely because it was not selected; explicit replacements may be migrated.\n\n' >/dev/tty
+
+if (( ${#install_arch[@]} == 0 && ${#selected_aur[@]} == 0 && ${#selected_flatpak[@]} == 0 && ${#selected_retired[@]} == 0 && enable_ly == 0 )); then
+  log 'No package changes selected.'
+  exit 0
+fi
+
+confirm_yes_no 'Apply this package plan?' 0 || { log 'Package reconciliation canceled.'; exit 0; }
+recover_package_disk_headroom
+
+if (( ${#install_arch[@]} )); then
+  confirm_nvidia_system_upgrade || exit 0
+  log "Installing Arch packages with a full system upgrade: ${install_arch[*]}"
+  if ! pacman_install_with_recovery -Syu --needed --noconfirm "${install_arch[@]}"; then
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Arch package transaction failed."
+  fi
+  # Finalize/offer NVIDIA recovery before bookkeeping so a ledger failure cannot
+  # strand a successful driver upgrade without its rollback point.
+  nvidia_post_rc=0
+  offer_nvidia_post_upgrade_choice || nvidia_post_rc=$?
+  record_managed_packages "${install_arch[@]}"
+  case "$nvidia_post_rc" in
+    0) ;;
+    20)
+      log 'NVIDIA/kernel rollback completed; stopping package reconciliation so the system can be rebooted cleanly.'
+      exit 0
+      ;;
+    *)
+      exit "$nvidia_post_rc"
+      ;;
+  esac
+fi
+
+if (( enable_ly == 1 )); then
+  have systemctl || die "Ly is installed but systemctl is unavailable for tty2 setup."
+  as_root systemctl disable getty@tty2.service >/dev/null 2>&1 || true
+  as_root systemctl enable ly@tty2.service
+  log 'Ly enabled on tty2; getty@tty2 disabled.'
+fi
+
+if (( ${#selected_aur[@]} )); then
+  log 'AUR build privilege isolation enabled; makepkg may request sudo independently.'
+  if ensure_aur_scanner; then
+    install_selected_aur_packages "${selected_aur[@]}"
+  else
+    warn 'aur-scanner is unavailable; recording selected AUR packages as failed and continuing with remaining package actions.'
+    FAILED_AUR+=("${selected_aur[@]}")
+  fi
+fi
+
+if (( ${#selected_flatpak[@]} )); then
+  have flatpak || die "Flatpak installation was selected but flatpak is unavailable after package installation."
+  scope="$(flatpak_scope)"
+  log "Installing Flatpak apps in ${scope} scope: ${selected_flatpak[*]}"
+  install_flatpak_apps "$scope" "${selected_flatpak[@]}"
+fi
+
+if (( ${#selected_retired[@]} )); then
+  log "Removing selected retired packages: ${selected_retired[*]}"
+  as_root pacman -R --noconfirm "${selected_retired[@]}"
+  forget_managed_packages "${selected_retired[@]}"
+fi
+
+if (( ${#FAILED_AUR[@]} )); then
+  sort_unique_array FAILED_AUR
+  printf '\n'
+  print_list 'AUR packages that could not be installed:' "${FAILED_AUR[@]}"
+  warn 'AUR failures do not stop package reconciliation; all other selected package actions were still processed.'
+  log 'Package reconciliation completed with AUR package failures.'
+else
+  log 'Package reconciliation complete.'
+fi
+\033[B'|j)
         if (( current + 1 < ${#labels[@]} )); then
           ((current++))
+        else
+          current=0
         fi
         ;;
       ' ')
