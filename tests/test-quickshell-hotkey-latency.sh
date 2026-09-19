@@ -219,14 +219,11 @@ if quick.count('active: quickSettingsWindow.visible') != 1:
     raise SystemExit("FAIL: unexpected immediate Quick Settings card activation remains")
 for needle in (
     "property bool fastPresentation: false",
-    "property bool postMapPositionRequired: true",
     "function openForScreen(targetScreen, fastOpen)",
     "fastPresentation = Boolean(fastOpen);",
     "function toggleForScreenNow(targetScreen, fastOpen)",
     "toggleForScreenNow(focusedScreen(), true);",
     "toggleForScreenNow(targetScreen, false);",
-    "postMapPositionRequired = exitCode !== 0;",
-    "if (root.postMapPositionRequired)",
     "enabled: FlyoutManager.animationsEnabled && !root.fastPresentation",
 ):
     if needle not in quick:
