@@ -1474,3 +1474,6 @@ d98e678330dba2814f931418853d8362a01d0245876d0824f63aa22e6ff0bf2e	.config/quicksh
 
 # 2026-09-18 instant Quick Settings keyboard presentation.
 33b7b7989e72afffabf8c06f98bc02a29bd0a6023a0e5ffdafd70e0f088440c0	.config/quickshell/awtarchy/QuickSettings.qml
+
+# 2026-09-18 instant keyboard presentation with safe post-map positioning.
+0de107e12bc57888167d945b404e1a970e9399d3ae2e2e772d1b853feedcff08	.config/quickshell/awtarchy/QuickSettings.qml
