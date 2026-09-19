@@ -103,7 +103,8 @@ if '"bar-enabled"' in visible_block:
     raise SystemExit('FAIL: Visible button still directly toggles per-monitor visibility instead of opening the workspace menu')
 
 need(hyprland, '{ "SUPER + ALT + CTRL + B", bar_toggle }', 'focused-monitor bar toggle keybind changed')
-need(toggle, '""|--focused|-f) exec "$QS_SH" toggle-autohide-focused', 'bar auto-hide helper no longer targets the focused monitor')
+need(toggle, 'ipc call control toggleBarAutoHideFocused', 'bar auto-hide helper no longer uses the focused-monitor IPC fast path')
+need(toggle, 'exec "$QS_SH" toggle-autohide-focused', 'bar auto-hide helper lost its manager recovery fallback')
 
 print('PASS: per-workspace bar visibility contract')
 PY
