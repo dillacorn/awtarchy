@@ -180,6 +180,10 @@ if bar_state.count("JSON.parse(text)") != 1:
 
 required_quick = (
     "property string preparedOpenKey:",
+    "property string preparedStateMonitor:",
+    "property int preparedStateRevision:",
+    "property bool secondaryCardsActive:",
+    "function ensurePreparedState(targetScreen)",
     "function preparationForScreen(targetScreen)",
     "function prewarmFocused()",
     "id: prewarmProcess",
@@ -187,6 +191,10 @@ required_quick = (
     "interval: 2400",
     "if (preparedOpenKey === preparation.key)",
     "finishPreparedOpen(0, true);",
+    "id: quickSettingsOpenStatusRefresh",
+    "interval: 160",
+    "id: quickSettingsSecondaryCardsRefresh",
+    "interval: 320",
     "function requestStatus(targetScreen)",
 )
 for needle in required_quick:
@@ -197,6 +205,12 @@ if 'prepareProcess.exec(preparation.args);' not in quick:
     raise SystemExit("FAIL: Quick Settings lost blocking prepare fallback for stale cache")
 if 'root.prewarmEnabled = true;' not in quick:
     raise SystemExit("FAIL: Quick Settings startup warmup is not gated until login settles")
+if 'preparedStateRevision === BarState.revision' not in quick:
+    raise SystemExit("FAIL: Quick Settings does not reuse warmed state by BarState revision")
+if quick.count('active: root.secondaryCardsActive') != 4:
+    raise SystemExit("FAIL: Quick Settings secondary status cards are not deferred consistently")
+if quick.count('active: quickSettingsWindow.visible') != 1:
+    raise SystemExit("FAIL: unexpected immediate Quick Settings card activation remains")
 PY
 
 printf '%s\n' 'PASS: Quickshell hotkeys use direct IPC, cached state, and Quick Settings prewarm'
