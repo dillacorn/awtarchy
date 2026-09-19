@@ -1,0 +1,7 @@
+# github.com/dillacorn/awtarchy/tree/main/config/yazi
+# ~/.config/yazi/yazi.toml
+
+[opener]
+edit = [
+  { run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" },
+]

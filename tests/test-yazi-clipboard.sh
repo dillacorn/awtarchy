@@ -5,6 +5,8 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
+YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
+MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
 fail() {
@@ -23,6 +25,54 @@ if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
 
+python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener is not delegated to the desktop default application'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+rules = config.get("opener", {}).get("edit", [])
+if not isinstance(rules, list):
+    raise SystemExit(1)
+
+if not any(
+    isinstance(rule, dict)
+    and rule.get("run") == "/usr/bin/xdg-open %s"
+    and rule.get("for") == "unix"
+    for rule in rules
+):
+    raise SystemExit(1)
+
+for rule in rules:
+    if not isinstance(rule, dict):
+        continue
+    run = str(rule.get("run", ""))
+    if "micro" in run.lower() or "$EDITOR" in run or "${EDITOR" in run:
+        raise SystemExit(1)
+PY
+
+grep -Fq 'text/plain=micro.desktop' "$MIMEAPPS" \
+  || fail 'Awtarchy default text/plain association is no longer Micro'
+grep -Fq 'repair_v373_yazi_default_editor_target()' "$RUNTIME" \
+  || fail 'runtime has no v3.7.3 Yazi default-editor delivery repair'
+# These assertions intentionally search for literal shell variables in runtime source.
+# shellcheck disable=SC2016
+grep -Fq '[[ "$tag" == "v3.7.3" ]] || return 0' "$RUNTIME" \
+  || fail 'v3.7.3 Yazi default-editor repair is not tag scoped'
+# shellcheck disable=SC2016
+grep -Fq 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" \
+  || fail 'stable update path does not apply the v3.7.3 Yazi default-editor repair'
+grep -Fq '{ run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" }' "$RUNTIME" \
+  || fail 'v3.7.3 stable repair does not install the default-editor Yazi opener'
+# shellcheck disable=SC2016
+build_line="$(grep -nF 'build_target_home "$repo_dir" "$target_home"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+# shellcheck disable=SC2016
+repair_line="$(grep -nF 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+[[ "$build_line" =~ ^[0-9]+$ && "$repair_line" =~ ^[0-9]+$ && "$repair_line" -gt "$build_line" ]] \
+  || fail 'v3.7.3 Yazi default-editor repair does not run after the stable target is built'
+grep -Fq ' xdg-utils ' "$RUNTIME" \
+  || fail 'xdg-utils is no longer part of the managed package catalog'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
   || fail 'wl-clipboard is no longer part of the managed Window Management package set'
 grep -Fq 'is_legacy_yazi_clipboard_plugin()' "$RUNTIME" \
@@ -42,4 +92,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi clipboard copy uses wl-clipboard and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi delegates text opening to the desktop default application, delivers the v3.7.3 stable repair, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
