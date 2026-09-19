@@ -26,7 +26,8 @@ NVIDIA_ROLLBACK_PENDING=""
 NVIDIA_ROLLBACK_COMPLETE=0
 PACMAN_CACHE_DIR="/var/cache/pacman/pkg"
 PACMAN_LOG_FILE="/var/log/pacman.log"
-NVIDIA_ARCHIVE_BASE="https://archive.archlinux.org/packages/.all"
+ARCH_PACKAGE_ARCHIVE_BASE="https://archive.archlinux.org/packages"
+CACHY_PACKAGE_ARCHIVE_BASE="https://archive.cachyos.org/archive"
 declare -a PACMAN_RECOVERY_RUN_ARGS=()
 
 # Packages required by currently exposed Awtarchy shell/runtime features.
@@ -725,20 +726,53 @@ valid_archive_package_component() {
   [[ "$1" =~ ^[A-Za-z0-9@._+:-]+$ ]]
 }
 
+archive_url_exists() {
+  local url="$1"
+  have curl || return 1
+  curl --fail --silent --show-error --location --head \
+    --connect-timeout 4 --max-time 12 -- "$url" >/dev/null 2>&1
+}
+
 find_archlinux_archive_package_url() {
-  local pkg="$1" version="$2" arch="" extension="" filename="" url=""
+  local pkg="$1" version="$2" first="" arch="" extension="" filename="" url=""
 
   valid_archive_package_component "$pkg" || return 1
   valid_archive_package_component "$version" || return 1
-  have curl || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
 
   for arch in x86_64 any; do
     for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
       filename="${pkg}-${version}-${arch}.${extension}"
-      url="${NVIDIA_ARCHIVE_BASE}/${filename}"
-      if curl --fail --silent --show-error --location --head \
-        --connect-timeout 4 --max-time 12 -- "$url" >/dev/null 2>&1;
-      then
+      url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/${filename}"
+      if archive_url_exists "$url"; then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+find_cachyos_archive_package_url() {
+  local pkg="$1" version="$2" repo="" arch="" extension="" filename="" url=""
+  local -a repo_arch_pairs=(
+    "cachyos|x86_64"
+    "cachyos-v3|x86_64_v3"
+    "cachyos-v4|x86_64_v4"
+  )
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+
+  local pair
+  for pair in "${repo_arch_pairs[@]}"; do
+    repo="${pair%%|*}"
+    arch="${pair#*|}"
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${CACHY_PACKAGE_ARCHIVE_BASE}/${repo}/${filename}"
+      if archive_url_exists "$url"; then
         printf '%s\n' "$url"
         return 0
       fi
@@ -755,8 +789,13 @@ trusted_nvidia_history_source() {
     return $?
   fi
 
-  [[ "$source" == "${NVIDIA_ARCHIVE_BASE}/"* ]] || return 1
-  [[ "$source" != *$'\n'* && "$source" != *$'\r'* && "$source" != *' '* ]]
+  if [[ "$source" == "${ARCH_PACKAGE_ARCHIVE_BASE}/"* \
+    || "$source" == "${CACHY_PACKAGE_ARCHIVE_BASE}/"* ]];
+  then
+    [[ "$source" != *$'\n'* && "$source" != *$'\r'* && "$source" != *' '* ]]
+    return $?
+  fi
+  return 1
 }
 
 find_historical_package_source() {
@@ -768,7 +807,21 @@ find_historical_package_source() {
     return 0
   fi
 
+  if [[ "$pkg" == linux-cachyos* ]]; then
+    source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+    if [[ -n "$source" ]]; then
+      printf '%s\n' "$source"
+      return 0
+    fi
+  fi
+
   source="$(find_archlinux_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  source="$(find_cachyos_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
   [[ -n "$source" ]] || return 1
   printf '%s\n' "$source"
 }
@@ -968,7 +1021,7 @@ print_recoverable_nvidia_versions() {
   mapfile -t versions < <(recoverable_nvidia_history_versions)
 
   printf 'Current NVIDIA driver: %s\n' "$current_driver"
-  printf 'Recoverable historical driver versions (local cache or Arch Linux Archive):\n'
+  printf 'Recoverable historical driver versions (local cache, Arch Linux Archive, or CachyOS archive):\n'
   if (( ${#versions[@]} == 0 )); then
     printf '  (none)\n'
     return 1
@@ -994,7 +1047,7 @@ apply_nvidia_history_version() {
   bundle="$(mktemp)"
   if ! build_nvidia_history_bundle "$target_driver" "$bundle"; then
     rm -f -- "$bundle"
-    die "No complete trusted NVIDIA/kernel package set can reconstruct driver ${target_driver} from local cache/history or the Arch Linux Archive. Awtarchy will not guess or perform a partial rollback."
+    die "No complete trusted NVIDIA/kernel package set can reconstruct driver ${target_driver} from local cache/history, the Arch Linux Archive, or the CachyOS archive. Awtarchy will not guess or perform a partial rollback."
   fi
 
   if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
@@ -1081,10 +1134,10 @@ pick_nvidia_history_version() {
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
   mapfile -t versions < <(recoverable_nvidia_history_versions)
   (( ${#versions[@]} > 0 )) \
-    || die "No complete historical NVIDIA/kernel package sets are available from the local pacman cache or Arch Linux Archive."
+    || die "No complete historical NVIDIA/kernel package sets are available from the local pacman cache, Arch Linux Archive, or CachyOS archive."
 
   printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
-  printf 'Recoverable historical driver versions (local cache or Arch Linux Archive):\n' >/dev/tty
+  printf 'Recoverable historical driver versions (local cache, Arch Linux Archive, or CachyOS archive):\n' >/dev/tty
   for i in "${!versions[@]}"; do
     printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
   done
