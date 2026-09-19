@@ -835,9 +835,7 @@ Singleton {
         outputVolumeHoverPercent = -1;
     }
 
-    function toggleForScreen(targetScreen) {
-        if (!FlyoutManager.acceptToggle("quick-settings"))
-            return;
+    function toggleForScreenNow(targetScreen) {
         const currentName = activeMonitorName;
         const targetName = targetScreen ? targetScreen.name : "";
         if ((quickSettingsWindow.visible || openPreparing)
@@ -845,6 +843,16 @@ Singleton {
             close();
         else
             openForScreen(targetScreen);
+    }
+
+    function toggleForScreen(targetScreen) {
+        if (!FlyoutManager.acceptToggle("quick-settings"))
+            return;
+        toggleForScreenNow(targetScreen);
+    }
+
+    function toggleFocused() {
+        toggleForScreenNow(focusedScreen());
     }
 
     FileView {
@@ -866,7 +874,7 @@ Singleton {
 
     IpcHandler {
         target: "quicksettings"
-        function toggle(): void { root.toggleForScreen(root.focusedScreen()); }
+        function toggle(): void { root.toggleFocused(); }
         function open(): void { root.openFocused(); }
         function close(): void { root.close(); }
         function refresh(): void { root.refreshStatus(); }
