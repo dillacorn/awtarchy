@@ -251,8 +251,6 @@ Singleton {
     }
 
     function toggleFocused() {
-        if (!FlyoutManager.acceptToggle("clipboard"))
-            return;
         if (clipboardWindow.visible || openPreparing)
             close();
         else
