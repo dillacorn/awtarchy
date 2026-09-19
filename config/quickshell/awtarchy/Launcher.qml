@@ -476,18 +476,23 @@ Singleton {
         });
     }
 
-    function prewarmFocused() {
+    function prewarmForScreen(targetScreen, targetPlacement) {
         if (launcherWindow.visible || openPreparing || prewarmProcess.running)
             return;
-        const targetScreen = focusedScreen();
         if (!targetScreen)
             return;
         const preparation = launcherPreparation(
-            targetScreen, centeredPlacementForScreen(targetScreen));
+            targetScreen, targetPlacement || placementForScreen(targetScreen));
         if (!preparation || preparedOpenKey === preparation.key)
             return;
         pendingPrewarmKey = preparation.key;
         prewarmProcess.exec(preparation.args);
+    }
+
+    function prewarmFocused() {
+        const targetScreen = focusedScreen();
+        prewarmForScreen(targetScreen,
+            targetScreen ? centeredPlacementForScreen(targetScreen) : "center");
     }
 
     function finishPrewarm(exitCode) {
