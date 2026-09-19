@@ -1165,7 +1165,22 @@ apply_nvidia_history_version() {
 
   ensure_nvidia_dkms_kernel_headers
 
-  while IFS=    rm -f -- "$bundle"
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    if ! trusted_nvidia_history_source "$source"; then
+      source_invalid=1
+      break
+    fi
+    sources+=("$source")
+  done <"$bundle"
+  if (( source_invalid == 1 )); then
+    rm -f -- "$bundle"
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Historical NVIDIA source validation failed. No NVIDIA packages were changed."
+  fi
+
+  if ! remove_nvidia_module_conflicts_for_dkms; then
+    rm -f -- "$bundle"
     cleanup_nvidia_pending_snapshot
     NVIDIA_ROLLBACK_PENDING=""
     die "Could not replace the current NVIDIA kernel-module package. No driver release was installed."
