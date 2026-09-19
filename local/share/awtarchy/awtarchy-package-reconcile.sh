@@ -114,11 +114,13 @@ Deselecting a current package never uninstalls it.
 On systems with NVIDIA drivers, a full system upgrade requires confirmation.
 Awtarchy saves a rollback point from the currently cached NVIDIA/kernel
 packages when possible so the last driver update can be restored later.
-Use --pick to choose another fully recoverable historical driver version from
-pacman history. Required package archives are reused from the trusted local
-pacman cache when present, otherwise Awtarchy can use the official Arch Linux
-Archive. --list inspects recoverable versions and --version selects one directly.
-Awtarchy refuses incomplete historical package sets.
+Use --pick to choose a previous NVIDIA driver release from the official Arch
+Linux Archive. Modern-driver rollback uses the matching nvidia-open-dkms stack
+against the kernels already installed on the machine instead of forcing an old
+kernel. Before switching, Awtarchy stages a complete return point for the current
+NVIDIA package set. --list inspects available releases and --version selects one
+directly. Failed switches are restored automatically when the return point is
+available.
 EOF
 }
 
@@ -840,176 +842,232 @@ installed_nvidia_driver_version() {
   nvidia_driver_version_from_package_version "$version"
 }
 
-trusted_pacman_history() {
-  [[ -f "$PACMAN_LOG_FILE" && ! -L "$PACMAN_LOG_FILE" ]] \
-    && root_owned_nonwritable_path "$PACMAN_LOG_FILE"
+nvidia_module_package_name() {
+  case "$1" in
+    nvidia|nvidia-lts|nvidia-dkms|nvidia-open|nvidia-open-lts|nvidia-lts-open|nvidia-open-dkms|linux-*-nvidia|linux-*-nvidia-open)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
 }
 
-nvidia_history_records() {
-  trusted_pacman_history \
-    || die "Pacman history is unavailable or not trusted: ${PACMAN_LOG_FILE}"
-
-  awk '
-    /\[ALPM\] transaction started$/ {
-      tx++
-      next
-    }
-    match($0, /\[ALPM\] (upgraded|downgraded) ([^ ]+) \(([^ ]+) -> ([^)]+)\)/, m) {
-      if (tx > 0) printf "%d\t%s\t%s\t%s\n", tx, m[2], m[3], m[4]
-      next
-    }
-    match($0, /\[ALPM\] installed ([^ ]+) \(([^)]+)\)/, m) {
-      if (tx > 0) printf "%d\t%s\t(absent)\t%s\n", tx, m[1], m[2]
-      next
-    }
-    match($0, /\[ALPM\] removed ([^ ]+) \(([^)]+)\)/, m) {
-      if (tx > 0) printf "%d\t%s\t%s\t(absent)\n", tx, m[1], m[2]
-    }
-  ' "$PACMAN_LOG_FILE"
+nvidia_driver_switch_package_name() {
+  case "$1" in
+    nvidia-utils|lib32-nvidia-utils|opencl-nvidia|lib32-opencl-nvidia)
+      return 0
+      ;;
+    *)
+      nvidia_module_package_name "$1"
+      ;;
+  esac
 }
 
-nvidia_history_target_points() {
-  local records="$1" target_driver="$2"
-  local tx pkg old_version new_version old_driver="" new_driver=""
-  local points=""
-  points="$(mktemp)"
+installed_nvidia_driver_switch_packages() {
+  local pkg
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_driver_switch_package_name "$pkg" && printf '%s\n' "$pkg"
+  done < <(pacman -Qq 2>/dev/null || true)
+}
 
-  while IFS=$'\t' read -r tx pkg old_version new_version; do
-    [[ "$pkg" == nvidia-utils ]] || continue
-    old_driver="$(nvidia_driver_version_from_package_version "$old_version" 2>/dev/null || true)"
-    new_driver="$(nvidia_driver_version_from_package_version "$new_version" 2>/dev/null || true)"
-    [[ "$old_driver" == "$target_driver" ]] && printf '%s\told\n' "$tx" >>"$points"
-    [[ "$new_driver" == "$target_driver" ]] && printf '%s\tnew\n' "$tx" >>"$points"
-  done <"$records"
+archlinux_archive_package_versions() {
+  local pkg="$1" first="" index_url="" pattern=""
 
-  if [[ -s "$points" ]]; then
-    tac -- "$points"
+  valid_archive_package_component "$pkg" || return 1
+  have curl || return 1
+  first="${pkg:0:1}"
+  [[ "$first" =~ ^[A-Za-z0-9]$ ]] || return 1
+  index_url="${ARCH_PACKAGE_ARCHIVE_BASE}/${first}/${pkg}/"
+  pattern="${pkg}-[^\"<>[:space:]]+-x86_64\\.pkg\\.tar\\.(zst|xz|gz)"
+
+  curl --fail --silent --show-error --location \
+    --connect-timeout 4 --max-time 25 -- "$index_url" \
+    | grep -oE "$pattern" \
+    | sed -E "s#^${pkg}-##; s#-x86_64\\.pkg\\.tar\\.(zst|xz|gz)$##" \
+    | LC_ALL=C sort -Vu
+}
+
+archlinux_archive_version_for_driver() {
+  local pkg="$1" driver="$2" version="" parsed=""
+  local -a matches=()
+
+  while IFS= read -r version; do
+    [[ -n "$version" ]] || continue
+    parsed="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ "$parsed" == "$driver" ]] || continue
+    matches+=("$version")
+  done < <(archlinux_archive_package_versions "$pkg" 2>/dev/null || true)
+
+  (( ${#matches[@]} > 0 )) || return 1
+  printf '%s\n' "${matches[@]}" | LC_ALL=C sort -V | tail -n1
+}
+
+driver_version_is_older() {
+  local candidate="$1" current="$2" first=""
+  [[ "$candidate" != "$current" ]] || return 1
+  first="$(printf '%s\n%s\n' "$candidate" "$current" | LC_ALL=C sort -V | head -n1)"
+  [[ "$first" == "$candidate" ]]
+}
+
+available_nvidia_driver_releases() {
+  local current_driver="" version="" driver=""
+  local module_versions="" utils_versions="" common_versions=""
+  local module_drivers="" utils_drivers=""
+
+  current_driver="$(installed_nvidia_driver_version)" || return 1
+  module_versions="$(mktemp)"
+  utils_versions="$(mktemp)"
+  module_drivers="$(mktemp)"
+  utils_drivers="$(mktemp)"
+  common_versions="$(mktemp)"
+
+  if ! archlinux_archive_package_versions nvidia-open-dkms >"$module_versions" \
+    || ! archlinux_archive_package_versions nvidia-utils >"$utils_versions";
+  then
+    rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions"
+    return 1
   fi
-  rm -f -- "$points"
+
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$module_drivers"
+  done <"$module_versions"
+  while IFS= read -r version; do
+    driver="$(nvidia_driver_version_from_package_version "$version" 2>/dev/null || true)"
+    [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$utils_drivers"
+  done <"$utils_versions"
+
+  LC_ALL=C sort -Vu -o "$module_drivers" "$module_drivers"
+  LC_ALL=C sort -Vu -o "$utils_drivers" "$utils_drivers"
+  comm -12 "$module_drivers" "$utils_drivers" >"$common_versions"
+
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    driver_version_is_older "$driver" "$current_driver" || continue
+    printf '%s\n' "$driver"
+  done <"$common_versions" | LC_ALL=C sort -Vr | head -n 20
+
+  rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions"
 }
 
-historical_package_version() {
-  local records="$1" pkg="$2" selected_tx="$3" side="$4" current_version="$5"
-  local tx record_pkg old_version new_version version="$current_version" reverse=0
-
-  while IFS=$'\t' read -r tx record_pkg old_version new_version; do
-    [[ "$record_pkg" == "$pkg" ]] || continue
-    reverse=0
-    if [[ "$side" == old ]]; then
-      (( tx >= selected_tx )) && reverse=1
-    else
-      (( tx > selected_tx )) && reverse=1
-    fi
-    (( reverse == 1 )) || continue
-
-    [[ "$version" == "$new_version" ]] || return 1
-    version="$old_version"
-  done < <(tac -- "$records")
-
-  [[ "$version" != '(absent)' ]] || return 1
-  printf '%s\n' "$version"
-}
-
-build_nvidia_history_bundle() {
+build_nvidia_release_bundle() {
   local target_driver="$1" output="$2"
-  local current_driver="" tx="" side="" pkg="" current_version="" target_version=""
-  local current_pkg_driver="" target_pkg_driver="" archive="" changes=0 complete=0 found=0
-  local records="" points="" attempt=""
+  local pkg="" target_version="" current_version="" source=""
+  local -a packages=(nvidia-utils nvidia-open-dkms)
+
+  for pkg in lib32-nvidia-utils opencl-nvidia lib32-opencl-nvidia; do
+    package_installed "$pkg" && packages+=("$pkg")
+  done
+
+  : >"$output"
+  for pkg in "${packages[@]}"; do
+    target_version="$(archlinux_archive_version_for_driver "$pkg" "$target_driver" 2>/dev/null || true)"
+    [[ -n "$target_version" ]] || return 1
+    source="$(find_archlinux_archive_package_url "$pkg" "$target_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] || return 1
+    current_version="$(package_version "$pkg" || true)"
+    [[ -n "$current_version" ]] || current_version='(not installed)'
+    printf '%s\t%s\t%s\t%s\n' \
+      "$pkg" "$current_version" "$target_version" "$source" >>"$output"
+  done
+}
+
+ensure_nvidia_dkms_kernel_headers() {
+  local kernel_pkg="" kernel_version="" header_pkg="" header_version="" source=""
+  local -a sources=()
+
+  while IFS= read -r kernel_pkg; do
+    [[ -n "$kernel_pkg" ]] || continue
+    kernel_version="$(package_version "$kernel_pkg" || true)"
+    [[ -n "$kernel_version" ]] \
+      || die "Cannot determine installed kernel package version for ${kernel_pkg}."
+
+    header_pkg="${kernel_pkg}-headers"
+    header_version="$(package_version "$header_pkg" || true)"
+    if [[ "$header_version" == "$kernel_version" ]]; then
+      continue
+    fi
+
+    source="$(find_historical_package_source "$header_pkg" "$kernel_version" 2>/dev/null || true)"
+    [[ -n "$source" ]] \
+      || die "Matching headers are unavailable for ${kernel_pkg} ${kernel_version}; refusing an NVIDIA DKMS switch."
+    trusted_nvidia_history_source "$source" \
+      || die "Kernel header source is not trusted: ${source}"
+    sources+=("$source")
+  done < <(current_kernel_package_names)
+
+  if (( ${#sources[@]} > 0 )); then
+    log 'Installing exact kernel headers required for the NVIDIA DKMS rollback...'
+    as_root pacman -U --needed --noconfirm "${sources[@]}" \
+      || die "Could not install matching kernel headers required for NVIDIA DKMS."
+  fi
+}
+
+remove_nvidia_module_conflicts_for_dkms() {
+  local pkg
+  local -a conflicts=()
+
+  while IFS= read -r pkg; do
+    [[ -n "$pkg" ]] || continue
+    nvidia_module_package_name "$pkg" || continue
+    [[ "$pkg" == nvidia-open-dkms ]] && continue
+    conflicts+=("$pkg")
+  done < <(pacman -Qq 2>/dev/null || true)
+
+  (( ${#conflicts[@]} > 0 )) || return 0
+  log "Temporarily replacing NVIDIA module packages with nvidia-open-dkms: ${conflicts[*]}"
+  as_root pacman -R --noconfirm -- "${conflicts[@]}"
+}
+
+refresh_nvidia_initramfs() {
+  if have mkinitcpio; then
+    as_root mkinitcpio -P
+  elif have dracut; then
+    as_root dracut --regenerate-all --force
+  fi
+}
+
+verify_nvidia_dkms_release() {
+  local target_driver="$1" status=""
+
+  [[ "$(installed_nvidia_driver_version 2>/dev/null || true)" == "$target_driver" ]] || return 1
+  [[ "$(nvidia_driver_version_from_package_version "$(package_version nvidia-open-dkms || true)" 2>/dev/null || true)" == "$target_driver" ]] \
+    || return 1
+
+  if have dkms; then
+    status="$(dkms status -m nvidia -v "$target_driver" 2>/dev/null || true)"
+    [[ "$status" == *installed* ]] || return 1
+  fi
+}
+
+prepare_nvidia_driver_switch_snapshot() {
+  local pkg
   local -a candidates=()
 
-  current_driver="$(installed_nvidia_driver_version)" || return 1
-  mapfile -t candidates < <(nvidia_rollback_candidate_packages)
-  (( ${#candidates[@]} > 0 )) || return 1
+  mapfile -t candidates < <(installed_nvidia_driver_switch_packages)
+  candidates+=(nvidia-open-dkms)
+  printf '%s\n' "${candidates[@]}" | sed '/^$/d' | LC_ALL=C sort -u >"${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
+  mapfile -t candidates <"${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
+  rm -f -- "${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
 
-  records="$(mktemp)"
-  points="$(mktemp)"
-  attempt="$(mktemp)"
-  nvidia_history_records >"$records"
-  nvidia_history_target_points "$records" "$target_driver" >"$points"
-  [[ -s "$points" ]] || {
-    rm -f -- "$records" "$points" "$attempt"
-    return 1
-  }
-
-  while IFS=$'\t' read -r tx side; do
-    : >"$attempt"
-    changes=0
-    complete=1
-
-    for pkg in "${candidates[@]}"; do
-      current_version="$(package_version "$pkg" || true)"
-      [[ -n "$current_version" ]] || { complete=0; break; }
-
-      target_version="$(historical_package_version \
-        "$records" "$pkg" "$tx" "$side" "$current_version" 2>/dev/null || true)"
-      [[ -n "$target_version" ]] || { complete=0; break; }
-
-      if nvidia_rollback_package_name "$pkg"; then
-        current_pkg_driver="$(nvidia_driver_version_from_package_version "$current_version" 2>/dev/null || true)"
-        if [[ "$current_pkg_driver" == "$current_driver" ]]; then
-          target_pkg_driver="$(nvidia_driver_version_from_package_version "$target_version" 2>/dev/null || true)"
-          [[ "$target_pkg_driver" == "$target_driver" ]] || { complete=0; break; }
-        fi
-      fi
-
-      [[ "$target_version" != "$current_version" ]] || continue
-      archive="$(find_historical_package_source "$pkg" "$target_version" 2>/dev/null || true)"
-      [[ -n "$archive" ]] || { complete=0; break; }
-      printf '%s\t%s\t%s\t%s\n' \
-        "$pkg" "$current_version" "$target_version" "$archive" >>"$attempt"
-      changes=1
-    done
-
-    if (( complete == 1 && changes == 1 )); then
-      if awk -F '\t' -v target="$target_driver" '
-        $1 == "nvidia-utils" {
-          version=$3
-          sub(/^[^:]+:/, "", version)
-          sub(/-[^-]+$/, "", version)
-          if (version == target) found=1
-        }
-        END { exit(found ? 0 : 1) }
-      ' "$attempt";
-      then
-        cat -- "$attempt" >"$output"
-        found=1
-        break
-      fi
-    fi
-  done <"$points"
-
-  rm -f -- "$records" "$points" "$attempt"
-  (( found == 1 ))
+  prepare_nvidia_rollback_snapshot "${candidates[@]}"
 }
 
-recoverable_nvidia_history_versions() {
-  local current_driver="" records="" candidate_versions_file="" version="" bundle=""
-  local tx pkg old_version new_version
+restore_failed_nvidia_switch() {
+  local reason="$1"
 
-  current_driver="$(installed_nvidia_driver_version)" || return 1
-  records="$(mktemp)"
-  candidate_versions_file="$(mktemp)"
-  bundle="$(mktemp)"
-  nvidia_history_records >"$records"
-
-  while IFS=$'\t' read -r tx pkg old_version new_version; do
-    [[ "$pkg" == nvidia-utils ]] || continue
-    version="$(nvidia_driver_version_from_package_version "$old_version" 2>/dev/null || true)"
-    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidate_versions_file"
-    version="$(nvidia_driver_version_from_package_version "$new_version" 2>/dev/null || true)"
-    [[ -n "$version" ]] && printf '%s\n' "$version" >>"$candidate_versions_file"
-  done <"$records"
-
-  if [[ -s "$candidate_versions_file" ]]; then
-    while IFS= read -r version; do
-      [[ -n "$version" && "$version" != "$current_driver" ]] || continue
-      if build_nvidia_history_bundle "$version" "$bundle"; then
-        printf '%s\n' "$version"
-      fi
-    done < <(LC_ALL=C sort -Vu "$candidate_versions_file")
+  if finalize_nvidia_rollback_snapshot; then
+    warn "${reason}; restoring the pre-switch NVIDIA package set now."
+    apply_nvidia_rollback 1
+    refresh_nvidia_initramfs || true
+    die "${reason}; the previous NVIDIA package set was restored."
   fi
 
-  rm -f -- "$records" "$candidate_versions_file" "$bundle"
+  cleanup_nvidia_pending_snapshot
+  NVIDIA_ROLLBACK_PENDING=""
+  die "${reason}; Awtarchy could not finalize the return point, so automatic recovery was unavailable."
 }
 
 print_recoverable_nvidia_versions() {
@@ -1018,10 +1076,10 @@ print_recoverable_nvidia_versions() {
 
   current_driver="$(installed_nvidia_driver_version)" \
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
-  mapfile -t versions < <(recoverable_nvidia_history_versions)
+  mapfile -t versions < <(available_nvidia_driver_releases)
 
   printf 'Current NVIDIA driver: %s\n' "$current_driver"
-  printf 'Recoverable historical driver versions (local cache, Arch Linux Archive, or CachyOS archive):\n'
+  printf 'Available previous NVIDIA driver releases (Arch Linux Archive):\n'
   if (( ${#versions[@]} == 0 )); then
     printf '  (none)\n'
     return 1
@@ -1033,9 +1091,9 @@ print_recoverable_nvidia_versions() {
 
 apply_nvidia_history_version() {
   local target_driver="$1" assume_yes="${2:-0}"
-  local current_driver="" bundle="" pkg current_version target_version archive
+  local current_driver="" bundle="" pkg="" current_version="" target_version="" source=""
   local snapshot_rc=0 verification_failed=0
-  local -a archives=()
+  local -a sources=()
 
   current_driver="$(installed_nvidia_driver_version)" \
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
@@ -1045,26 +1103,28 @@ apply_nvidia_history_version() {
   fi
 
   bundle="$(mktemp)"
-  if ! build_nvidia_history_bundle "$target_driver" "$bundle"; then
+  if ! build_nvidia_release_bundle "$target_driver" "$bundle"; then
     rm -f -- "$bundle"
-    die "No complete trusted NVIDIA/kernel package set can reconstruct driver ${target_driver} from local cache/history, the Arch Linux Archive, or the CachyOS archive. Awtarchy will not guess or perform a partial rollback."
+    die "NVIDIA driver ${target_driver} is not available as a complete nvidia-open-dkms/userspace release in the official Arch Linux Archive."
   fi
 
   if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
-    printf '\nHistorical NVIDIA rollback plan:\n' >/dev/tty
-    while IFS=$'\t' read -r pkg current_version target_version archive; do
+    printf '\nNVIDIA driver rollback plan:\n' >/dev/tty
+    while IFS=$'\t' read -r pkg current_version target_version source; do
       printf '  %s: %s -> %s\n' "$pkg" "$current_version" "$target_version" >/dev/tty
     done <"$bundle"
-    printf '\nAwtarchy will first save the current NVIDIA/kernel packages as the new return point.\n' >/dev/tty
-    printf 'A reboot is recommended after changing driver versions.\n\n' >/dev/tty
+    printf '\nCurrent kernels stay installed; Awtarchy will use nvidia-open-dkms for the selected release.\n' >/dev/tty
+    printf 'A complete return point for the current NVIDIA package set is staged before anything is removed.\n' >/dev/tty
+    printf 'If installation or verification fails, Awtarchy attempts to restore that return point automatically.\n' >/dev/tty
+    printf 'A reboot is required before judging the selected driver.\n\n' >/dev/tty
   fi
 
   if (( assume_yes == 0 )); then
-    confirm_yes_no "Switch to historical NVIDIA driver ${target_driver} now?" 0 \
+    confirm_yes_no "Switch NVIDIA driver from ${current_driver} to ${target_driver}?" 0 \
       || { rm -f -- "$bundle"; log 'NVIDIA driver version switch canceled.'; return 0; }
   fi
 
-  prepare_nvidia_rollback_snapshot || snapshot_rc=$?
+  prepare_nvidia_driver_switch_snapshot || snapshot_rc=$?
   case "$snapshot_rc" in
     0)
       ;;
@@ -1072,7 +1132,7 @@ apply_nvidia_history_version() {
       cleanup_nvidia_pending_snapshot
       NVIDIA_ROLLBACK_PENDING=""
       rm -f -- "$bundle"
-      die "The current NVIDIA/kernel package set is not fully cached. Refusing the version switch because Awtarchy cannot guarantee a return point."
+      die "A complete return point for the current NVIDIA package set could not be staged. No packages were changed."
       ;;
     2)
       NVIDIA_ROLLBACK_PENDING=""
@@ -1083,61 +1143,78 @@ apply_nvidia_history_version() {
       cleanup_nvidia_pending_snapshot
       NVIDIA_ROLLBACK_PENDING=""
       rm -f -- "$bundle"
-      die "Could not prepare the current NVIDIA/kernel return point."
+      die "Could not prepare the NVIDIA return point. No packages were changed."
       ;;
   esac
 
-  while IFS=$'\t' read -r pkg current_version target_version archive; do
-    trusted_nvidia_history_source "$archive" \
-      || die "Historical NVIDIA source is not trusted for privileged restore: ${archive}"
-    archives+=("$archive")
+  ensure_nvidia_dkms_kernel_headers
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
+    trusted_nvidia_history_source "$source" \
+      || { rm -f -- "$bundle"; restore_failed_nvidia_switch "Historical NVIDIA source validation failed"; }
+    sources+=("$source")
   done <"$bundle"
 
-  if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then
-    if finalize_nvidia_rollback_snapshot; then
-      warn "The driver transaction failed after package state changed; the pre-switch return point was preserved."
-    fi
+  if ! remove_nvidia_module_conflicts_for_dkms; then
     rm -f -- "$bundle"
-    die "NVIDIA historical driver transaction failed."
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Could not replace the current NVIDIA kernel-module package. No driver release was installed."
   fi
 
-  while IFS=$'\t' read -r pkg current_version target_version archive; do
+  if ! as_root pacman -U --needed --noconfirm "${sources[@]}"; then
+    rm -f -- "$bundle"
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} package transaction failed"
+  fi
+
+  if have dkms; then
+    if ! as_root dkms autoinstall -m nvidia -v "$target_driver"; then
+      rm -f -- "$bundle"
+      restore_failed_nvidia_switch "NVIDIA ${target_driver} DKMS build failed"
+    fi
+  fi
+
+  while IFS=$'\t' read -r pkg current_version target_version source; do
     if [[ "$(package_version "$pkg" || true)" != "$target_version" ]]; then
       verification_failed=1
       warn "NVIDIA version switch verification failed for ${pkg}; expected ${target_version}."
     fi
   done <"$bundle"
+  verify_nvidia_dkms_release "$target_driver" || verification_failed=1
 
   if (( verification_failed == 1 )); then
-    finalize_nvidia_rollback_snapshot \
-      || warn "Could not finalize the pre-switch NVIDIA return point after verification failure."
     rm -f -- "$bundle"
-    die "NVIDIA historical driver verification failed. Use the saved rollback point if package state changed."
+    restore_failed_nvidia_switch "NVIDIA ${target_driver} verification failed"
   fi
 
-  finalize_nvidia_rollback_snapshot \
-    || { rm -f -- "$bundle"; die "Driver versions changed, but Awtarchy could not save the pre-switch return point."; }
+  if ! finalize_nvidia_rollback_snapshot; then
+    rm -f -- "$bundle"
+    die "NVIDIA ${target_driver} was installed, but Awtarchy could not preserve the pre-switch return point."
+  fi
+
+  refresh_nvidia_initramfs \
+    || warn "NVIDIA ${target_driver} is installed, but initramfs refresh failed; inspect the system before rebooting."
   rm -f -- "$bundle"
 
-  log "NVIDIA driver ${target_driver} package set applied."
-  log "The pre-switch NVIDIA/kernel versions are now the saved rollback point."
+  log "NVIDIA driver ${target_driver} is installed through nvidia-open-dkms."
+  log "The previous NVIDIA package set is saved as the rollback point."
   log "Reboot before judging the selected driver."
 }
 
 pick_nvidia_history_version() {
-  local current_driver="" answer="" i selected_driver=""
+  local current_driver="" answer="" i="" selected_driver=""
   local -a versions=()
 
   [[ -r /dev/tty && -w /dev/tty ]] \
     || die "NVIDIA driver version selection requires an interactive terminal."
   current_driver="$(installed_nvidia_driver_version)" \
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
-  mapfile -t versions < <(recoverable_nvidia_history_versions)
+  mapfile -t versions < <(available_nvidia_driver_releases)
   (( ${#versions[@]} > 0 )) \
-    || die "No complete historical NVIDIA/kernel package sets are available from the local pacman cache, Arch Linux Archive, or CachyOS archive."
+    || die "No previous nvidia-open-dkms releases were found in the official Arch Linux Archive."
 
   printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
-  printf 'Recoverable historical driver versions (local cache, Arch Linux Archive, or CachyOS archive):\n' >/dev/tty
+  printf 'Available previous NVIDIA driver releases:\n' >/dev/tty
   for i in "${!versions[@]}"; do
     printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
   done
@@ -1154,6 +1231,7 @@ pick_nvidia_history_version() {
   selected_driver="${versions[answer-1]}"
   apply_nvidia_history_version "$selected_driver" 0
 }
+
 validate_nvidia_rollback_storage() {
   root_owned_nonwritable_path "$NVIDIA_ROLLBACK_ROOT" \
     && [[ -d "$NVIDIA_ROLLBACK_ROOT" ]] \
