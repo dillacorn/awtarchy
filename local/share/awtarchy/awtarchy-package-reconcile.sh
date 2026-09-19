@@ -938,9 +938,9 @@ available_nvidia_driver_releases() {
     [[ -n "$driver" ]] && printf '%s\n' "$driver" >>"$utils_drivers"
   done <"$utils_versions"
 
-  LC_ALL=C sort -Vu -o "$module_drivers" "$module_drivers"
-  LC_ALL=C sort -Vu -o "$utils_drivers" "$utils_drivers"
-  comm -12 "$module_drivers" "$utils_drivers" >"$common_versions"
+  awk 'NR == FNR { available[$0] = 1; next } available[$0]' \
+    "$module_drivers" "$utils_drivers" \
+    | LC_ALL=C sort -u >"$common_versions"
 
   local older_versions=""
   local driver_major=0 count=0
