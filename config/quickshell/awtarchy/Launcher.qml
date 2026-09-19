@@ -549,8 +549,9 @@ Singleton {
     }
 
     function toggleFocused() {
-        if (!FlyoutManager.acceptToggle("launcher"))
-            return;
+        // Keyboard/IPC toggles are deliberate discrete actions. Do not apply the
+        // pointer-oriented flyout debounce here so rapid shortcut presses can
+        // immediately alternate open and closed.
         if (launcherWindow.visible || openPreparing) {
             close();
             return;
