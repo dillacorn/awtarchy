@@ -199,11 +199,14 @@ Singleton {
 
     property int revision: 0
     property int idleRevision: 0
+    property var stateCache: ({})
+    property bool stateCacheReady: false
 
     // Immediate in-process overrides keep bar geometry and icon sizing
     // responsive while persistent JSON writes complete in the background.
     property var livePositions: ({})
     property var liveEnabled: ({})
+    property var liveAutoHide: ({})
     property var liveBarSizes: ({})
     property var liveIconScales: ({})
     property var liveBarTransparencies: ({})
@@ -273,7 +276,6 @@ Singleton {
 
     function refresh() {
         stateFile.reload();
-        revision++;
     }
 
     function refreshIdleState() {
@@ -295,28 +297,30 @@ Singleton {
         const next = Object.assign({}, livePositions);
         next[name] = value;
         livePositions = next;
-        revision++;
     }
 
     function setLiveEnabled(name, value) {
         const next = Object.assign({}, liveEnabled);
         next[name] = !!value;
         liveEnabled = next;
-        revision++;
+    }
+
+    function setLiveAutoHide(name, value) {
+        const next = Object.assign({}, liveAutoHide);
+        next[name] = !!value;
+        liveAutoHide = next;
     }
 
     function setLiveBarSize(name, value) {
         const next = Object.assign({}, liveBarSizes);
         next[name] = Number(value);
         liveBarSizes = next;
-        revision++;
     }
 
     function setLiveIconScale(name, value) {
         const next = Object.assign({}, liveIconScales);
         next[name] = Number(value);
         liveIconScales = next;
-        revision++;
     }
 
     function setLiveBarTransparency(name, value) {
@@ -329,7 +333,6 @@ Singleton {
         const next = Object.assign({}, liveBarTransparencies);
         next[name] = percent;
         liveBarTransparencies = next;
-        revision++;
     }
 
     function clearLiveBarTransparency(name) {
@@ -338,26 +341,56 @@ Singleton {
         const next = Object.assign({}, liveBarTransparencies);
         delete next[name];
         liveBarTransparencies = next;
-        revision++;
     }
 
     function clearLiveOverrides(name) {
         const positions = Object.assign({}, livePositions);
         const enabled = Object.assign({}, liveEnabled);
+        const autoHide = Object.assign({}, liveAutoHide);
         const sizes = Object.assign({}, liveBarSizes);
         const scales = Object.assign({}, liveIconScales);
         const transparencies = Object.assign({}, liveBarTransparencies);
         delete positions[name];
         delete enabled[name];
+        delete autoHide[name];
         delete sizes[name];
         delete scales[name];
         delete transparencies[name];
         livePositions = positions;
         liveEnabled = enabled;
+        liveAutoHide = autoHide;
         liveBarSizes = sizes;
         liveIconScales = scales;
         liveBarTransparencies = transparencies;
-        revision++;
+    }
+
+    function reconcileHotkeyOverrides() {
+        const positions = Object.assign({}, livePositions);
+        const autoHide = Object.assign({}, liveAutoHide);
+        let changed = false;
+
+        for (const name of Object.keys(positions)) {
+            const mon = monitorState(name);
+            const persisted = ["top", "bottom", "left", "right"].indexOf(mon.position) >= 0
+                ? mon.position : "top";
+            if (positions[name] === persisted) {
+                delete positions[name];
+                changed = true;
+            }
+        }
+
+        for (const name of Object.keys(autoHide)) {
+            const persisted = monitorState(name).auto_hide === true;
+            if (!!autoHide[name] === persisted) {
+                delete autoHide[name];
+                changed = true;
+            }
+        }
+
+        if (changed) {
+            livePositions = positions;
+            liveAutoHide = autoHide;
+        }
     }
 
     FileView {
@@ -366,7 +399,7 @@ Singleton {
         watchChanges: true
         blockLoading: false
         printErrors: false
-        onLoaded: root.revision++
+        onLoaded: root.rebuildStateCache()
         onFileChanged: root.refresh()
     }
 
@@ -426,9 +459,7 @@ Singleton {
         });
     }
 
-    function data() {
-        const dependency = revision;
-        const text = stateFile.text();
+    function parseStateText(text) {
         if (!text || text.length === 0)
             return emptyData();
 
@@ -470,6 +501,18 @@ Singleton {
             console.warn("Awtarchy Quickshell: invalid shell state:", error);
             return emptyData();
         }
+    }
+
+    function rebuildStateCache() {
+        stateCache = parseStateText(stateFile.text());
+        stateCacheReady = true;
+        reconcileHotkeyOverrides();
+        revision++;
+    }
+
+    function data() {
+        const dependency = revision;
+        return stateCacheReady ? stateCache : emptyData();
     }
 
     function lockscreenMonitorProfiles() {
@@ -1147,6 +1190,8 @@ Singleton {
 
     function autoHideFor(name) {
         const dependency = revision;
+        if (liveAutoHide[name] !== undefined)
+            return !!liveAutoHide[name];
         return monitorState(name).auto_hide === true;
     }
 

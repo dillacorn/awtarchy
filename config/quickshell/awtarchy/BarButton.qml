@@ -66,6 +66,7 @@ Rectangle {
         : (tooltip.indexOf("Memory usage: ") === 0 ? SystemState.memoryTooltip : tooltip)
 
     signal clicked()
+    signal hoverEntered()
     signal rightClicked()
     signal middleClicked()
     signal wheelUp()
@@ -364,6 +365,7 @@ Rectangle {
             if (containsMouse) {
                 hoverRelease.stop();
                 root.hovered = true;
+                root.hoverEntered();
                 root.wheelReady = root.wheelActivationDelay <= 0;
                 if (!root.wheelReady)
                     wheelDwell.restart();

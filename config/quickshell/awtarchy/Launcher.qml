@@ -61,6 +61,9 @@ Singleton {
     property bool launcherPositioned: false
     property bool launcherFocusGrabExpanded: false
     property bool openPreparing: false
+    property string preparedOpenKey: ""
+    property string pendingPrewarmKey: ""
+    property bool prewarmEnabled: false
     property bool settingsOpen: false
     property bool copySettingsOpen: false
     property int textScaleOverride: -1
@@ -442,25 +445,89 @@ Singleton {
         clearCopyTargets();
     }
 
+    function launcherPreparation(targetScreen, targetPlacement) {
+        if (!targetScreen)
+            return null;
+
+        const placement = targetPlacement || "center";
+        const persisted = BarState.launcherViewFor(targetScreen.name);
+        const width = Math.min(safeMaximumWidth(targetScreen),
+            Math.max(safeMinimumWidth(targetScreen), persisted.width));
+        const height = Math.min(safeMaximumHeight(targetScreen),
+            Math.max(safeMinimumHeight(targetScreen), persisted.height));
+        const edgePlacement = placement.replace("-center", "");
+        const vertical = edgePlacement === "left" || edgePlacement === "right";
+        const barSize = placement === "center"
+            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const key = [
+            targetScreen.name, placement, Math.round(width), Math.round(height),
+            barSize, screenWidth, screenHeight
+        ].join("|");
+
+        return ({
+            key: key,
+            args: [
+                "bash", prepareScript, "launcher", targetScreen.name, placement,
+                String(Math.round(width)), String(Math.round(height)),
+                String(barSize), "-1", String(screenWidth), String(screenHeight)
+            ]
+        });
+    }
+
+    function prewarmForScreen(targetScreen, targetPlacement) {
+        if (launcherWindow.visible || openPreparing || prewarmProcess.running)
+            return;
+        if (!targetScreen)
+            return;
+        const preparation = launcherPreparation(
+            targetScreen, targetPlacement || placementForScreen(targetScreen));
+        if (!preparation || preparedOpenKey === preparation.key)
+            return;
+        pendingPrewarmKey = preparation.key;
+        prewarmProcess.exec(preparation.args);
+    }
+
+    function prewarmFocused() {
+        const targetScreen = focusedScreen();
+        prewarmForScreen(targetScreen,
+            targetScreen ? centeredPlacementForScreen(targetScreen) : "center");
+    }
+
+    function finishPrewarm(exitCode) {
+        if (exitCode === 0 && pendingPrewarmKey.length > 0)
+            preparedOpenKey = pendingPrewarmKey;
+        pendingPrewarmKey = "";
+    }
+
     function prepareLauncherOpen(targetScreen) {
         if (!targetScreen)
             return;
-        const edgePlacement = requestedPlacement.replace("-center", "");
-        const vertical = edgePlacement === "left" || edgePlacement === "right";
-        const barSize = requestedPlacement === "center"
-            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const preparation = launcherPreparation(targetScreen, requestedPlacement);
+        if (!preparation)
+            return;
+
         openPreparing = true;
-        prepareProcess.exec([
-            "bash", prepareScript, "launcher", targetScreen.name, requestedPlacement,
-            String(savedView.width), String(savedView.height),
-            String(barSize), "-1",
-            String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
-        ]);
+        if (preparedOpenKey === preparation.key) {
+            finishPreparedOpen(0, true);
+            return;
+        }
+
+        if (prewarmProcess.running)
+            prewarmProcess.running = false;
+        prepareProcess.exec(preparation.args);
     }
 
-    function finishPreparedOpen() {
+    function finishPreparedOpen(exitCode, usedPrewarm) {
         if (!openPreparing)
             return;
+
+        if (!usedPrewarm && exitCode === 0) {
+            const preparation = launcherPreparation(activeScreen, requestedPlacement);
+            if (preparation)
+                preparedOpenKey = preparation.key;
+        }
 
         const wasVisible = launcherWindow.visible;
 
@@ -549,8 +616,9 @@ Singleton {
     }
 
     function toggleFocused() {
-        if (!FlyoutManager.acceptToggle("launcher"))
-            return;
+        // Keyboard/IPC toggles are deliberate discrete actions. Do not apply the
+        // pointer-oriented flyout debounce here so rapid shortcut presses can
+        // immediately alternate open and closed.
         if (launcherWindow.visible || openPreparing) {
             close();
             return;
@@ -794,7 +862,48 @@ Singleton {
 
     Process {
         id: prepareProcess
-        onExited: root.finishPreparedOpen()
+        onExited: (exitCode, exitStatus) => root.finishPreparedOpen(exitCode, false)
+    }
+
+    Process {
+        id: prewarmProcess
+        onExited: (exitCode, exitStatus) => root.finishPrewarm(exitCode)
+    }
+
+    Timer {
+        id: launcherStartupPrewarm
+        interval: 700
+        repeat: false
+        running: true
+        onTriggered: {
+            root.prewarmEnabled = true;
+            root.prewarmFocused();
+        }
+    }
+
+    Timer {
+        id: launcherPrewarmRefresh
+        interval: 220
+        repeat: false
+        onTriggered: root.prewarmFocused()
+    }
+
+    Connections {
+        target: BarState
+        function onRevisionChanged() {
+            if (root.prewarmEnabled && !launcherWindow.visible && !root.openPreparing)
+                launcherPrewarmRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (!root.prewarmEnabled || !event || launcherWindow.visible || root.openPreparing)
+                return;
+            if (event.name === "focusedmon" || event.name === "focusedmonv2")
+                launcherPrewarmRefresh.restart();
+        }
     }
 
     Process {

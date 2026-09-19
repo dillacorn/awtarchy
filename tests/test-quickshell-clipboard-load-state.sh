@@ -124,6 +124,16 @@ require_source 'stdout: SplitParser {' \
   'Clipboard list still waits for the complete process output'
 require_source 'onRead: line => root.appendClipboardRecord(line)' \
   'Clipboard list does not append records as they arrive'
+require_source 'property var incomingEntries: []' \
+  'Clipboard refresh has no retained-row staging model'
+require_source 'incomingEntries = [];' \
+  'Clipboard refresh does not reset the incoming model'
+require_source 'entries = nextEntries;' \
+  'Clipboard does not swap fresh rows into the visible model progressively'
+require_source 'id: clipboardListRefresh' \
+  'Clipboard refresh is not deferred until after the popup maps'
+require_source 'interval: 120' \
+  'Clipboard first-frame refresh delay changed unexpectedly'
 require_source 'ClipboardLoadState.requestListLoad(' \
   'Clipboard list does not use the tested stop-before-restart lifecycle'
 require_source 'ClipboardLoadState.enqueueThumbnail(' \
@@ -197,11 +207,21 @@ if not finish:
 if 'beginListLoad' in finish.group('body'):
     raise SystemExit('FAIL: in-place clipboard delete completion still performs a full list reload')
 
-open_block = re.search(r'function finishPreparedOpen\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+open_block = re.search(r'function finishPreparedOpen\([^)]*\) \{(?P<body>.*?)\n    \}', text, re.S)
 if not open_block or 'clipboardList.positionViewAtBeginning();' not in open_block.group('body'):
     raise SystemExit('FAIL: normal clipboard opening no longer starts at the configured edge')
+if 'clipboardListRefresh.restart();' not in open_block.group('body'):
+    raise SystemExit('FAIL: clipboard opening does not defer the backend refresh behind first paint')
 
-print('PASS: deletion preserves the live viewport while normal opening still starts at the configured edge.')
+start_load = re.search(r'function startListLoadNow\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+if not start_load:
+    raise SystemExit('FAIL: clipboard menu has no startListLoadNow() function')
+if 'entries = [];' in start_load.group('body'):
+    raise SystemExit('FAIL: clipboard refresh still blanks retained rows before fresh data arrives')
+if 'incomingEntries = [];' not in start_load.group('body'):
+    raise SystemExit('FAIL: clipboard refresh does not reset the incoming staging model')
+
+print('PASS: deletion preserves the live viewport and reopening retains rows until fresh history arrives.')
 PY
 
 # Real-session diagnostics exposed both failures this section guards: recycled

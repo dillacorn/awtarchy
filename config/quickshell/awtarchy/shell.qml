@@ -22,10 +22,66 @@ ShellRoot {
     property string barDragMonitor: ""
     property string barDragCandidate: ""
     property string barDropTarget: ""
+    property var barHotkeyQueue: []
 
     function runUpdateNotificationCheck(mode) {
         if (!updateNotificationCheck.running)
             updateNotificationCheck.exec([updateNotificationsScript, mode]);
+    }
+
+    function queueBarHotkeyWrite(args) {
+        barHotkeyQueue = [...barHotkeyQueue, args];
+        runNextBarHotkeyWrite();
+    }
+
+    function runNextBarHotkeyWrite() {
+        if (barHotkeyWriter.running || barHotkeyQueue.length === 0)
+            return;
+        const next = barHotkeyQueue[0];
+        barHotkeyQueue = barHotkeyQueue.slice(1);
+        barHotkeyWriter.exec([
+            configHome + "/hypr/scripts/quickshell.sh",
+            ...next
+        ]);
+    }
+
+    function flipBarFocused() {
+        const monitor = BarState.focusedMonitorName();
+        if (monitor.length === 0)
+            return;
+        const current = BarState.positionFor(monitor);
+        const target = current === "top" ? "bottom"
+            : current === "bottom" ? "top"
+            : current === "left" ? "right" : "left";
+        BarState.setLivePosition(monitor, target);
+        queueBarHotkeyWrite(["setpos", monitor, target]);
+    }
+
+    function rotateBarFocused() {
+        const monitor = BarState.focusedMonitorName();
+        if (monitor.length === 0)
+            return;
+        const current = BarState.positionFor(monitor);
+        const persisted = BarState.monitorState(monitor);
+        let target = "top";
+        if (current === "left" || current === "right") {
+            const candidate = String(persisted.last_horizontal || "top");
+            target = candidate === "bottom" ? "bottom" : "top";
+        } else {
+            const candidate = String(persisted.last_vertical || "right");
+            target = candidate === "left" ? "left" : "right";
+        }
+        BarState.setLivePosition(monitor, target);
+        queueBarHotkeyWrite(["setpos", monitor, target]);
+    }
+
+    function toggleBarAutoHideFocused() {
+        const monitor = BarState.focusedMonitorName();
+        if (monitor.length === 0)
+            return;
+        const target = !BarState.autoHideFor(monitor);
+        BarState.setLiveAutoHide(monitor, target);
+        queueBarHotkeyWrite(["setautohide", monitor, target ? "true" : "false"]);
     }
 
     function validBarEdge(edge) {
@@ -242,6 +298,14 @@ ShellRoot {
             dragRefreshFollowup.restart();
             if (root.barDropPending)
                 barDropSettle.restart();
+        }
+    }
+
+    Process {
+        id: barHotkeyWriter
+        onExited: {
+            BarState.refresh();
+            root.runNextBarHotkeyWrite();
         }
     }
 
@@ -555,6 +619,9 @@ ShellRoot {
         function reload(): void { Quickshell.reload(false); }
         function hardReload(): void { Quickshell.reload(true); }
         function toggleLockscreenEditor(): void { if (LockscreenEditor.open) LockscreenEditor.close(); else LockscreenEditor.openFocused(); }
+        function flipBarFocused(): void { root.flipBarFocused(); }
+        function rotateBarFocused(): void { root.rotateBarFocused(); }
+        function toggleBarAutoHideFocused(): void { root.toggleBarAutoHideFocused(); }
         function quit(): void { Qt.quit(); }
         function beginBarDrag(monitor: string): void { root.beginBarDrag(monitor); }
         function previewBarDrag(monitor: string, candidate: string): void { root.previewBarDrag(monitor, candidate); }

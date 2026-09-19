@@ -26,6 +26,14 @@ trap restore_input_submap EXIT
 main() {
     local opened=""
 
+    # Hot path: the running shell can open/close the menu directly. Keep the
+    # manager startup and retry loop only for a cold or recovering Quickshell.
+    opened="$("$QS_BIN" -c awtarchy ipc call powermenu begin 2>/dev/null | tail -n1 || true)"
+    if [[ "$opened" == true || "$opened" == false ]]; then
+        restore_input_submap
+        return 0
+    fi
+
     "$SCRIPTS_DIR/quickshell.sh" start >/dev/null
 
     # The compositor-owned temporary submap retains rapid follow-up actions

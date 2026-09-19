@@ -6,6 +6,11 @@ QML_DIR="${ROOT}/config/quickshell/awtarchy"
 MANAGER="${QML_DIR}/FlyoutManager.qml"
 SHELL="${QML_DIR}/shell.qml"
 LAUNCHER="${QML_DIR}/Launcher.qml"
+QUICK_SETTINGS="${QML_DIR}/QuickSettings.qml"
+NOTIFICATIONS="${QML_DIR}/Notifications.qml"
+CLIPBOARD="${QML_DIR}/ClipboardMenu.qml"
+BAR="${QML_DIR}/Bar.qml"
+BAR_BUTTON="${QML_DIR}/BarButton.qml"
 TOGGLE="${ROOT}/config/hypr/scripts/toggle_animations.sh"
 
 fail() {
@@ -18,16 +23,46 @@ require_source() {
   grep -Fq -- "$expected" "$file" || fail "$description"
 }
 
-require_source "$MANAGER" 'readonly property int toggleDebounceMs: 250' \
-  'flyout manager is missing the switch-bounce cooldown'
+require_source "$MANAGER" 'readonly property int toggleDebounceMs: 0' \
+  'flyout manager still imposes an artificial toggle cooldown'
 require_source "$MANAGER" 'function acceptToggle(surface)' \
   'flyout manager is missing the shared toggle gate'
-require_source "$MANAGER" 'now - previous < toggleDebounceMs' \
-  'flyout manager does not reject implausibly fast repeated toggles'
+require_source "$MANAGER" 'if (toggleDebounceMs <= 0)' \
+  'flyout manager does not bypass timestamp bookkeeping when cooldown is disabled'
+
+require_source "$BAR_BUTTON" 'signal hoverEntered()' \
+  'bar buttons do not expose a flyout prewarm hover hook'
+require_source "$BAR_BUTTON" 'root.hoverEntered();' \
+  'bar buttons do not emit the flyout prewarm hover hook'
+for hook in \
+  'Launcher.prewarmForScreen(bar.screen)' \
+  'QuickSettings.prewarmForScreen(bar.screen)' \
+  'BatteryMenu.prewarmForScreen(bar.screen)' \
+  'NetworkMenu.prewarmForScreen(bar.screen)' \
+  'BluetoothMenu.prewarmForScreen(bar.screen)' \
+  'ClipboardMenu.prewarmForScreen(bar.screen)' \
+  'Notifications.prewarmForItem(bar.screen, notificationButton)'
+do
+  require_source "$BAR" "$hook" "bar is missing prewarm hook: $hook"
+done
+require_source "$BAR" \
+  'Notifications.prewarmForItem(bar.screen, notificationButtonVertical)' \
+  'vertical notification button is missing its exact-anchor prewarm hook'
 
 require_source "${QML_DIR}/Launcher.qml" \
   'FlyoutManager.acceptToggle("launcher")' \
-  'application launcher bypasses the toggle gate'
+  'application launcher bar path bypasses the toggle gate'
+python3 - "$LAUNCHER" <<'PY'
+import re
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r'function toggleFocused\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+if match is None:
+    raise SystemExit("FAIL: launcher toggleFocused() function is missing")
+if 'FlyoutManager.acceptToggle("launcher")' in match.group("body"):
+    raise SystemExit("FAIL: launcher keyboard/IPC toggle is still debounced")
+PY
 require_source "${QML_DIR}/QuickSettings.qml" \
   'FlyoutManager.acceptToggle("quick-settings")' \
   'quick settings bypasses the toggle gate'
@@ -46,6 +81,24 @@ require_source "${QML_DIR}/ClipboardMenu.qml" \
 require_source "${QML_DIR}/Notifications.qml" \
   'FlyoutManager.acceptToggle("notifications")' \
   'notifications flyout bypasses the toggle gate'
+
+python3 - "$QUICK_SETTINGS" "$NOTIFICATIONS" "$CLIPBOARD" <<'PY'
+import re
+import sys
+
+for path in sys.argv[1:]:
+    text = open(path, encoding="utf-8").read()
+    match = re.search(r'function toggleFocused\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+    if match is None:
+        raise SystemExit(f"FAIL: {path} is missing toggleFocused()")
+    if 'FlyoutManager.acceptToggle(' in match.group("body"):
+        raise SystemExit(f"FAIL: {path} keyboard/IPC toggle is still debounced")
+
+for path in sys.argv[1:3]:
+    text = open(path, encoding="utf-8").read()
+    if 'function toggle(): void { root.toggleFocused(); }' not in text:
+        raise SystemExit(f"FAIL: {path} IPC toggle does not use the undebounced focused path")
+PY
 require_source "${QML_DIR}/PowerMenu.qml" \
   'FlyoutManager.acceptToggle("power")' \
   'power menu bypasses the toggle gate'
@@ -154,8 +207,14 @@ for flyout in QuickSettings.qml NetworkMenu.qml BluetoothMenu.qml BatteryMenu.qm
   esac
   presented_line="$(grep -nF -- 'panelPresented = true;' "$path" | head -n1 | cut -d: -f1)"
   visible_line="$(grep -nF -- "${window_id}.visible = true;" "$path" | head -n1 | cut -d: -f1)"
-  [[ -n "$presented_line" && -n "$visible_line" && "$presented_line" -lt "$visible_line" ]] \
-    || fail "${flyout} does not start panel presentation before mapping the window"
+  if [[ "$flyout" == "QuickSettings.qml" || "$flyout" == "NetworkMenu.qml" \
+      || "$flyout" == "BluetoothMenu.qml" || "$flyout" == "BatteryMenu.qml" ]]; then
+    [[ -n "$presented_line" && -n "$visible_line" && "$visible_line" -lt "$presented_line" ]] \
+      || fail "${flyout} does not map before starting its visible fade"
+  else
+    [[ -n "$presented_line" && -n "$visible_line" && "$presented_line" -lt "$visible_line" ]] \
+      || fail "${flyout} does not start panel presentation before mapping the window"
+  fi
 done
 
 if grep -Fq -- 'managedFlyoutWindow(' "$SHELL"; then
@@ -175,4 +234,4 @@ require_source "$TOGGLE" \
   'hypr-animations-enabled' \
   'Super+A animation state file changed unexpectedly'
 
-printf '%s\n' 'Flyout toggle debounce, fade, and blur lifecycle regression test passed.'
+printf '%s\n' 'Flyout rapid-toggle, prewarm, fade, and blur lifecycle regression test passed.'
