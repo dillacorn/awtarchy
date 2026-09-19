@@ -71,6 +71,7 @@ Singleton {
     property string pendingPrepareKey: ""
     property string pendingPrewarmKey: ""
     property bool initialStatusWarmDone: false
+    property bool prewarmEnabled: false
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -1003,7 +1004,10 @@ Singleton {
         interval: 2400
         repeat: false
         running: true
-        onTriggered: root.prewarmFocused()
+        onTriggered: {
+            root.prewarmEnabled = true;
+            root.prewarmFocused();
+        }
     }
 
     Timer {
@@ -1016,7 +1020,7 @@ Singleton {
     Connections {
         target: BarState
         function onRevisionChanged() {
-            if (!quickSettingsWindow.visible && !root.openPreparing)
+            if (root.prewarmEnabled && !quickSettingsWindow.visible && !root.openPreparing)
                 quickSettingsPrewarmRefresh.restart();
         }
     }
@@ -1024,7 +1028,7 @@ Singleton {
     Connections {
         target: Hyprland
         function onRawEvent(event) {
-            if (!event || quickSettingsWindow.visible || root.openPreparing)
+            if (!root.prewarmEnabled || !event || quickSettingsWindow.visible || root.openPreparing)
                 return;
             if (event.name === "focusedmon" || event.name === "focusedmonv2")
                 quickSettingsPrewarmRefresh.restart();
