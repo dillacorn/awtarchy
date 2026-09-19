@@ -176,10 +176,9 @@ Singleton {
         });
     }
 
-    function prewarmFocused() {
+    function prewarmForScreen(targetScreen) {
         if (clipboardWindow.visible || openPreparing || prewarmProcess.running)
             return;
-        const targetScreen = focusedScreen();
         const preparation = clipboardPreparation(targetScreen);
         if (!targetScreen || !preparation)
             return;
@@ -190,6 +189,10 @@ Singleton {
             return;
         pendingPrewarmKey = preparation.key;
         prewarmProcess.exec(preparation.args);
+    }
+
+    function prewarmFocused() {
+        prewarmForScreen(focusedScreen());
     }
 
     function finishPrewarm(exitCode) {
