@@ -129,6 +129,9 @@ grep -Fq -- 'manager start' "$LOG" \
 SHELL_QML="$ROOT/config/quickshell/awtarchy/shell.qml"
 BAR_STATE="$ROOT/config/quickshell/awtarchy/BarState.qml"
 QUICK_SETTINGS="$ROOT/config/quickshell/awtarchy/QuickSettings.qml"
+LAUNCHER="$ROOT/config/quickshell/awtarchy/Launcher.qml"
+CLIPBOARD="$ROOT/config/quickshell/awtarchy/ClipboardMenu.qml"
+NOTIFICATIONS="$ROOT/config/quickshell/awtarchy/Notifications.qml"
 
 for method in flipBarFocused rotateBarFocused toggleBarAutoHideFocused; do
     grep -Fq -- "function ${method}()" "$SHELL_QML" \
@@ -150,12 +153,15 @@ grep -Fq -- 'function rebuildStateCache()' "$BAR_STATE" \
 grep -Fq -- 'return stateCacheReady ? stateCache : emptyData();' "$BAR_STATE" \
     || fail 'BarState.data() still reparses state instead of returning the cache'
 
-python3 - "$BAR_STATE" "$QUICK_SETTINGS" <<'PY'
+python3 - "$BAR_STATE" "$QUICK_SETTINGS" "$LAUNCHER" "$CLIPBOARD" "$NOTIFICATIONS" <<'PY'
 import re
 import sys
 
 bar_state = open(sys.argv[1], encoding="utf-8").read()
 quick = open(sys.argv[2], encoding="utf-8").read()
+launcher = open(sys.argv[3], encoding="utf-8").read()
+clipboard = open(sys.argv[4], encoding="utf-8").read()
+notifications = open(sys.argv[5], encoding="utf-8").read()
 
 for name in (
     "setLivePosition",
@@ -211,6 +217,38 @@ if quick.count('active: root.secondaryCardsActive') != 4:
     raise SystemExit("FAIL: Quick Settings secondary status cards are not deferred consistently")
 if quick.count('active: quickSettingsWindow.visible') != 1:
     raise SystemExit("FAIL: unexpected immediate Quick Settings card activation remains")
+
+for name, text, startup_id, interval, finish_call in (
+    ("Launcher", launcher, "launcherStartupPrewarm", "interval: 700", "finishPreparedOpen(0, true);"),
+    ("Clipboard", clipboard, "clipboardStartupPrewarm", "interval: 1300", "finishPreparedOpen(0, true);"),
+    ("Notifications", notifications, "notificationsStartupPrewarm", "interval: 1900", "finishPreparedCenterOpen(0, true);"),
+):
+    for needle in (
+        "property string preparedOpenKey:",
+        "property string pendingPrewarmKey:",
+        "property bool prewarmEnabled:",
+        "function prewarmFocused()",
+        "id: prewarmProcess",
+        f"id: {startup_id}",
+        interval,
+        finish_call,
+        "prewarmProcess.running = false;",
+    ):
+        if needle not in text:
+            raise SystemExit(f"FAIL: {name} prewarm contract missing: {needle}")
+    if "prepareProcess.exec(preparation.args);" not in text:
+        raise SystemExit(f"FAIL: {name} lost blocking prepare fallback for stale cache")
+
+if "property var incomingEntries: []" not in clipboard:
+    raise SystemExit("FAIL: Clipboard does not retain a separate incoming refresh model")
+if "id: clipboardListRefresh" not in clipboard or "interval: 120" not in clipboard:
+    raise SystemExit("FAIL: Clipboard list refresh is not deferred behind the first frame")
+if "incomingEntries = [];" not in clipboard:
+    raise SystemExit("FAIL: Clipboard refresh does not reset only the incoming model")
+if "entries = [];" in re.search(
+        r"function startListLoadNow\(\) \{(?P<body>.*?)\n    \}", clipboard, re.S
+    ).group("body"):
+    raise SystemExit("FAIL: Clipboard still blanks retained rows before fresh data arrives")
 PY
 
 printf '%s\n' 'PASS: Quickshell hotkeys use direct IPC, cached state, and Quick Settings prewarm'
