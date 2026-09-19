@@ -26,11 +26,12 @@ text = Path(sys.argv[1]).read_text(encoding="utf-8")
 start = text.find("multi_select() {")
 if start < 0:
     raise SystemExit("missing multi_select")
+search_from = start + len("multi_select() {")
 next_function = re.search(
     r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\) \{$",
-    text[start + 1 :],
+    text[search_from:],
 )
-end = len(text) if next_function is None else start + 1 + next_function.start()
+end = len(text) if next_function is None else search_from + next_function.start()
 body = text[start:end]
 if "else\n          current=$((${#labels[@]} - 1))" not in body:
     raise SystemExit("multi_select does not wrap Up to the final entry")
