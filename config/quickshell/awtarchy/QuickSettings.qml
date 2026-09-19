@@ -240,11 +240,10 @@ Singleton {
         });
     }
 
-    function prewarmFocused() {
+    function prewarmForScreen(targetScreen) {
         if (quickSettingsWindow.visible || openPreparing || prewarmProcess.running)
             return;
 
-        const targetScreen = focusedScreen();
         const preparation = preparationForScreen(targetScreen);
         if (!targetScreen || !preparation)
             return;
@@ -264,6 +263,10 @@ Singleton {
 
         pendingPrewarmKey = preparation.key;
         prewarmProcess.exec(preparation.args);
+    }
+
+    function prewarmFocused() {
+        prewarmForScreen(focusedScreen());
     }
 
     function finishPrewarm(exitCode) {
