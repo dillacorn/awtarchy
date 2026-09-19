@@ -139,3 +139,8 @@ jobs:
 
           main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
           test "$main_sha" = "$POST_UPDATE_COMMIT"
+
+
+      - name: Remove one-use helper branch
+        run: |
+          gh api -X DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${GITHUB_HEAD_REF}"
