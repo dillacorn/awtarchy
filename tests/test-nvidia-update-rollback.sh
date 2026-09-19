@@ -389,6 +389,8 @@ case "$url" in
   https://archive.archlinux.org/packages/n/nvidia-open-dkms/)
     cat <<'INDEX'
 nvidia-open-dkms-595.71.05-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-610.9.01-1-x86_64.pkg.tar.zst
+nvidia-open-dkms-610.10.01-1-x86_64.pkg.tar.zst
 nvidia-open-dkms-610.43.03-1-x86_64.pkg.tar.zst
 nvidia-open-dkms-610.57.04-1-x86_64.pkg.tar.zst
 nvidia-open-dkms-615.71.09-1-x86_64.pkg.tar.zst
@@ -399,6 +401,8 @@ INDEX
   https://archive.archlinux.org/packages/n/nvidia-utils/)
     cat <<'INDEX'
 nvidia-utils-595.71.05-1-x86_64.pkg.tar.zst
+nvidia-utils-610.9.01-1-x86_64.pkg.tar.zst
+nvidia-utils-610.10.01-1-x86_64.pkg.tar.zst
 nvidia-utils-610.43.03-1-x86_64.pkg.tar.zst
 nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst
 nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst
@@ -523,6 +527,10 @@ grep -Fq '610.57.04' <<<"$list_output" \
   || fail 'archived NVIDIA release picker does not list 610.57.04'
 grep -Fq '610.43.03' <<<"$list_output" \
   || fail 'archived NVIDIA release picker does not list multiple previous releases'
+grep -Fq '610.9.01' <<<"$list_output" \
+  || fail 'release catalog lost a version when version-sort order differs from lexical order'
+grep -Fq '610.10.01' <<<"$list_output" \
+  || fail 'release catalog intersection still depends on comm-compatible lexical sorting'
 if grep -Fq '620.12.01' <<<"$list_output"; then
   fail 'archived NVIDIA release picker exposes a release newer than the installed driver'
 fi
