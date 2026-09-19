@@ -1459,3 +1459,7 @@ d5d7cc94f4d95ee7d78bb525acf7056f709bad9dbd8e97e095add796221146d8	.config/quicksh
 # 2026-09-18 theme picker wrapper managed migration.
 78c1fda78ccc4286903e60b8769804797e8287663ad0fe2bf29f42bba4f04e74	.config/hypr/scripts/theme_select.sh
 3802142241e8a9f4bad66f8c68a2efce3e5bd20cbcf1e1e50b478836739eedc4	.config/hypr/scripts/theme_select.sh
+
+# 2026-09-18 cached shell state and Quick Settings prewarm.
+0219a4862a976804d97ab74c642138d8ad71b91b11cccaa5c0e876473ab6188e	.config/quickshell/awtarchy/BarState.qml
+d98e678330dba2814f931418853d8362a01d0245876d0824f63aa22e6ff0bf2e	.config/quickshell/awtarchy/QuickSettings.qml
