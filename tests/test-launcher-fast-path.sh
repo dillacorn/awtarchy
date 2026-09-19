@@ -55,10 +55,17 @@ printf ' %s' "$@" >>"${AWTARCHY_TEST_LOG:?}"
 printf '\n' >>"${AWTARCHY_TEST_LOG:?}"
 EOF_MANAGER
 
-chmod 0755     "$BIN/qs"     "$CONFIG_HOME/hypr/scripts/quickshell_runtime_rules.sh"     "$CONFIG_HOME/hypr/scripts/quickshell.sh"
+chmod 0755 "$BIN/qs" "$CONFIG_HOME/hypr/scripts/quickshell_runtime_rules.sh" "$CONFIG_HOME/hypr/scripts/quickshell.sh"
+
+TEST_ENV=(
+    "XDG_CONFIG_HOME=$CONFIG_HOME"
+    "PATH=$BIN:$PATH"
+    "AWTARCHY_TEST_LOG=$LOG"
+    "AWTARCHY_TEST_QS_COUNT=$COUNT"
+)
 
 run_launcher() {
-    env         XDG_CONFIG_HOME="$CONFIG_HOME"         PATH="$BIN:$PATH"         AWTARCHY_TEST_LOG="$LOG"         AWTARCHY_TEST_QS_COUNT="$COUNT"         "$@"         bash "$LAUNCHER"
+    env "${TEST_ENV[@]}" "$@" bash "$LAUNCHER"
 }
 
 bash -n "$LAUNCHER"
@@ -68,8 +75,9 @@ rm -f -- "$COUNT"
 run_launcher
 
 mapfile -t calls <"$LOG"
-[[ ${#calls[@]} -eq 1 ]]     || fail "hot path invoked ${#calls[@]} commands instead of one"
-[[ ${calls[0]} == 'qs -c awtarchy ipc call launcher toggle' ]]     || fail "hot path did not call launcher IPC directly: ${calls[0]}"
+[[ ${#calls[@]} -eq 1 ]] || fail "hot path invoked ${#calls[@]} commands instead of one"
+[[ ${calls[0]} == 'qs -c awtarchy ipc call launcher toggle' ]] \
+    || fail "hot path did not call launcher IPC directly: ${calls[0]}"
 
 : >"$LOG"
 rm -f -- "$COUNT"
@@ -83,9 +91,11 @@ expected=(
     'qs -c awtarchy ipc call launcher toggle'
 )
 
-[[ ${#calls[@]} -eq ${#expected[@]} ]]     || fail "fallback invoked ${#calls[@]} commands instead of ${#expected[@]}"
+[[ ${#calls[@]} -eq ${#expected[@]} ]] \
+    || fail "fallback invoked ${#calls[@]} commands instead of ${#expected[@]}"
 for i in "${!expected[@]}"; do
-    [[ ${calls[$i]} == "${expected[$i]}" ]]         || fail "fallback call $i was '${calls[$i]}', expected '${expected[$i]}'"
+    [[ ${calls[$i]} == "${expected[$i]}" ]] \
+        || fail "fallback call $i was '${calls[$i]}', expected '${expected[$i]}'"
 done
 
 printf '%s\n' 'PASS: launcher keyboard fast path preserves cold-start recovery'
