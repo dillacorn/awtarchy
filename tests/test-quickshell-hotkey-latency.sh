@@ -217,17 +217,12 @@ if quick.count('active: root.secondaryCardsActive') != 4:
     raise SystemExit("FAIL: Quick Settings secondary status cards are not deferred consistently")
 if quick.count('active: quickSettingsWindow.visible') != 1:
     raise SystemExit("FAIL: unexpected immediate Quick Settings card activation remains")
-for needle in (
-    "property bool fastPresentation: false",
-    "function openForScreen(targetScreen, fastOpen)",
-    "fastPresentation = Boolean(fastOpen);",
-    "function toggleForScreenNow(targetScreen, fastOpen)",
-    "toggleForScreenNow(focusedScreen(), true);",
-    "toggleForScreenNow(targetScreen, false);",
-    "enabled: FlyoutManager.animationsEnabled && !root.fastPresentation",
-):
-    if needle not in quick:
-        raise SystemExit(f"FAIL: Quick Settings instant keyboard-open contract missing: {needle}")
+if "enabled: FlyoutManager.animationsEnabled" not in quick:
+    raise SystemExit("FAIL: Quick Settings no longer uses the launcher-style presentation fade")
+if "duration: root.panelFadeDuration" not in quick:
+    raise SystemExit("FAIL: Quick Settings presentation fade no longer uses the shared 140ms duration")
+if "fastPresentation" in quick:
+    raise SystemExit("FAIL: Quick Settings still bypasses its presentation fade for keyboard opens")
 
 for name, text, startup_id, interval, finish_call in (
     ("Launcher", launcher, "launcherStartupPrewarm", "interval: 700", "finishPreparedOpen(0, true);"),
