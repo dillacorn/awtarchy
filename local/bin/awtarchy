@@ -1095,7 +1095,5900 @@ single_select_menu() {
     key="$(read_key || true)"
     case "$key" in
       
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
+        fi
+        ;;
+      
       $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[B')
+        if (( index + 1 < ${#items[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
+        fi
+        ;;
+      
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
+        fi
+        ;;
+      
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[B')
+        if (( index + 1 < ${#items[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[B')
+        if (( index + 1 < ${#items[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
+      
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
+        fi
+        ;;
+      
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[B')
+        if (( index + 1 < ${#items[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\n'|
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
+        fi
+        ;;
+      
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\033[B')
+        if (( index + 1 < ${#items[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
+      $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
+      q|Q) return 1 ;;
+    esac
+  done
+}
+
+pause_menu() {
+  printf '\nPress any key to continue...' >/dev/tty
+  read_key >/dev/null || true
+}
+
+nvidia_pci_hardware_present() {
+  have lspci || return 2
+
+  local lines=""
+  lines="$(lspci -nn 2>/dev/null | grep -Ei 'VGA compatible controller|3D controller|Display controller|2D controller' || true)"
+  [[ -n "$lines" ]] || return 2
+  grep -qi '\[10de:' <<<"$lines"
+}
+
+confirm_nvidia_recovery_without_hardware() {
+  local choice="" detection_rc=0
+
+  nvidia_pci_hardware_present || detection_rc=$?
+  case "$detection_rc" in
+    0)
+      return 0
+      ;;
+    1)
+      choice="$(single_select_menu         $'No NVIDIA GPU detected\n\nAwtarchy did not find NVIDIA PCI hardware on this system.\nRecovery may still be useful after a GPU swap or if NVIDIA packages remain installed.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+    *)
+      choice="$(single_select_menu         $'NVIDIA GPU detection unavailable\n\nAwtarchy could not verify installed PCI graphics hardware.\nYou can continue manually if you know NVIDIA packages or rollback history exist.'         1         "Continue to NVIDIA recovery tools"         "Back")" || return 1
+      [[ "$choice" == 0 ]]
+      ;;
+  esac
+}
+
+nvidia_recovery_menu() {
+  local choice="" rc=0
+
+  confirm_nvidia_recovery_without_hardware || return 0
+
+  while true; do
+    choice="$(single_select_menu "NVIDIA Recovery" 0       "Restore last saved rollback point"       "Roll back to previous NVIDIA driver"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0)
+        run_current_nvidia_rollback || rc=$?
+        ;;
+      1)
+        run_current_nvidia_rollback --pick || rc=$?
+        ;;
+      *)
+        return 0
+        ;;
+    esac
+
+    (( rc == 0 )) || printf '\nNVIDIA recovery action exited with status %s.\n' "$rc" >/dev/tty
+    pause_menu
+  done
+}
+
+reject_stable_testing_overrides() {
+  local arg
+  for arg in "$@"; do
+    case "$arg" in
+      --testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*)
+        die "Git testing must use awtarchy git with a selected remote branch."
+        ;;
+    esac
+  done
+}
+
+run_git_operation() {
+  local action="$1" branch="$2" revision="$3"
+  shift 3
+  local arg
+  local -a runtime_args=(update-reset-backup)
+
+  for arg in "$@"; do
+    case "$arg" in
+      --tag|--tag=*|--testing-branch|--testing-branch=*|--testing-commit|--testing-commit=*|--mode|--mode=*|--review-only)
+        die "${arg%%=*} is selected by awtarchy git ${action}."
+        ;;
+    esac
+  done
+
+  case "$action" in
+    review)
+      runtime_args+=(--mode preserve --review-only)
+      ;;
+    update)
+      runtime_args+=(--mode preserve)
+      ;;
+    reset)
+      runtime_args+=(--mode clean)
+      ;;
+    *)
+      die "Unknown git-testing action: ${action}"
+      ;;
+  esac
+  runtime_args+=(--testing-branch "$branch" --testing-commit "$revision")
+  runtime_args+=("$@")
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  printf 'Git testing action: %s\n' "$action"
+  local rc=0
+  run_git_revision_runtime "$branch" "$revision" "${runtime_args[@]}" || rc=$?
+  case "$rc" in
+    0)
+      if [[ "$action" == update ]]; then
+        reconcile_quickshell_ui_after_update
+      fi
+      ;;
+    20)
+      log "Git-testing update was rolled back by the user; skipping post-update UI reconciliation."
+      return 0
+      ;;
+    *)
+      return "$rc"
+      ;;
+  esac
+}
+
+git_cli() {
+  local action="${1:-}" branch="" requested_commit="" branch_head="" revision=""
+  local -a runtime_options=()
+  [[ -n $action ]] || die "awtarchy git requires review, update, or reset in noninteractive use."
+  case "$action" in
+    review|update|reset) shift ;;
+    *) die "Unknown git-testing action: ${action}. Use review, update, or reset." ;;
+  esac
+
+  while (( $# > 0 )); do
+    case "$1" in
+      --branch)
+        shift
+        (( $# > 0 )) || die "--branch requires a remote branch name."
+        branch="$1"
+        ;;
+      --branch=*)
+        branch="${1#*=}"
+        ;;
+      --commit)
+        shift
+        (( $# > 0 )) || die "--commit requires a full 40-character commit SHA."
+        requested_commit="$1"
+        ;;
+      --commit=*)
+        requested_commit="${1#*=}"
+        ;;
+      *)
+        runtime_options+=("$1")
+        ;;
+    esac
+    shift
+  done
+
+  [[ -n $branch ]] || die "Git testing requires --branch so the remote source is explicit."
+  [[ $branch != *$'\n'* && $branch != *$'\r'* && $branch != *$'\t'* ]] \
+    || die "Remote branch name contains unsupported control characters."
+  if [[ -n $requested_commit ]]; then
+    [[ $requested_commit =~ ^[0-9a-fA-F]{40}$ ]] \
+      || die "--commit requires a full 40-character commit SHA."
+    requested_commit="${requested_commit,,}"
+  fi
+
+  branch_head="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+  if [[ -n $requested_commit ]]; then
+    git_commit_belongs_to_branch "$requested_commit" "$branch_head" \
+      || die "Commit ${requested_commit} does not belong to selected branch ${branch}."
+    revision="$requested_commit"
+  else
+    revision="$branch_head"
+  fi
+
+  run_git_operation "$action" "$branch" "$revision" "${runtime_options[@]}"
+}
+
+git_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] \
+    || die "The Awtarchy Git testing menu requires an interactive terminal."
+
+  local branch_output="" choice="" branch="" revision="" action=""
+  local -a branches=()
+  branch_output="$(remote_git_branches)" \
+    || die "Could not retrieve remote Awtarchy branches."
+  mapfile -t branches <<<"$branch_output"
+  (( ${#branches[@]} > 0 )) || die "No remote Awtarchy branches were returned."
+
+  choice="$(single_select_menu "Awtarchy Git Testing: Select Remote Branch" 0 \
+    "${branches[@]}")" || return 0
+  branch="${branches[choice]}"
+  revision="$(remote_git_branch_head "$branch")" \
+    || die "Could not resolve remote Awtarchy branch: ${branch}"
+
+  printf 'Selected remote branch: %s\n' "$branch"
+  printf 'Exact revision: %s\n' "$revision"
+  choice="$(single_select_menu \
+    "Git Testing: ${branch}@${revision}" 0 \
+    "Review changes without applying" \
+    "Update and preserve personal modifications" \
+    "Reset managed configs to Git defaults" \
+    "Cancel")" || return 0
+  case "$choice" in
+    0) action=review ;;
+    1) action=update ;;
+    2) action=reset ;;
+    *) return 0 ;;
+  esac
+  run_git_operation "$action" "$branch" "$revision"
+}
+
+maintenance_menu() {
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
+
+  local choice rc update_rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
+      "Refresh Awtarchy updater from main" \
+      "Update configs (preserve Hyprland customizations)" \
+      "Reset configs (clean-slate managed files)" \
+      "Reconcile packages (install current / remove replaced)" \
+      "NVIDIA driver recovery / rollback" \
+      "Review config changes without applying" \
+      "Clean Awtarchy backup files" \
+      "Version information" \
+      "Exit")" || exit 0
+
+    case "$choice" in
+      0)
+        self_update_safely
+        exec "${TARGET_HOME}/.local/bin/awtarchy"
+        ;;
+      1)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater update
+        if config_release_ready_or_noop; then
+          update_rc=0
+          run_runtime update-reset-backup --mode preserve || update_rc=$?
+          case "$update_rc" in
+            0)
+              reconcile_quickshell_ui_after_update
+              ;;
+            20)
+              log "Update was rolled back by the user; skipping post-update UI reconciliation."
+              ;;
+            *)
+              rc="$update_rc"
+              ;;
+          esac
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      2)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater reset
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode clean || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      3)
+        ensure_latest_updater packages
+        clear_screen
+        run_package_reconciler || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      4)
+        ensure_latest_updater
+        nvidia_recovery_menu
+        ;;
+      5)
+        protect_git_state_before_updater_refresh
+        ensure_latest_updater review
+        if config_release_ready_or_noop; then
+          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
+        fi
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      6)
+        run_runtime clean-backups || rc=$?
+        pause_menu
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
+        clear_screen
+        print_version_status >/dev/tty
+        pause_menu
+        ;;
+      *) exit 0 ;;
+    esac
+    unset rc
+  done
+}
+
+usage() {
+  cat <<'EOF'
+Usage:
+  awtarchy
+  awtarchy update [--tag <tag>] [update options]
+  awtarchy reset [--tag <tag>] [update options]
+  awtarchy packages [--review]
+  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
+  awtarchy review [--tag <tag>]
+  awtarchy report
+  awtarchy git
+  awtarchy git review --branch <branch> [--commit <40-character-sha>]
+  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy clean-backups [options]
+  awtarchy troubleshoot
+  awtarchy version
+  awtarchy check-update
+  awtarchy self-update
+  awtarchy help
+
+The updater always refreshes from the current `main` branch head.
+Managed configs update only from the latest published release or an exact
+published release selected with --tag.
+
+Package reconciliation uses the current installed Awtarchy package catalogs.
+It can install missing current dependencies and selected catalog items, and it
+can remove explicitly retired/replaced packages. Retired package removal is
+preselected only when Awtarchy recorded ownership of that package. On systems
+with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
+rollback point when the current NVIDIA/kernel package archives are available.
+Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
+Use '--pick' to choose another fully reconstructable historical driver,
+'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
+select one directly. Awtarchy saves the current package set before switching.
+
+Git testing is explicit. The selected Awtarchy remote branch is resolved to an
+exact revision, and an exact --commit is accepted only when it belongs to that
+branch. After a Quickshell-capable release is published, run awtarchy update to
+return configs to the published release stream.
+
+Installation is handled only by awtarchy-install.sh.
+EOF
+}
+
+main() {
+  drop_launcher_privileges "$@"
+  init_target
+
+  case "${1:-}" in
+    troubleshoot)
+      shift
+      (( $# == 0 )) || die "troubleshoot does not accept options."
+      require_runtime
+      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
+      ;;
+    report)
+      shift
+      (( $# == 0 )) || die "report does not accept options."
+      run_failure_reports
+      return 0
+      ;;
+    version)
+      print_version_status
+      return 0
+      ;;
+    check-update)
+      print_version_status
+      local installed remote=""
+      installed="$(installed_updater_commit)"
+      remote="$(updater_branch_head 2>/dev/null || true)"
+      if [[ -n $remote && $installed != "$remote" ]]; then
+        return 10
+      fi
+      return 0
+      ;;
+    help|-h|--help)
+      usage
+      return 0
+      ;;
+  esac
+
+  cleanup_legacy_quickshell_command
+  ensure_vpn_directory
+
+  case "${1:-}" in
+    self-update)
+      shift
+      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
+      self_update_safely
+      ;;
+    packages)
+      ensure_latest_updater "$@"
+      shift
+      run_package_reconciler "$@"
+      ;;
+    nvidia-rollback)
+      ensure_latest_updater "$@"
+      shift
+      run_current_nvidia_rollback "$@"
+      ;;
+    update)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      ensure_update_disk_headroom
+      if ! config_release_ready_or_noop "$@"; then
+        return 0
+      fi
+      local update_rc=0
+      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
+      case "$update_rc" in
+        0)
+          reconcile_quickshell_ui_after_update
+          ;;
+        20)
+          log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        *)
+          return "$update_rc"
+          ;;
+      esac
+      ;;
+    reset)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode clean "$@"
+      ;;
+    review)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup --mode preserve --review-only "$@"
+      ;;
+    clean-backups|update-backup-cleaner|backup-cleaner)
+      shift
+      exec_runtime clean-backups "$@"
+      ;;
+    update-reset-backup)
+      reject_stable_testing_overrides "$@"
+      protect_git_state_before_updater_refresh "$@"
+      ensure_latest_updater "$@"
+      shift
+      config_release_ready_or_noop "$@" || return 0
+      exec_runtime update-reset-backup "$@"
+      ;;
+    git)
+      ensure_latest_updater "$@"
+      shift
+      if (( $# == 0 )); then
+        git_menu
+      else
+        git_cli "$@"
+      fi
+      ;;
+    install|dry-run|dryrun|test)
+      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
+      ;;
+    "")
+      refresh_menu_updater_if_available
+      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
+      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
+        bash "$report_helper" prompt-pending || true
+      fi
+      maintenance_menu
+      ;;
+    *)
+      die "Unknown command: $1"
+      ;;
+  esac
+}
+
+main "$@"\r'|"") printf '%s\n' "$index"; return 0 ;;
       q|Q) return 1 ;;
     esac
   done
