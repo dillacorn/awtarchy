@@ -27,7 +27,18 @@ require_source "$MANAGER" 'now - previous < toggleDebounceMs' \
 
 require_source "${QML_DIR}/Launcher.qml" \
   'FlyoutManager.acceptToggle("launcher")' \
-  'application launcher bypasses the toggle gate'
+  'application launcher bar path bypasses the toggle gate'
+python3 - "$LAUNCHER" <<'PY'
+import re
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r'function toggleFocused\(\) \{(?P<body>.*?)\n    \}', text, re.S)
+if match is None:
+    raise SystemExit("FAIL: launcher toggleFocused() function is missing")
+if 'FlyoutManager.acceptToggle("launcher")' in match.group("body"):
+    raise SystemExit("FAIL: launcher keyboard/IPC toggle is still debounced")
+PY
 require_source "${QML_DIR}/QuickSettings.qml" \
   'FlyoutManager.acceptToggle("quick-settings")' \
   'quick settings bypasses the toggle gate'
