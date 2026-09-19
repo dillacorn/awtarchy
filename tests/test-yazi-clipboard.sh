@@ -54,6 +54,18 @@ PY
 
 grep -Fq 'text/plain=micro.desktop' "$MIMEAPPS" \
   || fail 'Awtarchy default text/plain association is no longer Micro'
+grep -Fq 'repair_v373_yazi_default_editor_target()' "$RUNTIME" \
+  || fail 'runtime has no v3.7.3 Yazi default-editor delivery repair'
+grep -Fq '[[ "$tag" == "v3.7.3" ]] || return 0' "$RUNTIME" \
+  || fail 'v3.7.3 Yazi default-editor repair is not tag scoped'
+grep -Fq 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" \
+  || fail 'stable update path does not apply the v3.7.3 Yazi default-editor repair'
+grep -Fq '{ run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" }' "$RUNTIME" \
+  || fail 'v3.7.3 stable repair does not install the default-editor Yazi opener'
+build_line="$(grep -nF 'build_target_home "$repo_dir" "$target_home"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+repair_line="$(grep -nF 'repair_v373_yazi_default_editor_target "$target_home" "$tag"' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+[[ "$build_line" =~ ^[0-9]+$ && "$repair_line" =~ ^[0-9]+$ && "$repair_line" -gt "$build_line" ]] \
+  || fail 'v3.7.3 Yazi default-editor repair does not run after the stable target is built'
 grep -Fq ' xdg-utils ' "$RUNTIME" \
   || fail 'xdg-utils is no longer part of the managed package catalog'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
@@ -75,4 +87,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi delegates text opening to the desktop default application, delivers the v3.7.3 stable repair, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
