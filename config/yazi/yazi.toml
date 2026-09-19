@@ -3,5 +3,5 @@
 
 [opener]
 edit = [
-  { run = "/usr/bin/micro %s", block = true, for = "unix", desc = "Edit with Micro" },
+  { run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" },
 ]
