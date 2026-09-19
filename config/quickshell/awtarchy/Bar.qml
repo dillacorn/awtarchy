@@ -664,6 +664,7 @@ PanelWindow {
                 label: BarState.launcherIcon()
                 tooltip: "app-launcher"
                 hoverBackground: Theme.strongHover
+                onHoverEntered: Launcher.prewarmForScreen(bar.screen)
                 onClicked: Launcher.openForScreen(bar.screen)
                 onRightClicked: Launcher.openForScreen(bar.screen)
             }
@@ -813,6 +814,7 @@ PanelWindow {
             BarControl {
                 label: bar.brightnessText
                 tooltip: bar.brightnessTooltip
+                onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)
                 onWheelUp: bar.ddcAction("up")
@@ -826,6 +828,7 @@ PanelWindow {
                 label: bar.batteryIcon(pct) + (pluggedIn ? "  " : " ") + pct
                 foreground: pct <= 15 && !pluggedIn ? Theme.critical : Theme.foreground
                 tooltip: BatteryState.barTooltip
+                onHoverEntered: BatteryMenu.prewarmForScreen(bar.screen)
                 onClicked: BatteryMenu.toggleForScreen(bar.screen)
                 onRightClicked: BatteryMenu.toggleForScreen(bar.screen)
             }
@@ -864,6 +867,7 @@ PanelWindow {
                 foreground: NetworkMenu.barForeground
                 tooltip: NetworkMenu.barTooltip
                 hoverBackground: Theme.strongHover
+                onHoverEntered: NetworkMenu.prewarmForScreen(bar.screen)
                 onClicked: NetworkMenu.toggleForScreen(bar.screen)
                 onRightClicked: NetworkMenu.toggleForScreen(bar.screen)
             }
@@ -874,6 +878,7 @@ PanelWindow {
                 foreground: BluetoothMenu.barForeground
                 tooltip: BluetoothMenu.barTooltip
                 hoverBackground: Theme.strongHover
+                onHoverEntered: BluetoothMenu.prewarmForScreen(bar.screen)
                 onClicked: BluetoothMenu.toggleForScreen(bar.screen)
                 onRightClicked: BluetoothMenu.toggleForScreen(bar.screen)
             }
@@ -884,6 +889,7 @@ PanelWindow {
                 label: ""
                 tooltip: "Clipboard history"
                 hoverBackground: Theme.strongHover
+                onHoverEntered: ClipboardMenu.prewarmForScreen(bar.screen)
                 onClicked: ClipboardMenu.toggleForScreen(bar.screen)
                 onRightClicked: ClipboardMenu.toggleForScreen(bar.screen)
             }
@@ -896,6 +902,7 @@ PanelWindow {
                 tooltip: Notifications.mutePopups
                     ? "Notifications muted\nLeft: open · Right: unmute"
                     : "Notifications enabled\nLeft: open · Right: mute"
+                onHoverEntered: Notifications.prewarmForItem(bar.screen, notificationButton)
                 onClicked: Notifications.toggleForItem(bar.screen, notificationButton)
                 onRightClicked: Notifications.togglePopupMute()
             }
@@ -926,6 +933,7 @@ PanelWindow {
             BarControl {
                 vertical: true; fixedWidth: bar.barSize; label: BarState.launcherIcon(); tooltip: "app-launcher"
                 hoverBackground: Theme.strongHover
+                onHoverEntered: Launcher.prewarmForScreen(bar.screen)
                 onClicked: Launcher.openForScreen(bar.screen)
                 onRightClicked: Launcher.openForScreen(bar.screen)
             }
@@ -1057,6 +1065,7 @@ PanelWindow {
                 label: bar.brightnessValue >= 0
                     ? "\n" + bar.brightnessValue + "%" : ""
                 tooltip: bar.brightnessTooltip
+                onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)
                 onWheelUp: bar.ddcAction("up")
@@ -1071,6 +1080,7 @@ PanelWindow {
                 label: bar.batteryIcon(pct) + (pluggedIn ? "\n" : "") + "\n" + pct
                 foreground: pct <= 15 && !pluggedIn ? Theme.critical : Theme.foreground
                 tooltip: BatteryState.barTooltip
+                onHoverEntered: BatteryMenu.prewarmForScreen(bar.screen)
                 onClicked: BatteryMenu.toggleForScreen(bar.screen)
                 onRightClicked: BatteryMenu.toggleForScreen(bar.screen)
             }
@@ -1114,6 +1124,7 @@ PanelWindow {
                 foreground: NetworkMenu.barForeground
                 tooltip: NetworkMenu.barTooltip
                 hoverBackground: Theme.strongHover
+                onHoverEntered: NetworkMenu.prewarmForScreen(bar.screen)
                 onClicked: NetworkMenu.toggleForScreen(bar.screen)
                 onRightClicked: NetworkMenu.toggleForScreen(bar.screen)
             }
@@ -1125,6 +1136,7 @@ PanelWindow {
                 foreground: BluetoothMenu.barForeground
                 tooltip: BluetoothMenu.barTooltip
                 hoverBackground: Theme.strongHover
+                onHoverEntered: BluetoothMenu.prewarmForScreen(bar.screen)
                 onClicked: BluetoothMenu.toggleForScreen(bar.screen)
                 onRightClicked: BluetoothMenu.toggleForScreen(bar.screen)
             }
@@ -1134,6 +1146,7 @@ PanelWindow {
             BarControl {
                 vertical: true; fixedWidth: bar.barSize; label: ""; tooltip: "Clipboard history"
                 hoverBackground: Theme.strongHover
+                onHoverEntered: ClipboardMenu.prewarmForScreen(bar.screen)
                 onClicked: ClipboardMenu.toggleForScreen(bar.screen)
                 onRightClicked: ClipboardMenu.toggleForScreen(bar.screen)
             }
@@ -1146,6 +1159,7 @@ PanelWindow {
                 tooltip: Notifications.mutePopups
                     ? "Notifications muted\nLeft: open · Right: unmute"
                     : "Notifications enabled\nLeft: open · Right: mute"
+                onHoverEntered: Notifications.prewarmForItem(bar.screen, notificationButtonVertical)
                 onClicked: Notifications.toggleForItem(bar.screen, notificationButtonVertical)
                 onRightClicked: Notifications.togglePopupMute()
             }
