@@ -199,6 +199,8 @@ Singleton {
 
     property int revision: 0
     property int idleRevision: 0
+    property var stateCache: ({})
+    property bool stateCacheReady: false
 
     // Immediate in-process overrides keep bar geometry and icon sizing
     // responsive while persistent JSON writes complete in the background.
@@ -274,7 +276,6 @@ Singleton {
 
     function refresh() {
         stateFile.reload();
-        revision++;
     }
 
     function refreshIdleState() {
@@ -296,35 +297,30 @@ Singleton {
         const next = Object.assign({}, livePositions);
         next[name] = value;
         livePositions = next;
-        revision++;
     }
 
     function setLiveEnabled(name, value) {
         const next = Object.assign({}, liveEnabled);
         next[name] = !!value;
         liveEnabled = next;
-        revision++;
     }
 
     function setLiveAutoHide(name, value) {
         const next = Object.assign({}, liveAutoHide);
         next[name] = !!value;
         liveAutoHide = next;
-        revision++;
     }
 
     function setLiveBarSize(name, value) {
         const next = Object.assign({}, liveBarSizes);
         next[name] = Number(value);
         liveBarSizes = next;
-        revision++;
     }
 
     function setLiveIconScale(name, value) {
         const next = Object.assign({}, liveIconScales);
         next[name] = Number(value);
         liveIconScales = next;
-        revision++;
     }
 
     function setLiveBarTransparency(name, value) {
@@ -337,7 +333,6 @@ Singleton {
         const next = Object.assign({}, liveBarTransparencies);
         next[name] = percent;
         liveBarTransparencies = next;
-        revision++;
     }
 
     function clearLiveBarTransparency(name) {
@@ -346,7 +341,6 @@ Singleton {
         const next = Object.assign({}, liveBarTransparencies);
         delete next[name];
         liveBarTransparencies = next;
-        revision++;
     }
 
     function clearLiveOverrides(name) {
@@ -368,7 +362,6 @@ Singleton {
         liveBarSizes = sizes;
         liveIconScales = scales;
         liveBarTransparencies = transparencies;
-        revision++;
     }
 
     function reconcileHotkeyOverrides() {
@@ -397,7 +390,6 @@ Singleton {
         if (changed) {
             livePositions = positions;
             liveAutoHide = autoHide;
-            revision++;
         }
     }
 
@@ -407,10 +399,7 @@ Singleton {
         watchChanges: true
         blockLoading: false
         printErrors: false
-        onLoaded: {
-            root.reconcileHotkeyOverrides();
-            root.revision++;
-        }
+        onLoaded: root.rebuildStateCache()
         onFileChanged: root.refresh()
     }
 
@@ -470,9 +459,7 @@ Singleton {
         });
     }
 
-    function data() {
-        const dependency = revision;
-        const text = stateFile.text();
+    function parseStateText(text) {
         if (!text || text.length === 0)
             return emptyData();
 
@@ -514,6 +501,18 @@ Singleton {
             console.warn("Awtarchy Quickshell: invalid shell state:", error);
             return emptyData();
         }
+    }
+
+    function rebuildStateCache() {
+        stateCache = parseStateText(stateFile.text());
+        stateCacheReady = true;
+        reconcileHotkeyOverrides();
+        revision++;
+    }
+
+    function data() {
+        const dependency = revision;
+        return stateCacheReady ? stateCache : emptyData();
     }
 
     function lockscreenMonitorProfiles() {
