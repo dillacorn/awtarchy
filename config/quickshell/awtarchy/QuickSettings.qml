@@ -75,7 +75,6 @@ Singleton {
     property string preparedStateMonitor: ""
     property int preparedStateRevision: -1
     property bool secondaryCardsActive: false
-    property bool fastPresentation: false
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -364,9 +363,6 @@ Singleton {
         quickSettingsWindow.visible = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
-        else if (fastPresentation)
-            Qt.callLater(() => root.fastPresentation = false);
-
         // The startup prewarm already populated status. Give the mapped window
         // its first frame before spawning the heavier live-status backend.
         if (initialStatusWarmDone)
@@ -897,10 +893,9 @@ Singleton {
         Qt.callLater(() => root.resizeForSettingsMode());
     }
 
-    function openForScreen(targetScreen, fastOpen) {
+    function openForScreen(targetScreen) {
         if (!targetScreen)
             return;
-        fastPresentation = Boolean(fastOpen);
         FlyoutManager.claim("quick-settings", targetScreen.name);
         flyoutScreen = targetScreen;
         if (!quickSettingsWindow.visible)
@@ -923,11 +918,10 @@ Singleton {
         prepareWindowOpen(targetScreen);
     }
 
-    function openFocused() { openForScreen(focusedScreen(), true); }
+    function openFocused() { openForScreen(focusedScreen()); }
 
     function close() {
         openPreparing = false;
-        fastPresentation = false;
         secondaryCardsActive = false;
         quickSettingsOpenStatusRefresh.stop();
         quickSettingsSecondaryCardsRefresh.stop();
@@ -957,24 +951,24 @@ Singleton {
         outputVolumeHoverPercent = -1;
     }
 
-    function toggleForScreenNow(targetScreen, fastOpen) {
+    function toggleForScreenNow(targetScreen) {
         const currentName = activeMonitorName;
         const targetName = targetScreen ? targetScreen.name : "";
         if ((quickSettingsWindow.visible || openPreparing)
             && currentName.length > 0 && currentName === targetName)
             close();
         else
-            openForScreen(targetScreen, fastOpen);
+            openForScreen(targetScreen);
     }
 
     function toggleForScreen(targetScreen) {
         if (!FlyoutManager.acceptToggle("quick-settings"))
             return;
-        toggleForScreenNow(targetScreen, false);
+        toggleForScreenNow(targetScreen);
     }
 
     function toggleFocused() {
-        toggleForScreenNow(focusedScreen(), true);
+        toggleForScreenNow(focusedScreen());
     }
 
     FileView {
@@ -1234,7 +1228,7 @@ Singleton {
             opacity: root.panelPresented ? 1 : 0
 
             Behavior on opacity {
-                enabled: FlyoutManager.animationsEnabled && !root.fastPresentation
+                enabled: FlyoutManager.animationsEnabled
                 NumberAnimation {
                     duration: root.panelFadeDuration
                     easing.type: Easing.OutCubic
