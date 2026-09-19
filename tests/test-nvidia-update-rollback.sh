@@ -36,8 +36,11 @@ grep -Fq 'No NVIDIA GPU detected' "$LAUNCHER" \
   || fail 'maintenance NVIDIA recovery does not warn systems without NVIDIA hardware'
 grep -Fq 'Continue to NVIDIA recovery tools' "$LAUNCHER" \
   || fail 'maintenance NVIDIA recovery cannot be inspected deliberately without NVIDIA hardware'
-grep -Fq 'Choose previous NVIDIA driver version' "$LAUNCHER" \
-  || fail 'maintenance NVIDIA recovery submenu does not expose the historical version picker'
+grep -Fq 'Roll back to previous NVIDIA driver' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery submenu does not expose the driver rollback picker'
+if grep -Fq '"List previous NVIDIA driver releases"' "$LAUNCHER"; then
+  fail 'interactive NVIDIA recovery menu still exposes the confusing list-only action'
+fi
 grep -Fq 'run_current_nvidia_rollback --pick' "$LAUNCHER" \
   || fail 'maintenance NVIDIA recovery submenu does not route to the historical version picker'
 grep -Fq 'run_current_nvidia_rollback' "$LAUNCHER" \
