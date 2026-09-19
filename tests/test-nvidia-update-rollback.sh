@@ -36,14 +36,14 @@ grep -Fq 'No NVIDIA GPU detected' "$LAUNCHER" \
   || fail 'maintenance NVIDIA recovery does not warn systems without NVIDIA hardware'
 grep -Fq 'Continue to NVIDIA recovery tools' "$LAUNCHER" \
   || fail 'maintenance NVIDIA recovery cannot be inspected deliberately without NVIDIA hardware'
-grep -Fq 'Choose cached historical driver version' "$LAUNCHER" \
-  || fail 'maintenance NVIDIA recovery submenu does not expose the cached version picker'
+grep -Fq 'Choose previous NVIDIA driver version' "$LAUNCHER" \
+  || fail 'maintenance NVIDIA recovery submenu does not expose the historical version picker'
 grep -Fq 'run_current_nvidia_rollback --pick' "$LAUNCHER" \
-  || fail 'maintenance NVIDIA recovery submenu does not route to the cached version picker'
+  || fail 'maintenance NVIDIA recovery submenu does not route to the historical version picker'
 grep -Fq 'run_current_nvidia_rollback' "$LAUNCHER" \
   || fail 'NVIDIA rollback is not pinned to the current updater reconciler'
 grep -Fq 'awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]' "$LAUNCHER" \
-  || fail 'launcher does not expose cached NVIDIA version selection'
+  || fail 'launcher does not expose historical NVIDIA version selection'
 # shellcheck disable=SC2016
 grep -Fq 'bash "$PACKAGE_RECONCILER" --nvidia-rollback "$@"' "$LAUNCHER" \
   || fail 'launcher does not forward NVIDIA rollback options to the current reconciler'
@@ -57,7 +57,13 @@ grep -Fq 'PACMAN_LOG_FILE="/var/log/pacman.log"' "$RECONCILER" \
 grep -Fq 'build_nvidia_history_bundle' "$RECONCILER" \
   || fail 'NVIDIA rollback has no historical package-set reconstruction'
 grep -Fq 'apply_nvidia_history_version' "$RECONCILER" \
-  || fail 'NVIDIA rollback has no cached historical version application path'
+  || fail 'NVIDIA rollback has no historical version application path'
+grep -Fq 'NVIDIA_ARCHIVE_BASE="https://archive.archlinux.org/packages/.all"' "$RECONCILER" \
+  || fail 'NVIDIA historical recovery is not pinned to the official Arch Linux Archive'
+grep -Fq 'find_archlinux_archive_package_url' "$RECONCILER" \
+  || fail 'NVIDIA historical recovery has no Arch Linux Archive fallback'
+grep -Fq 'trusted_nvidia_history_source' "$RECONCILER" \
+  || fail 'NVIDIA historical recovery does not validate local/remote package sources before pacman -U'
 grep -Fq 'validate_nvidia_rollback_storage' "$RECONCILER" \
   || fail 'NVIDIA rollback does not validate privileged restore state'
 # shellcheck disable=SC2016
@@ -246,6 +252,22 @@ exec "$@"
 EOF
 chmod +x "$fakebin/sudo"
 
+cat >"$fakebin/curl" <<'EOF'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+url="${!#}"
+case "$url" in
+  https://archive.archlinux.org/packages/.all/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/.all/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst)
+    exit 0
+    ;;
+  *)
+    exit 22
+    ;;
+esac
+EOF
+chmod +x "$fakebin/curl"
+
 if PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
   AWTARCHY_RUNTIME="$runtime" \
@@ -312,8 +334,9 @@ cat >"$pacman_log" <<'EOF'
 [2026-09-10T12:00:03-0400] [ALPM] transaction completed
 EOF
 
-: >"$cache/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst"
-: >"$cache/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst"
+# Simulate Ascending's recovery case: pacman history records 610, but the
+# old 610/kernel archives have been cleaned from /var/cache/pacman/pkg.
+# Only the currently installed 615 return-point packages remain cached.
 : >"$cache/nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst"
 : >"$cache/linux-6.18.2.arch1-1-x86_64.pkg.tar.zst"
 
@@ -331,7 +354,7 @@ list_output="$(
   "$test_reconciler" --nvidia-rollback --list
 )"
 grep -Fq '610.57.04' <<<"$list_output" \
-  || fail 'cached NVIDIA history does not list the recoverable 610.57.04 driver'
+  || fail 'NVIDIA history does not list recoverable 610.57.04 when only the Arch Linux Archive has the old package set'
 
 if ! PATH="$fakebin:/usr/bin:/bin" \
   HOME="$TMP/home" \
@@ -341,7 +364,7 @@ if ! PATH="$fakebin:/usr/bin:/bin" \
   FAKE_PACMAN_STATE="$state" \
   "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null
 then
-  fail 'cached NVIDIA historical version switch failed'
+  fail 'Arch Linux Archive-backed NVIDIA historical version switch failed'
 fi
 
 grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
@@ -366,4 +389,4 @@ grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
   || fail 'saved rollback did not return from historical NVIDIA testing to 615.71.09'
 grep -Fxq 'linux 6.18.2.arch1-1' "$state" \
   || fail 'saved rollback did not restore the matching pre-switch kernel'
-printf '%s\n' 'PASS: NVIDIA upgrades require consent, saved rollback is recoverable, historical cached versions are selectable, and stale rollback points fail closed.'
+printf '%s\n' 'PASS: NVIDIA upgrades require consent, saved rollback is recoverable, historical versions can fall back to the Arch Linux Archive, and stale rollback points fail closed.'

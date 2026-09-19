@@ -26,6 +26,7 @@ NVIDIA_ROLLBACK_PENDING=""
 NVIDIA_ROLLBACK_COMPLETE=0
 PACMAN_CACHE_DIR="/var/cache/pacman/pkg"
 PACMAN_LOG_FILE="/var/log/pacman.log"
+NVIDIA_ARCHIVE_BASE="https://archive.archlinux.org/packages/.all"
 declare -a PACMAN_RECOVERY_RUN_ARGS=()
 
 # Packages required by currently exposed Awtarchy shell/runtime features.
@@ -113,8 +114,10 @@ On systems with NVIDIA drivers, a full system upgrade requires confirmation.
 Awtarchy saves a rollback point from the currently cached NVIDIA/kernel
 packages when possible so the last driver update can be restored later.
 Use --pick to choose another fully recoverable historical driver version from
-trusted pacman cache/history, --list to inspect those versions, or --version to
-select one directly. Awtarchy refuses incomplete historical package sets.
+pacman history. Required package archives are reused from the trusted local
+pacman cache when present, otherwise Awtarchy can use the official Arch Linux
+Archive. --list inspects recoverable versions and --version selects one directly.
+Awtarchy refuses incomplete historical package sets.
 EOF
 }
 
@@ -718,6 +721,58 @@ find_cached_package_archive() {
   return 1
 }
 
+valid_archive_package_component() {
+  [[ "$1" =~ ^[A-Za-z0-9@._+:-]+$ ]]
+}
+
+find_archlinux_archive_package_url() {
+  local pkg="$1" version="$2" arch="" extension="" filename="" url=""
+
+  valid_archive_package_component "$pkg" || return 1
+  valid_archive_package_component "$version" || return 1
+  have curl || return 1
+
+  for arch in x86_64 any; do
+    for extension in pkg.tar.zst pkg.tar.xz pkg.tar.gz; do
+      filename="${pkg}-${version}-${arch}.${extension}"
+      url="${NVIDIA_ARCHIVE_BASE}/${filename}"
+      if curl --fail --silent --show-error --location --head \
+        --connect-timeout 4 --max-time 12 -- "$url" >/dev/null 2>&1;
+      then
+        printf '%s\n' "$url"
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+trusted_nvidia_history_source() {
+  local source="$1"
+
+  if [[ "$source" == "${PACMAN_CACHE_DIR}/"* ]]; then
+    trusted_nvidia_cache_archive "$source"
+    return $?
+  fi
+
+  [[ "$source" == "${NVIDIA_ARCHIVE_BASE}/"* ]] || return 1
+  [[ "$source" != *$'\n'* && "$source" != *$'\r'* && "$source" != *' '* ]]
+}
+
+find_historical_package_source() {
+  local pkg="$1" version="$2" source=""
+
+  source="$(find_cached_package_archive "$pkg" "$version" 2>/dev/null || true)"
+  if [[ -n "$source" ]]; then
+    printf '%s\n' "$source"
+    return 0
+  fi
+
+  source="$(find_archlinux_archive_package_url "$pkg" "$version" 2>/dev/null || true)"
+  [[ -n "$source" ]] || return 1
+  printf '%s\n' "$source"
+}
+
 nvidia_driver_version_from_package_version() {
   local version="${1#*:}"
   version="${version%-*}"
@@ -845,7 +900,7 @@ build_nvidia_history_bundle() {
       fi
 
       [[ "$target_version" != "$current_version" ]] || continue
-      archive="$(find_cached_package_archive "$pkg" "$target_version" 2>/dev/null || true)"
+      archive="$(find_historical_package_source "$pkg" "$target_version" 2>/dev/null || true)"
       [[ -n "$archive" ]] || { complete=0; break; }
       printf '%s\t%s\t%s\t%s\n' \
         "$pkg" "$current_version" "$target_version" "$archive" >>"$attempt"
@@ -913,7 +968,7 @@ print_recoverable_nvidia_versions() {
   mapfile -t versions < <(recoverable_nvidia_history_versions)
 
   printf 'Current NVIDIA driver: %s\n' "$current_driver"
-  printf 'Recoverable cached historical driver versions:\n'
+  printf 'Recoverable historical driver versions (local cache or Arch Linux Archive):\n'
   if (( ${#versions[@]} == 0 )); then
     printf '  (none)\n'
     return 1
@@ -939,7 +994,7 @@ apply_nvidia_history_version() {
   bundle="$(mktemp)"
   if ! build_nvidia_history_bundle "$target_driver" "$bundle"; then
     rm -f -- "$bundle"
-    die "No complete trusted cached NVIDIA/kernel package set can reconstruct driver ${target_driver}. Awtarchy will not guess or perform a partial rollback."
+    die "No complete trusted NVIDIA/kernel package set can reconstruct driver ${target_driver} from local cache/history or the Arch Linux Archive. Awtarchy will not guess or perform a partial rollback."
   fi
 
   if [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
@@ -952,7 +1007,7 @@ apply_nvidia_history_version() {
   fi
 
   if (( assume_yes == 0 )); then
-    confirm_yes_no "Switch to cached NVIDIA driver ${target_driver} now?" 0 \
+    confirm_yes_no "Switch to historical NVIDIA driver ${target_driver} now?" 0 \
       || { rm -f -- "$bundle"; log 'NVIDIA driver version switch canceled.'; return 0; }
   fi
 
@@ -980,10 +1035,8 @@ apply_nvidia_history_version() {
   esac
 
   while IFS=$'\t' read -r pkg current_version target_version archive; do
-    [[ "$archive" == "${PACMAN_CACHE_DIR}/"* ]] \
-      || die "Historical NVIDIA archive escaped the trusted pacman cache: ${archive}"
-    trusted_nvidia_cache_archive "$archive" \
-      || die "Historical NVIDIA archive is not trusted for privileged restore: $(basename -- "$archive")"
+    trusted_nvidia_history_source "$archive" \
+      || die "Historical NVIDIA source is not trusted for privileged restore: ${archive}"
     archives+=("$archive")
   done <"$bundle"
 
@@ -1028,10 +1081,10 @@ pick_nvidia_history_version() {
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
   mapfile -t versions < <(recoverable_nvidia_history_versions)
   (( ${#versions[@]} > 0 )) \
-    || die "No complete historical NVIDIA/kernel package sets are available in the trusted pacman cache."
+    || die "No complete historical NVIDIA/kernel package sets are available from the local pacman cache or Arch Linux Archive."
 
   printf '\nCurrent NVIDIA driver: %s\n' "$current_driver" >/dev/tty
-  printf 'Recoverable cached historical driver versions:\n' >/dev/tty
+  printf 'Recoverable historical driver versions (local cache or Arch Linux Archive):\n' >/dev/tty
   for i in "${!versions[@]}"; do
     printf '  %d. %s\n' "$((i + 1))" "${versions[$i]}" >/dev/tty
   done
