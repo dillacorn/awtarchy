@@ -52,12 +52,18 @@ if grep -Fq 'run_package_reconciler --nvidia-rollback' "$LAUNCHER"; then
 fi
 grep -Fq 'NVIDIA_ROLLBACK_ROOT="/var/lib/awtarchy"' "$RECONCILER" \
   || fail 'production NVIDIA rollback state is not rooted under /var/lib/awtarchy'
-grep -Fq 'PACMAN_LOG_FILE="/var/log/pacman.log"' "$RECONCILER" \
-  || fail 'historical NVIDIA rollback is not pinned to the system pacman log'
-grep -Fq 'build_nvidia_history_bundle' "$RECONCILER" \
-  || fail 'NVIDIA rollback has no historical package-set reconstruction'
+grep -Fq 'available_nvidia_driver_releases' "$RECONCILER" \
+  || fail 'NVIDIA rollback has no archived driver-release catalog'
+grep -Fq 'build_nvidia_release_bundle' "$RECONCILER" \
+  || fail 'NVIDIA rollback has no archived release bundle builder'
 grep -Fq 'apply_nvidia_history_version' "$RECONCILER" \
-  || fail 'NVIDIA rollback has no historical version application path'
+  || fail 'NVIDIA rollback has no archived version application path'
+grep -Fq 'nvidia-open-dkms' "$RECONCILER" \
+  || fail 'modern NVIDIA rollback does not use the kernel-independent open DKMS module strategy'
+grep -Fq 'ensure_nvidia_dkms_kernel_headers' "$RECONCILER" \
+  || fail 'NVIDIA rollback does not guarantee matching kernel headers before DKMS'
+grep -Fq 'restore_failed_nvidia_switch' "$RECONCILER" \
+  || fail 'failed NVIDIA release switches have no automatic restore path'
 grep -Fq 'ARCH_PACKAGE_ARCHIVE_BASE="https://archive.archlinux.org/packages"' "$RECONCILER" \
   || fail 'NVIDIA historical recovery is not pinned to the official Arch Linux Archive'
 grep -Fq 'CACHY_PACKAGE_ARCHIVE_BASE="https://archive.cachyos.org/archive"' "$RECONCILER" \
@@ -68,6 +74,10 @@ grep -Fq 'find_archlinux_archive_package_url' "$RECONCILER" \
   || fail 'NVIDIA historical recovery has no Arch Linux Archive fallback'
 grep -Fq 'trusted_nvidia_history_source' "$RECONCILER" \
   || fail 'NVIDIA historical recovery does not validate local/remote package sources before pacman -U'
+grep -Fq 'stage_nvidia_rollback_archive' "$RECONCILER" \
+  || fail 'NVIDIA return points cannot stage missing current packages from trusted archives'
+grep -Fq 'pacman-key --verify' "$RECONCILER" \
+  || fail 'archive-backed NVIDIA return points do not verify detached package signatures'
 grep -Fq 'validate_nvidia_rollback_storage' "$RECONCILER" \
   || fail 'NVIDIA rollback does not validate privileged restore state'
 # shellcheck disable=SC2016
@@ -93,6 +103,9 @@ fi
 # shellcheck disable=SC2016
 grep -Fq 'if ! as_root pacman -U --needed --noconfirm "${archives[@]}"; then' "$RECONCILER" \
   || fail 'NVIDIA rollback package transaction is not explicitly failure-checked'
+# shellcheck disable=SC2016
+grep -Fq 'if ! as_root pacman -R --noconfirm -- "${removals[@]}"; then' "$RECONCILER" \
+  || fail 'NVIDIA rollback cannot remove packages that were absent before a release switch'
 
 python3 - "$RECONCILER" <<'PY'
 from pathlib import Path
