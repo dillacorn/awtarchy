@@ -65,7 +65,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --json name,targetCommitish,isDraft,isPrerelease,body \
             > /tmp/release-before.json
-          jq -r '.body' /tmp/release-before.json > /tmp/release-before.md
+          jq -j '.body' /tmp/release-before.json > /tmp/release-before.md
 
           test "$(jq -r '.name' /tmp/release-before.json)" = "$EXPECTED_TITLE"
           test "$(jq -r '.targetCommitish' /tmp/release-before.json)" = "$EXPECTED_TARGET"
@@ -120,7 +120,7 @@ jobs:
             --repo "$GITHUB_REPOSITORY" \
             --json name,targetCommitish,isDraft,isPrerelease,body \
             > /tmp/release-after.json
-          jq -r '.body' /tmp/release-after.json > /tmp/release-after.md
+          jq -j '.body' /tmp/release-after.json > /tmp/release-after.md
 
           cmp -s /tmp/release-proposed.md /tmp/release-after.md
           python3 .github/scripts/validate-stable-release-notes.py \
