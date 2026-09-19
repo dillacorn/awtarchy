@@ -6,6 +6,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
 YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
+MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
 fail() {
@@ -24,7 +25,7 @@ if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
 
-python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi text opener is not pinned to blocking Micro'
+python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener is not delegated to the desktop default application'
 import sys
 import tomllib
 
@@ -37,23 +38,24 @@ if not isinstance(rules, list):
 
 if not any(
     isinstance(rule, dict)
-    and rule.get("run") == "/usr/bin/micro %s"
-    and rule.get("block") is True
+    and rule.get("run") == "/usr/bin/xdg-open %s"
     and rule.get("for") == "unix"
     for rule in rules
 ):
     raise SystemExit(1)
 
-if any(
-    isinstance(rule, dict)
-    and ("$EDITOR" in str(rule.get("run", "")) or "${EDITOR" in str(rule.get("run", "")))
-    for rule in rules
-):
-    raise SystemExit(1)
+for rule in rules:
+    if not isinstance(rule, dict):
+        continue
+    run = str(rule.get("run", ""))
+    if "micro" in run.lower() or "$EDITOR" in run or "${EDITOR" in run:
+        raise SystemExit(1)
 PY
 
-grep -Fq '"Terminal Apps:nano micro ' "$RUNTIME" \
-  || fail 'Micro is no longer part of the managed Terminal Apps package set'
+grep -Fq 'text/plain=micro.desktop' "$MIMEAPPS" \
+  || fail 'Awtarchy default text/plain association is no longer Micro'
+grep -Fq ' xdg-utils ' "$RUNTIME" \
+  || fail 'xdg-utils is no longer part of the managed package catalog'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
   || fail 'wl-clipboard is no longer part of the managed Window Management package set'
 grep -Fq 'is_legacy_yazi_clipboard_plugin()' "$RUNTIME" \
@@ -73,4 +75,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi uses Micro for text editing, wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
