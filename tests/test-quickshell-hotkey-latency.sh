@@ -132,6 +132,9 @@ QUICK_SETTINGS="$ROOT/config/quickshell/awtarchy/QuickSettings.qml"
 LAUNCHER="$ROOT/config/quickshell/awtarchy/Launcher.qml"
 CLIPBOARD="$ROOT/config/quickshell/awtarchy/ClipboardMenu.qml"
 NOTIFICATIONS="$ROOT/config/quickshell/awtarchy/Notifications.qml"
+NETWORK="$ROOT/config/quickshell/awtarchy/NetworkMenu.qml"
+BLUETOOTH="$ROOT/config/quickshell/awtarchy/BluetoothMenu.qml"
+BATTERY="$ROOT/config/quickshell/awtarchy/BatteryMenu.qml"
 
 for method in flipBarFocused rotateBarFocused toggleBarAutoHideFocused; do
     grep -Fq -- "function ${method}()" "$SHELL_QML" \
@@ -153,7 +156,7 @@ grep -Fq -- 'function rebuildStateCache()' "$BAR_STATE" \
 grep -Fq -- 'return stateCacheReady ? stateCache : emptyData();' "$BAR_STATE" \
     || fail 'BarState.data() still reparses state instead of returning the cache'
 
-python3 - "$BAR_STATE" "$QUICK_SETTINGS" "$LAUNCHER" "$CLIPBOARD" "$NOTIFICATIONS" <<'PY'
+python3 - "$BAR_STATE" "$QUICK_SETTINGS" "$LAUNCHER" "$CLIPBOARD" "$NOTIFICATIONS" "$NETWORK" "$BLUETOOTH" "$BATTERY" <<'PY'
 import re
 import sys
 
@@ -162,6 +165,9 @@ quick = open(sys.argv[2], encoding="utf-8").read()
 launcher = open(sys.argv[3], encoding="utf-8").read()
 clipboard = open(sys.argv[4], encoding="utf-8").read()
 notifications = open(sys.argv[5], encoding="utf-8").read()
+network = open(sys.argv[6], encoding="utf-8").read()
+bluetooth = open(sys.argv[7], encoding="utf-8").read()
+battery = open(sys.argv[8], encoding="utf-8").read()
 
 for name in (
     "setLivePosition",
@@ -245,6 +251,32 @@ for name, text, startup_id, interval, finish_call in (
     if "prepareProcess.exec(preparation.args);" not in text:
         raise SystemExit(f"FAIL: {name} lost blocking prepare fallback for stale cache")
 
+for name, text in (
+    ("Network", network),
+    ("Bluetooth", bluetooth),
+    ("Battery", battery),
+):
+    for needle in (
+        "property string preparedOpenKey:",
+        "property string pendingPrewarmKey:",
+        "function preparationForScreen(targetScreen)",
+        "function prewarmForScreen(targetScreen)",
+        "id: prewarmProcess",
+        "if (preparedOpenKey === preparation.key)",
+        "finishPreparedOpen(0, true);",
+        "prewarmProcess.running = false;",
+        "prepareProcess.exec(preparation.args);",
+    ):
+        if needle not in text:
+            raise SystemExit(f"FAIL: {name} bar prewarm contract missing: {needle}")
+
+if "function prewarmForScreen(targetScreen)" not in clipboard:
+    raise SystemExit("FAIL: Clipboard has no exact-monitor bar-hover prewarm path")
+if "function prewarmForItem(targetScreen, anchorItem)" not in notifications:
+    raise SystemExit("FAIL: Notifications have no exact-anchor bar-hover prewarm path")
+if "function prewarmForScreen(targetScreen, targetPlacement)" not in launcher:
+    raise SystemExit("FAIL: Launcher has no exact-monitor bar-hover prewarm path")
+
 if "property var incomingEntries: []" not in clipboard:
     raise SystemExit("FAIL: Clipboard does not retain a separate incoming refresh model")
 if "id: clipboardListRefresh" not in clipboard or "interval: 120" not in clipboard:
@@ -257,4 +289,4 @@ if "entries = [];" in re.search(
     raise SystemExit("FAIL: Clipboard still blanks retained rows before fresh data arrives")
 PY
 
-printf '%s\n' 'PASS: Quickshell hotkeys use direct IPC, cached state, and Quick Settings prewarm'
+printf '%s\n' 'PASS: Quickshell hotkeys and bar flyouts use direct IPC, cached state, and exact-target prewarm'
