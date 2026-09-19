@@ -186,8 +186,13 @@ for flyout in QuickSettings.qml NetworkMenu.qml BluetoothMenu.qml BatteryMenu.qm
   esac
   presented_line="$(grep -nF -- 'panelPresented = true;' "$path" | head -n1 | cut -d: -f1)"
   visible_line="$(grep -nF -- "${window_id}.visible = true;" "$path" | head -n1 | cut -d: -f1)"
-  [[ -n "$presented_line" && -n "$visible_line" && "$presented_line" -lt "$visible_line" ]] \
-    || fail "${flyout} does not start panel presentation before mapping the window"
+  if [[ "$flyout" == "QuickSettings.qml" ]]; then
+    [[ -n "$presented_line" && -n "$visible_line" && "$visible_line" -lt "$presented_line" ]] \
+      || fail 'Quick Settings does not map before starting its visible fade'
+  else
+    [[ -n "$presented_line" && -n "$visible_line" && "$presented_line" -lt "$visible_line" ]] \
+      || fail "${flyout} does not start panel presentation before mapping the window"
+  fi
 done
 
 if grep -Fq -- 'managedFlyoutWindow(' "$SHELL"; then
