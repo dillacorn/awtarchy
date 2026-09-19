@@ -943,13 +943,25 @@ available_nvidia_driver_releases() {
   LC_ALL=C sort -Vu -o "$utils_drivers" "$utils_drivers"
   comm -12 "$module_drivers" "$utils_drivers" >"$common_versions"
 
+  local older_versions=""
+  local driver_major=0 count=0
+  older_versions="$(mktemp)"
   while IFS= read -r driver; do
     [[ -n "$driver" ]] || continue
+    driver_major="${driver%%.*}"
+    [[ "$driver_major" =~ ^[0-9]+$ ]] || continue
+    (( driver_major >= 590 )) || continue
     driver_version_is_older "$driver" "$current_driver" || continue
-    printf '%s\n' "$driver"
-  done <"$common_versions" | LC_ALL=C sort -Vr | head -n 20
+    printf '%s\n' "$driver" >>"$older_versions"
+  done <"$common_versions"
 
-  rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions"
+  while IFS= read -r driver; do
+    [[ -n "$driver" ]] || continue
+    printf '%s\n' "$driver"
+    (( ++count >= 20 )) && break
+  done < <(LC_ALL=C sort -Vr "$older_versions")
+
+  rm -f -- "$module_versions" "$utils_versions" "$module_drivers" "$utils_drivers" "$common_versions" "$older_versions"
 }
 
 build_nvidia_release_bundle() {
@@ -1043,14 +1055,15 @@ verify_nvidia_dkms_release() {
 }
 
 prepare_nvidia_driver_switch_snapshot() {
-  local pkg
+  local tmp=""
   local -a candidates=()
 
   mapfile -t candidates < <(installed_nvidia_driver_switch_packages)
   candidates+=(nvidia-open-dkms)
-  printf '%s\n' "${candidates[@]}" | sed '/^$/d' | LC_ALL=C sort -u >"${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
-  mapfile -t candidates <"${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
-  rm -f -- "${TMPDIR:-/tmp}/awtarchy-nvidia-switch-candidates.$$"
+  tmp="$(mktemp)"
+  printf '%s\n' "${candidates[@]}" | sed '/^$/d' | LC_ALL=C sort -u >"$tmp"
+  mapfile -t candidates <"$tmp"
+  rm -f -- "$tmp"
 
   prepare_nvidia_rollback_snapshot "${candidates[@]}"
 }
@@ -1097,6 +1110,10 @@ apply_nvidia_history_version() {
 
   current_driver="$(installed_nvidia_driver_version)" \
     || die "nvidia-utils is not installed; no NVIDIA driver version can be selected."
+  [[ "${current_driver%%.*}" =~ ^[0-9]+$ && "${current_driver%%.*}" -ge 590 ]] \
+    || die "Archived release switching is supported only for the modern NVIDIA 590+ open-module stack."
+  [[ "${target_driver%%.*}" =~ ^[0-9]+$ && "${target_driver%%.*}" -ge 590 ]] \
+    || die "NVIDIA driver ${target_driver} predates Awtarchy's supported open-module rollback range."
   if [[ "$current_driver" == "$target_driver" ]]; then
     log "NVIDIA driver ${target_driver} is already installed."
     return 0
