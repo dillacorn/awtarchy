@@ -19,7 +19,7 @@ QtObject {
     readonly property string animationStatePath: runtimeDir + "/hypr-animations-enabled"
     readonly property bool animationsEnabled: animationStateFile.text().trim() !== "0"
     readonly property int recentBarMonitorLifetimeMs: 1500
-    readonly property int toggleDebounceMs: 250
+    readonly property int toggleDebounceMs: 0
     signal closeRequested(string exceptSurface)
 
     property FileView animationStateFile: FileView {
@@ -122,6 +122,9 @@ QtObject {
     }
 
     function acceptToggle(surface) {
+        if (toggleDebounceMs <= 0)
+            return true;
+
         const key = String(surface || "");
         if (key.length === 0)
             return true;
