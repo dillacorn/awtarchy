@@ -75,6 +75,8 @@ Singleton {
     property string preparedStateMonitor: ""
     property int preparedStateRevision: -1
     property bool secondaryCardsActive: false
+    property bool fastPresentation: false
+    property bool postMapPositionRequired: true
     readonly property int panelFadeDuration: 140
     readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
@@ -359,10 +361,13 @@ Singleton {
         const wasVisible = quickSettingsWindow.visible;
 
         openPreparing = false;
+        postMapPositionRequired = exitCode !== 0;
         panelPresented = true;
         quickSettingsWindow.visible = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
+        else if (fastPresentation)
+            Qt.callLater(() => root.fastPresentation = false);
 
         // The startup prewarm already populated status. Give the mapped window
         // its first frame before spawning the heavier live-status backend.
@@ -894,9 +899,11 @@ Singleton {
         Qt.callLater(() => root.resizeForSettingsMode());
     }
 
-    function openForScreen(targetScreen) {
+    function openForScreen(targetScreen, fastOpen) {
         if (!targetScreen)
             return;
+        fastPresentation = Boolean(fastOpen);
+        postMapPositionRequired = true;
         FlyoutManager.claim("quick-settings", targetScreen.name);
         flyoutScreen = targetScreen;
         if (!quickSettingsWindow.visible)
@@ -919,10 +926,12 @@ Singleton {
         prepareWindowOpen(targetScreen);
     }
 
-    function openFocused() { openForScreen(focusedScreen()); }
+    function openFocused() { openForScreen(focusedScreen(), true); }
 
     function close() {
         openPreparing = false;
+        fastPresentation = false;
+        postMapPositionRequired = true;
         secondaryCardsActive = false;
         quickSettingsOpenStatusRefresh.stop();
         quickSettingsSecondaryCardsRefresh.stop();
@@ -952,24 +961,24 @@ Singleton {
         outputVolumeHoverPercent = -1;
     }
 
-    function toggleForScreenNow(targetScreen) {
+    function toggleForScreenNow(targetScreen, fastOpen) {
         const currentName = activeMonitorName;
         const targetName = targetScreen ? targetScreen.name : "";
         if ((quickSettingsWindow.visible || openPreparing)
             && currentName.length > 0 && currentName === targetName)
             close();
         else
-            openForScreen(targetScreen);
+            openForScreen(targetScreen, fastOpen);
     }
 
     function toggleForScreen(targetScreen) {
         if (!FlyoutManager.acceptToggle("quick-settings"))
             return;
-        toggleForScreenNow(targetScreen);
+        toggleForScreenNow(targetScreen, false);
     }
 
     function toggleFocused() {
-        toggleForScreenNow(focusedScreen());
+        toggleForScreenNow(focusedScreen(), true);
     }
 
     FileView {
@@ -1219,7 +1228,8 @@ Singleton {
         onClosed: root.close()
         onVisibleChanged: {
             if (visible) {
-                Qt.callLater(() => root.positionWindow());
+                if (root.postMapPositionRequired)
+                    Qt.callLater(() => root.positionWindow());
                 Qt.callLater(() => root.alignContentToBar());
             }
         }
@@ -1229,7 +1239,7 @@ Singleton {
             opacity: root.panelPresented ? 1 : 0
 
             Behavior on opacity {
-                enabled: FlyoutManager.animationsEnabled
+                enabled: FlyoutManager.animationsEnabled && !root.fastPresentation
                 NumberAnimation {
                     duration: root.panelFadeDuration
                     easing.type: Easing.OutCubic
