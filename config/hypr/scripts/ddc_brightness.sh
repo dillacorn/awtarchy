@@ -455,6 +455,11 @@ adjust() {
 toggle_quick_settings() {
   local quickshell_manager
   quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/quickshell.sh"
+
+  if qs -c awtarchy ipc call quicksettings toggle >/dev/null 2>&1; then
+    return 0
+  fi
+
   "$quickshell_manager" start >/dev/null 2>&1 || true
   qs -c awtarchy ipc call quicksettings toggle >/dev/null
 }
