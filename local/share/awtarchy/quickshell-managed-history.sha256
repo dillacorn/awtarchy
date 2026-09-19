@@ -1435,3 +1435,6 @@ f91d72d27fd55533f8da89a8f8abb8a85c06710c09dfbe76b4d1a908d195626a	.config/quicksh
 
 # 2026-09-18 launcher keyboard fast path.
 b974687c9ebe4f5758c9b4f40f73951c13d1314b576f3118c641bb96a243b564	.config/hypr/scripts/quickshell_launcher.sh
+
+# 2026-09-18 rapid launcher keyboard toggles.
+2f7aec565d9f6bc11a65af2121b079e24759dd74b32cccea4fefef819d6dd2ad	.config/quickshell/awtarchy/Launcher.qml
