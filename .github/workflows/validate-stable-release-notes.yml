@@ -39,3 +39,103 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  update-v3-7-3-yazi-post-release:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Update v3.7.3 post-release Yazi patch' &&
+      github.head_ref == 'release/v3.7.3-yazi-post-update' &&
+      github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v3.7.3
+      EXPECTED_TITLE: Awtarchy v3.7.3 Quickshell
+      EXPECTED_TARGET: e9c5048722c6a2c46c14ab51e0d6c4c1f9473c7c
+      POST_UPDATE_COMMIT: e5f4ad3d8fdace0e248c41a51652b491004f70e3
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Snapshot published release and tag
+        run: |
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json name,targetCommitish,isDraft,isPrerelease,body \
+            > /tmp/release-before.json
+          jq -r '.body' /tmp/release-before.json > /tmp/release-before.md
+
+          test "$(jq -r '.name' /tmp/release-before.json)" = "$EXPECTED_TITLE"
+          test "$(jq -r '.targetCommitish' /tmp/release-before.json)" = "$EXPECTED_TARGET"
+          test "$(jq -r '.isDraft' /tmp/release-before.json)" = "false"
+          test "$(jq -r '.isPrerelease' /tmp/release-before.json)" = "false"
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          test "$tag_sha" = "$EXPECTED_TARGET"
+          printf '%s\n' "$tag_sha" > /tmp/tag-before.sha
+
+      - name: Generate proposed post-release body
+        run: |
+          python3 - /tmp/release-before.md /tmp/release-proposed.md <<'PY'
+          from pathlib import Path
+          import sys
+
+          source = Path(sys.argv[1])
+          target = Path(sys.argv[2])
+          body = source.read_text(encoding="utf-8")
+          placeholder = "_Placeholder for possible tested post-release patches to v3.7.3._"
+          patch = (
+              "- Yazi now opens text files with the user's configured desktop default editor; "
+              "Awtarchy still defaults `text/plain` to Micro. The v3.7.3 updater delivers this "
+              "post-release repair without moving the release tag.\n"
+              "- The maintainer runtime-tested the fix; PR #220 passed all 20 workflows and merged "
+              "`main` commit `e5f4ad3d8fdace0e248c41a51652b491004f70e3` passed all 14 push workflows.\n\n"
+          )
+
+          if placeholder not in body:
+              raise SystemExit("v3.7.3 post-release placeholder is missing")
+          if patch.strip() not in body:
+              body = body.replace(placeholder, patch + placeholder, 1)
+          target.write_text(body, encoding="utf-8")
+          PY
+
+      - name: Validate proposed release notes
+        run: |
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" \
+            --notes /tmp/release-proposed.md \
+            --previous /tmp/release-before.md
+
+      - name: Update existing v3.7.3 release body only
+        run: |
+          gh release edit "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --notes-file /tmp/release-proposed.md
+
+      - name: Verify published release and unchanged metadata
+        run: |
+          gh release view "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json name,targetCommitish,isDraft,isPrerelease,body \
+            > /tmp/release-after.json
+          jq -r '.body' /tmp/release-after.json > /tmp/release-after.md
+
+          cmp -s /tmp/release-proposed.md /tmp/release-after.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" \
+            --notes /tmp/release-after.md \
+            --previous /tmp/release-before.md
+
+          test "$(jq -r '.name' /tmp/release-after.json)" = "$(jq -r '.name' /tmp/release-before.json)"
+          test "$(jq -r '.targetCommitish' /tmp/release-after.json)" = "$(jq -r '.targetCommitish' /tmp/release-before.json)"
+          test "$(jq -r '.isDraft' /tmp/release-after.json)" = "$(jq -r '.isDraft' /tmp/release-before.json)"
+          test "$(jq -r '.isPrerelease' /tmp/release-after.json)" = "$(jq -r '.isPrerelease' /tmp/release-before.json)"
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq '.object.sha')"
+          test "$tag_sha" = "$(cat /tmp/tag-before.sha)"
+          test "$tag_sha" = "$EXPECTED_TARGET"
+
+          main_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')"
+          test "$main_sha" = "$POST_UPDATE_COMMIT"
