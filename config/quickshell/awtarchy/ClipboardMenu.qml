@@ -39,6 +39,12 @@ Singleton {
     property bool privacyRemapPending: false
     property bool openPreparing: false
     property bool panelPresented: false
+    property string preparedOpenKey: ""
+    property string pendingPrewarmKey: ""
+    property bool prewarmEnabled: false
+    property string preparedStateMonitor: ""
+    property int preparedStateRevision: -1
+    property var incomingEntries: []
     readonly property int panelFadeDuration: 140
     property var flyoutScreen: null
     property bool listLoading: false
@@ -129,33 +135,102 @@ Singleton {
         ]);
     }
 
+    function ensurePreparedState(targetScreen) {
+        if (!targetScreen || !targetScreen.name)
+            return;
+        const monitorName = String(targetScreen.name);
+        if (preparedStateMonitor === monitorName
+            && preparedStateRevision === BarState.revision)
+            return;
+        loadSavedView(targetScreen);
+        preparedStateMonitor = monitorName;
+        preparedStateRevision = BarState.revision;
+    }
+
+    function clipboardPreparation(targetScreen) {
+        if (!targetScreen)
+            return null;
+        const targetPlacement = placementForScreen(targetScreen);
+        const view = BarState.clipboardViewFor(targetScreen.name);
+        const screenWidth = Math.max(1, Math.round(Number(targetScreen.width) || 1920));
+        const screenHeight = Math.max(1, Math.round(Number(targetScreen.height) || 1080));
+        const width = Math.max(Math.min(480, screenWidth - 20),
+            Math.min(screenWidth - 20, Math.round(Number(view.width) || BarState.defaultClipboardWidth)));
+        const height = Math.max(Math.min(360, screenHeight - 20),
+            Math.min(screenHeight - 20, Math.round(Number(view.height) || BarState.defaultClipboardHeight)));
+        const vertical = targetPlacement === "left" || targetPlacement === "right";
+        const barSize = targetPlacement === "center"
+            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const key = [
+            targetScreen.name, targetPlacement, width, height,
+            barSize, screenWidth, screenHeight
+        ].join("|");
+        return ({
+            key: key,
+            placement: targetPlacement,
+            args: [
+                "bash", prepareScript, "clipboard", targetScreen.name, targetPlacement,
+                String(width), String(height), String(barSize), "-1",
+                String(screenWidth), String(screenHeight)
+            ]
+        });
+    }
+
+    function prewarmFocused() {
+        if (clipboardWindow.visible || openPreparing || prewarmProcess.running)
+            return;
+        const targetScreen = focusedScreen();
+        const preparation = clipboardPreparation(targetScreen);
+        if (!targetScreen || !preparation)
+            return;
+        flyoutScreen = targetScreen;
+        placement = preparation.placement;
+        ensurePreparedState(targetScreen);
+        if (preparedOpenKey === preparation.key)
+            return;
+        pendingPrewarmKey = preparation.key;
+        prewarmProcess.exec(preparation.args);
+    }
+
+    function finishPrewarm(exitCode) {
+        if (exitCode === 0 && pendingPrewarmKey.length > 0)
+            preparedOpenKey = pendingPrewarmKey;
+        pendingPrewarmKey = "";
+    }
+
     function prepareWindowOpen(targetScreen) {
         if (!targetScreen)
             return;
-        const vertical = placement === "left" || placement === "right";
-        const barSize = placement === "center"
-            ? 0 : BarState.barSizeFor(targetScreen.name, vertical);
+        const preparation = clipboardPreparation(targetScreen);
+        if (!preparation)
+            return;
+        placement = preparation.placement;
         openPreparing = true;
-        prepareProcess.exec([
-            "bash", prepareScript, "clipboard", targetScreen.name, placement,
-            String(configuredPanelWidth), String(configuredPanelHeight),
-            String(barSize), "-1",
-            String(Math.round(targetScreen.width)), String(Math.round(targetScreen.height))
-        ]);
+        if (preparedOpenKey === preparation.key) {
+            finishPreparedOpen(0, true);
+            return;
+        }
+        if (prewarmProcess.running)
+            prewarmProcess.running = false;
+        prepareProcess.exec(preparation.args);
     }
 
-    function finishPreparedOpen() {
+    function finishPreparedOpen(exitCode, usedPrewarm) {
         if (!openPreparing)
             return;
+        if (!usedPrewarm && exitCode === 0) {
+            const preparation = clipboardPreparation(activeScreen);
+            if (preparation)
+                preparedOpenKey = preparation.key;
+        }
 
         const wasVisible = clipboardWindow.visible;
-
         openPreparing = false;
         panelPresented = true;
         clipboardWindow.visible = true;
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
-        beginListLoad();
+        clipboardListRefresh.restart();
         Qt.callLater(() => {
             clipboardList.positionViewAtBeginning();
             search.forceActiveFocus();
@@ -213,7 +288,7 @@ Singleton {
         settingsPanel.resetCopySelection();
         settingsMessage = "";
         closeDetail();
-        loadSavedView(target);
+        ensurePreparedState(target);
         search.text = "";
         prepareWindowOpen(target);
     }
@@ -234,6 +309,7 @@ Singleton {
             thumbnailProcess.running = false;
         }
         listLoading = false;
+        clipboardListRefresh.stop();
         thumbnailQueue = [];
         thumbnailKnown = ({});
         activeThumbnailIndex = -1;
@@ -518,7 +594,7 @@ Singleton {
             thumbnailProcess.running = false;
         }
 
-        entries = [];
+        incomingEntries = [];
         listError = "";
         listLoading = true;
         listStopping = false;
@@ -542,18 +618,21 @@ Singleton {
             Qt.callLater(() => root.startListLoadNow());
             return;
         }
+        if (exitCode === 0 && incomingEntries.length === 0)
+            entries = [];
         if (exitCode !== 0 && listError.length === 0)
             listError = "Clipboard history could not be loaded";
     }
 
     function appendClipboardRecord(line) {
-        const nextEntries = ClipboardLoadState.appendRecord(entries, line);
-        if (nextEntries.length === entries.length) {
+        const nextEntries = ClipboardLoadState.appendRecord(incomingEntries, line);
+        if (nextEntries.length === incomingEntries.length) {
             console.warn("Awtarchy clipboard record parse failed:", String(line));
             return;
         }
 
-        const firstEntry = entries.length === 0;
+        const firstEntry = incomingEntries.length === 0;
+        incomingEntries = nextEntries;
         entries = nextEntries;
         if (firstEntry) {
             clipboardList.currentIndex = 0;
@@ -601,7 +680,58 @@ Singleton {
 
     Process {
         id: prepareProcess
-        onExited: root.finishPreparedOpen()
+        onExited: (exitCode, exitStatus) => root.finishPreparedOpen(exitCode, false)
+    }
+
+    Process {
+        id: prewarmProcess
+        onExited: (exitCode, exitStatus) => root.finishPrewarm(exitCode)
+    }
+
+    Timer {
+        id: clipboardStartupPrewarm
+        interval: 1300
+        repeat: false
+        running: true
+        onTriggered: {
+            root.prewarmEnabled = true;
+            root.prewarmFocused();
+        }
+    }
+
+    Timer {
+        id: clipboardPrewarmRefresh
+        interval: 220
+        repeat: false
+        onTriggered: root.prewarmFocused()
+    }
+
+    Timer {
+        id: clipboardListRefresh
+        interval: 120
+        repeat: false
+        onTriggered: {
+            if (clipboardWindow.visible)
+                root.beginListLoad();
+        }
+    }
+
+    Connections {
+        target: BarState
+        function onRevisionChanged() {
+            if (root.prewarmEnabled && !clipboardWindow.visible && !root.openPreparing)
+                clipboardPrewarmRefresh.restart();
+        }
+    }
+
+    Connections {
+        target: Hyprland
+        function onRawEvent(event) {
+            if (!root.prewarmEnabled || !event || clipboardWindow.visible || root.openPreparing)
+                return;
+            if (event.name === "focusedmon" || event.name === "focusedmonv2")
+                clipboardPrewarmRefresh.restart();
+        }
     }
 
     Process {
