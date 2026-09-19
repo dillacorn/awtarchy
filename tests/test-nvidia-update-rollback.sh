@@ -58,8 +58,12 @@ grep -Fq 'build_nvidia_history_bundle' "$RECONCILER" \
   || fail 'NVIDIA rollback has no historical package-set reconstruction'
 grep -Fq 'apply_nvidia_history_version' "$RECONCILER" \
   || fail 'NVIDIA rollback has no historical version application path'
-grep -Fq 'NVIDIA_ARCHIVE_BASE="https://archive.archlinux.org/packages/.all"' "$RECONCILER" \
+grep -Fq 'ARCH_PACKAGE_ARCHIVE_BASE="https://archive.archlinux.org/packages"' "$RECONCILER" \
   || fail 'NVIDIA historical recovery is not pinned to the official Arch Linux Archive'
+grep -Fq 'CACHY_PACKAGE_ARCHIVE_BASE="https://archive.cachyos.org/archive"' "$RECONCILER" \
+  || fail 'NVIDIA historical recovery is not pinned to the official CachyOS archive'
+grep -Fq 'find_cachyos_archive_package_url' "$RECONCILER" \
+  || fail 'NVIDIA historical recovery has no CachyOS archive fallback'
 grep -Fq 'find_archlinux_archive_package_url' "$RECONCILER" \
   || fail 'NVIDIA historical recovery has no Arch Linux Archive fallback'
 grep -Fq 'trusted_nvidia_history_source' "$RECONCILER" \
@@ -154,7 +158,9 @@ end = source.index("\n}\n\ntrusted_nvidia_cache_archive()", start)
 source = source[:start] + "root_owned_nonwritable_path() {\n  return 0\n}" + source[end + 2:]
 start = source.index("current_kernel_package_names() {")
 end = source.index("\n}\n\nnvidia_rollback_candidate_packages()", start)
-source = source[:start] + "current_kernel_package_names() {\n  printf '%s\\n' linux\n}" + source[end + 2:]
+source = source[:start] + """current_kernel_package_names() {
+  printf '%s\\n' "${FAKE_KERNEL_PACKAGE:-linux}"
+}""" + source[end + 2:]
 out.write_text(source, encoding="utf-8")
 PY
 chmod +x "$test_reconciler"
@@ -230,6 +236,26 @@ case "${1:-}" in
               printf '%s\n' 'linux 6.18.2.arch1-1' >>"${state}.tmp"
               mv "${state}.tmp" "$state"
               ;;
+            linux-cachyos-lts-6.18.42-1-*.pkg.tar.*)
+              awk '$1 != "linux-cachyos-lts"' "$state" >"${state}.tmp"
+              printf '%s\n' 'linux-cachyos-lts 6.18.42-1' >>"${state}.tmp"
+              mv "${state}.tmp" "$state"
+              ;;
+            linux-cachyos-lts-6.18.50-3-*.pkg.tar.*)
+              awk '$1 != "linux-cachyos-lts"' "$state" >"${state}.tmp"
+              printf '%s\n' 'linux-cachyos-lts 6.18.50-3' >>"${state}.tmp"
+              mv "${state}.tmp" "$state"
+              ;;
+            linux-cachyos-lts-nvidia-open-6.18.42-1-*.pkg.tar.*)
+              awk '$1 != "linux-cachyos-lts-nvidia-open"' "$state" >"${state}.tmp"
+              printf '%s\n' 'linux-cachyos-lts-nvidia-open 6.18.42-1' >>"${state}.tmp"
+              mv "${state}.tmp" "$state"
+              ;;
+            linux-cachyos-lts-nvidia-open-6.18.50-3-*.pkg.tar.*)
+              awk '$1 != "linux-cachyos-lts-nvidia-open"' "$state" >"${state}.tmp"
+              printf '%s\n' 'linux-cachyos-lts-nvidia-open 6.18.50-3' >>"${state}.tmp"
+              mv "${state}.tmp" "$state"
+              ;;
           esac
           shift
           ;;
@@ -257,8 +283,10 @@ cat >"$fakebin/curl" <<'EOF'
 set -Eeuo pipefail
 url="${!#}"
 case "$url" in
-  https://archive.archlinux.org/packages/.all/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst|\
-  https://archive.archlinux.org/packages/.all/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst)
+  https://archive.archlinux.org/packages/n/nvidia-utils/nvidia-utils-610.57.04-1-x86_64.pkg.tar.zst|\
+  https://archive.archlinux.org/packages/l/linux/linux-6.18.1.arch1-1-x86_64.pkg.tar.zst|\
+  https://archive.cachyos.org/archive/cachyos/linux-cachyos-lts-6.18.42-1-x86_64.pkg.tar.zst|\
+  https://archive.cachyos.org/archive/cachyos/linux-cachyos-lts-nvidia-open-6.18.42-1-x86_64.pkg.tar.zst)
     exit 0
     ;;
   *)
@@ -389,4 +417,57 @@ grep -Fxq 'nvidia-utils 615.71.09-1' "$state" \
   || fail 'saved rollback did not return from historical NVIDIA testing to 615.71.09'
 grep -Fxq 'linux 6.18.2.arch1-1' "$state" \
   || fail 'saved rollback did not restore the matching pre-switch kernel'
-printf '%s\n' 'PASS: NVIDIA upgrades require consent, saved rollback is recoverable, historical versions can fall back to the Arch Linux Archive, and stale rollback points fail closed.'
+rm -rf -- "$rollback"
+mkdir -p -- "$rollback/packages"
+rm -f -- "$cache"/*
+
+cat >"$pacman_log" <<'EOF'
+[2026-08-09T18:00:00-0400] [ALPM] transaction started
+[2026-08-09T18:00:01-0400] [ALPM] upgraded linux-cachyos-lts (6.18.42-1 -> 6.18.50-3)
+[2026-08-09T18:00:02-0400] [ALPM] upgraded linux-cachyos-lts-nvidia-open (6.18.42-1 -> 6.18.50-3)
+[2026-08-09T18:00:03-0400] [ALPM] upgraded nvidia-utils (610.57.04-1 -> 615.71.09-1)
+[2026-08-09T18:00:04-0400] [ALPM] transaction completed
+EOF
+
+: >"$cache/nvidia-utils-615.71.09-1-x86_64.pkg.tar.zst"
+: >"$cache/linux-cachyos-lts-6.18.50-3-x86_64.pkg.tar.zst"
+: >"$cache/linux-cachyos-lts-nvidia-open-6.18.50-3-x86_64.pkg.tar.zst"
+
+cat >"$state" <<'EOF'
+nvidia-utils 615.71.09-1
+linux-cachyos-lts 6.18.50-3
+linux-cachyos-lts-nvidia-open 6.18.50-3
+EOF
+
+cachy_list_output="$(
+  PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
+  FAKE_PACMAN_STATE="$state" \
+  "$test_reconciler" --nvidia-rollback --list
+)"
+grep -Fq '610.57.04' <<<"$cachy_list_output" \
+  || fail 'CachyOS historical NVIDIA recovery does not list 610.57.04 when kernel/module packages are only in the CachyOS archive'
+
+if ! PATH="$fakebin:/usr/bin:/bin" \
+  HOME="$TMP/home" \
+  AWTARCHY_RUNTIME="$runtime" \
+  AWTARCHY_TEST_MODE=1 \
+  AWTARCHY_NVIDIA_ROLLBACK_ASSUME_YES=1 \
+  FAKE_KERNEL_PACKAGE=linux-cachyos-lts \
+  FAKE_PACMAN_STATE="$state" \
+  "$test_reconciler" --nvidia-rollback --version 610.57.04 >/dev/null
+then
+  fail 'CachyOS archive-backed NVIDIA historical version switch failed'
+fi
+
+grep -Fxq 'nvidia-utils 610.57.04-1' "$state" \
+  || fail 'CachyOS historical version switch did not select NVIDIA 610.57.04'
+grep -Fxq 'linux-cachyos-lts 6.18.42-1' "$state" \
+  || fail 'CachyOS historical version switch did not reconstruct the matching CachyOS kernel'
+grep -Fxq 'linux-cachyos-lts-nvidia-open 6.18.42-1' "$state" \
+  || fail 'CachyOS historical version switch did not reconstruct the matching prebuilt NVIDIA-open module package'
+
+printf '%s\n' 'PASS: NVIDIA upgrades require consent, saved rollback is recoverable, Arch/Cachy historical archives are supported, and stale rollback points fail closed.'
