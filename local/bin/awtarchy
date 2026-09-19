@@ -1446,7 +1446,7 @@ with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
 rollback point when the current NVIDIA/kernel package archives are available.
 Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
 Use '--pick' to choose another fully reconstructable historical driver,
-'--list' to inspect available versions from local cache or the official Arch Linux Archive, or '--version <driver-version>' to
+'--list' to inspect available versions from local cache, the official Arch Linux Archive, or the CachyOS archive, or '--version <driver-version>' to
 select one directly. Awtarchy saves the current package set before switching.
 
 Git testing is explicit. The selected Awtarchy remote branch is resolved to an
