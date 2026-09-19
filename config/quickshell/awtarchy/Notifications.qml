@@ -641,9 +641,7 @@ Singleton {
         settingsMessage = "";
     }
 
-    function toggleForScreen(targetScreen) {
-        if (!FlyoutManager.acceptToggle("notifications"))
-            return;
+    function toggleForScreenNow(targetScreen) {
         const currentName = activeMonitorName;
         const targetName = targetScreen ? targetScreen.name : "";
         if ((centerWindow.visible || openPreparing)
@@ -651,6 +649,16 @@ Singleton {
             closeCenter();
         else
             openForScreen(targetScreen);
+    }
+
+    function toggleForScreen(targetScreen) {
+        if (!FlyoutManager.acceptToggle("notifications"))
+            return;
+        toggleForScreenNow(targetScreen);
+    }
+
+    function toggleFocused() {
+        toggleForScreenNow(focusedScreen());
     }
 
     function toggleForItem(targetScreen, anchorItem) {
@@ -717,7 +725,7 @@ Singleton {
 
     IpcHandler {
         target: "notifications"
-        function toggle(): void { root.toggleForScreen(root.focusedScreen()); }
+        function toggle(): void { root.toggleFocused(); }
         function open(): void { root.openFocused(); }
         function close(): void { root.closeCenter(); }
         function toggleDnd(): void { root.togglePopupMute(); }
