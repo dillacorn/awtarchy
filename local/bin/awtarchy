@@ -1097,11 +1097,15 @@ single_select_menu() {
       $'\033[A')
         if (( index > 0 )); then
           ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
         fi
         ;;
       $'\033[B')
         if (( index + 1 < ${#items[@]} )); then
           ((index++)) || true
+        else
+          index=0
         fi
         ;;
       $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;

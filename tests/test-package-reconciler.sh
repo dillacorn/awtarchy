@@ -17,6 +17,28 @@ fail() {
 [[ -x $RECONCILER ]] || fail "package reconciler source is not executable"
 bash -n "$RECONCILER"
 
+python3 - "$RECONCILER" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+start = text.find("multi_select() {")
+if start < 0:
+    raise SystemExit("missing multi_select")
+search_from = start + len("multi_select() {")
+next_function = re.search(
+    r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\) \{$",
+    text[search_from:],
+)
+end = len(text) if next_function is None else search_from + next_function.start()
+body = text[start:end]
+if "else\n          current=$((${#labels[@]} - 1))" not in body:
+    raise SystemExit("multi_select does not wrap Up to the final entry")
+if "else\n          current=0" not in body:
+    raise SystemExit("multi_select does not wrap Down to the first entry")
+PY
+
 grep -Fq 'awtarchy packages' "$LAUNCHER" \
   || fail "launcher help does not expose awtarchy packages"
 grep -Fq 'Reconcile packages (install current / remove replaced)' "$LAUNCHER" \

@@ -626,11 +626,15 @@ single_select_menu() {
       $'\033[A')
         if (( index > 0 )); then
           ((index--)) || true
+        else
+          index=$((${#items[@]} - 1))
         fi
         ;;
       $'\033[B')
         if (( index + 1 < ${#items[@]} )); then
           ((index++)) || true
+        else
+          index=0
         fi
         ;;
       $'\n'|$'\r'|"") printf '%s\n' "$index"; return 0 ;;
@@ -670,11 +674,15 @@ summary_toggle_menu() {
       $'\033[A')
         if (( index > 0 )); then
           ((index--)) || true
+        else
+          index=$((${#labels_ref[@]} - 1))
         fi
         ;;
       $'\033[B')
         if (( index + 1 < ${#labels_ref[@]} )); then
           ((index++)) || true
+        else
+          index=0
         fi
         ;;
       ' ')
@@ -948,11 +956,15 @@ edit_package_group() {
       $'\033[A')
         if (( index > 0 )); then
           ((index--)) || true
+        else
+          index=$((${#view_indices[@]} - 1))
         fi
         ;;
       $'\033[B')
         if (( index + 1 < ${#view_indices[@]} )); then
           ((index++)) || true
+        else
+          index=0
         fi
         ;;
       b|B)
@@ -2020,11 +2032,15 @@ package_picker() {
       $'\033[A')
         if (( index > 0 )); then
           ((index--)) || true
+        else
+          index=$((${#view_indices[@]} - 1))
         fi
         ;;
       $'\033[B')
         if (( index + 1 < ${#view_indices[@]} )); then
           ((index++)) || true
+        else
+          index=0
         fi
         ;;
       e|E)
@@ -7333,8 +7349,20 @@ review_plan() {
 
     key="$(read_update_key || true)"
     case "$key" in
-      $'\033[A') (( index > 0 )) && ((index--)) || true ;;
-      $'\033[B') (( index + 1 < ${#classes[@]} )) && ((index++)) || true ;;
+      $'\033[A')
+        if (( index > 0 )); then
+          ((index--)) || true
+        else
+          index=$((${#classes[@]} - 1))
+        fi
+        ;;
+      $'\033[B')
+        if (( index + 1 < ${#classes[@]} )); then
+          ((index++)) || true
+        else
+          index=0
+        fi
+        ;;
       $'\033[5~') index=$((index - page_size)); (( index < 0 )) && index=0 ;;
       $'\033[6~') index=$((index + page_size)); (( index >= ${#classes[@]} )) && index=$((${#classes[@]} - 1)) ;;
       $'\n'|$'\r'|"")

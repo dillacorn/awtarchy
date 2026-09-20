@@ -596,11 +596,15 @@ multi_select() {
       $'\033[A'|k)
         if (( current > 0 )); then
           ((current--))
+        else
+          current=$((${#labels[@]} - 1))
         fi
         ;;
       $'\033[B'|j)
         if (( current + 1 < ${#labels[@]} )); then
           ((current++))
+        else
+          current=0
         fi
         ;;
       ' ')
