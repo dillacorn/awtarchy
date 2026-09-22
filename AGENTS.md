@@ -326,7 +326,7 @@ When recovery behavior is requested, preserve a safe rollback/fallback path wher
 
 ## Yazi
 
-- `config/yazi/init.lua` defines `Linemode:size_and_mtime`, and `config/yazi/yazi.toml` selects it so normal rows show Yazi-readable file size plus compact `M/D/YY` modified date metadata. Keep the Lua implementation aligned with Arch's current stable Yazi API rather than assuming nightly behavior; Yazi 26.9.1 exposes the row mtime as `self._file.cha.mtime`.
+- `config/yazi/init.lua` defines `Linemode:size_and_mtime`, and `config/yazi/yazi.toml` selects it so normal rows show Yazi-readable file size plus compact `M/D/YY` modified date metadata. Keep detailed modified date/time in the bottom status for only the highlighted item, default that clock to 24-hour time, and preserve the `m t` 24h/12h toggle with its Help description. Persist the choice through Yazi's retained DDS static message `@awtarchy-yazi-time-format`; do not add a parallel hard-coded state file or filesystem polling. Keep the Lua implementation aligned with Arch's current stable Yazi API rather than assuming nightly behavior; Yazi 26.9.1 exposes row mtime as `self._file.cha.mtime` and highlighted-item mtime as `hovered.cha.mtime`.
 - Preserve native Yazi `a` create, `/` find, `n` next match, `N` previous match, lowercase `g` Go To prefix, `gg` top, and uppercase `G` bottom behavior. Use native `arrow prev` / `arrow next` for wraparound Up/Down and `k`/`j` movement; do not add custom navigation hacks for Caps Lock mistakes.
 
 ## Quickshell and desktop UI work
