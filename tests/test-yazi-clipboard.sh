@@ -21,21 +21,42 @@ grep -Fq 'for path in %s' "$KEYMAP" \
 if grep -Fq 'plugin clipboard' "$KEYMAP"; then
   fail 'Yazi keymap still invokes the deprecated custom clipboard plugin name'
 fi
-if grep -Eq 'on[[:space:]]*=[[:space:]]*\["g"([[:space:]]*,|[[:space:]]*\])' "$KEYMAP"; then
-  fail 'Yazi keymap overrides native lowercase g Go To behavior'
-fi
-grep -Fq '{ on = ["<Up>"],    run = "arrow prev", desc = "Previous file" },' "$KEYMAP" \
-  || fail 'Yazi Up Arrow does not use native wraparound previous navigation'
-grep -Fq '{ on = ["<Down>"],  run = "arrow next", desc = "Next file" },' "$KEYMAP" \
-  || fail 'Yazi Down Arrow does not use native wraparound next navigation'
-grep -Fq '{ on = ["k"],       run = "arrow prev", desc = "Previous file" },' "$KEYMAP" \
-  || fail 'Yazi k does not use native wraparound previous navigation'
-grep -Fq '{ on = ["j"],       run = "arrow next", desc = "Next file" },' "$KEYMAP" \
-  || fail 'Yazi j does not use native wraparound next navigation'
-grep -Fq '{ on = ["g", "g"], run = "arrow top", desc = "Top" },' "$KEYMAP" \
-  || fail 'Yazi g g top navigation changed unexpectedly'
-grep -Fq '{ on = ["G"],       run = "arrow bot", desc = "Bottom" },' "$KEYMAP" \
-  || fail 'Yazi G bottom navigation changed unexpectedly'
+python3 - "$KEYMAP" <<'PY_KEYMAP' || fail 'Yazi manager keybindings do not preserve native g/G behavior and wraparound movement'
+import sys
+import tomllib
+
+with open(sys.argv[1], "rb") as handle:
+    config = tomllib.load(handle)
+
+bindings = config.get("mgr", {}).get("prepend_keymap", [])
+if not isinstance(bindings, list):
+    raise SystemExit(1)
+
+by_keys = {}
+for binding in bindings:
+    if not isinstance(binding, dict):
+        continue
+    keys = binding.get("on")
+    if isinstance(keys, str):
+        keys = [keys]
+    if isinstance(keys, list):
+        by_keys[tuple(keys)] = binding
+
+if ("g",) in by_keys:
+    raise SystemExit(1)
+
+expected = {
+    ("<Up>",): "arrow prev",
+    ("<Down>",): "arrow next",
+    ("k",): "arrow prev",
+    ("j",): "arrow next",
+    ("g", "g"): "arrow top",
+    ("G",): "arrow bot",
+}
+for keys, run in expected.items():
+    if by_keys.get(keys, {}).get("run") != run:
+        raise SystemExit(1)
+PY_KEYMAP
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
