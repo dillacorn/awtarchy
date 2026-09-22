@@ -327,7 +327,7 @@ When recovery behavior is requested, preserve a safe rollback/fallback path wher
 ## Yazi
 
 - `config/yazi/yazi.toml` intentionally uses Yazi's built-in `[mgr] linemode = "size"` for visible file sizes.
-- Preserve native Yazi lowercase `g` Go To behavior and uppercase `G` bottom behavior. Do not add custom keymap workarounds for Caps Lock mistakes.
+- Preserve native Yazi lowercase `g` Go To behavior and uppercase `G` bottom behavior. Use native `arrow prev` / `arrow next` for wraparound Up/Down and `k`/`j` movement; do not add custom navigation hacks for Caps Lock mistakes.
 
 ## Quickshell and desktop UI work
 
