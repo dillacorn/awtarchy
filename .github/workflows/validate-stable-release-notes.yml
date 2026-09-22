@@ -39,3 +39,206 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+  one-use-v374-yazi-release-edit:
+    name: One-use v3.7.4 Yazi release edit
+    needs: release-notes-contract
+    if: github.event_name == 'pull_request' && github.repository == 'dillacorn/awtarchy' && github.event.pull_request.title == 'Temporary: update v3.7.4 Yazi post-release notes' && github.head_ref == 'chore/v3.7.4-yazi-time-release-bridge' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v3.7.4
+      PREVIOUS_TAG: v3.7.3
+      EXPECTED_MAIN_SHA: c3ee7eeaf06d2f06116541c32dfa6918e0b70e61
+      EXPECTED_TAG_SHA: b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe
+      EXPECTED_RELEASE_NAME: Awtarchy v3.7.4 Quickshell
+      EXPECTED_PUSH_RUNS: "12"
+      HELPER_BRANCH: chore/v3.7.4-yazi-time-release-bridge
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Verify exact source and merged-main validation
+        run: |
+          set -Eeuo pipefail
+
+          test "$(git rev-parse HEAD^)" = "$EXPECTED_MAIN_SHA"
+
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          test "$current_main" = "$EXPECTED_MAIN_SHA"
+
+          git fetch --force --tags origin
+          test "$(git rev-parse "${TAG}^{}")" = "$EXPECTED_TAG_SHA"
+
+          python3 - <<'PY'
+          import json
+          import os
+          import subprocess
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+          sha = os.environ["EXPECTED_MAIN_SHA"]
+          expected_count = int(os.environ["EXPECTED_PUSH_RUNS"])
+
+          payload = subprocess.check_output(
+              [
+                  "gh",
+                  "api",
+                  f"repos/{repo}/actions/runs?head_sha={sha}&event=push&per_page=100",
+              ],
+              text=True,
+          )
+          runs = json.loads(payload)["workflow_runs"]
+
+          if len(runs) != expected_count:
+              raise SystemExit(
+                  f"Expected {expected_count} push workflows for {sha}, found {len(runs)}"
+              )
+
+          validate = [run for run in runs if run["name"] == "Validate Awtarchy"]
+          if len(validate) != 1:
+              raise SystemExit("Exact merged commit does not have one Validate Awtarchy push run")
+
+          bad = [
+              (run["name"], run["status"], run.get("conclusion"))
+              for run in runs
+              if run["status"] != "completed" or run.get("conclusion") != "success"
+          ]
+          if bad:
+              raise SystemExit(f"Merged-main push validation is not fully green: {bad}")
+
+          print(f"Verified {len(runs)} successful push workflows for {sha}")
+          PY
+
+      - name: Build and validate proposed release notes
+        run: |
+          set -Eeuo pipefail
+
+          work="${RUNNER_TEMP}/awtarchy-v374-release-bridge"
+          rm -rf -- "$work"
+          mkdir -p -- "$work"
+
+          gh release view "$TAG" \
+            --json name,tagName,targetCommitish,isDraft,isPrerelease,body \
+            >"$work/before.json"
+          gh release view "$PREVIOUS_TAG" --json body >"$work/previous.json"
+
+          python3 - "$work" <<'PY'
+          import json
+          import os
+          import pathlib
+          import sys
+
+          work = pathlib.Path(sys.argv[1])
+          before = json.loads((work / "before.json").read_text(encoding="utf-8"))
+          previous = json.loads((work / "previous.json").read_text(encoding="utf-8"))
+
+          expected = {
+              "name": os.environ["EXPECTED_RELEASE_NAME"],
+              "tagName": os.environ["TAG"],
+              "targetCommitish": os.environ["EXPECTED_TAG_SHA"],
+              "isDraft": False,
+              "isPrerelease": False,
+          }
+          actual = {key: before.get(key) for key in expected}
+          if actual != expected:
+              raise SystemExit(f"Unexpected v3.7.4 release metadata before edit: {actual!r}")
+
+          body = before["body"]
+          previous_body = previous["body"]
+          placeholder = "_Placeholder for possible tested post-release patches to v3.7.4._"
+          prior_sha = "ffb162e6fd948eea3c284b7179d8eb7ed2b1e71f"
+          merged_sha = os.environ["EXPECTED_MAIN_SHA"]
+
+          if body.count(placeholder) != 1:
+              raise SystemExit("v3.7.4 placeholder is missing or duplicated")
+          if prior_sha not in body:
+              raise SystemExit("Existing v3.7.4 Yazi post-release entry is missing")
+          if merged_sha in body:
+              raise SystemExit("New v3.7.4 Yazi post-release entry already exists")
+
+          entry = (
+              f"- Yazi post-release update on `main` commit `{merged_sha}`: "
+              "the highlighted item now shows its full modified date/time in the bottom status, "
+              "defaulting to 24-hour time, and `m t` persistently toggles 24h/12h. "
+              "Existing readable size + compact `M/D/YY` file rows, wraparound/navigation, "
+              "native create/search, Help, clipboard, dragon-drop, and desktop-default opener behavior "
+              f"remain preserved. The exact post-release commit passed the full `Validate Awtarchy` "
+              f"workflow and all {os.environ['EXPECTED_PUSH_RUNS']} push workflows triggered for that commit."
+          )
+
+          proposed = body.replace(placeholder, entry + "\n\n" + placeholder, 1)
+
+          (work / "current.md").write_text(body, encoding="utf-8")
+          (work / "previous.md").write_text(previous_body, encoding="utf-8")
+          (work / "proposed.md").write_text(proposed, encoding="utf-8")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$TAG" \
+            --notes "$work/proposed.md" \
+            --previous "$work/previous.md"
+
+      - name: Edit existing v3.7.4 release and independently verify
+        run: |
+          set -Eeuo pipefail
+
+          work="${RUNNER_TEMP}/awtarchy-v374-release-bridge"
+
+          gh release edit "$TAG" --notes-file "$work/proposed.md"
+
+          gh release view "$TAG" \
+            --json name,tagName,targetCommitish,isDraft,isPrerelease,body \
+            >"$work/after.json"
+
+          python3 - "$work" <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          work = pathlib.Path(sys.argv[1])
+          before = json.loads((work / "before.json").read_text(encoding="utf-8"))
+          after = json.loads((work / "after.json").read_text(encoding="utf-8"))
+          proposed = (work / "proposed.md").read_text(encoding="utf-8")
+
+          fields = ("name", "tagName", "targetCommitish", "isDraft", "isPrerelease")
+          before_meta = {field: before.get(field) for field in fields}
+          after_meta = {field: after.get(field) for field in fields}
+          if after_meta != before_meta:
+              raise SystemExit(
+                  f"Release metadata changed unexpectedly: before={before_meta!r} after={after_meta!r}"
+              )
+          if after["body"] != proposed:
+              raise SystemExit("Published v3.7.4 body does not exactly match the validated proposal")
+
+          (work / "published.md").write_text(after["body"], encoding="utf-8")
+          print(f"Verified unchanged release metadata: {after_meta}")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$TAG" \
+            --notes "$work/published.md" \
+            --previous "$work/previous.md"
+
+          git fetch --force --tags origin
+          test "$(git rev-parse "${TAG}^{}")" = "$EXPECTED_TAG_SHA"
+
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          test "$current_main" = "$EXPECTED_MAIN_SHA"
+
+      - name: Close unmerged helper PR and delete helper branch
+        if: success()
+        run: |
+          set -Eeuo pipefail
+
+          gh pr close "${{ github.event.pull_request.number }}" \
+            --repo "$GITHUB_REPOSITORY"
+
+          gh api \
+            --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/${HELPER_BRANCH}"
+
