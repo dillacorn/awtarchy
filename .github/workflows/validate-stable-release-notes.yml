@@ -111,7 +111,7 @@ jobs:
               "",
               "- Exact release target: `b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe`.",
               "- Pull request #224 passed all 28 pull-request workflows on the exact approved feature head before merge.",
-              "- All 15 `main` push workflows passed on the exact release target after merge.",
+              "- All 17 `main` push workflows passed on the exact release target after merge.",
               "- The maintainer runtime-tested the Caps Lock indicator, visible Yazi file sizes, wraparound Up/Down navigation, and Yazi `g g` / `G` behavior before approving the merge.",
               "",
               "## Post-release updates",
