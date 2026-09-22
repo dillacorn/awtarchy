@@ -21,6 +21,9 @@ grep -Fq 'for path in %s' "$KEYMAP" \
 if grep -Fq 'plugin clipboard' "$KEYMAP"; then
   fail 'Yazi keymap still invokes the deprecated custom clipboard plugin name'
 fi
+if grep -Eq 'on[[:space:]]*=[[:space:]]*\["g"([[:space:]]*,|[[:space:]]*\])' "$KEYMAP"; then
+  fail 'Yazi keymap overrides native lowercase g Go To behavior'
+fi
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
@@ -31,6 +34,9 @@ import tomllib
 
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
+
+if config.get("mgr", {}).get("linemode") != "size":
+    raise SystemExit(1)
 
 rules = config.get("opener", {}).get("edit", [])
 if not isinstance(rules, list):
@@ -92,4 +98,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi delegates text opening to the desktop default application, delivers the v3.7.3 stable repair, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi shows built-in size linemode, preserves native lowercase g behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
