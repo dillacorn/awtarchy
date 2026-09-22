@@ -51,12 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Create and verify v3.7.4
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_MAIN_SHA: b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -Eeuo pipefail
 
@@ -168,3 +170,12 @@ jobs:
             printf 'v3.7.4 tag mismatch: expected %s, found %s\n' "$EXPECTED_MAIN_SHA" "$tag_sha" >&2
             exit 1
           fi
+
+          gh api \
+            --method PATCH \
+            "repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}" \
+            -f state=closed >/dev/null
+
+          gh api \
+            --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/release/v3.7.4-bridge"
