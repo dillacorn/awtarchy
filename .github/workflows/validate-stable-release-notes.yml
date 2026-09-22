@@ -80,10 +80,14 @@ jobs:
           body = path.read_text(encoding="utf-8")
           marker = "_Placeholder for possible tested post-release patches to v3.7.4._"
           assert body.count(marker) == 1
-          update = """- Yazi post-release update on `main` commit `ffb162e6fd948eea3c284b7179d8eb7ed2b1e71f`: file rows now show readable size plus compact `M/D/YY` modified dates, while native `a` create, `/` find, `n` next match, and `N` previous match are restored.
-- Existing wraparound Up/Down and `k`/`j`, lowercase `g` Go To, `g g` top, `G` bottom, Help, dragon-drop, clipboard, and opener behavior are preserved. The exact post-release commit passed Awtarchy's full `Validate Awtarchy` workflow and the other push workflows triggered for that commit.
-
-"""
+          update = (
+              "- Yazi post-release update on `main` commit `ffb162e6fd948eea3c284b7179d8eb7ed2b1e71f`: "
+              "file rows now show readable size plus compact `M/D/YY` modified dates, while native `a` create, "
+              "`/` find, `n` next match, and `N` previous match are restored.\n"
+              "- Existing wraparound Up/Down and `k`/`j`, lowercase `g` Go To, `g g` top, `G` bottom, "
+              "Help, dragon-drop, clipboard, and opener behavior are preserved. The exact post-release commit "
+              "passed Awtarchy's full `Validate Awtarchy` workflow and the other push workflows triggered for that commit.\n\n"
+          )
           Path("proposed.md").write_text(body.replace(marker, update + marker), encoding="utf-8")
           PY
           python3 .github/scripts/validate-stable-release-notes.py --version v3.7.4 --notes proposed.md --previous previous.md
