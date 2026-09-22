@@ -24,6 +24,18 @@ fi
 if grep -Eq 'on[[:space:]]*=[[:space:]]*\["g"([[:space:]]*,|[[:space:]]*\])' "$KEYMAP"; then
   fail 'Yazi keymap overrides native lowercase g Go To behavior'
 fi
+grep -Fq '{ on = ["<Up>"],    run = "arrow prev", desc = "Previous file" },' "$KEYMAP" \
+  || fail 'Yazi Up Arrow does not use native wraparound previous navigation'
+grep -Fq '{ on = ["<Down>"],  run = "arrow next", desc = "Next file" },' "$KEYMAP" \
+  || fail 'Yazi Down Arrow does not use native wraparound next navigation'
+grep -Fq '{ on = ["k"],       run = "arrow prev", desc = "Previous file" },' "$KEYMAP" \
+  || fail 'Yazi k does not use native wraparound previous navigation'
+grep -Fq '{ on = ["j"],       run = "arrow next", desc = "Next file" },' "$KEYMAP" \
+  || fail 'Yazi j does not use native wraparound next navigation'
+grep -Fq '{ on = ["g", "g"], run = "arrow top", desc = "Top" },' "$KEYMAP" \
+  || fail 'Yazi g g top navigation changed unexpectedly'
+grep -Fq '{ on = ["G"],       run = "arrow bot", desc = "Bottom" },' "$KEYMAP" \
+  || fail 'Yazi G bottom navigation changed unexpectedly'
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
@@ -98,4 +110,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi shows built-in size linemode, preserves native lowercase g behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi shows built-in size linemode, uses native wraparound arrow/j/k navigation, preserves lowercase g and G behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
