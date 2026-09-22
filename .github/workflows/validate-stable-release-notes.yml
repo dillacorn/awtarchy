@@ -39,3 +39,71 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  release-edit-v374-yazi-postupdate:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Temporary release bridge: update v3.7.4 Yazi post-release notes' &&
+      github.event.pull_request.head.ref == 'release-bridge-v374-yazi-postupdate' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      TAG: v3.7.4
+      EXPECTED_TAG_SHA: b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe
+      POST_UPDATE_SHA: ffb162e6fd948eea3c284b7179d8eb7ed2b1e71f
+      HEAD_BRANCH: release-bridge-v374-yazi-postupdate
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Read current release
+        run: |
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isPrerelease,targetCommitish,body > before.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("before.json").read_text())
+          assert data["name"] == "Awtarchy v3.7.4 Quickshell"
+          assert data["tagName"] == "v3.7.4"
+          assert data["isDraft"] is False
+          assert data["isPrerelease"] is False
+          assert data["targetCommitish"] == "b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe"
+          Path("previous.md").write_text(data["body"], encoding="utf-8")
+          PY
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$EXPECTED_TAG_SHA"
+      - name: Build and validate updated notes
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          path = Path("previous.md")
+          body = path.read_text(encoding="utf-8")
+          marker = "_Placeholder for possible tested post-release patches to v3.7.4._"
+          assert body.count(marker) == 1
+          update = """- Yazi post-release update on `main` commit `ffb162e6fd948eea3c284b7179d8eb7ed2b1e71f`: file rows now show readable size plus compact `M/D/YY` modified dates, while native `a` create, `/` find, `n` next match, and `N` previous match are restored.
+- Existing wraparound Up/Down and `k`/`j`, lowercase `g` Go To, `g g` top, `G` bottom, Help, dragon-drop, clipboard, and opener behavior are preserved. The exact post-release commit passed Awtarchy's full `Validate Awtarchy` workflow and the other push workflows triggered for that commit.
+
+"""
+          Path("proposed.md").write_text(body.replace(marker, update + marker), encoding="utf-8")
+          PY
+          python3 .github/scripts/validate-stable-release-notes.py --version v3.7.4 --notes proposed.md --previous previous.md
+      - name: Edit and verify release
+        run: |
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --notes-file proposed.md
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json name,tagName,isDraft,isPrerelease,targetCommitish,body > after.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("after.json").read_text())
+          proposed = Path("proposed.md").read_text(encoding="utf-8")
+          assert data["name"] == "Awtarchy v3.7.4 Quickshell"
+          assert data["tagName"] == "v3.7.4"
+          assert data["isDraft"] is False
+          assert data["isPrerelease"] is False
+          assert data["targetCommitish"] == "b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe"
+          assert data["body"] == proposed
+          PY
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha)" = "$EXPECTED_TAG_SHA"
+      - name: Remove temporary helper branch
+        if: success()
+        run: gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$HEAD_BRANCH"
