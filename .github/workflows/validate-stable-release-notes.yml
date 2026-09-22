@@ -39,3 +39,132 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  publish-v374:
+    needs: release-notes-contract
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.ref == 'release/v3.7.4-bridge' &&
+      github.event.pull_request.title == 'Release Awtarchy v3.7.4'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Create and verify v3.7.4
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe
+        run: |
+          set -Eeuo pipefail
+
+          git fetch --no-tags origin main
+          actual_main="$(git rev-parse origin/main)"
+          if [[ "$actual_main" != "$EXPECTED_MAIN_SHA" ]]; then
+            printf 'main moved: expected %s, found %s\n' "$EXPECTED_MAIN_SHA" "$actual_main" >&2
+            exit 1
+          fi
+
+          if gh release view v3.7.4 >/dev/null 2>&1; then
+            printf 'v3.7.4 already exists; refusing to recreate it.\n' >&2
+            exit 1
+          fi
+
+          gh release view v3.7.3 --json body --jq .body > previous-release.md
+
+          python3 - <<'PY_RELEASE_NOTES'
+          from pathlib import Path
+
+          lines = [
+              "# Awtarchy v3.7.4 Quickshell",
+              "",
+              "Awtarchy v3.7.4 rolls the post-v3.7.3 maintenance work into a new stable release, with improved Yazi navigation and file visibility, a conditional Caps Lock bar indicator, stronger NVIDIA rollback recovery, and wrapped Awtarchy menus.",
+              "",
+              "## Install and update",
+              "",
+              "Fresh installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)",
+              "",
+              "Existing Awtarchy installations and stable updates: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)",
+              "",
+              "Quick update:",
+              "",
+              "```bash",
+              "awtarchy update",
+              "```",
+              "",
+              "## Yazi and bar",
+              "",
+              "- Yazi now displays file sizes directly in the file list with its built-in size line mode.",
+              "- Up/Down and `k`/`j` use native wraparound navigation; lowercase `g` keeps the Go To behavior, `g g` goes to the top, and `G` goes to the bottom.",
+              "- The v3.7.3 post-release Yazi repair is carried into this release: text files open through the user's desktop default application, while Awtarchy still defaults `text/plain` to Micro.",
+              "- The Quickshell bar now shows a compact `⇪` only while Caps Lock is enabled, immediately left of the idle inhibitor, using the normal foreground color and shared event-driven state across displays.",
+              "",
+              "## Maintenance and recovery",
+              "",
+              "- NVIDIA rollback can recover compatible historical driver releases from the official Arch Linux Archive, with CachyOS archive support where Awtarchy supports Cachy kernels.",
+              "- The NVIDIA recovery flow now uses matching archived driver components, a pre-switch return point, automatic restoration on failed package/DKMS transitions, and a simplified release picker with corrected archived-release listing.",
+              "- Awtarchy command menus now wrap from first to last and last to first instead of stopping at the ends.",
+              "",
+              "## Validation",
+              "",
+              "- Exact release target: `b5f6b38cc2ceaae223edf6fe6b1fc5f4b35c2fbe`.",
+              "- Pull request #224 passed all 28 pull-request workflows on the exact approved feature head before merge.",
+              "- All 15 `main` push workflows passed on the exact release target after merge.",
+              "- The maintainer runtime-tested the Caps Lock indicator, visible Yazi file sizes, wraparound Up/Down navigation, and Yazi `g g` / `G` behavior before approving the merge.",
+              "",
+              "## Post-release updates",
+              "",
+              "_Placeholder for possible tested post-release patches to v3.7.4._",
+          ]
+
+          Path("proposed-release.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY_RELEASE_NOTES
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.7.4 \
+            --notes proposed-release.md \
+            --previous previous-release.md
+
+          gh release create v3.7.4 \
+            --target "$EXPECTED_MAIN_SHA" \
+            --title "Awtarchy v3.7.4 Quickshell" \
+            --notes-file proposed-release.md
+
+          gh release view v3.7.4 --json body --jq .body > published-release.md
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.7.4 \
+            --notes published-release.md \
+            --previous previous-release.md
+
+          gh release view v3.7.4 \
+            --json name,tagName,targetCommitish,isDraft,isPrerelease,url \
+            > release-metadata.json
+
+          python3 - "$EXPECTED_MAIN_SHA" <<'PY_RELEASE_META'
+          import json
+          import sys
+          from pathlib import Path
+
+          expected = sys.argv[1]
+          data = json.loads(Path("release-metadata.json").read_text(encoding="utf-8"))
+
+          assert data["name"] == "Awtarchy v3.7.4 Quickshell", data
+          assert data["tagName"] == "v3.7.4", data
+          assert data["targetCommitish"] == expected, data
+          assert data["isDraft"] is False, data
+          assert data["isPrerelease"] is False, data
+          print(data["url"])
+          PY_RELEASE_META
+
+          tag_type="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v3.7.4" --jq '.object.type')"
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v3.7.4" --jq '.object.sha')"
+          if [[ "$tag_type" == "tag" ]]; then
+            tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${tag_sha}" --jq '.object.sha')"
+          fi
+          if [[ "$tag_sha" != "$EXPECTED_MAIN_SHA" ]]; then
+            printf 'v3.7.4 tag mismatch: expected %s, found %s\n' "$EXPECTED_MAIN_SHA" "$tag_sha" >&2
+            exit 1
+          fi
