@@ -6,6 +6,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
 YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
+YAZI_INIT="$ROOT/config/yazi/init.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
@@ -42,8 +43,9 @@ for binding in bindings:
     if isinstance(keys, list):
         by_keys[tuple(keys)] = binding
 
-if ("g",) in by_keys:
-    raise SystemExit(1)
+for keys in [("g",), ("a",), ("/",), ("n",), ("N",)]:
+    if keys in by_keys:
+        raise SystemExit(1)
 
 expected = {
     ("<Up>",): "arrow prev",
@@ -52,6 +54,7 @@ expected = {
     ("j",): "arrow next",
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
+    ("?",): "help",
 }
 for keys, run in expected.items():
     if by_keys.get(keys, {}).get("run") != run:
@@ -61,14 +64,38 @@ if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
 
-python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener is not delegated to the desktop default application'
+if grep -Eq '^[[:space:]]*#' "$YAZI_INIT"; then
+  fail 'Yazi init.lua contains shell-style hash comments instead of Lua comments'
+fi
+if command -v luac >/dev/null 2>&1; then
+  luac -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
+elif command -v luac5.4 >/dev/null 2>&1; then
+  luac5.4 -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
+else
+  fail 'No Lua compiler is available to validate Yazi init.lua'
+fi
+grep -Fq 'function Linemode:size_and_mtime()' "$YAZI_INIT" \
+  || fail 'Yazi combined size/date linemode is not defined'
+grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
+  || fail 'Yazi combined linemode does not use native readable file sizes'
+grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
+  || fail 'Yazi combined linemode does not use the current stable Yazi mtime API'
+if grep -Fq 'self._file.stat.mtime' "$YAZI_INIT"; then
+  fail 'Yazi combined linemode uses the incompatible nightly stat.mtime API'
+fi
+grep -Fq '"%d/%d/%02d"' "$YAZI_INIT" \
+  || fail 'Yazi combined linemode does not use compact M/D/YY dates'
+grep -Fq '"%9s  %8s"' "$YAZI_INIT" \
+  || fail 'Yazi combined linemode lost size/date alignment'
+
+python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener or combined metadata linemode is not configured correctly'
 import sys
 import tomllib
 
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
 
-if config.get("mgr", {}).get("linemode") != "size":
+if config.get("mgr", {}).get("linemode") != "size_and_mtime":
     raise SystemExit(1)
 
 rules = config.get("opener", {}).get("edit", [])
@@ -131,4 +158,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi shows built-in size linemode, uses native wraparound arrow/j/k navigation, preserves lowercase g and G behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi shows combined size/date metadata, inherits native create/find keys, uses native wraparound arrow/j/k navigation, preserves lowercase g/gg/G behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'

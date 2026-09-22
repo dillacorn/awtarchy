@@ -2,7 +2,7 @@
 # ~/.config/yazi/yazi.toml
 
 [mgr]
-linemode = "size"
+linemode = "size_and_mtime"
 
 [opener]
 edit = [
