@@ -65,8 +65,11 @@ if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
 PY_KEYMAP
 
+# These assertions intentionally search for literal shell variables in keymap source.
+# shellcheck disable=SC2016
 grep -Fq 'dragon-drop -x -i -T "$@"' "$KEYMAP" \
   || fail 'Yazi selected-item dragon-drop binding changed'
+# shellcheck disable=SC2016
 grep -Fq 'dragon-drop -x -i -T "$1"' "$KEYMAP" \
   || fail 'Yazi hovered-item dragon-drop binding changed'
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
