@@ -782,6 +782,13 @@ PanelWindow {
             spacing: 0
 
             BarControl {
+                visible: KeyboardLockState.capsLockOn
+                label: "⇪"
+                foreground: Theme.foreground
+                tooltip: "Caps Lock enabled"
+            }
+
+            BarControl {
                 label: SystemState.idleBroken ? "" : (SystemState.idleInhibited ? "" : "")
                 normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"
                 tooltip: SystemState.idleMode === "always-awake"
@@ -1026,6 +1033,14 @@ PanelWindow {
             anchors.bottom: parent.bottom
             anchors.horizontalCenter: parent.horizontalCenter
             spacing: 0
+
+            BarControl {
+                visible: KeyboardLockState.capsLockOn
+                vertical: true; fixedWidth: bar.barSize
+                label: "⇪"
+                foreground: Theme.foreground
+                tooltip: "Caps Lock enabled"
+            }
 
             BarControl {
                 vertical: true; fixedWidth: bar.barSize

@@ -919,6 +919,17 @@ for _, bind in ipairs(media_binds) do
 end
 hl.bind("SUPER + M", hl.dsp.exec_cmd(mute_unmute), {})
 
+-- Keep the shared Quickshell Caps Lock state synchronized without polling.
+-- The key remains available to applications and the event fires after the
+-- lock state has changed, regardless of active Awtarchy submap.
+hl.bind("Caps_Lock", hl.dsp.event("awtarchy-capslock"), {
+    ignore_mods = true,
+    locked = true,
+    non_consuming = true,
+    release = true,
+    submap_universal = true,
+})
+
 -- Submap binds                        (Toggle on/off)
 hl.bind("SUPER + ALT + N", hl.dsp.exec_cmd(noalt_on), {})
 hl.bind("SUPER + ALT + M", hl.dsp.exec_cmd(mouse_on), {})

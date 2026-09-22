@@ -324,6 +324,11 @@ Do not fix updater failures by indiscriminately deleting user state or replacing
 
 When recovery behavior is requested, preserve a safe rollback/fallback path where practical.
 
+## Yazi
+
+- `config/yazi/yazi.toml` intentionally uses Yazi's built-in `[mgr] linemode = "size"` for visible file sizes.
+- Preserve native Yazi lowercase `g` Go To behavior and uppercase `G` bottom behavior. Use native `arrow prev` / `arrow next` for wraparound Up/Down and `k`/`j` movement; do not add custom navigation hacks for Caps Lock mistakes.
+
 ## Quickshell and desktop UI work
 
 For Quickshell, bar, launcher, flyout, and quick-settings changes:
@@ -334,6 +339,8 @@ For Quickshell, bar, launcher, flyout, and quick-settings changes:
 - check top/bottom/left/right layouts when the feature is edge-sensitive;
 - consider keyboard focus, pointer interaction, toggle/debounce behavior, spawn/despawn lifecycle, and multi-monitor state where applicable;
 - prefer one existing source of state over duplicated QML/shell state;
+- keep the Caps Lock bar indicator conditional and immediately before the idle inhibitor, with no visible slot while off and normal foreground styling while on;
+- keep keyboard lock state shared across per-output bars and event-driven; do not replace the Caps Lock event path with timer polling;
 - do not assume visual correctness from static code inspection alone.
 
 `FlyoutManager.qml` intentionally coordinates flyout focus/handoffs to avoid focus gaps and cursor/window focus side effects. Treat lifecycle changes there as behavioral changes and validate them with the focused flyout tests.

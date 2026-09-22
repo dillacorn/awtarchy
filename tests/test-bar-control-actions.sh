@@ -6,6 +6,9 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 MOUSE_SCRIPT="${AWTARCHY_TEST_MOUSE_SCRIPT:-${ROOT}/config/hypr/scripts/toggle_mouse_submap.sh}"
 VOLUME_SCRIPT="${AWTARCHY_TEST_VOLUME_SCRIPT:-${ROOT}/config/hypr/scripts/quickshell_volume.sh}"
 SYSTEM_STATE="${ROOT}/config/quickshell/awtarchy/SystemState.qml"
+KEYBOARD_LOCK_STATE="${ROOT}/config/quickshell/awtarchy/KeyboardLockState.qml"
+BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
+HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
 TMP="$(mktemp -d)"
 SUBMAP_RUNTIME="${TMP}/submap-runtime"
@@ -127,6 +130,63 @@ grep -Fq 'root.refreshIdleAfterToggle();' "$SYSTEM_STATE" \
   || fail "idle inhibitor still waits on the fixed refresh timer"
 ! grep -Fq 'interval: 350' "$SYSTEM_STATE" \
   || fail "idle inhibitor still contains the 350 ms visual delay"
+
+grep -Fq 'property bool capsLockOn: false' "$KEYBOARD_LOCK_STATE" \
+  || fail "Caps Lock singleton does not expose shared off-by-default state"
+grep -Fq 'devicesProcess.exec(["hyprctl", "devices", "-j"]);' "$KEYBOARD_LOCK_STATE" \
+  || fail "Caps Lock singleton does not read authoritative Hyprland keyboard state"
+grep -Fq 'event.name !== "custom"' "$KEYBOARD_LOCK_STATE" \
+  || fail "Caps Lock singleton is not driven by Hyprland custom events"
+grep -Fq 'awtarchy-capslock' "$KEYBOARD_LOCK_STATE" \
+  || fail "Caps Lock singleton does not listen for the Awtarchy Caps Lock event"
+! grep -Fq 'Timer {' "$KEYBOARD_LOCK_STATE" \
+  || fail "Caps Lock singleton regressed to timer polling"
+[[ $(grep -Fc 'visible: KeyboardLockState.capsLockOn' "$BAR_QML") -eq 2 ]] \
+  || fail "Caps Lock indicator is not conditional in both bar orientations"
+[[ $(grep -Fc 'label: "⇪"' "$BAR_QML") -eq 2 ]] \
+  || fail "Caps Lock indicator does not use the requested compact symbol"
+[[ $(grep -Fc 'foreground: Theme.foreground' "$BAR_QML") -ge 2 ]] \
+  || fail "Caps Lock indicator does not use normal bar foreground"
+python3 - "$BAR_QML" <<'PY_CAPS_ORDER' || fail "Caps Lock indicator is not immediately before the idle inhibitor"
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+caps = []
+idle = []
+start = 0
+while True:
+    index = text.find("visible: KeyboardLockState.capsLockOn", start)
+    if index < 0:
+        break
+    caps.append(index)
+    start = index + 1
+start = 0
+while True:
+    index = text.find('label: SystemState.idleBroken ? ""', start)
+    if index < 0:
+        break
+    idle.append(index)
+    start = index + 1
+
+if len(caps) != 2 or len(idle) != 2:
+    raise SystemExit(1)
+for cap_index, idle_index in zip(caps, idle):
+    if cap_index >= idle_index:
+        raise SystemExit(1)
+    between = text[cap_index:idle_index]
+    if between.count("BarControl {") != 1:
+        raise SystemExit(1)
+PY_CAPS_ORDER
+
+grep -Fq 'hl.bind("Caps_Lock", hl.dsp.event("awtarchy-capslock"), {' "$HYPR_CONFIG" \
+  || fail "Hyprland config does not emit the Caps Lock state event"
+grep -Fq 'non_consuming = true' "$HYPR_CONFIG" \
+  || fail "Caps Lock state bind would consume normal application Caps Lock input"
+grep -Fq 'release = true' "$HYPR_CONFIG" \
+  || fail "Caps Lock state event is not delayed until key release"
+grep -Fq 'submap_universal = true' "$HYPR_CONFIG" \
+  || fail "Caps Lock state event is not universal across Awtarchy submaps"
 
 grep -Fq 'repair_v347_idle_inhibitor_feedback_target()' "$RUNTIME" \
   || fail "runtime is missing the v3.4.7 idle-inhibitor post-release repair"
