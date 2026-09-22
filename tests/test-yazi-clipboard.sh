@@ -54,12 +54,21 @@ expected = {
     ("j",): "arrow next",
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
+    ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("?",): "help",
 }
 for keys, run in expected.items():
     if by_keys.get(keys, {}).get("run") != run:
         raise SystemExit(1)
+
+if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
+    raise SystemExit(1)
 PY_KEYMAP
+
+grep -Fq 'dragon-drop -x -i -T "$@"' "$KEYMAP" \
+  || fail 'Yazi selected-item dragon-drop binding changed'
+grep -Fq 'dragon-drop -x -i -T "$1"' "$KEYMAP" \
+  || fail 'Yazi hovered-item dragon-drop binding changed'
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
@@ -87,6 +96,33 @@ grep -Fq '"%d/%d/%02d"' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use compact M/D/YY dates'
 grep -Fq '"%9s  %8s"' "$YAZI_INIT" \
   || fail 'Yazi combined linemode lost size/date alignment'
+grep -Fq 'function Status:modified_time()' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item modified timestamp is not defined'
+grep -Fq 'hovered.cha.mtime' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item timestamp does not use stable hovered cha.mtime metadata'
+if grep -Fq '.stat.mtime' "$YAZI_INIT"; then
+  fail 'Yazi modified timestamp uses the incompatible development stat.mtime API'
+fi
+grep -Fq 'AwtarchyYaziTimeFormat = "24h"' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item time does not default to 24-hour format'
+grep -Fq 'ps.sub("@awtarchy-yazi-time-format"' "$YAZI_INIT" \
+  || fail 'Yazi time-format preference is not restored through retained DDS state'
+grep -Fq 'ps.pub("@awtarchy-yazi-time-format", next_format)' "$YAZI_INIT" \
+  || fail 'Yazi time-format toggle is not persisted through retained DDS state'
+grep -Fq 'function AwtarchyYaziToggleTimeFormat()' "$YAZI_INIT" \
+  || fail 'Yazi time-format toggle function is missing'
+grep -Fq 'Modified: %d/%d/%02d %02d:%02d' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item timestamp lacks 24-hour modified time'
+grep -Fq 'Modified: %d/%d/%02d %d:%02d %s' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item timestamp lacks 12-hour modified time'
+grep -Fq 'parts.hour % 12' "$YAZI_INIT" \
+  || fail 'Yazi 12-hour mode does not convert midnight/noon correctly'
+grep -Fq '"AM" or "PM"' "$YAZI_INIT" \
+  || fail 'Yazi 12-hour mode does not label AM/PM'
+grep -Fq 'Status:children_add(function(self)' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item timestamp is not attached to the status component'
+grep -Fq '500, Status.RIGHT' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item timestamp is not placed on the right side of status'
 
 python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener or combined metadata linemode is not configured correctly'
 import sys
@@ -158,4 +194,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi shows combined size/date metadata, inherits native create/find keys, uses native wraparound arrow/j/k navigation, preserves lowercase g/gg/G behavior, delegates text opening to the desktop default application, uses wl-clipboard for file copy, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
