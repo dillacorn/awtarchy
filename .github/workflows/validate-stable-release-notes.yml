@@ -42,7 +42,12 @@ jobs:
   one-use-v374-yazi-release-edit:
     name: One-use v3.7.4 Yazi release edit
     needs: release-notes-contract
-    if: github.event_name == 'pull_request' && github.repository == 'dillacorn/awtarchy' && github.event.pull_request.title == 'Temporary: update v3.7.4 Yazi post-release notes' && github.head_ref == 'chore/v3.7.4-yazi-time-release-bridge' && github.base_ref == 'main'
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.repository == 'dillacorn/awtarchy' &&
+      github.event.pull_request.title == 'Temporary: update v3.7.4 Yazi post-release notes' &&
+      github.head_ref == 'chore/v3.7.4-yazi-time-release-bridge' &&
+      github.base_ref == 'main'
     runs-on: ubuntu-latest
     permissions:
       actions: read
@@ -67,10 +72,12 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          test "$(git rev-parse HEAD^)" = "$EXPECTED_MAIN_SHA"
-
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
           test "$current_main" = "$EXPECTED_MAIN_SHA"
+
+          git fetch origin main
+          test "$(git merge-base HEAD origin/main)" = "$EXPECTED_MAIN_SHA"
+          test "$(git diff --name-only "$EXPECTED_MAIN_SHA"...HEAD)" = ".github/workflows/validate-stable-release-notes.yml"
 
           git fetch --force --tags origin
           test "$(git rev-parse "${TAG}^{}")" = "$EXPECTED_TAG_SHA"
