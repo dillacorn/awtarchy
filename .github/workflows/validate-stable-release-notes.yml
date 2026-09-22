@@ -99,7 +99,8 @@ jobs:
               ],
               text=True,
           )
-          runs = json.loads(payload)["workflow_runs"]
+          all_runs = json.loads(payload)["workflow_runs"]
+          runs = [run for run in all_runs if run.get("head_branch") == "main"]
 
           if len(runs) != expected_count:
               raise SystemExit(
