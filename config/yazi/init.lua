@@ -75,7 +75,7 @@ function AwtarchyYaziCloseTab()
     end
 end
 
-local AwtarchyYaziArchiveSnapshot = ya.sync(function()
+local function AwtarchyYaziArchiveSnapshot()
     local tab = cx.active
     local files = {}
 
@@ -104,7 +104,7 @@ local AwtarchyYaziArchiveSnapshot = ya.sync(function()
         cwd = tostring(tab.current.cwd),
         files = files,
     }
-end)
+end
 
 local function AwtarchyYaziArchiveNotify(content, level)
     ya.notify {
@@ -154,8 +154,8 @@ local function AwtarchyYaziUniqueZip(cwd, requested)
 end
 
 function AwtarchyYaziCompressSelection()
+    local snapshot = AwtarchyYaziArchiveSnapshot()
     ya.async(function()
-        local snapshot = AwtarchyYaziArchiveSnapshot()
         if #snapshot.files == 0 then
             return AwtarchyYaziArchiveNotify("Nothing selected.", "warn")
         end
@@ -226,8 +226,8 @@ local function AwtarchyYaziSingleZipSnapshot()
 end
 
 function AwtarchyYaziExtractZipHere()
+    local snapshot = AwtarchyYaziSingleZipSnapshot()
     ya.async(function()
-        local snapshot = AwtarchyYaziSingleZipSnapshot()
         if not snapshot then
             return AwtarchyYaziArchiveNotify("Select one .zip file to extract.", "warn")
         end
@@ -252,8 +252,8 @@ function AwtarchyYaziExtractZipHere()
 end
 
 function AwtarchyYaziExtractZipFolder()
+    local snapshot = AwtarchyYaziSingleZipSnapshot()
     ya.async(function()
-        local snapshot = AwtarchyYaziSingleZipSnapshot()
         if not snapshot then
             return AwtarchyYaziArchiveNotify("Select one .zip file to extract.", "warn")
         end
