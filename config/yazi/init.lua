@@ -268,6 +268,70 @@ local AwtarchyYaziItemActions = {
     { label = "Trash", shortcut = "dd", action = "trash" },
 }
 
+local AwtarchyYaziDropActions = {
+    { label = "Copy to folder", shortcut = "copy", action = "drop_copy" },
+    { label = "Move to folder", shortcut = "move", action = "drop_move" },
+}
+
+local AwtarchyYaziDragState = nil
+
+local function AwtarchyYaziDragSources(file)
+    local sources = {}
+
+    if file:is_selected() and #cx.active.selected > 0 then
+        for _, selected in pairs(cx.active.selected) do
+            sources[#sources + 1] = {
+                path = tostring(selected.path),
+                name = selected.name,
+                is_dir = selected.cha.is_dir,
+            }
+        end
+    else
+        sources[1] = {
+            path = tostring(file.path),
+            name = file.name,
+            is_dir = file.cha.is_dir,
+        }
+    end
+
+    return sources
+end
+
+local function AwtarchyYaziCanDropInto(target, sources)
+    local target_url = Url(target)
+    for _, source in ipairs(sources) do
+        if source.is_dir and target_url:starts_with(Url(source.path)) then
+            return false
+        end
+    end
+    return true
+end
+
+local function AwtarchyYaziDropInto(op, target, sources)
+    if not target or not sources or #sources == 0 then
+        return
+    end
+
+    ya.async(function()
+        for _, source in ipairs(sources) do
+            local from = Url(source.path)
+            local to = Url(target):join(source.name)
+            ya.task(op, { from = from, to = to }):spawn()
+        end
+    end)
+
+    ya.notify {
+        title = "Yazi",
+        content = string.format(
+            "%s %d item(s) to %s",
+            op == "move" and "Moving" or "Copying",
+            #sources,
+            tostring(Url(target).name or target)
+        ),
+        timeout = 2,
+    }
+end
+
 local AwtarchyYaziFolderActions = {
     { label = "New file", shortcut = "a", action = "new_file" },
     { label = "New folder", shortcut = "a /", action = "new_folder" },
@@ -285,6 +349,8 @@ AwtarchyYaziContextMenu = {
     _list_area = ui.Rect {},
     _hovered_row = nil,
     _selection_count = 0,
+    _drop_target = nil,
+    _drop_sources = nil,
 }
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
@@ -297,6 +363,12 @@ function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
     ui.render()
 end
 
+function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
+    self._drop_target = tostring(target)
+    self._drop_sources = sources
+    self:show("drop", x, y, #sources)
+end
+
 function AwtarchyYaziContextMenu:hide()
     if not self._visible then
         return
@@ -304,12 +376,17 @@ function AwtarchyYaziContextMenu:hide()
 
     self._visible = false
     self._hovered_row = nil
+    self._drop_target = nil
+    self._drop_sources = nil
     ui.render()
 end
 
 function AwtarchyYaziContextMenu:title()
     if self._kind == "background" then
         return " Folder actions "
+    elseif self._kind == "drop" then
+        local target = self._drop_target and Url(self._drop_target) or nil
+        return " Drop into " .. tostring(target and target.name or "folder") .. " "
     elseif self._selection_count > 1 then
         return " " .. tostring(self._selection_count) .. " selected "
     end
@@ -320,6 +397,8 @@ end
 function AwtarchyYaziContextMenu:actions()
     if self._kind == "background" then
         return AwtarchyYaziFolderActions
+    elseif self._kind == "drop" then
+        return AwtarchyYaziDropActions
     end
 
     local actions = {}
@@ -344,6 +423,11 @@ function AwtarchyYaziContextMenu:footer()
         return {
             "Keys: a create | Ctrl+V/p paste | t e terminal",
             "Right-click items for file and archive actions",
+        }
+    elseif self._kind == "drop" then
+        return {
+            "Release chose this folder as the destination",
+            "Choose Copy or Move; click elsewhere to cancel",
         }
     end
 
@@ -436,8 +520,12 @@ end
 
 function AwtarchyYaziContextMenu:run(action)
     local count = self._selection_count > 0 and self._selection_count or 1
+    local drop_target = self._drop_target
+    local drop_sources = self._drop_sources
     self._visible = false
     self._hovered_row = nil
+    self._drop_target = nil
+    self._drop_sources = nil
     ui.render()
 
     if action == "smart_open" then
@@ -477,6 +565,10 @@ function AwtarchyYaziContextMenu:run(action)
         end
     elseif action == "terminal" then
         ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+    elseif action == "drop_copy" then
+        AwtarchyYaziDropInto("copy", drop_target, drop_sources)
+    elseif action == "drop_move" then
+        AwtarchyYaziDropInto("move", drop_target, drop_sources)
     end
 end
 
@@ -546,6 +638,13 @@ end
 local AwtarchyYaziDefaultCurrentClick = Current.click
 
 function Current:click(event, up)
+    if up and event.is_left and AwtarchyYaziDragState then
+        AwtarchyYaziDragState = nil
+        return
+    elseif not up and event.is_left then
+        AwtarchyYaziDragState = nil
+    end
+
     if not up and event.is_right then
         local row = event.y - self._area.y + 1
         if not self._folder.window[row] then
@@ -559,11 +658,49 @@ function Current:click(event, up)
     return AwtarchyYaziDefaultCurrentClick(self, event, up)
 end
 
+function Entity:drag(event)
+    if AwtarchyYaziDragState then
+        return
+    end
+
+    local sources = AwtarchyYaziDragSources(self._file)
+    if #sources == 0 then
+        return
+    end
+
+    if not self._file:is_selected() then
+        ya.emit("toggle_all", { state = "off" })
+        ya.emit("reveal", { self._file.url })
+    end
+
+    AwtarchyYaziContextMenu:hide()
+    AwtarchyYaziDragState = { sources = sources }
+end
+
 function Entity:click(event, up)
     if up then
+        if event.is_left and AwtarchyYaziDragState then
+            local drag = AwtarchyYaziDragState
+            AwtarchyYaziDragState = nil
+
+            if self._file.cha.is_dir
+                and AwtarchyYaziCanDropInto(tostring(self._file.url), drag.sources)
+            then
+                AwtarchyYaziContextMenu:show_drop(
+                    self._file.url,
+                    drag.sources,
+                    event.x,
+                    event.y
+                )
+            end
+        end
         return
     elseif not event.is_left and not event.is_right and not event.is_middle then
         return
+    end
+
+    if event.is_left then
+        AwtarchyYaziDragState = nil
     end
 
     if event.is_middle then
