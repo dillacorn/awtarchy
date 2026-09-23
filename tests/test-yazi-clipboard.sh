@@ -123,6 +123,8 @@ grep -Fq 'Keys: a create | p paste | t e terminal' "$YAZI_INIT" \
   || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
   || fail 'Yazi New folder does not use the stable native create dir flag'
+# This assertion intentionally searches for the literal managed $HOME path.
+# shellcheck disable=SC2016
 grep -Fq '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash' "$YAZI_INIT" \
   || fail 'Yazi Terminal here does not use Awtarchy default terminal resolution'
 grep -Fq 'function Entity:click(event, up)' "$YAZI_INIT" \
