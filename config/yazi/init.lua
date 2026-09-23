@@ -1,8 +1,7 @@
 -- github.com/dillacorn/awtarchy/tree/main/config/yazi
 -- ~/.config/yazi/init.lua
 
-local AwtarchyYaziRecentFiles = require("recent-files")
-AwtarchyYaziRecentFiles:setup()
+require("recent-files"):setup()
 
 function Linemode:size_and_mtime()
     local size = self._file:size()
@@ -52,7 +51,11 @@ local function AwtarchyYaziOpenFiles(interactive, hovered_only)
     end
 
     if #recent > 0 then
-        AwtarchyYaziRecentFiles:record(recent)
+        local record = { "recent-files", "record" }
+        for _, path in ipairs(recent) do
+            record[#record + 1] = path
+        end
+        ya.emit("plugin", record)
     end
 
     local args = {}
@@ -84,12 +87,11 @@ function AwtarchyYaziEnsureRangeSelect()
     end
 end
 
-function AwtarchyYaziToggleOrCommitSelection()
-    if cx.active.mode.is_normal then
-        ya.emit("toggle", {})
-    else
+function AwtarchyYaziArrow(step)
+    if not cx.active.mode.is_normal then
         ya.emit("escape", { visual = true })
     end
+    ya.emit("arrow", { step })
 end
 
 function AwtarchyYaziConfirmQuit(no_cwd_file)
@@ -720,46 +722,50 @@ function Header:click(event, up)
     }
 end
 
-local AwtarchyYaziDefaultCurrentClick = Current.click
+local AwtarchyYaziPendingClick = nil
+local AwtarchyYaziDefaultCurrentDrag = Current.drag
 
 function Current:click(event, up)
-    if up and event.is_left and AwtarchyYaziDragState then
-        AwtarchyYaziDragState = nil
-        return
-    elseif not up and event.is_left then
-        AwtarchyYaziDragState = nil
+    local row = event.y - self._area.y + 1
+    local file = self._folder.window[row]
+
+    if file then
+        return Entity:new(file):click(event, up)
     end
 
     if not up and event.is_right then
-        local row = event.y - self._area.y + 1
-        if not self._folder.window[row] then
-            AwtarchyYaziContextMenu:show("background", event.x, event.y)
-            return
+        AwtarchyYaziPendingClick = nil
+        AwtarchyYaziContextMenu:show("background", event.x, event.y)
+    elseif event.is_left then
+        AwtarchyYaziPendingClick = nil
+        if up then
+            AwtarchyYaziDragState = nil
+        else
+            AwtarchyYaziContextMenu:hide()
         end
-    elseif not up and event.is_left then
-        AwtarchyYaziContextMenu:hide()
     end
-
-    return AwtarchyYaziDefaultCurrentClick(self, event, up)
 end
 
-function Entity:drag(event)
-    if AwtarchyYaziDragState then
-        return
+function Current:drag(event)
+    AwtarchyYaziPendingClick = nil
+
+    if not AwtarchyYaziDragState then
+        local source = self._folder.hovered
+        if source then
+            local sources = AwtarchyYaziDragSources(source)
+            if #sources > 0 then
+                if not source:is_selected() then
+                    ya.emit("toggle_all", { state = "off" })
+                    ya.emit("reveal", { source.url })
+                end
+
+                AwtarchyYaziContextMenu:hide()
+                AwtarchyYaziDragState = { sources = sources }
+            end
+        end
     end
 
-    local sources = AwtarchyYaziDragSources(self._file)
-    if #sources == 0 then
-        return
-    end
-
-    if not self._file:is_selected() then
-        ya.emit("toggle_all", { state = "off" })
-        ya.emit("reveal", { self._file.url })
-    end
-
-    AwtarchyYaziContextMenu:hide()
-    AwtarchyYaziDragState = { sources = sources }
+    return AwtarchyYaziDefaultCurrentDrag(self, event)
 end
 
 function Entity:click(event, up)
@@ -767,6 +773,7 @@ function Entity:click(event, up)
         if event.is_left and AwtarchyYaziDragState then
             local drag = AwtarchyYaziDragState
             AwtarchyYaziDragState = nil
+            AwtarchyYaziPendingClick = nil
 
             if self._file.cha.is_dir
                 and AwtarchyYaziCanDropInto(tostring(self._file.url), drag.sources)
@@ -778,20 +785,32 @@ function Entity:click(event, up)
                     event.y
                 )
             end
+            return
+        end
+
+        if event.is_left and AwtarchyYaziPendingClick then
+            local pending = AwtarchyYaziPendingClick
+            AwtarchyYaziPendingClick = nil
+
+            if pending.path == tostring(self._file.url) and pending.was_hovered then
+                AwtarchyYaziContextMenu:hide()
+                if self._file.cha.is_dir then
+                    ya.emit("enter", {})
+                else
+                    AwtarchyYaziOpenFiles(false, true)
+                end
+            end
         end
         return
     elseif not event.is_left and not event.is_right and not event.is_middle then
         return
     end
 
-    if event.is_left then
-        AwtarchyYaziDragState = nil
-    end
-
     if event.is_middle then
+        AwtarchyYaziPendingClick = nil
         AwtarchyYaziContextMenu:hide()
         if self._file.cha.is_dir then
-            ya.emit("tab_create", { tostring(self._file.url) })
+            ya.emit("tab_create", { tostring(self._file.url), raw = true })
         end
         return
     end
@@ -800,27 +819,26 @@ function Entity:click(event, up)
     local was_selected = self._file:is_selected()
     local selected_count = #cx.active.selected
 
-    if event.is_right and not was_selected then
-        ya.emit("toggle_all", { state = "off" })
-        selected_count = 1
-    elseif event.is_right then
-        selected_count = math.max(1, selected_count)
-    end
-
-    ya.emit("reveal", { self._file.url })
-
     if event.is_right then
-        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)
-    elseif was_hovered then
-        AwtarchyYaziContextMenu:hide()
-        if self._file.cha.is_dir then
-            ya.emit("enter", {})
+        AwtarchyYaziPendingClick = nil
+        if not was_selected then
+            ya.emit("toggle_all", { state = "off" })
+            selected_count = 1
         else
-            AwtarchyYaziOpenFiles(false, true)
+            selected_count = math.max(1, selected_count)
         end
-    else
-        AwtarchyYaziContextMenu:hide()
+
+        ya.emit("reveal", { self._file.url })
+        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)
+        return
     end
+
+    AwtarchyYaziContextMenu:hide()
+    AwtarchyYaziPendingClick = {
+        path = tostring(self._file.url),
+        was_hovered = was_hovered,
+    }
+    ya.emit("reveal", { self._file.url })
 end
 
 AwtarchyYaziTimeFormat = "24h"
