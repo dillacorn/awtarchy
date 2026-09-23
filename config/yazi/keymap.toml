@@ -17,6 +17,7 @@ prepend_keymap = [
   { on = ["<Right>"], run = "enter",     desc = "Enter directory" },
   { on = ["l"],       run = "enter",     desc = "Enter directory" },
   { on = ["<Enter>"], run = 'lua "AwtarchyYaziSmartEnter()"', desc = "Enter directory or open file" },
+  { on = ["<Esc>"],   run = 'lua "AwtarchyYaziEscape()"', desc = "Exit maximized preview or cancel" },
   { on = ["q"],       run = 'lua "AwtarchyYaziConfirmQuit(false)"', desc = "Quit with confirmation" },
   { on = ["Q"],       run = 'lua "AwtarchyYaziConfirmQuit(true)"', desc = "Quit without cwd file (confirm)" },
   { on = ["<C-w>"],   run = 'lua "AwtarchyYaziCloseTab()"', desc = "Close tab (confirm if last)" },
@@ -24,10 +25,14 @@ prepend_keymap = [
   { on = ["h"],       run = "leave",     desc = "Up one dir" },
   { on = ["<Backspace>"], run = "leave", desc = "Up one dir" },
 
-  # History
+  # History / navigation
   { on = ["H"],       run = "back",      desc = "Back in history" },
   { on = ["L"],       run = "forward",   desc = "Forward in history" },
   { on = ["g", "r"], run = "plugin recent-files", desc = "Go to recently opened file" },
+  { on = ["g", "b"], run = "plugin bookmarks", desc = "Go to bookmarked folder" },
+  { on = ["g", "B"], run = 'lua "AwtarchyYaziToggleBookmark()"', desc = "Bookmark hovered/current folder" },
+  { on = ["g", "m"], run = "plugin mounts", desc = "Open mount manager" },
+  { on = ["<C-f>"],  run = 'lua "AwtarchyYaziSearchMenu()"', desc = "Search current directory tree" },
 
   # Selection
   { on = ["<Space>"],   run = "toggle", desc = "Toggle selection" },
@@ -61,6 +66,8 @@ prepend_keymap = [
 
   # Display
   { on = ["m", "t"], run = 'lua "AwtarchyYaziToggleTimeFormat()"', desc = "Toggle modified time 24h/12h" },
+  { on = ["m", "v"], run = 'lua "AwtarchyYaziTogglePreview()"', desc = "Toggle preview pane" },
+  { on = ["m", "x"], run = 'lua "AwtarchyYaziTogglePreviewMax()"', desc = "Maximize/restore preview" },
 
   # Help
   { on = ["?"],       run = "help",           desc = "Help" }
