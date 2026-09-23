@@ -40,6 +40,14 @@ function AwtarchyYaziEnsureRangeSelect()
     end
 end
 
+function AwtarchyYaziToggleOrCommitSelection()
+    if cx.active.mode.is_normal then
+        ya.emit("toggle", {})
+    else
+        ya.emit("escape", { visual = true })
+    end
+end
+
 function AwtarchyYaziConfirmQuit(no_cwd_file)
     ya.async(function()
         local confirmed = ya.confirm {
