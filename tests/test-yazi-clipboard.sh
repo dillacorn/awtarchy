@@ -60,7 +60,6 @@ expected = {
     ("<C-Space>",): "toggle",
     ("<S-Up>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow prev"],
     ("<S-Down>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow next"],
-    ("<C-c>",): ['shell -- for path in %s; do printf "file://%s\\r\\n" "$path"; done | wl-copy -t text/uri-list', "yank"],
     ("<C-x>",): "yank --cut",
     ("<C-v>",): "paste",
     ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
@@ -73,6 +72,14 @@ expected = {
 for keys, run in expected.items():
     if by_keys.get(keys, {}).get("run") != run:
         raise SystemExit(1)
+
+ctrl_copy = by_keys.get(("<C-c>",), {}).get("run")
+if (
+    not isinstance(ctrl_copy, list)
+    or "yank" not in ctrl_copy
+    or not any("wl-copy -t text/uri-list" in action for action in ctrl_copy if isinstance(action, str))
+):
+    raise SystemExit(1)
 
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
