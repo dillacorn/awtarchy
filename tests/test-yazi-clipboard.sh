@@ -107,6 +107,12 @@ grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_I
   || fail 'Yazi blank-space right-click does not open folder actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y)' "$YAZI_INIT" \
   || fail 'Yazi item right-click does not open item actions'
+grep -Fq 'function Header:click(event, up)' "$YAZI_INIT" \
+  || fail 'Yazi header path mouse clipboard behavior is missing'
+grep -Fq 'ya.emit("copy", { "dirpath" })' "$YAZI_INIT" \
+  || fail 'Yazi header click does not use native current-directory path copying'
+grep -Fq 'Copied to clipboard: ' "$YAZI_INIT" \
+  || fail 'Yazi header click does not report clipboard success'
 grep -Fq '{ label = "New file", shortcut = "a", action = "new_file" }' "$YAZI_INIT" \
   || fail 'Yazi folder context menu lacks New file with keyboard hint'
 grep -Fq '{ label = "New folder", shortcut = "a /", action = "new_folder" }' "$YAZI_INIT" \
