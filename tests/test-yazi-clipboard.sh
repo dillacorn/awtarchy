@@ -157,9 +157,10 @@ grep -Fq 'string.format("%s (%d).zip", stem, index)' "$YAZI_INIT" \
   || fail 'Yazi ZIP creation does not protect existing archive names'
 grep -Fq '"-aou"' "$YAZI_INIT" \
   || fail 'Yazi extract-here does not auto-rename colliding files'
-grep -Fq '"Terminal Apps:' "$RUNTIME" \
-  && grep -Fq ' 7zip ' "$RUNTIME" \
-  || fail 'Awtarchy does not install 7zip for Yazi archive actions'
+if ! grep -Fq '"Terminal Apps:' "$RUNTIME" \
+  || ! grep -Fq ' 7zip ' "$RUNTIME"; then
+  fail 'Awtarchy does not install 7zip for Yazi archive actions'
+fi
 # This assertion intentionally searches for the literal managed $HOME path.
 # shellcheck disable=SC2016
 grep -Fq '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash' "$YAZI_INIT" \
