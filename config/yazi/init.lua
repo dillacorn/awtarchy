@@ -59,6 +59,14 @@ function AwtarchyYaziConfirmQuit(no_cwd_file)
     end)
 end
 
+function AwtarchyYaziCloseTab()
+    if #cx.tabs > 1 then
+        ya.emit("close", {})
+    else
+        AwtarchyYaziConfirmQuit(false)
+    end
+end
+
 local AwtarchyYaziArchiveSnapshot = ya.sync(function()
     local tab = cx.active
     local files = {}
