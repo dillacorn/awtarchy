@@ -154,6 +154,13 @@ function AwtarchyYaziToggleBookmark()
     ya.emit("plugin", { "bookmarks", "toggle", target })
 end
 
+function AwtarchyYaziOpenHoveredTab()
+    local hovered = cx.active.current.hovered
+    if hovered and hovered.cha.is_dir then
+        ya.emit("tab_create", { tostring(hovered.url), raw = true })
+    end
+end
+
 local AwtarchyYaziInitialRatio = nil
 local AwtarchyYaziPreviewHiddenRestore = nil
 local AwtarchyYaziPreviewMaxRestore = nil
@@ -611,7 +618,7 @@ function AwtarchyYaziContextMenu:actions()
         local bookmarked = require("bookmarks"):is_bookmarked(tostring(hovered.url))
         return {
             { label = "Enter folder", shortcut = "Enter / l", action = "smart_open" },
-            { label = "Open in new tab", shortcut = "middle-click", action = "open_new_tab" },
+            { label = "Open in new tab", shortcut = "t n", action = "open_new_tab" },
             {
                 label = bookmarked and "Remove bookmark" or "Add bookmark",
                 shortcut = "g B",
@@ -766,10 +773,7 @@ function AwtarchyYaziContextMenu:run(action)
     if action == "smart_open" then
         AwtarchyYaziSmartEnter()
     elseif action == "open_new_tab" then
-        local hovered = cx.active.current.hovered
-        if hovered and hovered.cha.is_dir then
-            ya.emit("tab_create", { tostring(hovered.url), raw = true })
-        end
+        AwtarchyYaziOpenHoveredTab()
     elseif action == "open_with" then
         AwtarchyYaziOpenFiles(true, true)
     elseif action == "rename" then
