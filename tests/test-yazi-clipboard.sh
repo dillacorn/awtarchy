@@ -180,6 +180,14 @@ grep -Fq 'function AwtarchyYaziTogglePreview()' "$YAZI_INIT" \
   || fail 'Yazi preview pane toggle is missing'
 grep -Fq 'function AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
   || fail 'Yazi preview maximize toggle is missing'
+grep -Fq 'AwtarchyYaziPreviewButton = {' "$YAZI_INIT" \
+  || fail 'Yazi preview pane lacks the clickable maximize/restore button'
+grep -Fq 'and "[ Restore ]" or "[ Maximize ]"' "$YAZI_INIT" \
+  || fail 'Yazi preview button does not expose maximize/restore state'
+grep -Fq 'h = area.h - 1' "$YAZI_INIT" \
+  || fail 'Yazi preview control does not reserve a non-overlapping bottom row'
+grep -Fq 'AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
+  || fail 'Yazi preview button is not wired to the maximize/restore action'
 grep -Fq 'function AwtarchyYaziEscape()' "$YAZI_INIT" \
   || fail 'Yazi conditional Esc preview restore is missing'
 grep -Fq 'ya.emit("escape", {})' "$YAZI_INIT" \
