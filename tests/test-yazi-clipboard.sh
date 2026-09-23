@@ -129,10 +129,12 @@ if grep -Eq '^[[:space:]]*#' "$YAZI_INIT"; then
 fi
 if command -v luac >/dev/null 2>&1; then
   luac -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
+  luac -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
 elif command -v luac5.4 >/dev/null 2>&1; then
   luac5.4 -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
+  luac5.4 -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
 else
-  fail 'No Lua compiler is available to validate Yazi init.lua'
+  fail 'No Lua compiler is available to validate Yazi Lua'
 fi
 grep -Fq 'function Linemode:size_and_mtime()' "$YAZI_INIT" \
   || fail 'Yazi combined size/date linemode is not defined'
