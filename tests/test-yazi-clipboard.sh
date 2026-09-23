@@ -185,6 +185,17 @@ grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
   || fail 'Yazi context menu hover handling is missing'
 grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not highlight the hovered action'
+grep -Fq 'function Entity:drag(event)' "$YAZI_INIT" \
+  || fail 'Yazi internal drag gesture handling is missing'
+grep -Fq 'AwtarchyYaziContextMenu:show_drop' "$YAZI_INIT" \
+  || fail 'Yazi drag release over a directory does not open Copy/Move choices'
+grep -Fq 'AwtarchyYaziDropInto("copy"' "$YAZI_INIT" \
+  || fail 'Yazi internal drag cannot copy selected items into a folder'
+grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
+  || fail 'Yazi internal drag cannot move selected items into a folder'
+if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'dragon-drop' "$YAZI_INIT"; then
+  fail 'Awtarchy Yazi internal drag depends on an external Windows/DragonDrop helper'
+fi
 grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use native readable file sizes'
 grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
