@@ -55,6 +55,12 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
+    ("<C-c>",): "yank",
+    ("<C-x>",): "yank --cut",
+    ("<C-v>",): "paste",
+    ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
+    ("e", "h"): 'lua "AwtarchyYaziExtractZipHere()"',
+    ("e", "f"): 'lua "AwtarchyYaziExtractZipFolder()"',
     ("t", "e"): 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("?",): "help",
@@ -70,13 +76,15 @@ if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
 PY_KEYMAP
 
-# These assertions intentionally search for literal shell variables in keymap source.
-# shellcheck disable=SC2016
-grep -Fq 'dragon-drop -x -i -T "$@"' "$KEYMAP" \
-  || fail 'Yazi selected-item dragon-drop binding changed'
-# shellcheck disable=SC2016
-grep -Fq 'dragon-drop -x -i -T "$1"' "$KEYMAP" \
-  || fail 'Yazi hovered-item dragon-drop binding changed'
+if grep -Fq 'dragon-drop' "$KEYMAP"; then
+  fail 'Yazi keymap still contains the retired DragonDrop workflow'
+fi
+grep -Fq 'desc = "Copy selected files"' "$KEYMAP" \
+  || fail 'Yazi Ctrl+C copy binding is not documented'
+grep -Fq 'desc = "Cut selected files"' "$KEYMAP" \
+  || fail 'Yazi Ctrl+X cut binding is not documented'
+grep -Fq 'desc = "Paste copied/cut files"' "$KEYMAP" \
+  || fail 'Yazi Ctrl+V paste binding is not documented'
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi
@@ -123,12 +131,35 @@ grep -Fq '{ label = "Rename", shortcut = "r", action = "rename" }' "$YAZI_INIT" 
   || fail 'Yazi item context menu lacks Rename shortcut hint'
 grep -Fq '{ label = "Trash", shortcut = "dd", action = "trash" }' "$YAZI_INIT" \
   || fail 'Yazi item context menu lacks Trash shortcut hint'
-grep -Fq 'Keys: Enter open | O open with | r rename | y/Y copy/cut' "$YAZI_INIT" \
+grep -Fq 'Keys: Enter open | r rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
   || fail 'Yazi item context footer does not teach keyboard equivalents'
-grep -Fq 'Keys: a create | p paste | t e terminal' "$YAZI_INIT" \
+grep -Fq 'Keys: a create | Ctrl+V/p paste | t e terminal' "$YAZI_INIT" \
   || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
   || fail 'Yazi New folder does not use the stable native create dir flag'
+grep -Fq 'function AwtarchyYaziCompressSelection()' "$YAZI_INIT" \
+  || fail 'Yazi ZIP compression helper is missing'
+grep -Fq 'function AwtarchyYaziExtractZipHere()' "$YAZI_INIT" \
+  || fail 'Yazi extract-here helper is missing'
+grep -Fq 'function AwtarchyYaziExtractZipFolder()' "$YAZI_INIT" \
+  || fail 'Yazi extract-to-folder helper is missing'
+grep -Fq 'Compress to ZIP...' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose ZIP compression'
+grep -Fq 'Extract here' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose extract-here'
+grep -Fq 'Extract to folder' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose extract-to-folder'
+grep -Fq '7zz' "$YAZI_INIT" \
+  || fail 'Yazi archive helper does not support the upstream 7zz command name'
+grep -Fq '7z' "$YAZI_INIT" \
+  || fail 'Yazi archive helper does not support the Arch 7z command name'
+grep -Fq 'string.format("%s (%d).zip", stem, index)' "$YAZI_INIT" \
+  || fail 'Yazi ZIP creation does not protect existing archive names'
+grep -Fq '"-aou"' "$YAZI_INIT" \
+  || fail 'Yazi extract-here does not auto-rename colliding files'
+grep -Fq '"Terminal Apps:' "$RUNTIME" \
+  && grep -Fq ' 7zip ' "$RUNTIME" \
+  || fail 'Awtarchy does not install 7zip for Yazi archive actions'
 # This assertion intentionally searches for the literal managed $HOME path.
 # shellcheck disable=SC2016
 grep -Fq '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash' "$YAZI_INIT" \
@@ -139,8 +170,20 @@ grep -Fq 'local was_hovered = self._file.is_hovered' "$YAZI_INIT" \
   || fail 'Yazi click handler does not preserve pre-click highlighted state'
 grep -Fq 'ya.emit("reveal", { self._file.url })' "$YAZI_INIT" \
   || fail 'Yazi click handler no longer selects newly clicked rows'
-grep -Fq 'elseif was_hovered and self._file.cha.is_dir then' "$YAZI_INIT" \
-  || fail 'Yazi second-click directory entry guard is missing'
+grep -Fq 'elseif was_hovered then' "$YAZI_INIT" \
+  || fail 'Yazi second-click action guard is missing'
+grep -Fq 'ya.emit("open", { hovered = true })' "$YAZI_INIT" \
+  || fail 'Yazi second-click file opening is missing'
+grep -Fq 'event.is_middle' "$YAZI_INIT" \
+  || fail 'Yazi middle-click directory handling is missing'
+grep -Fq 'ya.emit("tab_create", { tostring(self._file.url) })' "$YAZI_INIT" \
+  || fail 'Yazi middle-click does not open directories in a new tab'
+grep -Fq 'self._selection_count > 1' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose multi-selection count'
+grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi context menu hover handling is missing'
+grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not highlight the hovered action'
 grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use native readable file sizes'
 grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
@@ -250,4 +293,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
