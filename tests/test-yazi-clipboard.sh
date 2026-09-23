@@ -55,7 +55,12 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
-    ("<C-c>",): "yank",
+    ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
+    ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
+    ("<C-Space>",): "toggle",
+    ("<S-Up>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow prev"],
+    ("<S-Down>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow next"],
+    ("<C-c>",): ['shell -- for path in %s; do printf "file://%s\\r\\n" "$path"; done | wl-copy -t text/uri-list', "yank"],
     ("<C-x>",): "yank --cut",
     ("<C-v>",): "paste",
     ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
@@ -79,8 +84,21 @@ PY_KEYMAP
 if grep -Fq 'dragon-drop' "$KEYMAP"; then
   fail 'Yazi keymap still contains the retired DragonDrop workflow'
 fi
-grep -Fq 'desc = "Copy selected files"' "$KEYMAP" \
-  || fail 'Yazi Ctrl+C copy binding is not documented'
+grep -Fq 'desc = "Copy files + system clipboard"' "$KEYMAP" \
+  || fail 'Yazi Ctrl+C system-clipboard copy binding is not documented'
+grep -Fq 'on = ["<C-Space>"]' "$KEYMAP" \
+  || fail 'Yazi Ctrl+Space individual-selection binding is missing'
+grep -Fq 'on = ["<S-Up>"]' "$KEYMAP" \
+  || fail 'Yazi Shift+Up range-selection binding is missing'
+grep -Fq 'on = ["<S-Down>"]' "$KEYMAP" \
+  || fail 'Yazi Shift+Down range-selection binding is missing'
+grep -Fq 'AwtarchyYaziConfirmQuit(false)' "$KEYMAP" \
+  || fail 'Yazi q quit confirmation binding is missing'
+grep -Fq 'AwtarchyYaziConfirmQuit(true)' "$KEYMAP" \
+  || fail 'Yazi Q quit-without-cwd confirmation binding is missing'
+grep -Fq '[confirm]' "$KEYMAP" \
+  && grep -Fq '{ on = ["<Space>"], run = "close --submit", desc = "Confirm" }' "$KEYMAP" \
+  || fail 'Yazi quit confirmation does not accept Space'
 grep -Fq 'desc = "Cut selected files"' "$KEYMAP" \
   || fail 'Yazi Ctrl+X cut binding is not documented'
 grep -Fq 'desc = "Paste copied/cut files"' "$KEYMAP" \
@@ -105,6 +123,20 @@ grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper is missing'
 grep -Fq 'hovered and hovered.cha.is_dir and "enter" or "open"' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper does not distinguish directories from files'
+grep -Fq 'function AwtarchyYaziEnsureRangeSelect()' "$YAZI_INIT" \
+  || fail 'Yazi Shift+Arrow range-selection helper is missing'
+grep -Fq 'cx.active.mode.is_normal' "$YAZI_INIT" \
+  || fail 'Yazi range selection does not preserve an existing visual selection'
+grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
+  || fail 'Yazi quit confirmation helper is missing'
+grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
+  || fail 'Yazi quit confirmation prompt is missing'
+grep -Fq 'Yes: Y / Enter / Space' "$YAZI_INIT" \
+  || fail 'Yazi quit confirmation does not document affirmative keys'
+grep -Fq 'No:  N / Esc' "$YAZI_INIT" \
+  || fail 'Yazi quit confirmation does not document cancel keys'
+grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
+  || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context-menu component is missing'
 grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu, 20)' "$YAZI_INIT" \
@@ -207,6 +239,14 @@ grep -Fq '"%d/%d/%02d"' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use compact M/D/YY dates'
 grep -Fq '"%9s  %8s"' "$YAZI_INIT" \
   || fail 'Yazi combined linemode lost size/date alignment'
+grep -Fq 'function Status:selected_count()' "$YAZI_INIT" \
+  || fail 'Yazi multi-selection count status is missing'
+grep -Fq 'local count = #cx.active.selected' "$YAZI_INIT" \
+  || fail 'Yazi multi-selection status does not use the cheap selected-item count'
+grep -Fq 'if count < 2 then' "$YAZI_INIT" \
+  || fail 'Yazi selection count should stay hidden for zero/one selected item'
+grep -Fq '" %d selected "' "$YAZI_INIT" \
+  || fail 'Yazi multi-selection status text changed'
 grep -Fq 'function Status:modified_time()' "$YAZI_INIT" \
   || fail 'Yazi highlighted-item modified timestamp is not defined'
 grep -Fq 'hovered.cha.mtime' "$YAZI_INIT" \
