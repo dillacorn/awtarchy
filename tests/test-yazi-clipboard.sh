@@ -113,8 +113,8 @@ grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \
   || fail 'Yazi blank-space right-click does not open folder actions'
-grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y)' "$YAZI_INIT" \
-  || fail 'Yazi item right-click does not open item actions'
+grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)' "$YAZI_INIT" \
+  || fail 'Yazi item right-click does not open selection-aware item actions'
 grep -Fq 'function Header:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi header path mouse clipboard behavior is missing'
 grep -Fq 'ya.emit("copy", { "dirpath" })' "$YAZI_INIT" \
