@@ -96,9 +96,10 @@ grep -Fq 'AwtarchyYaziConfirmQuit(false)' "$KEYMAP" \
   || fail 'Yazi q quit confirmation binding is missing'
 grep -Fq 'AwtarchyYaziConfirmQuit(true)' "$KEYMAP" \
   || fail 'Yazi Q quit-without-cwd confirmation binding is missing'
-grep -Fq '[confirm]' "$KEYMAP" \
-  && grep -Fq '{ on = ["<Space>"], run = "close --submit", desc = "Confirm" }' "$KEYMAP" \
-  || fail 'Yazi quit confirmation does not accept Space'
+if ! grep -Fq '[confirm]' "$KEYMAP" \
+  || ! grep -Fq '{ on = ["<Space>"], run = "close --submit", desc = "Confirm" }' "$KEYMAP"; then
+  fail 'Yazi quit confirmation does not accept Space'
+fi
 grep -Fq 'desc = "Cut selected files"' "$KEYMAP" \
   || fail 'Yazi Ctrl+X cut binding is not documented'
 grep -Fq 'desc = "Paste copied/cut files"' "$KEYMAP" \
