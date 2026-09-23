@@ -1,6 +1,9 @@
 -- github.com/dillacorn/awtarchy/tree/main/config/yazi
 -- ~/.config/yazi/init.lua
 
+local AwtarchyYaziRecentFiles = require("recent-files")
+AwtarchyYaziRecentFiles:setup()
+
 function Linemode:size_and_mtime()
     local size = self._file:size()
     local size_text
@@ -29,9 +32,50 @@ function Linemode:size_and_mtime()
 end
 
 
+local function AwtarchyYaziOpenFiles(interactive, hovered_only)
+    local tab = cx.active
+    local recent = {}
+
+    if hovered_only then
+        local file = tab.current.hovered
+        if file and not file.cha.is_dir then
+            recent[1] = tostring(file.path)
+        end
+    elseif #tab.selected > 0 then
+        for _, file in pairs(tab.selected) do
+            if not file.cha.is_dir then
+                recent[#recent + 1] = tostring(file.path)
+            end
+        end
+    elseif tab.current.hovered and not tab.current.hovered.cha.is_dir then
+        recent[1] = tostring(tab.current.hovered.path)
+    end
+
+    if #recent > 0 then
+        AwtarchyYaziRecentFiles:record(recent)
+    end
+
+    local args = {}
+    if interactive then
+        args.interactive = true
+    end
+    if hovered_only then
+        args.hovered = true
+    end
+    ya.emit("open", args)
+end
+
+function AwtarchyYaziOpen(interactive)
+    AwtarchyYaziOpenFiles(interactive == true, false)
+end
+
 function AwtarchyYaziSmartEnter()
     local hovered = cx.active.current.hovered
-    ya.emit(hovered and hovered.cha.is_dir and "enter" or "open", {})
+    if hovered and hovered.cha.is_dir then
+        ya.emit("enter", {})
+    else
+        AwtarchyYaziOpenFiles(false, false)
+    end
 end
 
 function AwtarchyYaziEnsureRangeSelect()
@@ -572,7 +616,7 @@ function AwtarchyYaziContextMenu:run(action)
     if action == "smart_open" then
         AwtarchyYaziSmartEnter()
     elseif action == "open_with" then
-        ya.emit("open", { interactive = true, hovered = true })
+        AwtarchyYaziOpenFiles(true, true)
     elseif action == "rename" then
         ya.emit("rename", { hovered = true })
     elseif action == "copy" then
@@ -772,7 +816,7 @@ function Entity:click(event, up)
         if self._file.cha.is_dir then
             ya.emit("enter", {})
         else
-            ya.emit("open", { hovered = true })
+            AwtarchyYaziOpenFiles(false, true)
         end
     else
         AwtarchyYaziContextMenu:hide()
