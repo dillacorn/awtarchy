@@ -49,8 +49,8 @@ for keys in [("g",), ("a",), ("/",), ("n",), ("N",)]:
         raise SystemExit(1)
 
 expected = {
-    ("<Up>",): "arrow prev",
-    ("<Down>",): "arrow next",
+    ("<Up>",): 'lua "AwtarchyYaziArrow(-1)"',
+    ("<Down>",): 'lua "AwtarchyYaziArrow(1)"',
     ("k",): "arrow prev",
     ("j",): "arrow next",
     ("g", "g"): "arrow top",
@@ -63,10 +63,11 @@ expected = {
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
-    ("<Space>",): 'lua "AwtarchyYaziToggleOrCommitSelection()"',
+    ("<Space>",): "toggle",
     ("<C-Space>",): "toggle",
-    ("<S-Up>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow prev"],
-    ("<S-Down>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow next"],
+    ("<S-Up>",): 'lua "AwtarchyYaziShiftArrow(-1)"',
+    ("<S-Down>",): 'lua "AwtarchyYaziShiftArrow(1)"',
+    ("<Delete>",): "remove",
     ("<C-x>",): "yank --cut",
     ("<C-v>",): "paste",
     ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
@@ -140,7 +141,7 @@ grep -Fq 'function Linemode:size_and_mtime()' "$YAZI_INIT" \
   || fail 'Yazi combined size/date linemode is not defined'
 grep -Fq 'require("recent-files")' "$YAZI_INIT" \
   || fail 'Yazi init does not load the managed recent-files plugin'
-grep -Fq 'AwtarchyYaziRecentFiles:setup()' "$YAZI_INIT" \
+grep -Fq 'require("recent-files"):setup()' "$YAZI_INIT" \
   || fail 'Yazi recent-files DDS state is not initialized at startup'
 grep -Fq 'local function AwtarchyYaziOpenFiles(interactive, hovered_only)' "$YAZI_INIT" \
   || fail 'Yazi central file-open recorder is missing'
@@ -148,22 +149,22 @@ grep -Fq 'if file and not file.cha.is_dir then' "$YAZI_INIT" \
   || fail 'Yazi recent history does not exclude hovered directories'
 grep -Fq 'if not file.cha.is_dir then' "$YAZI_INIT" \
   || fail 'Yazi recent history does not exclude selected directories'
-grep -Fq 'AwtarchyYaziRecentFiles:record(recent)' "$YAZI_INIT" \
-  || fail 'Yazi opened files are not recorded into shared history'
+grep -Fq 'local record = { "recent-files", "record" }' "$YAZI_INIT" \
+  || fail 'Yazi opened files are not routed through the recent-files plugin runtime'
 grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper is missing'
 grep -Fq 'if hovered and hovered.cha.is_dir then' "$YAZI_INIT" \
   || fail 'Yazi smart Enter no longer distinguishes directories from files'
 grep -Fq 'AwtarchyYaziOpenFiles(false, false)' "$YAZI_INIT" \
   || fail 'Yazi smart Enter does not record and open files'
-grep -Fq 'function AwtarchyYaziEnsureRangeSelect()' "$YAZI_INIT" \
+grep -Fq 'function AwtarchyYaziShiftArrow(step)' "$YAZI_INIT" \
   || fail 'Yazi Shift+Arrow range-selection helper is missing'
-grep -Fq 'function AwtarchyYaziToggleOrCommitSelection()' "$YAZI_INIT" \
-  || fail 'Yazi Space toggle/commit helper is missing'
+grep -Fq 'AwtarchyYaziShiftRangeActive = true' "$YAZI_INIT" \
+  || fail 'Yazi Shift+Arrow selection is not tracked separately from native visual mode'
+grep -Fq 'function AwtarchyYaziArrow(step)' "$YAZI_INIT" \
+  || fail 'Yazi plain-arrow range commit helper is missing'
 grep -Fq 'ya.emit("escape", { visual = true })' "$YAZI_INIT" \
-  || fail 'Yazi Space does not commit an active range selection'
-grep -Fq 'cx.active.mode.is_normal' "$YAZI_INIT" \
-  || fail 'Yazi range selection does not preserve an existing visual selection'
+  || fail 'Yazi plain arrow does not commit an active Shift+Arrow range'
 grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation helper is missing'
 grep -Fq 'function AwtarchyYaziCloseTab()' "$YAZI_INIT" \
@@ -260,22 +261,28 @@ grep -Fq 'local was_hovered = self._file.is_hovered' "$YAZI_INIT" \
   || fail 'Yazi click handler does not preserve pre-click highlighted state'
 grep -Fq 'ya.emit("reveal", { self._file.url })' "$YAZI_INIT" \
   || fail 'Yazi click handler no longer selects newly clicked rows'
-grep -Fq 'elseif was_hovered then' "$YAZI_INIT" \
-  || fail 'Yazi second-click action guard is missing'
+grep -Fq 'AwtarchyYaziPendingClick = {' "$YAZI_INIT" \
+  || fail 'Yazi second-click action is not deferred until Mouse1 release'
+grep -Fq 'pending.was_hovered' "$YAZI_INIT" \
+  || fail 'Yazi release-open does not require the item to have been highlighted on Mouse1 down'
+grep -Fq 'function Current:drag(event)' "$YAZI_INIT" \
+  || fail 'Yazi internal drag gesture handling is missing at the current-pane layer'
+grep -Fq 'AwtarchyYaziPendingClick = nil' "$YAZI_INIT" \
+  || fail 'Yazi drag does not cancel pending click-open'
 grep -Fq 'AwtarchyYaziOpenFiles(false, true)' "$YAZI_INIT" \
   || fail 'Yazi second-click file opening no longer records recents'
 grep -Fq 'event.is_middle' "$YAZI_INIT" \
   || fail 'Yazi middle-click directory handling is missing'
-grep -Fq 'ya.emit("tab_create", { tostring(self._file.url) })' "$YAZI_INIT" \
+grep -Fq 'ya.emit("tab_create", { tostring(self._file.url), raw = true })' "$YAZI_INIT" \
   || fail 'Yazi middle-click does not open directories in a new tab'
 grep -Fq 'self._selection_count > 1' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose multi-selection count'
 grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
   || fail 'Yazi context menu hover handling is missing'
+grep -Fq 'function Root:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi root does not route mouse-move events to the context menu'
 grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not highlight the hovered action'
-grep -Fq 'function Entity:drag(event)' "$YAZI_INIT" \
-  || fail 'Yazi internal drag gesture handling is missing'
 grep -Fq 'AwtarchyYaziContextMenu:show_drop' "$YAZI_INIT" \
   || fail 'Yazi drag release over a directory does not open Copy/Move choices'
 grep -Fq 'AwtarchyYaziDropInto("copy"' "$YAZI_INIT" \
@@ -340,6 +347,9 @@ with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
 
 if config.get("mgr", {}).get("linemode") != "size_and_mtime":
+    raise SystemExit(1)
+
+if config.get("mgr", {}).get("mouse_events") != ["click", "scroll", "drag", "move"]:
     raise SystemExit(1)
 
 rules = config.get("opener", {}).get("edit", [])
@@ -407,10 +417,16 @@ grep -Fq 'local KIND = "@dillacorn-yazi-recent-files"' "$YAZI_RECENT" \
   || fail 'Yazi recents do not use retained DDS static state'
 grep -Fq 'local MAX_RECENTS = 35' "$YAZI_RECENT" \
   || fail 'Yazi recent history is not bounded'
-grep -Fq 'ps.sub_remote(KIND, merge_remote)' "$YAZI_RECENT" \
+grep -Fq 'local snapshot = ya.sync' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not keep state behind the plugin sync boundary'
+grep -Fq 'local record = ya.sync' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not record through plugin sync context'
+grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
   || fail 'Yazi recents are not subscribed across sessions'
-grep -Fq 'ps.pub_to(0, KIND, recents)' "$YAZI_RECENT" \
+grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
   || fail 'Yazi recents are not published across sessions'
+grep -Fq 'content = "No recently opened files."' "$YAZI_RECENT" \
+  || fail 'Yazi empty recent-files message changed'
 grep -Fq 'cha and not cha.is_dir' "$YAZI_RECENT" \
   || fail 'Yazi recents picker does not filter directories'
 grep -Fq 'ya.which' "$YAZI_RECENT" \
