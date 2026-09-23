@@ -3,6 +3,7 @@
 
 [mgr]
 linemode = "size_and_mtime"
+mouse_events = ["click", "scroll", "drag", "move"]
 
 [opener]
 edit = [
