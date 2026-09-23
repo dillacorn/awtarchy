@@ -55,6 +55,7 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
+    ("t", "e"): 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("?",): "help",
 }
@@ -63,6 +64,9 @@ for keys, run in expected.items():
         raise SystemExit(1)
 
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
+    raise SystemExit(1)
+
+if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
 PY_KEYMAP
 
@@ -93,6 +97,34 @@ grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper is missing'
 grep -Fq 'hovered and hovered.cha.is_dir and "enter" or "open"' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper does not distinguish directories from files'
+grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
+  || fail 'Yazi mouse context-menu component is missing'
+grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu, 20)' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu is not registered as a clickable modal child'
+grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
+  || fail 'Yazi current-pane click handler does not support blank-space actions'
+grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \
+  || fail 'Yazi blank-space right-click does not open folder actions'
+grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y)' "$YAZI_INIT" \
+  || fail 'Yazi item right-click does not open item actions'
+grep -Fq '{ label = "New file", shortcut = "a", action = "new_file" }' "$YAZI_INIT" \
+  || fail 'Yazi folder context menu lacks New file with keyboard hint'
+grep -Fq '{ label = "New folder", shortcut = "a /", action = "new_folder" }' "$YAZI_INIT" \
+  || fail 'Yazi folder context menu lacks New folder with create convention hint'
+grep -Fq '{ label = "Terminal here", shortcut = "t e", action = "terminal" }' "$YAZI_INIT" \
+  || fail 'Yazi folder context menu lacks Terminal here with keyboard parity'
+grep -Fq '{ label = "Rename", shortcut = "r", action = "rename" }' "$YAZI_INIT" \
+  || fail 'Yazi item context menu lacks Rename shortcut hint'
+grep -Fq '{ label = "Trash", shortcut = "dd", action = "trash" }' "$YAZI_INIT" \
+  || fail 'Yazi item context menu lacks Trash shortcut hint'
+grep -Fq 'Keys: Enter open | O open with | r rename | y/Y copy/cut' "$YAZI_INIT" \
+  || fail 'Yazi item context footer does not teach keyboard equivalents'
+grep -Fq 'Keys: a create | p paste | t e terminal' "$YAZI_INIT" \
+  || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
+grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
+  || fail 'Yazi New folder does not use the stable native create dir flag'
+grep -Fq '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash' "$YAZI_INIT" \
+  || fail 'Yazi Terminal here does not use Awtarchy default terminal resolution'
 grep -Fq 'function Entity:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi custom entity click handler is missing'
 grep -Fq 'local was_hovered = self._file.is_hovered' "$YAZI_INIT" \
@@ -210,4 +242,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, smart-enters directories from Enter or a second click, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
