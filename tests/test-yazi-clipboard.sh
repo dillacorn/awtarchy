@@ -57,6 +57,7 @@ expected = {
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
+    ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
     ("<C-Space>",): "toggle",
     ("<S-Up>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow prev"],
     ("<S-Down>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow next"],
@@ -103,6 +104,8 @@ grep -Fq 'AwtarchyYaziConfirmQuit(false)' "$KEYMAP" \
   || fail 'Yazi q quit confirmation binding is missing'
 grep -Fq 'AwtarchyYaziConfirmQuit(true)' "$KEYMAP" \
   || fail 'Yazi Q quit-without-cwd confirmation binding is missing'
+grep -Fq 'AwtarchyYaziCloseTab()' "$KEYMAP" \
+  || fail 'Yazi Ctrl+W tab-close replacement is missing'
 if ! grep -Fq '[confirm]' "$KEYMAP" \
   || ! grep -Fq '{ on = ["<Space>"], run = "close --submit", desc = "Confirm" }' "$KEYMAP"; then
   fail 'Yazi quit confirmation does not accept Space'
@@ -137,6 +140,10 @@ grep -Fq 'cx.active.mode.is_normal' "$YAZI_INIT" \
   || fail 'Yazi range selection does not preserve an existing visual selection'
 grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation helper is missing'
+grep -Fq 'function AwtarchyYaziCloseTab()' "$YAZI_INIT" \
+  || fail 'Yazi tab-close helper is missing'
+grep -Fq 'if #cx.tabs > 1 then' "$YAZI_INIT" \
+  || fail 'Yazi Ctrl+W does not distinguish tab close from last-tab quit'
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
 grep -Fq 'Yes: Y / Enter / Space' "$YAZI_INIT" \
