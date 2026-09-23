@@ -27,6 +27,7 @@ prepend_keymap = [
   # History
   { on = ["H"],       run = "back",      desc = "Back in history" },
   { on = ["L"],       run = "forward",   desc = "Forward in history" },
+  { on = ["g", "r"], run = "plugin recent-files", desc = "Go to recently opened file" },
 
   # Selection
   { on = ["<Space>"],   run = 'lua "AwtarchyYaziToggleOrCommitSelection()"', desc = "Toggle or commit selection" },
@@ -50,6 +51,9 @@ prepend_keymap = [
 
   # File ops
   # Creation/search stay on Yazi defaults: a=create, /=find, n/N=next/previous match.
+  { on = ["o"],       run = 'lua "AwtarchyYaziOpen(false)"', desc = "Open selected files" },
+  { on = ["O"],       run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
+  { on = ["<S-Enter>"], run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
   { on = ["r"],       run = "rename",               desc = "Rename" },
   { on = ["d", "d"], run = "remove",               desc = "Trash selection" },
   { on = ["t", "e"], run = 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', desc = "Open terminal here" },
