@@ -54,6 +54,7 @@ expected = {
     ("j",): "arrow next",
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
+    ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("?",): "help",
 }
@@ -88,6 +89,18 @@ else
 fi
 grep -Fq 'function Linemode:size_and_mtime()' "$YAZI_INIT" \
   || fail 'Yazi combined size/date linemode is not defined'
+grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
+  || fail 'Yazi smart Enter helper is missing'
+grep -Fq 'hovered and hovered.cha.is_dir and "enter" or "open"' "$YAZI_INIT" \
+  || fail 'Yazi smart Enter helper does not distinguish directories from files'
+grep -Fq 'function Entity:click(event, up)' "$YAZI_INIT" \
+  || fail 'Yazi custom entity click handler is missing'
+grep -Fq 'local was_hovered = self._file.is_hovered' "$YAZI_INIT" \
+  || fail 'Yazi click handler does not preserve pre-click highlighted state'
+grep -Fq 'ya.emit("reveal", { self._file.url })' "$YAZI_INIT" \
+  || fail 'Yazi click handler no longer selects newly clicked rows'
+grep -Fq 'elseif was_hovered and self._file.cha.is_dir then' "$YAZI_INIT" \
+  || fail 'Yazi second-click directory entry guard is missing'
 grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use native readable file sizes'
 grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
@@ -197,4 +210,4 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, smart-enters directories from Enter or a second click, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard and dragon-drop behavior, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
