@@ -81,16 +81,21 @@ function AwtarchyYaziSmartEnter()
     end
 end
 
-function AwtarchyYaziEnsureRangeSelect()
+AwtarchyYaziShiftRangeActive = false
+
+function AwtarchyYaziShiftArrow(step)
     if cx.active.mode.is_normal then
         ya.emit("visual_mode", {})
     end
+    AwtarchyYaziShiftRangeActive = true
+    ya.emit("arrow", { step })
 end
 
 function AwtarchyYaziArrow(step)
-    if not cx.active.mode.is_normal then
+    if AwtarchyYaziShiftRangeActive and not cx.active.mode.is_normal then
         ya.emit("escape", { visual = true })
     end
+    AwtarchyYaziShiftRangeActive = false
     ya.emit("arrow", { step })
 end
 
