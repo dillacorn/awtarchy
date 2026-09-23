@@ -222,6 +222,25 @@ end
 
 Modal:children_add(AwtarchyYaziContextMenu, 20)
 
+function Header:click(event, up)
+    if up or (not event.is_left and not event.is_right) then
+        return
+    end
+
+    local path_width = math.max(0, self._area.w - (self._right_width or 0))
+    if event.x >= self._area.x + path_width then
+        return
+    end
+
+    local cwd = ya.readable_path(tostring(self._current.cwd))
+    ya.emit("copy", { "dirpath" })
+    ya.notify {
+        title = "Clipboard",
+        content = "Copied to clipboard: " .. cwd,
+        timeout = 2,
+    }
+end
+
 local AwtarchyYaziDefaultCurrentClick = Current.click
 
 function Current:click(event, up)
