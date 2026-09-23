@@ -231,6 +231,71 @@ function AwtarchyYaziEscape()
     ya.emit("escape", {})
 end
 
+AwtarchyYaziPreviewButton = {
+    _id = "awtarchy-yazi-preview-button",
+}
+
+function AwtarchyYaziPreviewButton:new(area)
+    return setmetatable({ _area = area }, { __index = self })
+end
+
+function AwtarchyYaziPreviewButton:reflow()
+    return { self }
+end
+
+function AwtarchyYaziPreviewButton:redraw()
+    local label = AwtarchyYaziPreviewMaximized and "[ Restore ]" or "[ Maximize ]"
+    return {
+        ui.Text(ui.Line(label):style(ui.Style():reverse()))
+            :area(self._area)
+            :align(ui.Align.RIGHT),
+    }
+end
+
+function AwtarchyYaziPreviewButton:click(event, up)
+    if up or not event.is_left then
+        return
+    end
+    AwtarchyYaziTogglePreviewMax()
+end
+
+local AwtarchyYaziDefaultPreviewNew = Preview.new
+local AwtarchyYaziDefaultPreviewRedraw = Preview.redraw
+
+function Preview:new(area, tab)
+    local reserve_control_row = area.w >= 12 and area.h >= 2
+    local preview_area = reserve_control_row
+        and ui.Rect { x = area.x, y = area.y, w = area.w, h = area.h - 1 }
+        or area
+
+    local me = AwtarchyYaziDefaultPreviewNew(self, preview_area, tab)
+    if reserve_control_row then
+        me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {
+            x = area.x + area.w - 12,
+            y = area.y + area.h - 1,
+            w = 12,
+            h = 1,
+        })
+    end
+    return me
+end
+
+function Preview:reflow()
+    local components = { self }
+    if self._awtarchy_preview_button then
+        components[#components + 1] = self._awtarchy_preview_button
+    end
+    return components
+end
+
+function Preview:redraw()
+    local elements = AwtarchyYaziDefaultPreviewRedraw(self) or {}
+    if self._awtarchy_preview_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_button))
+    end
+    return elements
+end
+
 local function AwtarchyYaziArchiveSnapshot()
     local tab = cx.active
     local files = {}
