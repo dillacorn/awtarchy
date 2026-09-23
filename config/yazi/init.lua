@@ -34,6 +34,31 @@ function AwtarchyYaziSmartEnter()
     ya.emit(hovered and hovered.cha.is_dir and "enter" or "open", {})
 end
 
+function AwtarchyYaziEnsureRangeSelect()
+    if cx.active.mode.is_normal then
+        ya.emit("visual_mode", {})
+    end
+end
+
+function AwtarchyYaziConfirmQuit(no_cwd_file)
+    ya.async(function()
+        local confirmed = ya.confirm {
+            pos = { "center", w = 48, h = 8 },
+            title = "Quit Yazi?",
+            body = ui.Text {
+                ui.Line("Quit this Yazi session?"):align(ui.Align.CENTER),
+                ui.Line(""),
+                ui.Line("Yes: Y / Enter / Space"):align(ui.Align.CENTER),
+                ui.Line("No:  N / Esc"):align(ui.Align.CENTER),
+            },
+        }
+
+        if confirmed then
+            ya.emit("quit", { no_cwd_file = no_cwd_file == true })
+        end
+    end)
+end
+
 local AwtarchyYaziArchiveSnapshot = ya.sync(function()
     local tab = cx.active
     local files = {}
@@ -752,6 +777,15 @@ function AwtarchyYaziToggleTimeFormat()
     ps.pub("@awtarchy-yazi-time-format", next_format)
 end
 
+function Status:selected_count()
+    local count = #cx.active.selected
+    if count < 2 then
+        return ""
+    end
+
+    return string.format(" %d selected ", count)
+end
+
 function Status:modified_time()
     local hovered = self._current.hovered
     if not hovered then
@@ -792,6 +826,10 @@ function Status:modified_time()
         parts.min
     )
 end
+
+Status:children_add(function(self)
+    return self:selected_count()
+end, 450, Status.RIGHT)
 
 Status:children_add(function(self)
     return self:modified_time()
