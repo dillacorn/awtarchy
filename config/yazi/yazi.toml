@@ -9,3 +9,13 @@ mouse_events = ["click", "scroll", "drag", "move"]
 edit = [
   { run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" },
 ]
+
+[[plugin.prepend_fetchers]]
+url = "*"
+run = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url = "*/"
+run = "git"
+group = "git"
