@@ -8,6 +8,9 @@ PACKAGE="$ROOT/config/yazi/package.toml"
 YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
 YAZI_INIT="$ROOT/config/yazi/init.lua"
 YAZI_RECENT="$ROOT/config/yazi/plugins/recent-files.yazi/main.lua"
+YAZI_BOOKMARKS="$ROOT/config/yazi/plugins/bookmarks.yazi/main.lua"
+YAZI_MOUNTS="$ROOT/config/yazi/plugins/mounts.yazi/main.lua"
+YAZI_GIT="$ROOT/config/yazi/plugins/git.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
@@ -57,6 +60,11 @@ expected = {
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
     ("g", "r"): "plugin recent-files",
+    ("g", "b"): "plugin bookmarks",
+    ("g", "B"): 'lua "AwtarchyYaziToggleBookmark()"',
+    ("g", "m"): "plugin mounts",
+    ("<C-f>",): 'lua "AwtarchyYaziSearchMenu()"',
+    ("<Esc>",): 'lua "AwtarchyYaziEscape()"',
     ("o",): 'lua "AwtarchyYaziOpen(false)"',
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
@@ -75,6 +83,8 @@ expected = {
     ("e", "f"): 'lua "AwtarchyYaziExtractZipFolder()"',
     ("t", "e"): 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
+    ("m", "v"): 'lua "AwtarchyYaziTogglePreview()"',
+    ("m", "x"): 'lua "AwtarchyYaziTogglePreviewMax()"',
     ("?",): "help",
 }
 for keys, run in expected.items():
@@ -131,9 +141,15 @@ fi
 if command -v luac >/dev/null 2>&1; then
   luac -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
+  luac -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
+  luac -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
 elif command -v luac5.4 >/dev/null 2>&1; then
   luac5.4 -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac5.4 -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
+  luac5.4 -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac5.4 -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
+  luac5.4 -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
 else
   fail 'No Lua compiler is available to validate Yazi Lua'
 fi
@@ -143,6 +159,38 @@ grep -Fq 'require("recent-files")' "$YAZI_INIT" \
   || fail 'Yazi init does not load the managed recent-files plugin'
 grep -Fq 'require("recent-files"):setup()' "$YAZI_INIT" \
   || fail 'Yazi recent-files DDS state is not initialized at startup'
+grep -Fq 'require("bookmarks"):setup()' "$YAZI_INIT" \
+  || fail 'Yazi bookmarks DDS state is not initialized at startup'
+grep -Fq 'require("git"):setup { order = 1500 }' "$YAZI_INIT" \
+  || fail 'Yazi git status signs are not attached to the linemode'
+grep -Fq 'function AwtarchyYaziSearchMenu()' "$YAZI_INIT" \
+  || fail 'Yazi recursive search menu is missing'
+grep -Fq 'ya.emit("plugin", { "fd" })' "$YAZI_INIT" \
+  || fail 'Yazi recursive filename search does not use native fd plugin'
+grep -Fq 'ya.emit("plugin", { "rg" })' "$YAZI_INIT" \
+  || fail 'Yazi recursive content search does not use native rg plugin'
+grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
+  || fail 'Yazi bookmark toggle helper is missing'
+grep -Fq 'function AwtarchyYaziTogglePreview()' "$YAZI_INIT" \
+  || fail 'Yazi preview pane toggle is missing'
+grep -Fq 'function AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
+  || fail 'Yazi preview maximize toggle is missing'
+grep -Fq 'function AwtarchyYaziEscape()' "$YAZI_INIT" \
+  || fail 'Yazi conditional Esc preview restore is missing'
+grep -Fq 'ya.emit("escape", {})' "$YAZI_INIT" \
+  || fail 'Yazi Esc no longer falls through to native manager escape'
+grep -Fq 'function Header:cwd()' "$YAZI_INIT" \
+  || fail 'Yazi clickable breadcrumb renderer is missing'
+grep -Fq 'AwtarchyYaziBreadcrumbTarget' "$YAZI_INIT" \
+  || fail 'Yazi breadcrumb forward trail state is missing'
+grep -Fq 'ui.Style():dim()' "$YAZI_INIT" \
+  || fail 'Yazi breadcrumb forward trail is not visually dimmed'
+grep -Fq 'function Status:task_summary()' "$YAZI_INIT" \
+  || fail 'Yazi task summary status is missing'
+grep -Fq 'ya.emit("tasks:show", {})' "$YAZI_INIT" \
+  || fail 'Yazi active task status is not clickable'
+grep -Fq 'action = "bulk_rename"' "$YAZI_INIT" \
+  || fail 'Yazi multi-selection context menu lacks bulk rename'
 grep -Fq 'local function AwtarchyYaziOpenFiles(interactive, hovered_only)' "$YAZI_INIT" \
   || fail 'Yazi central file-open recorder is missing'
 grep -Fq 'if file and not file.cha.is_dir then' "$YAZI_INIT" \
@@ -352,6 +400,19 @@ if config.get("mgr", {}).get("linemode") != "size_and_mtime":
 if config.get("mgr", {}).get("mouse_events") != ["click", "scroll", "drag", "move"]:
     raise SystemExit(1)
 
+fetchers = config.get("plugin", {}).get("prepend_fetchers", [])
+expected_fetchers = {
+    ("*", "git", "git"),
+    ("*/", "git", "git"),
+}
+actual_fetchers = {
+    (entry.get("url"), entry.get("run"), entry.get("group"))
+    for entry in fetchers
+    if isinstance(entry, dict)
+}
+if not expected_fetchers.issubset(actual_fetchers):
+    raise SystemExit(1)
+
 rules = config.get("opener", {}).get("edit", [])
 if not isinstance(rules, list):
     raise SystemExit(1)
@@ -393,6 +454,10 @@ repair_line="$(grep -nF 'repair_v373_yazi_default_editor_target "$target_home" "
   || fail 'v3.7.3 Yazi default-editor repair does not run after the stable target is built'
 grep -Fq ' xdg-utils ' "$RUNTIME" \
   || fail 'xdg-utils is no longer part of the managed package catalog'
+grep -Fq ' git fd ripgrep ' "$RUNTIME" \
+  || fail 'fd/ripgrep are not managed for Yazi recursive search'
+grep -Fq ' udisks2 ' "$RUNTIME" \
+  || fail 'udisks2 is not managed for Yazi mount actions'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
   || fail 'wl-clipboard is no longer part of the managed Window Management package set'
 grep -Fq 'is_legacy_yazi_clipboard_plugin()' "$RUNTIME" \
@@ -413,6 +478,24 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
+[[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
+[[ -f "$YAZI_MOUNTS" ]] || fail 'managed mounts plugin is missing'
+[[ -f "$YAZI_GIT" ]] || fail 'managed git status plugin is missing'
+grep -Fq 'local KIND = "@awtarchy-yazi-bookmarks"' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not use retained DDS static state'
+grep -Fq 'local MAX_BOOKMARKS = 35' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmark history is not bounded'
+grep -Fq 'ps.sub_remote(KIND' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks are not shared across sessions'
+grep -Fq 'content = "No bookmarked folders."' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi empty bookmarks message changed'
+grep -Fq 'Command("udisksctl")' "$YAZI_MOUNTS" \
+  || fail 'Yazi mount manager does not use udisksctl'
+if grep -Fq 'sudo' "$YAZI_MOUNTS"; then
+  fail 'Yazi mount manager invokes sudo instead of system PolicyKit'
+fi
+grep -Fq 'Linemode:children_add' "$YAZI_GIT" \
+  || fail 'Yazi git signs do not augment the existing linemode'
 grep -Fq 'local KIND = "@dillacorn-yazi-recent-files"' "$YAZI_RECENT" \
   || fail 'Yazi recents do not use retained DDS static state'
 grep -Fq 'local MAX_RECENTS = 35' "$YAZI_RECENT" \
