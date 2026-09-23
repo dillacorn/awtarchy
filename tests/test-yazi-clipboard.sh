@@ -189,6 +189,22 @@ grep -Fq 'Keys: a create | Ctrl+V/p paste | t e terminal' "$YAZI_INIT" \
   || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
   || fail 'Yazi New folder does not use the stable native create dir flag'
+if grep -Fq 'ya.sync(' "$YAZI_INIT"; then
+  fail 'Yazi init.lua still uses plugin-only ya.sync'
+fi
+grep -Fq 'local function AwtarchyYaziArchiveSnapshot()' "$YAZI_INIT" \
+  || fail 'Yazi archive snapshot helper is not plain synchronous init.lua code'
+python3 - "$YAZI_INIT" <<'PY_RUNTIME_BOUNDARY' || fail 'Yazi archive snapshot is not captured before async work'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+start = text.index("function AwtarchyYaziCompressSelection()")
+end = text.index("function AwtarchyYaziExtractZipHere()", start)
+block = text[start:end]
+if block.index("local snapshot = AwtarchyYaziArchiveSnapshot()") > block.index("ya.async(function()"):
+    raise SystemExit(1)
+PY_RUNTIME_BOUNDARY
 grep -Fq 'function AwtarchyYaziCompressSelection()' "$YAZI_INIT" \
   || fail 'Yazi ZIP compression helper is missing'
 grep -Fq 'function AwtarchyYaziExtractZipHere()' "$YAZI_INIT" \
