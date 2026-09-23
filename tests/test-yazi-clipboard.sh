@@ -7,6 +7,7 @@ KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
 YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
 YAZI_INIT="$ROOT/config/yazi/init.lua"
+YAZI_RECENT="$ROOT/config/yazi/plugins/recent-files.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
@@ -55,6 +56,10 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
+    ("g", "r"): "plugin recent-files",
+    ("o",): 'lua "AwtarchyYaziOpen(false)"',
+    ("O",): 'lua "AwtarchyYaziOpen(true)"',
+    ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -131,10 +136,24 @@ else
 fi
 grep -Fq 'function Linemode:size_and_mtime()' "$YAZI_INIT" \
   || fail 'Yazi combined size/date linemode is not defined'
+grep -Fq 'require("recent-files")' "$YAZI_INIT" \
+  || fail 'Yazi init does not load the managed recent-files plugin'
+grep -Fq 'AwtarchyYaziRecentFiles:setup()' "$YAZI_INIT" \
+  || fail 'Yazi recent-files DDS state is not initialized at startup'
+grep -Fq 'local function AwtarchyYaziOpenFiles(interactive, hovered_only)' "$YAZI_INIT" \
+  || fail 'Yazi central file-open recorder is missing'
+grep -Fq 'if file and not file.cha.is_dir then' "$YAZI_INIT" \
+  || fail 'Yazi recent history does not exclude hovered directories'
+grep -Fq 'if not file.cha.is_dir then' "$YAZI_INIT" \
+  || fail 'Yazi recent history does not exclude selected directories'
+grep -Fq 'AwtarchyYaziRecentFiles:record(recent)' "$YAZI_INIT" \
+  || fail 'Yazi opened files are not recorded into shared history'
 grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper is missing'
-grep -Fq 'hovered and hovered.cha.is_dir and "enter" or "open"' "$YAZI_INIT" \
-  || fail 'Yazi smart Enter helper does not distinguish directories from files'
+grep -Fq 'if hovered and hovered.cha.is_dir then' "$YAZI_INIT" \
+  || fail 'Yazi smart Enter no longer distinguishes directories from files'
+grep -Fq 'AwtarchyYaziOpenFiles(false, false)' "$YAZI_INIT" \
+  || fail 'Yazi smart Enter does not record and open files'
 grep -Fq 'function AwtarchyYaziEnsureRangeSelect()' "$YAZI_INIT" \
   || fail 'Yazi Shift+Arrow range-selection helper is missing'
 grep -Fq 'function AwtarchyYaziToggleOrCommitSelection()' "$YAZI_INIT" \
@@ -241,8 +260,8 @@ grep -Fq 'ya.emit("reveal", { self._file.url })' "$YAZI_INIT" \
   || fail 'Yazi click handler no longer selects newly clicked rows'
 grep -Fq 'elseif was_hovered then' "$YAZI_INIT" \
   || fail 'Yazi second-click action guard is missing'
-grep -Fq 'ya.emit("open", { hovered = true })' "$YAZI_INIT" \
-  || fail 'Yazi second-click file opening is missing'
+grep -Fq 'AwtarchyYaziOpenFiles(false, true)' "$YAZI_INIT" \
+  || fail 'Yazi second-click file opening no longer records recents'
 grep -Fq 'event.is_middle' "$YAZI_INIT" \
   || fail 'Yazi middle-click directory handling is missing'
 grep -Fq 'ya.emit("tab_create", { tostring(self._file.url) })' "$YAZI_INIT" \
@@ -380,5 +399,24 @@ install_count="$(grep -Fc 'run_as_target rm -rf -- "$legacy_yazi_clipboard"' "$R
 update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTIME" || true)"
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
+
+[[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
+grep -Fq 'local KIND = "@dillacorn-yazi-recent-files"' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not use retained DDS static state'
+grep -Fq 'local MAX_RECENTS = 35' "$YAZI_RECENT" \
+  || fail 'Yazi recent history is not bounded'
+grep -Fq 'ps.sub_remote(KIND, merge_remote)' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not subscribed across sessions'
+grep -Fq 'ps.pub_to(0, KIND, recents)' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not published across sessions'
+grep -Fq 'cha and not cha.is_dir' "$YAZI_RECENT" \
+  || fail 'Yazi recents picker does not filter directories'
+grep -Fq 'ya.which' "$YAZI_RECENT" \
+  || fail 'Yazi recent files do not use the native Which picker'
+grep -Fq 'ya.emit("reveal"' "$YAZI_RECENT" \
+  || fail 'Yazi recent selection does not reveal the file'
+if grep -Eq 'io\.open|XDG_STATE_HOME|LOCALAPPDATA' "$YAZI_RECENT"; then
+  fail 'Yazi recents added a parallel state-file database'
+fi
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
