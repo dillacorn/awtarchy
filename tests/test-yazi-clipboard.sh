@@ -58,6 +58,7 @@ expected = {
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
+    ("<Space>",): 'lua "AwtarchyYaziToggleOrCommitSelection()"',
     ("<C-Space>",): "toggle",
     ("<S-Up>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow prev"],
     ("<S-Down>",): ['lua "AwtarchyYaziEnsureRangeSelect()"', "arrow next"],
@@ -136,6 +137,10 @@ grep -Fq 'hovered and hovered.cha.is_dir and "enter" or "open"' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper does not distinguish directories from files'
 grep -Fq 'function AwtarchyYaziEnsureRangeSelect()' "$YAZI_INIT" \
   || fail 'Yazi Shift+Arrow range-selection helper is missing'
+grep -Fq 'function AwtarchyYaziToggleOrCommitSelection()' "$YAZI_INIT" \
+  || fail 'Yazi Space toggle/commit helper is missing'
+grep -Fq 'ya.emit("escape", { visual = true })' "$YAZI_INIT" \
+  || fail 'Yazi Space does not commit an active range selection'
 grep -Fq 'cx.active.mode.is_normal' "$YAZI_INIT" \
   || fail 'Yazi range selection does not preserve an existing visual selection'
 grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
