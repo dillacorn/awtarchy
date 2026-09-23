@@ -325,7 +325,7 @@ local function AwtarchyYaziDropInto(op, target, sources)
         content = string.format(
             "%s %d item(s) to %s",
             op == "move" and "Moving" or "Copying",
-            #sources,
+            (#sources),
             tostring(Url(target).name or target)
         ),
         timeout = 2,
