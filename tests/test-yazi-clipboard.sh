@@ -82,6 +82,7 @@ expected = {
     ("e", "h"): 'lua "AwtarchyYaziExtractZipHere()"',
     ("e", "f"): 'lua "AwtarchyYaziExtractZipFolder()"',
     ("t", "e"): 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
+    ("t", "n"): 'lua "AwtarchyYaziOpenHoveredTab()"',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("m", "v"): 'lua "AwtarchyYaziTogglePreview()"',
     ("m", "x"): 'lua "AwtarchyYaziTogglePreviewMax()"',
@@ -171,6 +172,10 @@ grep -Fq 'ya.emit("plugin", { "rg" })' "$YAZI_INIT" \
   || fail 'Yazi recursive content search does not use native rg plugin'
 grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
   || fail 'Yazi bookmark toggle helper is missing'
+grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
+  || fail 'Yazi keyboard open-folder-in-new-tab helper is missing'
+grep -Fq '{ label = "Open in new tab", shortcut = "t n", action = "open_new_tab" }' "$YAZI_INIT" \
+  || fail 'Yazi directory context menu lacks keyboard parity for new-tab opening'
 grep -Fq 'function AwtarchyYaziTogglePreview()' "$YAZI_INIT" \
   || fail 'Yazi preview pane toggle is missing'
 grep -Fq 'function AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
