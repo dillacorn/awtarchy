@@ -6,6 +6,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 KEYMAP="$ROOT/config/yazi/keymap.toml"
 PACKAGE="$ROOT/config/yazi/package.toml"
 YAZI_CONFIG="$ROOT/config/yazi/yazi.toml"
+YAZI_THEME="$ROOT/config/yazi/theme.toml"
 YAZI_INIT="$ROOT/config/yazi/init.lua"
 YAZI_RECENT="$ROOT/config/yazi/plugins/recent-files.yazi/main.lua"
 YAZI_BOOKMARKS="$ROOT/config/yazi/plugins/bookmarks.yazi/main.lua"
@@ -444,6 +445,13 @@ if config.get("mgr", {}).get("linemode") != "size_and_mtime":
     raise SystemExit(1)
 
 if config.get("mgr", {}).get("mouse_events") != ["click", "scroll", "drag", "move"]:
+    raise SystemExit(1)
+
+if theme.get("tabs", {}).get("sep_inner") != {"open": "", "close": ""}:
+    raise SystemExit(1)
+if theme.get("status", {}).get("sep_left") != {"open": "", "close": ""}:
+    raise SystemExit(1)
+if theme.get("indicator", {}).get("padding") != {"open": " ", "close": " "}:
     raise SystemExit(1)
 
 fetchers = config.get("plugin", {}).get("prepend_fetchers", [])
