@@ -350,6 +350,11 @@ grep -Fq 'paths[#paths + 1] = decode_arg(job.args[i])' "$YAZI_RECENT" \
   || fail 'Yazi recents do not decode recorded file paths'
 grep -Fq 'local path = job.args[3] and decode_arg(job.args[3]) or decode_arg(job.args[2])' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks do not decode typed managed path arguments'
+grep -Fq 'local kind, path = value:match("^([DFU])\\t(.*)$")' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not preserve legacy untyped entries without filesystem I/O'
+if awk '/local function parse_entry\(value\)/,/^end$/' "$YAZI_BOOKMARKS" | grep -Fq 'fs.cha('; then
+  fail 'Yazi bookmark parser performs yielding filesystem I/O inside synchronized state callbacks'
+fi
 
 grep -Fq 'function AwtarchyYaziCompressSelection()' "$YAZI_INIT" \
   || fail 'Yazi ZIP compression helper is missing'
