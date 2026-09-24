@@ -643,6 +643,11 @@ grep -Fq 'copy with Ctrl+Shift+C' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not document Alacritty copy behavior'
 grep -Fq 'block = true' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
+grep -Fq 'ya.emit("shell", { run = command, block = true })' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not pass its command through the stable shell run field'
+if grep -Fq 'ya.emit("shell", { command, block = true })' "$YAZI_INIT"; then
+  fail 'Yazi selectable text mode still uses the ignored positional variable form'
+fi
 grep -Fq 'ui.render()' "$YAZI_INIT" \
   || fail 'Yazi time-format toggle does not request an immediate UI redraw'
 grep -Fq 'ui.Span(flags):style(th.mgr.find_keyword)' "$YAZI_INIT" \

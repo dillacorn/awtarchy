@@ -525,7 +525,7 @@ function AwtarchyYaziSelectPreviewText()
         "printf '\\n\\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter to return to Yazi...'; " ..
         "read -r _"
 
-    ya.emit("shell", { command, block = true })
+    ya.emit("shell", { run = command, block = true })
 end
 
 function AwtarchyYaziEscape()
