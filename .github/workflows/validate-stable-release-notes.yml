@@ -43,6 +43,7 @@ jobs:
   release-v3-8-0-yazi:
     if: >-
       github.event_name == 'pull_request' &&
+      github.event.pull_request.head.sha == '5894429e32d624591cd9fefd1f8445b01189b782' &&
       github.event.pull_request.title == 'Release bridge: Awtarchy v3.8.0 Yazi' &&
       github.event.pull_request.head.ref == 'release-bridge-v3-8-0-yazi' &&
       github.event.pull_request.base.ref == 'main'
@@ -124,3 +125,60 @@ jobs:
           set -euo pipefail
           gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRIDGE_BRANCH}"
 
+
+
+  verify-v3-8-0-yazi-release:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Release bridge: Awtarchy v3.8.0 Yazi' &&
+      github.event.pull_request.head.ref == 'release-bridge-v3-8-0-yazi' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: v3.8.0
+      RELEASE_TITLE: Awtarchy v3.8.0 Yazi
+      RELEASE_TARGET: 46eadde776a4d881507545968a69ef3cb5e2906e
+      RELEASE_NOTES: .github/release-v3.8.0-yazi.md
+      BRIDGE_BRANCH: release-bridge-v3-8-0-yazi
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Re-validate published release notes, metadata, and tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$current_main" = "$RELEASE_TARGET"
+          previous_tag="$(gh release list --repo "$GITHUB_REPOSITORY" --exclude-drafts --exclude-pre-releases --limit 2 --json tagName --jq '[.[] | select(.tagName != env.RELEASE_TAG)][0].tagName')"
+          test -n "$previous_tag"
+          gh release view "$previous_tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > /tmp/previous-stable.md
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"             --json tagName,name,targetCommitish,isDraft,isPrerelease,body,url > /tmp/release.json
+          python3 - "$RELEASE_TAG" "$RELEASE_TITLE" "$RELEASE_TARGET" "$RELEASE_NOTES" /tmp/release.json <<'PY'
+          import json, sys
+          from pathlib import Path
+          tag, title, target, notes_path, release_path = sys.argv[1:]
+          data = json.load(open(release_path, encoding="utf-8"))
+          assert data["tagName"] == tag
+          assert data["name"] == title
+          assert data["targetCommitish"] == target
+          assert data["isDraft"] is False
+          assert data["isPrerelease"] is False
+          expected = Path(notes_path).read_text(encoding="utf-8")
+          assert data["body"] == expected
+          Path("/tmp/published.md").write_text(data["body"], encoding="utf-8")
+          PY
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$RELEASE_TAG"             --notes /tmp/published.md             --previous /tmp/previous-stable.md
+          git fetch --force origin "refs/tags/${RELEASE_TAG}:refs/tags/${RELEASE_TAG}"
+          test "$(git rev-list -n1 "$RELEASE_TAG")" = "$RELEASE_TARGET"
+          cat /tmp/release.json
+      - name: Delete one-use release bridge branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRIDGE_BRANCH}"
