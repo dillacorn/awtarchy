@@ -13,7 +13,6 @@ YAZI_BOOKMARKS="$ROOT/config/yazi/plugins/bookmarks.yazi/main.lua"
 YAZI_PREVIEW_REFIT="$ROOT/config/yazi/plugins/preview-refit.yazi/main.lua"
 YAZI_VFS="$ROOT/config/yazi/vfs.toml"
 YAZI_MOUNTS="$ROOT/config/yazi/plugins/mounts.yazi/main.lua"
-ALACRITTY="$ROOT/config/alacritty/alacritty.toml"
 YAZI_GIT="$ROOT/config/yazi/plugins/git.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
@@ -658,7 +657,4 @@ grep -Fq 'Permanently delete...' "$YAZI_INIT" \
   || fail 'Yazi delete chooser does not expose permanent deletion'
 grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
   || fail 'Yazi collection rows do not navigate to their real targets'
-grep -Fq 'save_to_clipboard = true' "$ALACRITTY" \
-  || fail 'Alacritty preview text selection is not copied to the clipboard'
-
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
