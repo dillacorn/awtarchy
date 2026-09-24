@@ -251,8 +251,8 @@ grep -Fq 'if file and not file.cha.is_dir then' "$YAZI_INIT" \
   || fail 'Yazi recent history does not exclude hovered directories'
 grep -Fq 'if not file.cha.is_dir then' "$YAZI_INIT" \
   || fail 'Yazi recent history does not exclude selected directories'
-grep -Fq 'local record = { "recent-files", "record" }' "$YAZI_INIT" \
-  || fail 'Yazi opened files are not routed through the recent-files plugin runtime'
+grep -Fq 'AwtarchyYaziPluginArgs("record", recent)' "$YAZI_INIT" \
+  || fail 'Yazi opened files are not routed through the recent-files plugin argument payload'
 grep -Fq 'function AwtarchyYaziSmartEnter()' "$YAZI_INIT" \
   || fail 'Yazi smart Enter helper is missing'
 grep -Fq 'if hovered and hovered.cha.is_dir then' "$YAZI_INIT" \
