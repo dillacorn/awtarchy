@@ -757,26 +757,29 @@ grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
 grep -Fq 'plan_changes_yazi() {' "$RUNTIME" \
   || fail 'Awtarchy updater lacks a Yazi managed-plan detector'
 grep -Fq '.config/yazi/*) return 0 ;;' "$RUNTIME" \
-  || fail 'Awtarchy updater Yazi guard is not scoped to planned managed Yazi changes'
-grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
-  || fail 'Awtarchy updater cannot identify running same-user Yazi processes'
-grep -Fq "printf 'Close Yazi and continue? [Y/n] ' >/dev/tty" "$RUNTIME" \
-  || fail 'Awtarchy updater does not ask for default-Yes Yazi close consent'
-grep -Fq "kill -TERM \"\$pid\"" "$RUNTIME" \
-  || fail 'Awtarchy updater does not terminate Yazi only after approval'
-grep -Fq 'Yazi is still running after the termination request. No managed files were changed.' "$RUNTIME" \
-  || fail 'Awtarchy updater does not refuse managed writes when Yazi remains running'
-python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_GUARD' || fail 'Awtarchy Yazi close guard is not ordered before managed writes'
+  || fail 'Awtarchy updater Yazi change detection is not scoped to managed Yazi config'
+grep -Fq 'yazi_config_changed=0' "$RUNTIME" \
+  || fail 'Awtarchy updater does not track planned Yazi configuration changes'
+grep -Fq 'yazi_config_changed=1' "$RUNTIME" \
+  || fail 'Awtarchy updater does not mark planned Yazi configuration changes'
+grep -Fq 'Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.' "$RUNTIME" \
+  || fail 'Awtarchy updater does not tell users to restart Yazi after managed config changes'
+if grep -Fq 'guard_yazi_before_managed_apply' "$RUNTIME" \
+  || grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
+  || grep -Fq 'Close Yazi and continue?' "$RUNTIME"; then
+  fail 'Awtarchy updater still requires Yazi to close before managed config updates'
+fi
+python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_NOTICE' || fail 'Awtarchy Yazi restart notice is not tied to the managed update flow'
 from pathlib import Path
 import sys
 
 runtime = Path(sys.argv[1]).read_text()
-review = runtime.index('if (( REVIEW_ONLY == 1 )); then')
-mode = runtime.index('select_update_mode', review)
-guard = runtime.index('guard_yazi_before_managed_apply "$plan_file"', mode)
-apply_plan = runtime.index('apply_plan "$plan_file"', guard)
-if not review < mode < guard < apply_plan:
+build = runtime.index('build_plan "$target_home" "$plan_file"')
+mark = runtime.index('yazi_config_changed=1', build)
+apply_plan = runtime.index('apply_plan "$plan_file"', mark)
+notice = runtime.index('Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.', apply_plan)
+if not build < mark < apply_plan < notice:
     raise SystemExit(1)
-PY_YAZI_UPDATE_GUARD
+PY_YAZI_UPDATE_NOTICE
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, guards running Yazi before managed config writes, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
