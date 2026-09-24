@@ -67,7 +67,7 @@ declare -a VIRT_MANAGER_PACKAGES=(
 
 declare -a PACKAGES_AUR=(
   smtty
-  ripdrag-git
+  ripdrag
   awtwall
   hyprmoncfg-bin
   bibata-cursor-theme-bin
@@ -2711,6 +2711,12 @@ aur_selected_package_installed() {
       ;;
     qimgv|qimgv-git)
       for alt in qimgv qimgv-git; do
+        pacman -Q "$alt" >/dev/null 2>&1 && return 0
+      done
+      return 1
+      ;;
+    ripdrag|ripdrag-git)
+      for alt in ripdrag ripdrag-git; do
         pacman -Q "$alt" >/dev/null 2>&1 && return 0
       done
       return 1
