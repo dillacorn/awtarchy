@@ -575,8 +575,13 @@ grep -Fq 'ya.which' "$YAZI_RECENT" \
   || fail 'Yazi recent files do not use the native Which picker'
 grep -Fq 'ya.emit("reveal"' "$YAZI_RECENT" \
   || fail 'Yazi recent selection does not reveal the file'
-if grep -Eq 'io\.open|XDG_STATE_HOME|LOCALAPPDATA' "$YAZI_RECENT"; then
-  fail 'Yazi recents added a parallel state-file database'
-fi
+grep -Fq 'awtarchy-recent-files.txt' "$YAZI_RECENT" \
+  || fail 'Yazi recents lack deterministic restart-safe state'
+grep -Fq 'awtarchy-bookmarks.txt' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks lack deterministic restart-safe state'
+grep -Fq 'ensure_state_dir()' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not create their state directory before first write'
+grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not create their state directory before first write'
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
