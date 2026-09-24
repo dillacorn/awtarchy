@@ -388,7 +388,8 @@ Inspect the latest published stable release for release-specific context, but do
 
 A normal Awtarchy stable release body must include:
 
-- the release title and a short overview of the release;
+- an H1 release title beginning with `# Awtarchy vX.Y.Z`; any descriptive suffix such as `Yazi` or `Quickshell` must match the actual GitHub Release title and must not be hard-coded to one component;
+- a short overview of the release;
 - an **Install and update** section linking to the canonical `main` versions of `INSTALL.md` and `UPDATING.md`; it may also include `awtarchy update` inline for convenience;
 - feature/change sections appropriate to the release;
 - a **Validation** section grounded in tests and CI that actually passed for the release target;
@@ -411,11 +412,12 @@ Before any `gh release create` or `gh release edit` operation:
 ```bash
 python3 .github/scripts/validate-stable-release-notes.py \
   --version vX.Y.Z \
+  --title "Awtarchy vX.Y.Z <release theme>" \
   --notes /path/to/proposed-release.md \
   --previous /path/to/previous-stable-release.md
 ```
 
-A release bridge or other automated release writer must run this validator as a hard pre-write dependency. If validation fails, the release write must not execute. The validator enforces objective structure such as canonical guide links, Validation, and the version-specific post-release placeholder; it must not impose an arbitrary word-count limit.
+A release bridge or other automated release writer must run this validator as a hard pre-write dependency and pass the actual GitHub Release title with `--title`. If validation fails, the release write must not execute. The validator enforces the versioned H1/title match plus objective structure such as canonical guide links, Validation, and the version-specific post-release placeholder; it must not impose an arbitrary word-count limit.
 
 After publishing or editing a release, re-read the complete published body into a file and run the same validator against that published body before declaring the release complete. Continue to verify the release name, draft/prerelease state, target commit, and tag SHA separately; release-note validation does not replace tag/target verification.
 

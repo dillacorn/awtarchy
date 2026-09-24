@@ -12,7 +12,11 @@ fail() {
 }
 
 run_validator() {
-  python3 "$VALIDATOR" --version v3.5.6 --notes "$1" --previous "$2"
+  python3 "$VALIDATOR" \
+    --version v3.5.6 \
+    --title "Awtarchy v3.5.6 Yazi" \
+    --notes "$1" \
+    --previous "$2"
 }
 
 cat >"${TMP_DIR}/previous.md" <<'EOF'
@@ -38,7 +42,7 @@ _Placeholder for possible tested post-release patches to v3.5.5._
 EOF
 
 cat >"${TMP_DIR}/valid.md" <<'EOF'
-# Awtarchy v3.5.6 Quickshell
+# Awtarchy v3.5.6 Yazi
 
 New stable release with release-specific changes and canonical documentation links.
 
@@ -63,6 +67,11 @@ EOF
 [[ -f "$VALIDATOR" ]] || fail "stable release notes validator is missing"
 run_validator "${TMP_DIR}/valid.md" "${TMP_DIR}/previous.md" >/dev/null \
   || fail "canonical-guide stable release notes were rejected"
+
+sed '1s/Yazi/Quickshell/' "${TMP_DIR}/valid.md" >"${TMP_DIR}/wrong-title.md"
+if run_validator "${TMP_DIR}/wrong-title.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
+  fail "release body title that does not match the supplied release title was accepted"
+fi
 
 sed '/INSTALL\.md/d' "${TMP_DIR}/valid.md" >"${TMP_DIR}/missing-install-link.md"
 if run_validator "${TMP_DIR}/missing-install-link.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
