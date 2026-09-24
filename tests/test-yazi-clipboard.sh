@@ -92,6 +92,8 @@ expected = {
     ("<S-Down>",): 'lua "AwtarchyYaziShiftArrow(1)"',
     ("<Delete>",): 'lua "AwtarchyYaziRemoveMenu()"',
     ("d", "d"): 'lua "AwtarchyYaziRemoveMenu()"',
+    ("y",): 'lua "AwtarchyYaziYank()"',
+    ("D",): 'lua "AwtarchyYaziPermanentDelete()"',
     ("<C-x>",): "yank --cut",
     ("<C-v>",): "paste",
     ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
@@ -651,10 +653,22 @@ grep -Fq 'run  = "bookmarks"' "$YAZI_VFS" \
   || fail 'Yazi bookmark VFS service is not routed to the managed plugin'
 grep -Fq 'run  = "recent-files"' "$YAZI_VFS" \
   || fail 'Yazi recents VFS service is not routed to the managed plugin'
-grep -Fq 'function AwtarchyYaziRemoveMenu()' "$YAZI_INIT" \
-  || fail 'Yazi trash/permanent-delete chooser is missing'
-grep -Fq 'Permanently delete...' "$YAZI_INIT" \
-  || fail 'Yazi delete chooser does not expose permanent deletion'
+grep -Fq 'AwtarchyYaziDeleteMenu = {' "$YAZI_INIT" \
+  || fail 'Yazi trash/permanent-delete modal is missing'
+grep -Fq 'function AwtarchyYaziDeleteMenu:move(step)' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not support arrow navigation'
+grep -Fq 'function AwtarchyYaziDeleteMenu:submit(choice)' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not submit the highlighted choice'
+grep -Fq 'local actions = {' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not render explicit choices'
+grep -Fq '{ label = "Move to trash", shortcut = "y / Enter" }' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not default to the trash choice'
+grep -Fq '{ label = "Permanently delete...", shortcut = "D" }' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not expose permanent deletion'
+grep -Fq 'ya.emit("remove", { force = true })' "$YAZI_INIT" \
+  || fail 'Yazi delete modal trash choice does not submit directly'
+grep -Fq 'ya.emit("remove", { permanently = true })' "$YAZI_INIT" \
+  || fail 'Yazi delete modal permanent choice does not use native permanent deletion'
 grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
   || fail 'Yazi collection rows do not navigate to their real targets'
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
