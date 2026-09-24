@@ -497,18 +497,51 @@ function AwtarchyYaziTogglePreviewMax()
     AwtarchyYaziApplyRatio({ 0, 0, 9999 })
 end
 
-local function AwtarchyYaziPreviewTextSelectable()
-    if not AwtarchyYaziPreviewMaximized then return false end
+local AwtarchyYaziTextExtensions = {
+    txt = true, md = true, markdown = true, log = true, csv = true, tsv = true,
+    json = true, jsonc = true, yaml = true, yml = true, toml = true,
+    ini = true, conf = true, cfg = true, xml = true, html = true, htm = true,
+    css = true, scss = true, less = true, js = true, jsx = true, ts = true,
+    tsx = true, lua = true, py = true, rb = true, rs = true, go = true,
+    c = true, cc = true, cpp = true, h = true, hpp = true, cs = true,
+    java = true, kt = true, kts = true, sh = true, bash = true, zsh = true,
+    fish = true, ps1 = true, bat = true, cmd = true, sql = true, env = true,
+}
+
+local AwtarchyYaziTextNames = {
+    dockerfile = true,
+    makefile = true,
+    readme = true,
+    [".gitignore"] = true,
+    [".gitattributes"] = true,
+    [".editorconfig"] = true,
+}
+
+local function AwtarchyYaziHoveredTextFile()
     local hovered = cx.active.current.hovered
-    if not hovered or hovered.cha.is_dir then return false end
+    if not hovered or hovered.cha.is_dir then return nil end
 
     local mime = hovered:mime() or ""
-    return mime:match("^text/") ~= nil
+    if mime:match("^text/")
         or mime == "application/json"
         or mime == "application/xml"
         or mime == "application/javascript"
         or mime == "application/x-javascript"
         or mime == "application/x-shellscript"
+    then
+        return hovered
+    end
+
+    local name = tostring(hovered.url.name or ""):lower()
+    if AwtarchyYaziTextNames[name] then return hovered end
+
+    local ext = name:match("%.([^%.]+)$")
+    if ext and AwtarchyYaziTextExtensions[ext] then return hovered end
+    return nil
+end
+
+local function AwtarchyYaziPreviewTextSelectable()
+    return AwtarchyYaziPreviewMaximized and AwtarchyYaziHoveredTextFile() ~= nil
 end
 
 local function AwtarchyYaziShellQuote(value)
@@ -516,11 +549,19 @@ local function AwtarchyYaziShellQuote(value)
 end
 
 function AwtarchyYaziSelectPreviewText()
-    if not AwtarchyYaziPreviewTextSelectable() then return end
+    local hovered = AwtarchyYaziHoveredTextFile()
+    if not hovered then
+        ya.notify {
+            title = "Select text",
+            content = "The highlighted item is not recognized as a text file.",
+            timeout = 3,
+            level = "warn",
+        }
+        return
+    end
 
-    local hovered = cx.active.current.hovered
     local path = AwtarchyYaziShellQuote(tostring(hovered.url))
-    local command = "printf '\\033[2J\\033[H'; " ..
+    local command = "clear; " ..
         "cat -- " .. path .. "; " ..
         "printf '\\n\\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter to return to Yazi...'; " ..
         "read -r _"
@@ -591,7 +632,7 @@ end
 function AwtarchyYaziTextSelectButton:redraw()
     if not AwtarchyYaziPreviewTextSelectable() then return {} end
     return {
-        ui.Text(ui.Line(" Select text "):style(ui.Style():reverse()))
+        ui.Text(ui.Line(" Select text [m c] "):style(ui.Style():reverse()))
             :area(self._area)
             :align(ui.Align.LEFT),
     }
@@ -616,7 +657,7 @@ function Preview:new(area, tab)
         me._awtarchy_text_select_button = AwtarchyYaziTextSelectButton:new(ui.Rect {
             x = area.x,
             y = area.y + area.h - 1,
-            w = math.min(13, math.max(0, area.w - 3)),
+            w = math.min(19, math.max(0, area.w - 3)),
             h = 1,
         })
         me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {

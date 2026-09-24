@@ -645,6 +645,12 @@ grep -Fq 'block = true' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
 grep -Fq 'ya.emit("shell", { run = command, block = true })' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not pass its command through the stable shell run field'
+grep -Fq 'AwtarchyYaziTextExtensions' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode lacks the text-extension fallback'
+grep -Fq 'The highlighted item is not recognized as a text file.' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode still fails silently on unsupported files'
+grep -Fq 'Select text [m c]' "$YAZI_INIT" \
+  || fail 'Yazi selectable text control does not teach the m c shortcut'
 if grep -Fq 'ya.emit("shell", { command, block = true })' "$YAZI_INIT"; then
   fail 'Yazi selectable text mode still uses the ignored positional variable form'
 fi
