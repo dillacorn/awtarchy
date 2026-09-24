@@ -40,16 +40,16 @@ local function AwtarchyYaziOpenFiles(interactive, hovered_only)
     if hovered_only then
         local file = tab.current.hovered
         if file and not file.cha.is_dir then
-            recent[1] = tostring(file.path)
+            recent[1] = tostring(file.url)
         end
     elseif #tab.selected > 0 then
         for _, file in pairs(tab.selected) do
             if not file.cha.is_dir then
-                recent[#recent + 1] = tostring(file.path)
+                recent[#recent + 1] = tostring(file.url)
             end
         end
     elseif tab.current.hovered and not tab.current.hovered.cha.is_dir then
-        recent[1] = tostring(tab.current.hovered.path)
+        recent[1] = tostring(tab.current.hovered.url)
     end
 
     if #recent > 0 then
@@ -80,6 +80,25 @@ function AwtarchyYaziSmartEnter()
         ya.emit("enter", {})
     else
         AwtarchyYaziOpenFiles(false, false)
+    end
+end
+
+function AwtarchyYaziRight()
+    local hovered = cx.active.current.hovered
+    if not hovered then
+        return
+    elseif hovered.cha.is_dir then
+        ya.emit("enter", {})
+    elseif not AwtarchyYaziPreviewMaximized and AwtarchyYaziRatio()[3] > 0 then
+        AwtarchyYaziTogglePreviewMax()
+    end
+end
+
+function AwtarchyYaziLeft()
+    if AwtarchyYaziPreviewMaximized then
+        AwtarchyYaziTogglePreviewMax()
+    else
+        ya.emit("leave", {})
     end
 end
 
@@ -132,16 +151,16 @@ function AwtarchyYaziSearchMenu()
     ya.async(function()
         local choice = ya.which {
             cands = {
-                { on = "n", desc = "Search names recursively below current directory (fd)" },
-                { on = "c", desc = "Search file contents recursively below current directory (ripgrep)" },
+                { on = "n", desc = "Name search" },
+                { on = "c", desc = "Content search" },
             },
             silent = false,
         }
 
         if choice == 1 then
-            ya.emit("plugin", { "fd" })
+            ya.emit("search", { via = "fd" })
         elseif choice == 2 then
-            ya.emit("plugin", { "rg" })
+            ya.emit("search", { via = "rg" })
         end
     end)
 end
@@ -814,7 +833,7 @@ function AwtarchyYaziContextMenu:redraw()
         ui.Clear(self._area),
         ui.Border(ui.Edge.ALL)
             :area(self._area)
-            :type(ui.Border.ROUNDED)
+            :type(ui.Border.PLAIN)
             :style(th.help.border)
             :title(ui.Line(self:title()):align(ui.Align.CENTER)),
         ui.List(rows):area(self._list_area),
@@ -1084,14 +1103,41 @@ function Header:click(event, up)
     end
 
     local cwd = tostring(self._current.cwd)
-    for _, region in ipairs(self._awtarchy_breadcrumbs or {}) do
-        if event.x >= region.x1 and event.x <= region.x2 and region.target ~= cwd then
-            if not region.forward and AwtarchyYaziPathIsAncestor(region.target, cwd) then
+    local segments = AwtarchyYaziBreadcrumbSegments(cwd) or {}
+    if AwtarchyYaziBreadcrumbTarget
+        and cwd ~= AwtarchyYaziBreadcrumbTarget
+        and AwtarchyYaziPathIsAncestor(cwd, AwtarchyYaziBreadcrumbTarget)
+    then
+        for _, segment in ipairs(AwtarchyYaziBreadcrumbSegments(AwtarchyYaziBreadcrumbTarget) or {}) do
+            if segment.target ~= cwd and AwtarchyYaziPathIsAncestor(cwd, segment.target) then
+                segment.forward = true
+                segments[#segments + 1] = segment
+            end
+        end
+    end
+
+    local total = 0
+    for _, segment in ipairs(segments) do
+        total = total + ui.Line(segment.text):width()
+    end
+    local clipped = false
+    while total > path_width and #segments > 1 do
+        total = total - ui.Line(segments[1].text):width()
+        table.remove(segments, 1)
+        clipped = true
+    end
+
+    local x = self._area.x + (clipped and 1 or 0)
+    for _, segment in ipairs(segments) do
+        local width = ui.Line(segment.text):width()
+        if event.x >= x and event.x < x + width and segment.target ~= cwd then
+            if not segment.forward and AwtarchyYaziPathIsAncestor(segment.target, cwd) then
                 AwtarchyYaziBreadcrumbTarget = AwtarchyYaziBreadcrumbTarget or cwd
             end
-            ya.emit("cd", { Url(region.target), raw = true })
+            ya.emit("cd", { Url(segment.target), raw = true })
             return
         end
+        x = x + width
     end
 end
 
