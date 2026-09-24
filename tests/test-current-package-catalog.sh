@@ -65,7 +65,7 @@ contains_token vesktop-bin "$optional_aur" \
 if contains_token vesktop-bin "$required_aur"; then
     fail "vesktop-bin is in the default-selected AUR catalog instead of the optional catalog"
 fi
-for pkg in smtty hyprmoncfg-bin bibata-cursor-theme-bin obs-pipewire-audio-capture-bin; do
+for pkg in smtty ripdrag-git hyprmoncfg-bin bibata-cursor-theme-bin obs-pipewire-audio-capture-bin; do
     contains_token "$pkg" "$required_aur" \
         || fail "expected default-selected AUR package is missing: ${pkg}"
 done
