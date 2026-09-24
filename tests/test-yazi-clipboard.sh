@@ -614,6 +614,11 @@ grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
 
 grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' "$YAZI_INIT" \
   || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
+grep -Fq 'ya.emit("resize", {})' "$YAZI_INIT" \
+  || fail 'Yazi preview ratio changes do not dispatch stable Yazi resize/reflow'
+if grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT"; then
+  fail 'Yazi preview ratio changes still use the internal app:resize actor name'
+fi
 grep -Fq '"preview-refit"' "$YAZI_INIT" \
   || fail 'Yazi maximized preview does not invalidate stale preview cache'
 grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_PREVIEW_REFIT" \
