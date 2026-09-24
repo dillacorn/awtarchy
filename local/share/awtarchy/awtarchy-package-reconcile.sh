@@ -352,6 +352,12 @@ aur_package_satisfied() {
       done
       return 1
       ;;
+    ripdrag|ripdrag-git)
+      for alt in ripdrag ripdrag-git; do
+        package_installed "$alt" && return 0
+      done
+      return 1
+      ;;
     hyprmoncfg|hyprmoncfg-bin|hyprmoncfg-git)
       for alt in hyprmoncfg hyprmoncfg-bin hyprmoncfg-git; do
         package_installed "$alt" && return 0
@@ -2446,6 +2452,10 @@ if (( CHEESE_REPLACEMENT_NEEDED == 1 )); then
 fi
 
 install_arch=("${MISSING_REQUIRED[@]}" "${selected_arch[@]}")
+if array_contains ripdrag "${selected_aur[@]}"; then
+  package_installed rust || install_arch+=(rust)
+  package_installed gtk4 || install_arch+=(gtk4)
+fi
 if (( CHEESE_REPLACEMENT_NEEDED == 1 )) && ! package_installed snapshot; then
   install_arch+=(snapshot)
 fi
