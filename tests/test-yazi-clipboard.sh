@@ -73,6 +73,16 @@ expected = {
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
+    ("<C-t>",): "tab_create --current",
+    ("<C-1>",): "tab_switch 0",
+    ("<C-2>",): "tab_switch 1",
+    ("<C-3>",): "tab_switch 2",
+    ("<C-4>",): "tab_switch 3",
+    ("<C-5>",): "tab_switch 4",
+    ("<C-6>",): "tab_switch 5",
+    ("<C-7>",): "tab_switch 6",
+    ("<C-8>",): "tab_switch 7",
+    ("<C-9>",): "tab_switch 8",
     ("<Space>",): "toggle",
     ("<C-Space>",): "toggle",
     ("<S-Up>",): 'lua "AwtarchyYaziShiftArrow(-1)"',
@@ -193,6 +203,12 @@ grep -Fq 'function AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
   || fail 'Yazi preview maximize toggle is missing'
 grep -Fq 'AwtarchyYaziPreviewButton = {' "$YAZI_INIT" \
   || fail 'Yazi preview pane lacks the clickable maximize/restore button'
+grep -Fq 'AwtarchyYaziPreviewToggleButton = {' "$YAZI_INIT" \
+  || fail 'Yazi current pane lacks the clickable preview visibility toggle'
+grep -Fq 'local label = visible and " 󰞔 " or " 󰞓 "' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility toggle glyphs changed'
+grep -Fq 'x = area.x + math.floor((area.w - 3) / 2)' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility toggle is not centered in the current pane'
 grep -Fq 'and " 󰘕 " or " 󰹶 "' "$YAZI_INIT" \
   || fail 'Yazi preview button does not use the compact restore/maximize glyphs'
 grep -Fq 'w = 3' "$YAZI_INIT" \
