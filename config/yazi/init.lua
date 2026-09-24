@@ -455,24 +455,9 @@ local function AwtarchyYaziRatio()
     return { ratio[1], ratio[2], ratio[3] }
 end
 
-local function AwtarchyYaziQueuePreviewRefit(path)
-    ya.async(function()
-        ya.sleep(25)
-        ya.emit("plugin", {
-            "preview-refit",
-            AwtarchyYaziPluginArgs("refit", { path }),
-        })
-    end)
-end
-
 local function AwtarchyYaziApplyRatio(ratio)
     rt.mgr.ratio = { ratio[1], ratio[2], ratio[3] }
     ya.emit("app:resize", {})
-
-    local hovered = cx.active.current.hovered
-    if ratio[3] > 0 and hovered and not hovered.cha.is_dir then
-        AwtarchyYaziQueuePreviewRefit(tostring(hovered.url))
-    end
 end
 
 function AwtarchyYaziTogglePreview()
@@ -510,6 +495,37 @@ function AwtarchyYaziTogglePreviewMax()
     AwtarchyYaziPreviewMaxRestore = ratio
     AwtarchyYaziPreviewMaximized = true
     AwtarchyYaziApplyRatio({ 0, 0, 9999 })
+end
+
+local function AwtarchyYaziPreviewTextSelectable()
+    if not AwtarchyYaziPreviewMaximized then return false end
+    local hovered = cx.active.current.hovered
+    if not hovered or hovered.cha.is_dir then return false end
+
+    local mime = hovered:mime() or ""
+    return mime:match("^text/") ~= nil
+        or mime == "application/json"
+        or mime == "application/xml"
+        or mime == "application/javascript"
+        or mime == "application/x-javascript"
+        or mime == "application/x-shellscript"
+end
+
+local function AwtarchyYaziShellQuote(value)
+    return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
+end
+
+function AwtarchyYaziSelectPreviewText()
+    if not AwtarchyYaziPreviewTextSelectable() then return end
+
+    local hovered = cx.active.current.hovered
+    local path = AwtarchyYaziShellQuote(tostring(hovered.url))
+    local command = "printf '\\033[2J\\033[H'; " ..
+        "cat -- " .. path .. "; " ..
+        "printf '\\n\\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter to return to Yazi...'; " ..
+        "read -r _"
+
+    ya.emit("shell", { command, block = true })
 end
 
 function AwtarchyYaziEscape()
@@ -560,6 +576,32 @@ function AwtarchyYaziPreviewButton:click(event, up)
     AwtarchyYaziTogglePreviewMax()
 end
 
+AwtarchyYaziTextSelectButton = {
+    _id = "awtarchy-yazi-text-select-button",
+}
+
+function AwtarchyYaziTextSelectButton:new(area)
+    return setmetatable({ _area = area }, { __index = self })
+end
+
+function AwtarchyYaziTextSelectButton:reflow()
+    return { self }
+end
+
+function AwtarchyYaziTextSelectButton:redraw()
+    if not AwtarchyYaziPreviewTextSelectable() then return {} end
+    return {
+        ui.Text(ui.Line(" Select text "):style(ui.Style():reverse()))
+            :area(self._area)
+            :align(ui.Align.LEFT),
+    }
+end
+
+function AwtarchyYaziTextSelectButton:click(event, up)
+    if up or not event.is_left or not AwtarchyYaziPreviewTextSelectable() then return end
+    AwtarchyYaziSelectPreviewText()
+end
+
 local AwtarchyYaziDefaultPreviewNew = Preview.new
 local AwtarchyYaziDefaultPreviewRedraw = Preview.redraw
 
@@ -571,6 +613,12 @@ function Preview:new(area, tab)
 
     local me = AwtarchyYaziDefaultPreviewNew(self, preview_area, tab)
     if reserve_control_row then
+        me._awtarchy_text_select_button = AwtarchyYaziTextSelectButton:new(ui.Rect {
+            x = area.x,
+            y = area.y + area.h - 1,
+            w = math.min(13, math.max(0, area.w - 3)),
+            h = 1,
+        })
         me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {
             x = area.x + area.w - 3,
             y = area.y + area.h - 1,
@@ -583,6 +631,9 @@ end
 
 function Preview:reflow()
     local components = { self }
+    if self._awtarchy_text_select_button then
+        components[#components + 1] = self._awtarchy_text_select_button
+    end
     if self._awtarchy_preview_button then
         components[#components + 1] = self._awtarchy_preview_button
     end
@@ -591,6 +642,9 @@ end
 
 function Preview:redraw()
     local elements = AwtarchyYaziDefaultPreviewRedraw(self) or {}
+    if self._awtarchy_text_select_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_text_select_button))
+    end
     if self._awtarchy_preview_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_button))
     end

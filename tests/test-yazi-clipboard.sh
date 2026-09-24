@@ -104,6 +104,7 @@ expected = {
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("m", "v"): 'lua "AwtarchyYaziTogglePreview()"',
     ("m", "x"): 'lua "AwtarchyYaziTogglePreviewMax()"',
+    ("m", "c"): 'lua "AwtarchyYaziSelectPreviewText()"',
     ("?",): "help",
 }
 for keys, run in expected.items():
@@ -631,12 +632,17 @@ grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' 
   || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
 grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT" \
   || fail 'Yazi preview ratio changes do not dispatch stable app-layer resize/reflow'
-grep -Fq 'ya.sleep(25)' "$YAZI_INIT" \
-  || fail 'Yazi preview cache refit is not deferred until after the first pane resize render'
-grep -Fq '"preview-refit"' "$YAZI_INIT" \
-  || fail 'Yazi maximized preview does not invalidate stale preview cache'
-grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_PREVIEW_REFIT" \
-  || fail 'Yazi preview-refit plugin does not force a fresh peek'
+if grep -Fq 'AwtarchyYaziQueuePreviewRefit' "$YAZI_INIT"; then
+  fail 'Yazi preview resize still schedules a redundant second re-peek'
+fi
+grep -Fq 'function AwtarchyYaziSelectPreviewText()' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode is missing'
+grep -Fq 'AwtarchyYaziTextSelectButton = {' "$YAZI_INIT" \
+  || fail 'Yazi maximized text preview lacks a clickable Select text control'
+grep -Fq 'copy with Ctrl+Shift+C' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not document Alacritty copy behavior'
+grep -Fq 'block = true' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
 grep -Fq 'ui.render()' "$YAZI_INIT" \
   || fail 'Yazi time-format toggle does not request an immediate UI redraw'
 grep -Fq 'ui.Span(flags):style(th.mgr.find_keyword)' "$YAZI_INIT" \
