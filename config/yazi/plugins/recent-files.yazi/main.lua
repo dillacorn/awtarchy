@@ -9,13 +9,26 @@ local KEYS = {
     "u", "v", "w", "x", "y", "z",
 }
 
-local function state_file()
+local function state_dir()
     local root = os.getenv("XDG_STATE_HOME")
     if not root or root == "" then
         local home = os.getenv("HOME") or "."
         root = home .. "/.local/state"
     end
-    return root .. "/yazi/awtarchy-recent-files.txt"
+    return root .. "/yazi"
+end
+
+local function state_file()
+    return state_dir() .. "/awtarchy-recent-files.txt"
+end
+
+local function shell_quote(value)
+    return "'" .. value:gsub("'", "'\\''") .. "'"
+end
+
+local function ensure_state_dir()
+    os.execute("mkdir -p -- " .. shell_quote(state_dir()) .. " >/dev/null 2>&1")
+    return true
 end
 
 local function normalized(list)
@@ -53,6 +66,7 @@ local function read_state()
 end
 
 local function write_state(list)
+    ensure_state_dir()
     local file = io.open(state_file(), "w")
     if not file then
         return false
@@ -65,7 +79,12 @@ local function write_state(list)
 end
 
 local snapshot = ya.sync(function(self)
-    self.recents = read_state()
+    local disk = read_state()
+    if #disk > 0 then
+        self.recents = disk
+    else
+        self.recents = normalized(self.recents or {})
+    end
     return normalized(self.recents)
 end)
 
@@ -92,7 +111,7 @@ local record = ya.sync(function(self, paths)
 end)
 
 local subscribe = ya.sync(function(self)
-    self.recents = read_state()
+    self.recents = normalized(read_state())
 
     pcall(ps.unsub, KIND)
     pcall(ps.unsub_remote, KIND)
