@@ -434,12 +434,14 @@ grep -Fq 'Status:children_add(function(self)' "$YAZI_INIT" \
 grep -Fq '500, Status.RIGHT' "$YAZI_INIT" \
   || fail 'Yazi highlighted-item timestamp is not placed on the right side of status'
 
-python3 - "$YAZI_CONFIG" <<'PY' || fail 'Yazi edit opener or combined metadata linemode is not configured correctly'
+python3 - "$YAZI_CONFIG" "$YAZI_THEME" <<'PY' || fail 'Yazi edit opener, metadata linemode, or theme override is not configured correctly'
 import sys
 import tomllib
 
 with open(sys.argv[1], "rb") as handle:
     config = tomllib.load(handle)
+with open(sys.argv[2], "rb") as handle:
+    theme = tomllib.load(handle)
 
 if config.get("mgr", {}).get("linemode") != "size_and_mtime":
     raise SystemExit(1)
