@@ -37,6 +37,27 @@ function Linemode:size_and_mtime()
 end
 
 
+local function AwtarchyYaziPluginHex(value)
+    return (value:gsub(".", function(char)
+        return string.format("%02x", string.byte(char))
+    end))
+end
+
+local function AwtarchyYaziPluginArgs(command, values)
+    local args = { command }
+    for _, value in ipairs(values) do
+        args[#args + 1] = "hex:" .. AwtarchyYaziPluginHex(value)
+    end
+    return table.concat(args, " ")
+end
+
+local function AwtarchyYaziBookmarkTarget(target)
+    ya.emit("plugin", {
+        "bookmarks",
+        AwtarchyYaziPluginArgs("toggle", { target }),
+    })
+end
+
 local function AwtarchyYaziOpenFiles(interactive, hovered_only)
     local tab = cx.active
     local recent = {}
@@ -57,11 +78,10 @@ local function AwtarchyYaziOpenFiles(interactive, hovered_only)
     end
 
     if #recent > 0 then
-        local record = { "recent-files", "record" }
-        for _, path in ipairs(recent) do
-            record[#record + 1] = path
-        end
-        ya.emit("plugin", record)
+        ya.emit("plugin", {
+            "recent-files",
+            AwtarchyYaziPluginArgs("record", recent),
+        })
     end
 
     local args = {}
@@ -170,10 +190,7 @@ function AwtarchyYaziSearchMenu()
 end
 
 function AwtarchyYaziToggleBookmark()
-    local hovered = cx.active.current.hovered
-    local target = hovered and tostring(hovered.url)
-        or tostring(cx.active.current.cwd)
-    ya.emit("plugin", { "bookmarks", "toggle", target })
+    AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))
 end
 
 function AwtarchyYaziOpenHoveredTab()
@@ -936,10 +953,10 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "bookmark_hovered" then
         local hovered = cx.active.current.hovered
         if hovered then
-            ya.emit("plugin", { "bookmarks", "toggle", tostring(hovered.url) })
+            AwtarchyYaziBookmarkTarget(tostring(hovered.url))
         end
     elseif action == "bookmark_current" then
-        ya.emit("plugin", { "bookmarks", "toggle", tostring(cx.active.current.cwd) })
+        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))
     elseif action == "copy" then
         ya.emit("yank", {})
         ya.notify { title = "Yazi", content = "Copied " .. tostring(count) .. " item(s)", timeout = 2 }
