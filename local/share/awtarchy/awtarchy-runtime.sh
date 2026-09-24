@@ -2857,6 +2857,10 @@ install_aur_repo_apps_stage() {
         printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
       else
         printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
+        if [[ "$pkg" == "ripdrag" ]]; then
+          pacman_install_one rust
+          pacman_install_one gtk4
+        fi
         if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
           if ! install_obs_pipewire_audio_capture_package; then
             warn "AUR package failed: ${pkg}. Continuing with remaining selections."
