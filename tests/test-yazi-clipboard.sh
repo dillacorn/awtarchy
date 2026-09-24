@@ -595,8 +595,8 @@ grep -Fq 'for _, file in pairs(tab.selected)' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not include the current multi-selection'
 grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
-grep -Fq 'ripdrag-git' "$RUNTIME" \
-  || fail 'ripdrag-git is not managed for Yazi outbound drag'
+grep -Fq '  ripdrag' "$RUNTIME" \
+  || fail 'stable ripdrag is not managed for Yazi outbound drag'
 
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
