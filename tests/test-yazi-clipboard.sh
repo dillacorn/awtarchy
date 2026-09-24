@@ -215,8 +215,8 @@ grep -Fq 'AwtarchyYaziPreviewToggleButton = {' "$YAZI_INIT" \
   || fail 'Yazi current pane lacks the clickable preview visibility toggle'
 grep -Fq 'local label = visible and " 󰞔 " or " 󰞓 "' "$YAZI_INIT" \
   || fail 'Yazi preview visibility toggle glyphs changed'
-grep -Fq 'x = area.x + math.floor((area.w - 3) / 2)' "$YAZI_INIT" \
-  || fail 'Yazi preview visibility toggle is not centered in the current pane'
+grep -Fq 'x = area.x + area.w - 3' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility toggle is not at the current-pane right edge'
 grep -Fq 'and " 󰘕 " or " 󰹶 "' "$YAZI_INIT" \
   || fail 'Yazi preview button does not use the compact restore/maximize glyphs'
 grep -Fq 'w = 3' "$YAZI_INIT" \
