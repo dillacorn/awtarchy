@@ -67,6 +67,7 @@ declare -a VIRT_MANAGER_PACKAGES=(
 
 declare -a PACKAGES_AUR=(
   smtty
+  ripdrag-git
   awtwall
   hyprmoncfg-bin
   bibata-cursor-theme-bin
