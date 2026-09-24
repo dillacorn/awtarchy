@@ -5,6 +5,10 @@ require("recent-files"):setup()
 require("bookmarks"):setup()
 require("git"):setup { order = 1500 }
 
+Entity:children_add(function()
+    return " "
+end, 500)
+
 function Linemode:size_and_mtime()
     local size = self._file:size()
     local size_text
@@ -89,7 +93,7 @@ function AwtarchyYaziRight()
         return
     elseif hovered.cha.is_dir then
         ya.emit("enter", {})
-    elseif not AwtarchyYaziPreviewMaximized and AwtarchyYaziRatio()[3] > 0 then
+    elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then
         AwtarchyYaziTogglePreviewMax()
     end
 end
@@ -195,6 +199,7 @@ end
 local function AwtarchyYaziApplyRatio(ratio)
     rt.mgr.ratio = { ratio[1], ratio[2], ratio[3] }
     ya.emit("app:resize", {})
+    ya.emit("peek", { force = true })
 end
 
 function AwtarchyYaziTogglePreview()
@@ -353,7 +358,7 @@ function Current:new(area, tab)
     local me = AwtarchyYaziDefaultCurrentNew(self, current_area, tab)
     if reserve_control_row then
         me._awtarchy_preview_toggle_button = AwtarchyYaziPreviewToggleButton:new(ui.Rect {
-            x = area.x + math.floor((area.w - 3) / 2),
+            x = area.x + area.w - 3,
             y = area.y + area.h - 1,
             w = 3,
             h = 1,
@@ -1336,6 +1341,7 @@ function AwtarchyYaziToggleTimeFormat()
     local next_format = AwtarchyYaziTimeFormat == "24h" and "12h" or "24h"
     AwtarchyYaziTimeFormat = next_format
     ps.pub("@awtarchy-yazi-time-format", next_format)
+    ui.render()
 end
 
 function Status:selected_count()

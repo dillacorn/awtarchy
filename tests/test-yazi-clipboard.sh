@@ -584,4 +584,32 @@ grep -Fq 'ensure_state_dir()' "$YAZI_RECENT" \
 grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks do not create their state directory before first write'
 
+grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' "$YAZI_INIT" \
+  || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
+grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_INIT" \
+  || fail 'Yazi preview ratio changes do not force a stable re-peek'
+grep -Fq 'ui.render()' "$YAZI_INIT" \
+  || fail 'Yazi time-format toggle does not request an immediate UI redraw'
+grep -Fq 'Entity:children_add(function()' "$YAZI_INIT" \
+  || fail 'Yazi rows do not include managed leading spacing'
+python3 - "$YAZI_INIT" "$YAZI_CONFIG" <<'PY_PREVIEW' || fail 'Yazi preview layout usability contract is not configured correctly'
+from pathlib import Path
+import sys
+import tomllib
+
+init = Path(sys.argv[1]).read_text()
+with open(sys.argv[2], "rb") as handle:
+    config = tomllib.load(handle)
+
+current_start = init.index("function Current:new(area, tab)")
+current_end = init.index("function Current:reflow()", current_start)
+current_block = init[current_start:current_end]
+if "x = area.x + area.w - 3" not in current_block:
+    raise SystemExit(1)
+
+preview = config.get("preview", {})
+if preview.get("max_width") != 2000 or preview.get("max_height") != 2000:
+    raise SystemExit(1)
+PY_PREVIEW
+
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
