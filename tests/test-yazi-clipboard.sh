@@ -10,7 +10,10 @@ YAZI_THEME="$ROOT/config/yazi/theme.toml"
 YAZI_INIT="$ROOT/config/yazi/init.lua"
 YAZI_RECENT="$ROOT/config/yazi/plugins/recent-files.yazi/main.lua"
 YAZI_BOOKMARKS="$ROOT/config/yazi/plugins/bookmarks.yazi/main.lua"
+YAZI_PREVIEW_REFIT="$ROOT/config/yazi/plugins/preview-refit.yazi/main.lua"
+YAZI_VFS="$ROOT/config/yazi/vfs.toml"
 YAZI_MOUNTS="$ROOT/config/yazi/plugins/mounts.yazi/main.lua"
+ALACRITTY="$ROOT/config/alacritty/alacritty.toml"
 YAZI_GIT="$ROOT/config/yazi/plugins/git.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
@@ -88,7 +91,8 @@ expected = {
     ("<C-Space>",): "toggle",
     ("<S-Up>",): 'lua "AwtarchyYaziShiftArrow(-1)"',
     ("<S-Down>",): 'lua "AwtarchyYaziShiftArrow(1)"',
-    ("<Delete>",): "remove",
+    ("<Delete>",): 'lua "AwtarchyYaziRemoveMenu()"',
+    ("d", "d"): 'lua "AwtarchyYaziRemoveMenu()"',
     ("<C-x>",): "yank --cut",
     ("<C-v>",): "paste",
     ("c", "z"): 'lua "AwtarchyYaziCompressSelection()"',
@@ -158,12 +162,14 @@ if command -v luac >/dev/null 2>&1; then
   luac -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
   luac -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac -p "$YAZI_PREVIEW_REFIT" || fail 'Yazi preview-refit plugin does not parse as Lua'
   luac -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
   luac -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
 elif command -v luac5.4 >/dev/null 2>&1; then
   luac5.4 -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac5.4 -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
   luac5.4 -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac5.4 -p "$YAZI_PREVIEW_REFIT" || fail 'Yazi preview-refit plugin does not parse as Lua'
   luac5.4 -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
   luac5.4 -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
 else
@@ -193,14 +199,14 @@ grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
 grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
   || fail 'Yazi bookmark toggle helper is missing'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))' "$YAZI_INIT" \
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
   || fail 'Yazi g B does not bookmark the current directory'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url))' "$YAZI_INIT" \
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
-grep -Fq 'content = "No bookmarked items."' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks picker is not an item list'
-grep -Fq 'ya.emit("reveal", { Url(item.path), raw = true })' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi file bookmarks do not reveal the bookmarked file'
+grep -Fq 'local ROOT = "awt-bookmarks://collection/"' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks are not exposed as a VFS collection'
+grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi g b does not enter the bookmark collection'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
   || fail 'Yazi keyboard open-folder-in-new-tab helper is missing'
 grep -Fq '{ label = "Open in new tab", shortcut = "t n", action = "open_new_tab" }' "$YAZI_INIT" \
@@ -561,12 +567,14 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 [[ -f "$YAZI_GIT" ]] || fail 'managed git status plugin is missing'
 grep -Fq 'local KIND = "@awtarchy-yazi-bookmarks"' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks do not use retained DDS static state'
-grep -Fq 'local MAX_BOOKMARKS = 35' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmark history is not bounded'
+grep -Fq 'local MAX_BOOKMARKS = 1000' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmark history is not bounded at the managed collection limit'
 grep -Fq 'ps.sub_remote(KIND' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks are not shared across sessions'
-grep -Fq 'content = "No bookmarked items."' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi empty bookmarks message changed'
+grep -Fq 'function M:ReadDir(job)' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not implement the stable VFS directory provider'
+grep -Fq 'function M:Trash(job)' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi deleting a bookmark row cannot remove only the virtual entry'
 grep -Fq 'Command("udisksctl")' "$YAZI_MOUNTS" \
   || fail 'Yazi mount manager does not use udisksctl'
 if grep -Fq 'sudo' "$YAZI_MOUNTS"; then
@@ -576,8 +584,8 @@ grep -Fq 'Linemode:children_add' "$YAZI_GIT" \
   || fail 'Yazi git signs do not augment the existing linemode'
 grep -Fq 'local KIND = "@dillacorn-yazi-recent-files"' "$YAZI_RECENT" \
   || fail 'Yazi recents do not use retained DDS static state'
-grep -Fq 'local MAX_RECENTS = 35' "$YAZI_RECENT" \
-  || fail 'Yazi recent history is not bounded'
+grep -Fq 'local MAX_RECENTS = 1000' "$YAZI_RECENT" \
+  || fail 'Yazi recent history is not bounded at the managed collection limit'
 grep -Fq 'local snapshot = ya.sync' "$YAZI_RECENT" \
   || fail 'Yazi recents do not keep state behind the plugin sync boundary'
 grep -Fq 'local record = ya.sync' "$YAZI_RECENT" \
@@ -586,14 +594,14 @@ grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
   || fail 'Yazi recents are not subscribed across sessions'
 grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
   || fail 'Yazi recents are not published across sessions'
-grep -Fq 'content = "No recently opened files."' "$YAZI_RECENT" \
-  || fail 'Yazi empty recent-files message changed'
-grep -Fq 'cha and not cha.is_dir' "$YAZI_RECENT" \
-  || fail 'Yazi recents picker does not filter directories'
-grep -Fq 'ya.which' "$YAZI_RECENT" \
-  || fail 'Yazi recent files do not use the native Which picker'
-grep -Fq 'ya.emit("reveal"' "$YAZI_RECENT" \
-  || fail 'Yazi recent selection does not reveal the file'
+grep -Fq 'local ROOT = "awt-recents://collection/"' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not exposed as a VFS collection'
+grep -Fq 'function M:ReadDir(job)' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not implement the stable VFS directory provider'
+grep -Fq 'function M:Trash(job)' "$YAZI_RECENT" \
+  || fail 'Yazi deleting a recent row cannot remove only the virtual history entry'
+grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_RECENT" \
+  || fail 'Yazi g r does not enter the recent-files collection'
 grep -Fq 'awtarchy-recent-files.txt' "$YAZI_RECENT" \
   || fail 'Yazi recents lack deterministic restart-safe state'
 grep -Fq 'awtarchy-bookmarks.txt' "$YAZI_BOOKMARKS" \
@@ -605,12 +613,15 @@ grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
 
 grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' "$YAZI_INIT" \
   || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
-grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_INIT" \
-  || fail 'Yazi preview ratio changes do not force a stable re-peek'
+grep -Fq '"preview-refit"' "$YAZI_INIT" \
+  || fail 'Yazi maximized preview does not invalidate stale preview cache'
+grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_PREVIEW_REFIT" \
+  || fail 'Yazi preview-refit plugin does not force a fresh peek'
 grep -Fq 'ui.render()' "$YAZI_INIT" \
   || fail 'Yazi time-format toggle does not request an immediate UI redraw'
-grep -Fq 'Entity:children_add(function()' "$YAZI_INIT" \
-  || fail 'Yazi rows do not include managed leading spacing'
+if grep -Fq 'Entity:children_add(function()' "$YAZI_INIT"; then
+  fail 'Yazi still adds the rejected global row/icon padding'
+fi
 python3 - "$YAZI_INIT" "$YAZI_CONFIG" <<'PY_PREVIEW' || fail 'Yazi preview layout usability contract is not configured correctly'
 from pathlib import Path
 import sys
@@ -629,6 +640,25 @@ if "x = area.x + area.w - 3" not in current_block:
 preview = config.get("preview", {})
 if preview.get("max_width") != 2000 or preview.get("max_height") != 2000:
     raise SystemExit(1)
+if preview.get("wrap") != "yes":
+    raise SystemExit(1)
 PY_PREVIEW
+
+grep -Fq '[awt-bookmarks."*"]' "$YAZI_VFS" \
+  || fail 'Yazi bookmark VFS service is not configured'
+grep -Fq '[awt-recents."*"]' "$YAZI_VFS" \
+  || fail 'Yazi recents VFS service is not configured'
+grep -Fq 'run  = "bookmarks"' "$YAZI_VFS" \
+  || fail 'Yazi bookmark VFS service is not routed to the managed plugin'
+grep -Fq 'run  = "recent-files"' "$YAZI_VFS" \
+  || fail 'Yazi recents VFS service is not routed to the managed plugin'
+grep -Fq 'function AwtarchyYaziRemoveMenu()' "$YAZI_INIT" \
+  || fail 'Yazi trash/permanent-delete chooser is missing'
+grep -Fq 'Permanently delete...' "$YAZI_INIT" \
+  || fail 'Yazi delete chooser does not expose permanent deletion'
+grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
+  || fail 'Yazi collection rows do not navigate to their real targets'
+grep -Fq 'save_to_clipboard = true' "$ALACRITTY" \
+  || fail 'Alacritty preview text selection is not copied to the clipboard'
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
