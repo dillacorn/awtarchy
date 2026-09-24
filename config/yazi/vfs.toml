@@ -1,7 +1,2 @@
-[awt-bookmarks."*"]
-kind = "scope"
-run  = "bookmarks"
-
-[awt-recents."*"]
-kind = "scope"
-run  = "recent-files"
+# Awtarchy bookmarks and recents use real filesystem collection folders.
+# No custom Yazi VFS services are required.

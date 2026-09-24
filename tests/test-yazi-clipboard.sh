@@ -206,10 +206,17 @@ grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$Y
   || fail 'Yazi g B does not bookmark the current directory'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
-grep -Fq 'local ROOT = "awt-bookmarks://collection//"' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks are not exposed as a flat scope VFS collection root'
-grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi g b does not enter the bookmark collection'
+grep -Fq '/collections/Bookmarks' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not materialize into a real local collection folder'
+grep -Fq 'fs.create("dir_all", Url(root))' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not create the real collection folder'
+grep -Fq '.awtarchy-target' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi directory bookmark markers do not retain their real target'
+if grep -Fq 'function M:provide(' "$YAZI_BOOKMARKS"; then
+  fail 'Yazi bookmarks still depend on a custom VFS provider'
+fi
+grep -Fq 'ya.emit("cd", { Url(collection_dir()), raw = true })' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi g b does not enter the real bookmark folder'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
   || fail 'Yazi keyboard open-folder-in-new-tab helper is missing'
 grep -Fq '{ label = "Open in new tab", shortcut = "t n", action = "open_new_tab" }' "$YAZI_INIT" \
@@ -579,10 +586,10 @@ grep -Fq 'local MAX_BOOKMARKS = 1000' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmark history is not bounded at the managed collection limit'
 grep -Fq 'ps.sub_remote(KIND' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks are not shared across sessions'
-grep -Fq 'function M:ReadDir(job)' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks do not implement the stable VFS directory provider'
-grep -Fq 'function M:Trash(job)' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi deleting a bookmark row cannot remove only the virtual entry'
+grep -Fq 'local function delete_markers(markers)' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmark collection cannot delete marker entries safely'
+grep -Fq 'AwtarchyYaziDeleteCollectionSelection' "$YAZI_INIT" \
+  || fail 'Yazi collection deletion is not intercepted before real-file deletion'
 grep -Fq 'Command("udisksctl")' "$YAZI_MOUNTS" \
   || fail 'Yazi mount manager does not use udisksctl'
 if grep -Fq 'sudo' "$YAZI_MOUNTS"; then
@@ -602,14 +609,15 @@ grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
   || fail 'Yazi recents are not subscribed across sessions'
 grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
   || fail 'Yazi recents are not published across sessions'
-grep -Fq 'local ROOT = "awt-recents://collection//"' "$YAZI_RECENT" \
-  || fail 'Yazi recents are not exposed as a flat scope VFS collection root'
-grep -Fq 'function M:ReadDir(job)' "$YAZI_RECENT" \
-  || fail 'Yazi recents do not implement the stable VFS directory provider'
-grep -Fq 'function M:Trash(job)' "$YAZI_RECENT" \
-  || fail 'Yazi deleting a recent row cannot remove only the virtual history entry'
-grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_RECENT" \
-  || fail 'Yazi g r does not enter the recent-files collection'
+grep -Fq '/collections/Recently Opened' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not materialize into a real local collection folder'
+grep -Fq 'fs.write(Url(marker), path)' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not materialize local marker files'
+if grep -Fq 'function M:provide(' "$YAZI_RECENT"; then
+  fail 'Yazi recents still depend on a custom VFS provider'
+fi
+grep -Fq 'ya.emit("cd", { Url(collection_dir()), raw = true })' "$YAZI_RECENT" \
+  || fail 'Yazi g r does not enter the real recent-files folder'
 grep -Fq 'awtarchy-recent-files.txt' "$YAZI_RECENT" \
   || fail 'Yazi recents lack deterministic restart-safe state'
 grep -Fq 'awtarchy-bookmarks.txt' "$YAZI_BOOKMARKS" \
@@ -658,18 +666,9 @@ if preview.get("wrap") != "yes":
     raise SystemExit(1)
 PY_PREVIEW
 
-grep -Fq '[awt-bookmarks."*"]' "$YAZI_VFS" \
-  || fail 'Yazi bookmark VFS service is not configured'
-awk '/^\[awt-bookmarks\."\*"\]/{f=1;next} /^\[/{f=0} f && /kind = "scope"/{ok=1} END{exit !ok}' "$YAZI_VFS" \
-  || fail 'Yazi bookmark VFS does not use flat scope semantics'
-grep -Fq '[awt-recents."*"]' "$YAZI_VFS" \
-  || fail 'Yazi recents VFS service is not configured'
-awk '/^\[awt-recents\."\*"\]/{f=1;next} /^\[/{f=0} f && /kind = "scope"/{ok=1} END{exit !ok}' "$YAZI_VFS" \
-  || fail 'Yazi recents VFS does not use flat scope semantics'
-grep -Fq 'run  = "bookmarks"' "$YAZI_VFS" \
-  || fail 'Yazi bookmark VFS service is not routed to the managed plugin'
-grep -Fq 'run  = "recent-files"' "$YAZI_VFS" \
-  || fail 'Yazi recents VFS service is not routed to the managed plugin'
+if grep -Eq '^[[:space:]]*\[' "$YAZI_VFS"; then
+  fail 'Yazi custom VFS services are still configured for bookmark/recent collections'
+fi
 grep -Fq 'AwtarchyYaziDeleteMenu = {' "$YAZI_INIT" \
   || fail 'Yazi trash/permanent-delete modal is missing'
 grep -Fq 'function AwtarchyYaziDeleteMenu:move(step)' "$YAZI_INIT" \

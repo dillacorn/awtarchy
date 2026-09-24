@@ -5,40 +5,64 @@ require("recent-files"):setup()
 require("bookmarks"):setup()
 require("git"):setup { order = 1500 }
 
-local function AwtarchyYaziIsCollectionUrl(value)
-    local url = tostring(value or "")
-    return url:match("^awt%-bookmarks://") ~= nil
-        or url:match("^awt%-recents://") ~= nil
+local function AwtarchyYaziNormalizeFsPath(value)
+    return tostring(value or ""):gsub("\\", "/"):gsub("/+$", "")
 end
 
-local function AwtarchyYaziCollectionTarget(file)
-    if not file or not AwtarchyYaziIsCollectionUrl(file.url) or not file.link_to then
-        return nil
+local function AwtarchyYaziStateDir()
+    local root = os.getenv("XDG_STATE_HOME")
+    if not root or root == "" then
+        local home = os.getenv("HOME") or "."
+        root = home .. "/.local/state"
     end
-    return tostring(file.link_to), file.cha.is_dir
+    return root .. "/yazi"
+end
+
+local AwtarchyYaziCollectionRoots = {
+    bookmarks = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Bookmarks"),
+    recents = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Recently Opened"),
+}
+
+local function AwtarchyYaziCollectionKind(value)
+    local path = AwtarchyYaziNormalizeFsPath(value)
+    if path == AwtarchyYaziCollectionRoots.bookmarks then return "bookmarks" end
+    if path == AwtarchyYaziCollectionRoots.recents then return "recents" end
+    return nil
+end
+
+local function AwtarchyYaziIsCollectionItemUrl(value)
+    local path = AwtarchyYaziNormalizeFsPath(value)
+    for _, root in pairs(AwtarchyYaziCollectionRoots) do
+        local prefix = root .. "/"
+        if path:sub(1, #prefix) == prefix then
+            local rest = path:sub(#prefix + 1)
+            return rest ~= "" and rest:find("/", 1, true) == nil
+        end
+    end
+    return false
 end
 
 local function AwtarchyYaziCollectionCwd()
-    return AwtarchyYaziIsCollectionUrl(cx.active.current.cwd)
+    return AwtarchyYaziCollectionKind(cx.active.current.cwd)
 end
 
 local AwtarchyYaziDefaultEntityHighlights = Entity.highlights
 local AwtarchyYaziDefaultEntitySymlink = Entity.symlink
 
 function Entity:highlights()
-    if AwtarchyYaziIsCollectionUrl(self._file.url) then
+    if AwtarchyYaziIsCollectionItemUrl(self._file.url) then
         return ui.printable(tostring(self._file.url.name or ""):gsub("^%d+%-%-", ""))
     end
     return AwtarchyYaziDefaultEntityHighlights(self)
 end
 
 function Entity:symlink()
-    if AwtarchyYaziIsCollectionUrl(self._file.url) then return "" end
+    if AwtarchyYaziIsCollectionItemUrl(self._file.url) then return "" end
     return AwtarchyYaziDefaultEntitySymlink(self)
 end
 
 function Linemode:size_and_mtime()
-    if AwtarchyYaziIsCollectionUrl(self._file.url) then return "" end
+    if AwtarchyYaziIsCollectionItemUrl(self._file.url) then return "" end
     local size = self._file:size()
     local size_text
 
@@ -88,35 +112,44 @@ local function AwtarchyYaziBookmarkTarget(target, is_dir)
 end
 
 local function AwtarchyYaziNavigateCollection(file, new_tab)
-    local target = AwtarchyYaziCollectionTarget(file)
-    if not target then return false end
+    local kind = AwtarchyYaziCollectionCwd()
+    if not kind or not file or not AwtarchyYaziIsCollectionItemUrl(file.url) then return false end
 
-    local cha = fs.cha(Url(target), true)
-    if not cha then
-        ya.notify {
-            title = "Yazi",
-            content = "Target no longer exists; removing stale collection entry.",
-            timeout = 3,
-            level = "warn",
-        }
-        ya.emit("remove", { hovered = true, force = true })
-        return true
-    end
+    local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
+    ya.emit("plugin", {
+        plugin,
+        AwtarchyYaziPluginArgs("activate", { tostring(file.url), new_tab and "1" or "0" }),
+    })
+    return true
+end
 
-    local is_dir = cha.is_dir
-    local url = Url(target)
-    if new_tab then
-        if is_dir then
-            ya.emit("tab_create", { target, raw = true })
-        elseif url.parent then
-            ya.emit("tab_create", { tostring(url.parent), raw = true })
-            ya.emit("reveal", { url, raw = true })
+local function AwtarchyYaziCollectionSelection()
+    local kind = AwtarchyYaziCollectionCwd()
+    if not kind then return nil, {} end
+
+    local tab = cx.active
+    local markers = {}
+    if #tab.selected > 0 then
+        for _, file in pairs(tab.selected) do
+            if AwtarchyYaziIsCollectionItemUrl(file.url) then
+                markers[#markers + 1] = tostring(file.url)
+            end
         end
-    elseif is_dir then
-        ya.emit("cd", { url, raw = true })
-    else
-        ya.emit("reveal", { url, raw = true })
+    elseif tab.current.hovered and AwtarchyYaziIsCollectionItemUrl(tab.current.hovered.url) then
+        markers[1] = tostring(tab.current.hovered.url)
     end
+    return kind, markers
+end
+
+local function AwtarchyYaziDeleteCollectionSelection()
+    local kind, markers = AwtarchyYaziCollectionSelection()
+    if not kind or #markers == 0 then return false end
+
+    local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
+    ya.emit("plugin", {
+        plugin,
+        AwtarchyYaziPluginArgs("delete", markers),
+    })
     return true
 end
 
@@ -281,7 +314,9 @@ function AwtarchyYaziDeleteMenu:submit(choice)
     self._visible = false
     ui.render()
 
-    if selected == 1 then
+    if AwtarchyYaziDeleteCollectionSelection() then
+        return
+    elseif selected == 1 then
         ya.emit("remove", { force = true })
     elseif selected == 2 then
         ya.emit("remove", { permanently = true })
@@ -369,6 +404,8 @@ end
 function AwtarchyYaziPermanentDelete()
     if AwtarchyYaziDeleteMenu._visible then
         AwtarchyYaziDeleteMenu:submit(2)
+    elseif AwtarchyYaziDeleteCollectionSelection() then
+        return
     else
         ya.emit("remove", { permanently = true })
     end
@@ -1199,7 +1236,7 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "details" then
         ya.emit("spot", {})
     elseif action == "trash" then
-        ya.emit("remove", {})
+        AwtarchyYaziRemoveMenu()
     elseif action == "new_file" then
         ya.emit("create", { dir = false })
     elseif action == "new_folder" then
