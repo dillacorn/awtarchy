@@ -733,7 +733,7 @@ grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
   || fail 'Awtarchy updater cannot identify running same-user Yazi processes'
 grep -Fq "printf 'Close Yazi and continue? [Y/n] ' >/dev/tty" "$RUNTIME" \
   || fail 'Awtarchy updater does not ask for default-Yes Yazi close consent'
-grep -Fq 'kill -TERM "$pid"' "$RUNTIME" \
+grep -Fq "kill -TERM \"\$pid\"" "$RUNTIME" \
   || fail 'Awtarchy updater does not terminate Yazi only after approval'
 grep -Fq 'Yazi is still running after the termination request. No managed files were changed.' "$RUNTIME" \
   || fail 'Awtarchy updater does not refuse managed writes when Yazi remains running'
