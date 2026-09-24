@@ -597,6 +597,14 @@ grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
 grep -Fq '  ripdrag' "$RUNTIME" \
   || fail 'stable ripdrag is not managed for Yazi outbound drag'
+grep -Fq 'if [[ "$pkg" == "ripdrag" ]]; then' "$RUNTIME" \
+  || fail 'fresh install does not special-case ripdrag prerequisites'
+grep -Fq 'pacman_install_one rust' "$RUNTIME" \
+  || fail 'fresh install does not ensure Rust/Cargo before ripdrag'
+grep -Fq 'pacman_install_one gtk4' "$RUNTIME" \
+  || fail 'fresh install does not ensure GTK4 before ripdrag'
+grep -Fq 'if array_contains ripdrag "${selected_aur[@]}"; then' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not add ripdrag prerequisites to the Arch phase'
 
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
