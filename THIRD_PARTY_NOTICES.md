@@ -18,7 +18,7 @@ The colors in `config/hypr/themes/gruvbox` are based on [morhetz/gruvbox](https:
 
 `config/yazi/plugins/drag.yazi/main.lua` is adapted from [Joao-Queiroga/drag.yazi](https://github.com/Joao-Queiroga/drag.yazi), which is distributed under the MIT License. Awtarchy changes the ripdrag invocation and Linux-only integration while preserving the upstream license in `config/yazi/plugins/drag.yazi/LICENSE`.
 
-The runtime dependency [nik012003/ripdrag](https://github.com/nik012003/ripdrag) is installed from the Arch User Repository as `ripdrag-git` and is distributed under GPL-3.0.
+The runtime dependency [nik012003/ripdrag](https://github.com/nik012003/ripdrag) is installed from the Arch User Repository as `ripdrag` and is distributed under GPL-3.0.
 
 ## Adapted desktop-entry metadata
 
