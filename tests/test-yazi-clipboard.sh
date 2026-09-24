@@ -230,14 +230,14 @@ grep -Fq 'AwtarchyYaziPreviewButton = {' "$YAZI_INIT" \
   || fail 'Yazi preview pane lacks the clickable maximize/restore button'
 grep -Fq 'AwtarchyYaziPreviewToggleButton = {' "$YAZI_INIT" \
   || fail 'Yazi current pane lacks the clickable preview visibility toggle'
-grep -Fq 'local label = visible and " 󰞔 " or " 󰞓 "' "$YAZI_INIT" \
-  || fail 'Yazi preview visibility toggle glyphs changed'
-grep -Fq 'x = area.x + area.w - 3' "$YAZI_INIT" \
+grep -Fq 'local label = visible and " 󰞔 [m v] " or " 󰞓 [m v] "' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility toggle no longer teaches the m v shortcut'
+grep -Fq 'x = area.x + area.w - preview_toggle_width' "$YAZI_INIT" \
   || fail 'Yazi preview visibility toggle is not at the current-pane right edge'
-grep -Fq 'and " 󰘕 " or " 󰹶 "' "$YAZI_INIT" \
-  || fail 'Yazi preview button does not use the compact restore/maximize glyphs'
-grep -Fq 'w = 3' "$YAZI_INIT" \
-  || fail 'Yazi preview button is not kept to a compact three-cell click target'
+grep -Fq 'local label = AwtarchyYaziPreviewMaximized and " 󰘕 [m x] " or " 󰹶 [m x] "' "$YAZI_INIT" \
+  || fail 'Yazi preview button no longer teaches the m x shortcut'
+grep -Fq 'w = preview_button_width' "$YAZI_INIT" \
+  || fail 'Yazi preview button does not reserve its widened shortcut click target'
 grep -Fq 'h = area.h - 1' "$YAZI_INIT" \
   || fail 'Yazi preview control does not reserve a non-overlapping bottom row'
 grep -Fq 'AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
