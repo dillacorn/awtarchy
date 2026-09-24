@@ -418,16 +418,23 @@ local function AwtarchyYaziRatio()
     return { ratio[1], ratio[2], ratio[3] }
 end
 
+local function AwtarchyYaziQueuePreviewRefit(path)
+    ya.async(function()
+        ya.sleep(25)
+        ya.emit("plugin", {
+            "preview-refit",
+            AwtarchyYaziPluginArgs("refit", { path }),
+        })
+    end)
+end
+
 local function AwtarchyYaziApplyRatio(ratio)
     rt.mgr.ratio = { ratio[1], ratio[2], ratio[3] }
-    ya.emit("resize", {})
+    ya.emit("app:resize", {})
 
     local hovered = cx.active.current.hovered
     if ratio[3] > 0 and hovered and not hovered.cha.is_dir then
-        ya.emit("plugin", {
-            "preview-refit",
-            AwtarchyYaziPluginArgs("refit", { tostring(hovered.url) }),
-        })
+        AwtarchyYaziQueuePreviewRefit(tostring(hovered.url))
     end
 end
 
@@ -1316,19 +1323,37 @@ ps.sub("cd", function()
     end
 end)
 
+local function AwtarchyYaziHeaderFallback(max, cwd, flags)
+    if max <= 0 then return "" end
+
+    local flag_width = ui.Line(flags):width()
+    if flags ~= "" and flag_width >= max then
+        return ui.Span(ui.truncate(flags, { max = max, rtl = true }))
+            :style(th.mgr.find_keyword)
+    end
+
+    local path_max = math.max(0, max - flag_width)
+    local path = ui.truncate(ya.readable_path(cwd), { max = path_max, rtl = true })
+    local spans = { ui.Span(path):style(th.mgr.cwd) }
+    if flags ~= "" then
+        spans[#spans + 1] = ui.Span(flags):style(th.mgr.find_keyword)
+    end
+    return ui.Line(spans)
+end
+
 function Header:cwd()
     local max = self._area.w - self._right_width
     local cwd = tostring(self._current.cwd)
     local flags = self:flags()
+    local flag_width = ui.Line(flags):width()
+    local path_max = math.max(0, max - flag_width)
 
     self._awtarchy_breadcrumbs = {}
-    if max <= 0 or flags ~= "" or cwd:sub(1, 1) ~= "/" then
-        return AwtarchyYaziDefaultHeaderCwd(self)
-    end
+    if max <= 0 then return "" end
 
     local segments = AwtarchyYaziBreadcrumbSegments(cwd)
     if not segments then
-        return AwtarchyYaziDefaultHeaderCwd(self)
+        return AwtarchyYaziHeaderFallback(max, cwd, flags)
     end
 
     if AwtarchyYaziBreadcrumbTarget
@@ -1344,22 +1369,16 @@ function Header:cwd()
     end
 
     local total = 0
-    for _, segment in ipairs(segments) do
-        total = total + ui.Line(segment.text):width()
-    end
+    for _, segment in ipairs(segments) do total = total + ui.Line(segment.text):width() end
 
     local clipped = false
-    while total > max and #segments > 1 do
+    while total > path_max and #segments > 1 do
         total = total - ui.Line(segments[1].text):width()
         table.remove(segments, 1)
         clipped = true
     end
-    if clipped then
-        total = total + 1
-    end
-    if total > max then
-        return AwtarchyYaziDefaultHeaderCwd(self)
-    end
+    if clipped then total = total + 1 end
+    if total > path_max then return AwtarchyYaziHeaderFallback(max, cwd, flags) end
 
     local spans = {}
     local x = self._area.x
@@ -1381,6 +1400,7 @@ function Header:cwd()
         x = x + width
     end
 
+    if flags ~= "" then spans[#spans + 1] = ui.Span(flags):style(th.mgr.find_keyword) end
     return ui.Line(spans)
 end
 

@@ -126,6 +126,8 @@ if by_keys.get(("g", "B"), {}).get("desc") != "Bookmark current directory":
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
 PY_KEYMAP
+grep -Fq 'desc = "Go to recently opened folder"' "$KEYMAP" \
+  || fail 'Yazi g r help does not describe the virtual recent-files folder'
 
 if grep -Fq 'dragon-drop' "$KEYMAP"; then
   fail 'Yazi keymap still contains the retired DragonDrop workflow'
@@ -204,8 +206,8 @@ grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$Y
   || fail 'Yazi g B does not bookmark the current directory'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
-grep -Fq 'local ROOT = "awt-bookmarks://collection/"' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks are not exposed as a VFS collection'
+grep -Fq 'local ROOT = "awt-bookmarks://collection/@/"' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks are not exposed as a valid hub VFS collection root'
 grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_BOOKMARKS" \
   || fail 'Yazi g b does not enter the bookmark collection'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
@@ -600,8 +602,8 @@ grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
   || fail 'Yazi recents are not subscribed across sessions'
 grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
   || fail 'Yazi recents are not published across sessions'
-grep -Fq 'local ROOT = "awt-recents://collection/"' "$YAZI_RECENT" \
-  || fail 'Yazi recents are not exposed as a VFS collection'
+grep -Fq 'local ROOT = "awt-recents://collection/@/"' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not exposed as a valid hub VFS collection root'
 grep -Fq 'function M:ReadDir(job)' "$YAZI_RECENT" \
   || fail 'Yazi recents do not implement the stable VFS directory provider'
 grep -Fq 'function M:Trash(job)' "$YAZI_RECENT" \
@@ -619,17 +621,18 @@ grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
 
 grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' "$YAZI_INIT" \
   || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
-grep -Fq 'ya.emit("resize", {})' "$YAZI_INIT" \
-  || fail 'Yazi preview ratio changes do not dispatch stable Yazi resize/reflow'
-if grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT"; then
-  fail 'Yazi preview ratio changes still use the internal app:resize actor name'
-fi
+grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT" \
+  || fail 'Yazi preview ratio changes do not dispatch stable app-layer resize/reflow'
+grep -Fq 'ya.sleep(25)' "$YAZI_INIT" \
+  || fail 'Yazi preview cache refit is not deferred until after the first pane resize render'
 grep -Fq '"preview-refit"' "$YAZI_INIT" \
   || fail 'Yazi maximized preview does not invalidate stale preview cache'
 grep -Fq 'ya.emit("peek", { force = true })' "$YAZI_PREVIEW_REFIT" \
   || fail 'Yazi preview-refit plugin does not force a fresh peek'
 grep -Fq 'ui.render()' "$YAZI_INIT" \
   || fail 'Yazi time-format toggle does not request an immediate UI redraw'
+grep -Fq 'ui.Span(flags):style(th.mgr.find_keyword)' "$YAZI_INIT" \
+  || fail 'Yazi header filter/search/find suffix does not use a distinct command color'
 if grep -Fq 'Entity:children_add(function()' "$YAZI_INIT"; then
   fail 'Yazi still adds the rejected global row/icon padding'
 fi
