@@ -70,7 +70,7 @@ prepend_keymap = [
   { on = ["o"],       run = 'lua "AwtarchyYaziOpen(false)"', desc = "Open selected files" },
   { on = ["O"],       run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
   { on = ["<S-Enter>"], run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
-  { on = ["d", "g"], run = "plugin drag", desc = "Drag selected file(s) out" },
+  { on = ["e", "d"], run = "plugin drag", desc = "Drag selected file(s) out" },
   { on = ["r"],       run = "rename",               desc = "Rename" },
   { on = ["d", "d"], run = 'lua "AwtarchyYaziRemoveMenu()"', desc = "Trash or permanently delete selection" },
   { on = ["<Delete>"], run = 'lua "AwtarchyYaziRemoveMenu()"', desc = "Trash or permanently delete selection" },
