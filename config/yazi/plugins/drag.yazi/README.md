@@ -9,4 +9,4 @@ Awtarchy uses it only for explicit outbound drag from Yazi:
 
 The plugin launches `ripdrag` as a compact drag surface and exits after the first successful drop. Internal Yazi drag-to-folder remains handled by Awtarchy's existing Yazi Lua workflow.
 
-Runtime dependency: `ripdrag-git` from the Arch User Repository.
+Runtime dependency: stable `ripdrag` from the Arch User Repository.
