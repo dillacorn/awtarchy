@@ -9,13 +9,26 @@ local KEYS = {
     "u", "v", "w", "x", "y", "z",
 }
 
-local function state_file()
+local function state_dir()
     local root = os.getenv("XDG_STATE_HOME")
     if not root or root == "" then
         local home = os.getenv("HOME") or "."
         root = home .. "/.local/state"
     end
-    return root .. "/yazi/awtarchy-bookmarks.txt"
+    return root .. "/yazi"
+end
+
+local function state_file()
+    return state_dir() .. "/awtarchy-bookmarks.txt"
+end
+
+local function shell_quote(value)
+    return "'" .. value:gsub("'", "'\\''") .. "'"
+end
+
+local function ensure_state_dir()
+    os.execute("mkdir -p -- " .. shell_quote(state_dir()) .. " >/dev/null 2>&1")
+    return true
 end
 
 local function normalized(list)
@@ -53,6 +66,7 @@ local function read_state()
 end
 
 local function write_state(list)
+    ensure_state_dir()
     local file = io.open(state_file(), "w")
     if not file then
         return false
@@ -74,7 +88,12 @@ function M:is_bookmarked(path)
 end
 
 local snapshot = ya.sync(function(self)
-    self.bookmarks = read_state()
+    local disk = read_state()
+    if #disk > 0 then
+        self.bookmarks = disk
+    else
+        self.bookmarks = normalized(self.bookmarks or {})
+    end
     return normalized(self.bookmarks)
 end)
 
@@ -109,7 +128,7 @@ local toggle = ya.sync(function(self, path)
 end)
 
 local subscribe = ya.sync(function(self)
-    self.bookmarks = read_state()
+    self.bookmarks = normalized(read_state())
 
     pcall(ps.unsub, KIND)
     pcall(ps.unsub_remote, KIND)
