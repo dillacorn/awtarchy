@@ -52,6 +52,8 @@ for keys in [("g",), ("a",), ("/",), ("n",), ("N",)]:
         raise SystemExit(1)
 
 expected = {
+    ("<Right>",): 'lua "AwtarchyYaziRight()"',
+    ("<Left>",): 'lua "AwtarchyYaziLeft()"',
     ("<Up>",): 'lua "AwtarchyYaziArrow(-1)"',
     ("<Down>",): 'lua "AwtarchyYaziArrow(1)"',
     ("k",): "arrow prev",
@@ -160,16 +162,25 @@ grep -Fq 'require("recent-files")' "$YAZI_INIT" \
   || fail 'Yazi init does not load the managed recent-files plugin'
 grep -Fq 'require("recent-files"):setup()' "$YAZI_INIT" \
   || fail 'Yazi recent-files DDS state is not initialized at startup'
+grep -Fq 'tostring(file.url)' "$YAZI_INIT" \
+  || fail 'Yazi recents are not recorded from the File.url API'
+if grep -Fq 'tostring(file.path)' "$YAZI_INIT"; then
+  fail 'Yazi recents still use the nonexistent File.path field'
+fi
 grep -Fq 'require("bookmarks"):setup()' "$YAZI_INIT" \
   || fail 'Yazi bookmarks DDS state is not initialized at startup'
 grep -Fq 'require("git"):setup { order = 1500 }' "$YAZI_INIT" \
   || fail 'Yazi git status signs are not attached to the linemode'
 grep -Fq 'function AwtarchyYaziSearchMenu()' "$YAZI_INIT" \
   || fail 'Yazi recursive search menu is missing'
-grep -Fq 'ya.emit("plugin", { "fd" })' "$YAZI_INIT" \
-  || fail 'Yazi recursive filename search does not use native fd plugin'
-grep -Fq 'ya.emit("plugin", { "rg" })' "$YAZI_INIT" \
-  || fail 'Yazi recursive content search does not use native rg plugin'
+grep -Fq 'ya.emit("search", { via = "fd" })' "$YAZI_INIT" \
+  || fail 'Yazi recursive filename search does not use native fd search'
+grep -Fq 'ya.emit("search", { via = "rg" })' "$YAZI_INIT" \
+  || fail 'Yazi recursive content search does not use native rg search'
+grep -Fq '{ on = "n", desc = "Name search" }' "$YAZI_INIT" \
+  || fail 'Yazi recursive search chooser label is too verbose or changed'
+grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
+  || fail 'Yazi content search chooser label is too verbose or changed'
 grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
   || fail 'Yazi bookmark toggle helper is missing'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
@@ -198,6 +209,10 @@ grep -Fq 'function Header:cwd()' "$YAZI_INIT" \
   || fail 'Yazi clickable breadcrumb renderer is missing'
 grep -Fq 'AwtarchyYaziBreadcrumbTarget' "$YAZI_INIT" \
   || fail 'Yazi breadcrumb forward trail state is missing'
+grep -Fq 'local segments = AwtarchyYaziBreadcrumbSegments(cwd) or {}' "$YAZI_INIT" \
+  || fail 'Yazi breadcrumb click handling does not recompute live hit regions'
+grep -Fq ':type(ui.Border.PLAIN)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu border is still rounded'
 grep -Fq 'ui.Style():dim()' "$YAZI_INIT" \
   || fail 'Yazi breadcrumb forward trail is not visually dimmed'
 grep -Fq 'function Status:task_summary()' "$YAZI_INIT" \
