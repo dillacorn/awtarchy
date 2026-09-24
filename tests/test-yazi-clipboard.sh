@@ -74,7 +74,7 @@ expected = {
     ("o",): 'lua "AwtarchyYaziOpen(false)"',
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
-    ("d", "g"): "plugin drag",
+    ("e", "d"): "plugin drag",
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -133,7 +133,7 @@ grep -Fq 'desc = "Go to recently opened folder"' "$KEYMAP" \
   || fail 'Yazi g r help does not describe the virtual recent-files folder'
 
 grep -Fq 'desc = "Drag selected file(s) out"' "$KEYMAP" \
-  || fail 'Yazi d g outbound drag binding is not documented'
+  || fail 'Yazi e d outbound drag binding is not documented'
 grep -Fq 'desc = "Copy files + system clipboard"' "$KEYMAP" \
   || fail 'Yazi Ctrl+C system-clipboard copy binding is not documented'
 grep -Fq 'on = ["<C-Space>"]' "$KEYMAP" \
@@ -432,7 +432,7 @@ grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
 if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'Command("ripdrag")' "$YAZI_INIT"; then
   fail 'Awtarchy Yazi internal drag directly depends on an external outbound-drag helper'
 fi
-grep -Fq '{ label = "Drag out...", shortcut = "d g", action = "drag_out" }' "$YAZI_INIT" \
+grep -Fq '{ label = "Drag out...", shortcut = "e d", action = "drag_out" }' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose outbound drag'
 grep -Fq 'ya.emit("plugin", { "drag" })' "$YAZI_INIT" \
   || fail 'Yazi context-menu outbound drag does not dispatch the managed drag plugin'
