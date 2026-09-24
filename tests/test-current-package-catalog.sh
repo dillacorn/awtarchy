@@ -69,6 +69,9 @@ for pkg in smtty ripdrag hyprmoncfg-bin bibata-cursor-theme-bin obs-pipewire-aud
     contains_token "$pkg" "$required_aur" \
         || fail "expected default-selected AUR package is missing: ${pkg}"
 done
+if contains_token ripdrag-git "$required_aur"; then
+    fail "ripdrag-git is selected instead of the stable ripdrag package"
+fi
 
 if grep -Eq 'dev\.vencord\.Vesktop|com\.moonlight_stream\.Moonlight|Vesktop|Moonlight' <<<"$flatpak_catalog"; then
     fail "Vesktop or Moonlight is still listed in the Flatpak catalog"
