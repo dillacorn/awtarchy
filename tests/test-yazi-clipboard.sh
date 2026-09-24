@@ -194,6 +194,12 @@ grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
 grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
   || fail 'Yazi bookmark toggle helper is missing'
+grep -Fq 'local target = hovered and tostring(hovered.url)' "$YAZI_INIT" \
+  || fail 'Yazi g B does not bookmark the actual hovered file or folder'
+grep -Fq 'content = "No bookmarked items."' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks picker is not an item list'
+grep -Fq 'ya.emit("reveal", { Url(item.path), raw = true })' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi file bookmarks do not reveal the bookmarked file'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
   || fail 'Yazi keyboard open-folder-in-new-tab helper is missing'
 grep -Fq '{ label = "Open in new tab", shortcut = "t n", action = "open_new_tab" }' "$YAZI_INIT" \
