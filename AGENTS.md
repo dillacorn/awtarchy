@@ -333,7 +333,7 @@ When recovery behavior is requested, preserve a safe rollback/fallback path wher
 
 
 - Keep the Yazi preview controls self-teaching without changing the existing bottom-row architecture: the current-pane visibility control must show `󰞔 [m v]` while preview is visible and `󰞓 [m v]` while hidden; the preview-pane maximize control must show `󰹶 [m x]` normally and `󰘕 [m x]` while maximized. Keep the maximized text control as `Select text [m c]`. Reserve enough width for each shortcut hint and keep the maximize control from overlapping the text-selection control on narrow panes.
-- Before an update/reset/Git-testing apply that has planned `.config/yazi/...` changes, detect same-user running Yazi processes before `apply_plan`. Interactive runs must explain that managed Yazi configuration is about to change and ask `Close Yazi and continue? [Y/n]`; `--yes` is explicit pre-authorization. After approval, request termination and verify every Yazi process exited before managed-file writes. Refusal, unavailable noninteractive consent, or failed termination must cancel before partial managed writes. Review-only mode must remain non-mutating and must not close Yazi.
+- Updating managed `.config/yazi/...` files must not require Yazi to be closed and must not terminate running Yazi processes. Existing sessions may continue using the old in-memory configuration until restarted. When an applied plan changes managed Yazi configuration, complete the update normally and print a concise restart notice afterward. Review-only mode remains non-mutating and does not need a restart notice.
 
 ## Quickshell and desktop UI work
 
