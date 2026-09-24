@@ -193,8 +193,10 @@ grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
 grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
   || fail 'Yazi bookmark toggle helper is missing'
-grep -Fq 'local target = hovered and tostring(hovered.url)' "$YAZI_INIT" \
-  || fail 'Yazi g B does not bookmark the actual hovered file or folder'
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))' "$YAZI_INIT" \
+  || fail 'Yazi g B does not bookmark the current directory'
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url))' "$YAZI_INIT" \
+  || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
 grep -Fq 'content = "No bookmarked items."' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks picker is not an item list'
 grep -Fq 'ya.emit("reveal", { Url(item.path), raw = true })' "$YAZI_BOOKMARKS" \
