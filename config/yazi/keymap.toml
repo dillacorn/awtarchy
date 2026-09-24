@@ -14,14 +14,14 @@ prepend_keymap = [
   { on = ["G"],       run = "arrow bot", desc = "Bottom" },
 
   # Enter/leave
-  { on = ["<Right>"], run = "enter",     desc = "Enter directory" },
+  { on = ["<Right>"], run = 'lua "AwtarchyYaziRight()"', desc = "Enter directory or maximize file preview" },
   { on = ["l"],       run = "enter",     desc = "Enter directory" },
   { on = ["<Enter>"], run = 'lua "AwtarchyYaziSmartEnter()"', desc = "Enter directory or open file" },
   { on = ["<Esc>"],   run = 'lua "AwtarchyYaziEscape()"', desc = "Exit maximized preview or cancel" },
   { on = ["q"],       run = 'lua "AwtarchyYaziConfirmQuit(false)"', desc = "Quit with confirmation" },
   { on = ["Q"],       run = 'lua "AwtarchyYaziConfirmQuit(true)"', desc = "Quit without cwd file (confirm)" },
   { on = ["<C-w>"],   run = 'lua "AwtarchyYaziCloseTab()"', desc = "Close tab (confirm if last)" },
-  { on = ["<Left>"],  run = "leave",     desc = "Up one dir" },
+  { on = ["<Left>"],  run = 'lua "AwtarchyYaziLeft()"', desc = "Restore preview or go up one dir" },
   { on = ["h"],       run = "leave",     desc = "Up one dir" },
   { on = ["<Backspace>"], run = "leave", desc = "Up one dir" },
 
