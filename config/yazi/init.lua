@@ -5,11 +5,40 @@ require("recent-files"):setup()
 require("bookmarks"):setup()
 require("git"):setup { order = 1500 }
 
-Entity:children_add(function()
-    return " "
-end, 500)
+local function AwtarchyYaziIsCollectionUrl(value)
+    local url = tostring(value or "")
+    return url:match("^awt%-bookmarks://") ~= nil
+        or url:match("^awt%-recents://") ~= nil
+end
+
+local function AwtarchyYaziCollectionTarget(file)
+    if not file or not AwtarchyYaziIsCollectionUrl(file.url) or not file.link_to then
+        return nil
+    end
+    return tostring(file.link_to), file.cha.is_dir
+end
+
+local function AwtarchyYaziCollectionCwd()
+    return AwtarchyYaziIsCollectionUrl(cx.active.current.cwd)
+end
+
+local AwtarchyYaziDefaultEntityHighlights = Entity.highlights
+local AwtarchyYaziDefaultEntitySymlink = Entity.symlink
+
+function Entity:highlights()
+    if AwtarchyYaziIsCollectionUrl(self._file.url) then
+        return ui.printable(tostring(self._file.url.name or ""):gsub("^%d+%-%-", ""))
+    end
+    return AwtarchyYaziDefaultEntityHighlights(self)
+end
+
+function Entity:symlink()
+    if AwtarchyYaziIsCollectionUrl(self._file.url) then return "" end
+    return AwtarchyYaziDefaultEntitySymlink(self)
+end
 
 function Linemode:size_and_mtime()
+    if AwtarchyYaziIsCollectionUrl(self._file.url) then return "" end
     local size = self._file:size()
     local size_text
 
@@ -51,11 +80,42 @@ local function AwtarchyYaziPluginArgs(command, values)
     return table.concat(args, " ")
 end
 
-local function AwtarchyYaziBookmarkTarget(target)
+local function AwtarchyYaziBookmarkTarget(target, is_dir)
     ya.emit("plugin", {
         "bookmarks",
-        AwtarchyYaziPluginArgs("toggle", { target }),
+        AwtarchyYaziPluginArgs("toggle", { is_dir and "D" or "F", target }),
     })
+end
+
+local function AwtarchyYaziNavigateCollection(file, new_tab)
+    local target, is_dir = AwtarchyYaziCollectionTarget(file)
+    if not target then return false end
+
+    if not fs.cha(Url(target), true) then
+        ya.notify {
+            title = "Yazi",
+            content = "Target no longer exists; removing stale collection entry.",
+            timeout = 3,
+            level = "warn",
+        }
+        ya.emit("remove", { hovered = true, force = true })
+        return true
+    end
+
+    local url = Url(target)
+    if new_tab then
+        if is_dir then
+            ya.emit("tab_create", { target, raw = true })
+        elseif url.parent then
+            ya.emit("tab_create", { tostring(url.parent), raw = true })
+            ya.emit("reveal", { url, raw = true })
+        end
+    elseif is_dir then
+        ya.emit("cd", { url, raw = true })
+    else
+        ya.emit("reveal", { url, raw = true })
+    end
+    return true
 end
 
 local function AwtarchyYaziOpenFiles(interactive, hovered_only)
@@ -100,7 +160,9 @@ end
 
 function AwtarchyYaziSmartEnter()
     local hovered = cx.active.current.hovered
-    if hovered and hovered.cha.is_dir then
+    if AwtarchyYaziNavigateCollection(hovered, false) then
+        return
+    elseif hovered and hovered.cha.is_dir then
         ya.emit("enter", {})
     else
         AwtarchyYaziOpenFiles(false, false)
@@ -110,6 +172,8 @@ end
 function AwtarchyYaziRight()
     local hovered = cx.active.current.hovered
     if not hovered then
+        return
+    elseif AwtarchyYaziNavigateCollection(hovered, false) then
         return
     elseif hovered.cha.is_dir then
         ya.emit("enter", {})
@@ -121,6 +185,8 @@ end
 function AwtarchyYaziLeft()
     if AwtarchyYaziPreviewMaximized then
         AwtarchyYaziTogglePreviewMax()
+    elseif AwtarchyYaziCollectionCwd() then
+        ya.emit("back", {})
     else
         ya.emit("leave", {})
     end
@@ -171,6 +237,23 @@ function AwtarchyYaziCloseTab()
     end
 end
 
+function AwtarchyYaziRemoveMenu()
+    ya.async(function()
+        local choice = ya.which {
+            cands = {
+                { on = "y", desc = "Move to trash" },
+                { on = "D", desc = "Permanently delete..." },
+            },
+            silent = false,
+        }
+        if choice == 1 then
+            ya.emit("remove", { force = true })
+        elseif choice == 2 then
+            ya.emit("remove", { permanently = true })
+        end
+    end)
+end
+
 function AwtarchyYaziSearchMenu()
     ya.async(function()
         local choice = ya.which {
@@ -190,12 +273,14 @@ function AwtarchyYaziSearchMenu()
 end
 
 function AwtarchyYaziToggleBookmark()
-    AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))
+    AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
 end
 
 function AwtarchyYaziOpenHoveredTab()
     local hovered = cx.active.current.hovered
-    if hovered and hovered.cha.is_dir then
+    if AwtarchyYaziNavigateCollection(hovered, true) then
+        return
+    elseif hovered and hovered.cha.is_dir then
         ya.emit("tab_create", { tostring(hovered.url), raw = true })
     end
 end
@@ -213,10 +298,19 @@ local function AwtarchyYaziRatio()
     return { ratio[1], ratio[2], ratio[3] }
 end
 
-local function AwtarchyYaziApplyRatio(ratio)
+local function AwtarchyYaziApplyRatio(ratio, invalidate_cache)
     rt.mgr.ratio = { ratio[1], ratio[2], ratio[3] }
     ya.emit("app:resize", {})
-    ya.emit("peek", { force = true })
+
+    local hovered = cx.active.current.hovered
+    if invalidate_cache and hovered and not hovered.cha.is_dir then
+        ya.emit("plugin", {
+            "preview-refit",
+            AwtarchyYaziPluginArgs("refit", { tostring(hovered.url) }),
+        })
+    else
+        ya.emit("peek", { force = true })
+    end
 end
 
 function AwtarchyYaziTogglePreview()
@@ -253,7 +347,7 @@ function AwtarchyYaziTogglePreviewMax()
 
     AwtarchyYaziPreviewMaxRestore = ratio
     AwtarchyYaziPreviewMaximized = true
-    AwtarchyYaziApplyRatio { 0, 0, 9999 }
+    AwtarchyYaziApplyRatio({ 0, 0, 9999 }, true)
 end
 
 function AwtarchyYaziEscape()
@@ -953,10 +1047,10 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "bookmark_hovered" then
         local hovered = cx.active.current.hovered
         if hovered then
-            AwtarchyYaziBookmarkTarget(tostring(hovered.url))
+            AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)
         end
     elseif action == "bookmark_current" then
-        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))
+        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
     elseif action == "copy" then
         ya.emit("yank", {})
         ya.notify { title = "Yazi", content = "Copied " .. tostring(count) .. " item(s)", timeout = 2 }
@@ -1299,7 +1393,9 @@ function Entity:click(event, up)
 
             if pending.path == tostring(self._file.url) and pending.was_hovered then
                 AwtarchyYaziContextMenu:hide()
-                if self._file.cha.is_dir then
+                if AwtarchyYaziNavigateCollection(self._file, false) then
+                    return
+                elseif self._file.cha.is_dir then
                     ya.emit("enter", {})
                 else
                     AwtarchyYaziOpenFiles(false, true)
@@ -1314,7 +1410,9 @@ function Entity:click(event, up)
     if event.is_middle then
         AwtarchyYaziPendingClick = nil
         AwtarchyYaziContextMenu:hide()
-        if self._file.cha.is_dir then
+        if AwtarchyYaziNavigateCollection(self._file, true) then
+            return
+        elseif self._file.cha.is_dir then
             ya.emit("tab_create", { tostring(self._file.url), raw = true })
         end
         return
