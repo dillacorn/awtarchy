@@ -3,8 +3,24 @@
 
 [mgr]
 linemode = "size_and_mtime"
+mouse_events = ["click", "scroll", "drag", "move"]
+
+[preview]
+wrap = "yes"
+max_width = 2000
+max_height = 2000
 
 [opener]
 edit = [
   { run = "/usr/bin/xdg-open %s", for = "unix", desc = "Open with default editor" },
 ]
+
+[[plugin.prepend_fetchers]]
+url = "*"
+run = "git"
+group = "git"
+
+[[plugin.prepend_fetchers]]
+url = "*/"
+run = "git"
+group = "git"

@@ -1,64 +1,101 @@
 # github.com/dillacorn/awtarchy/tree/main/config/yazi
 # ~/.config/yazi/keymap.toml
 
-# Minimal navigation and dragon-drop support.
+# Mouse-friendly navigation with keyboard parity.
 
 [mgr]
 prepend_keymap = [
   # Movement
-  { on = ["<Up>"],    run = "arrow prev", desc = "Previous file" },
-  { on = ["<Down>"],  run = "arrow next", desc = "Next file" },
+  { on = ["<Up>"],    run = 'lua "AwtarchyYaziArrow(-1)"', desc = "Previous file" },
+  { on = ["<Down>"],  run = 'lua "AwtarchyYaziArrow(1)"', desc = "Next file" },
   { on = ["k"],       run = "arrow prev", desc = "Previous file" },
   { on = ["j"],       run = "arrow next", desc = "Next file" },
   { on = ["g", "g"], run = "arrow top", desc = "Top" },
   { on = ["G"],       run = "arrow bot", desc = "Bottom" },
 
   # Enter/leave
-  { on = ["<Right>"], run = "enter",     desc = "Enter directory" },
+  { on = ["<Right>"], run = 'lua "AwtarchyYaziRight()"', desc = "Enter directory or maximize file preview" },
   { on = ["l"],       run = "enter",     desc = "Enter directory" },
-  { on = ["<Enter>"], run = "open",      desc = "Open file" },
-  { on = ["<Left>"],  run = "leave",     desc = "Up one dir" },
+  { on = ["<Enter>"], run = 'lua "AwtarchyYaziSmartEnter()"', desc = "Enter directory or open file" },
+  { on = ["<Esc>"],   run = 'lua "AwtarchyYaziEscape()"', desc = "Exit maximized preview or cancel" },
+  { on = ["q"],       run = 'lua "AwtarchyYaziConfirmQuit(false)"', desc = "Quit with confirmation" },
+  { on = ["Q"],       run = 'lua "AwtarchyYaziConfirmQuit(true)"', desc = "Quit without cwd file (confirm)" },
+  { on = ["<C-w>"],   run = 'lua "AwtarchyYaziCloseTab()"', desc = "Close tab (confirm if last)" },
+  { on = ["<C-t>"],   run = "tab_create --current", desc = "Create tab in current directory" },
+  { on = ["<C-1>"],   run = "tab_switch 0", desc = "Switch to tab 1" },
+  { on = ["<C-2>"],   run = "tab_switch 1", desc = "Switch to tab 2" },
+  { on = ["<C-3>"],   run = "tab_switch 2", desc = "Switch to tab 3" },
+  { on = ["<C-4>"],   run = "tab_switch 3", desc = "Switch to tab 4" },
+  { on = ["<C-5>"],   run = "tab_switch 4", desc = "Switch to tab 5" },
+  { on = ["<C-6>"],   run = "tab_switch 5", desc = "Switch to tab 6" },
+  { on = ["<C-7>"],   run = "tab_switch 6", desc = "Switch to tab 7" },
+  { on = ["<C-8>"],   run = "tab_switch 7", desc = "Switch to tab 8" },
+  { on = ["<C-9>"],   run = "tab_switch 8", desc = "Switch to tab 9" },
+  { on = ["<Left>"],  run = 'lua "AwtarchyYaziLeft()"', desc = "Restore preview or go up one dir" },
   { on = ["h"],       run = "leave",     desc = "Up one dir" },
   { on = ["<Backspace>"], run = "leave", desc = "Up one dir" },
 
-  # History
+  # History / navigation
   { on = ["H"],       run = "back",      desc = "Back in history" },
   { on = ["L"],       run = "forward",   desc = "Forward in history" },
+  { on = ["g", "r"], run = "plugin recent-files", desc = "Go to recently opened folder" },
+  { on = ["g", "b"], run = "plugin bookmarks", desc = "Go to bookmarked folder" },
+  { on = ["g", "B"], run = 'lua "AwtarchyYaziToggleBookmark()"', desc = "Bookmark current directory" },
+  { on = ["g", "m"], run = "plugin mounts", desc = "Open mount manager" },
+  { on = ["<C-f>"],  run = 'lua "AwtarchyYaziSearchMenu()"', desc = "Search current directory tree" },
 
   # Selection
-  { on = ["<Space>"], run = "toggle",    desc = "Toggle select" },
-  { on = ["v"],       run = "visual_mode", desc = "Visual select mode" },
-  { on = ["<C-a>"],   run = "toggle_all --state=on",  desc = "Select all" },
-  { on = ["<C-x>"],   run = "toggle_all --state=off", desc = "Clear selection" },
+  { on = ["<Space>"],   run = "toggle", desc = "Toggle selection" },
+  { on = ["<C-Space>"], run = "toggle", desc = "Toggle individual selection" },
+  { on = ["<S-Up>"],    run = 'lua "AwtarchyYaziShiftArrow(-1)"', desc = "Extend selection up" },
+  { on = ["<S-Down>"],  run = 'lua "AwtarchyYaziShiftArrow(1)"', desc = "Extend selection down" },
+  { on = ["v"],         run = "visual_mode", desc = "Visual select mode" },
+  { on = ["<C-a>"],     run = "toggle_all --state=on", desc = "Select all" },
 
   # Copy/Cut/Paste
-  { on = ["y"],       run = "yank",            desc = "Yank (copy)" },
+  { on = ["y"],       run = 'lua "AwtarchyYaziYank()"', desc = "Yank (copy) or confirm trash" },
+  { on = ["D"],       run = 'lua "AwtarchyYaziPermanentDelete()"', desc = "Permanently delete selection" },
   { on = ["Y"],       run = "yank --cut",      desc = "Yank (cut)" },
   { on = ["p"],       run = "paste",           desc = "Paste" },
+  { on = ["<C-c>"],   run = ['shell -- for path in %s; do printf "file://%s\\r\\n" "$path"; done | wl-copy -t text/uri-list', "yank"], desc = "Copy files + system clipboard" },
+  { on = ["<C-x>"],   run = "yank --cut",      desc = "Cut selected files" },
+  { on = ["<C-v>"],   run = "paste",           desc = "Paste copied/cut files" },
   { on = ["c", "y"],  run = ['shell -- for path in %s; do printf "file://%s\\r\\n" "$path"; done | wl-copy -t text/uri-list', "yank"], desc = "Copy file(s) to system clipboard" },
+  { on = ["c", "z"], run = 'lua "AwtarchyYaziCompressSelection()"', desc = "Compress selection to ZIP" },
+  { on = ["e", "h"], run = 'lua "AwtarchyYaziExtractZipHere()"', desc = "Extract ZIP here" },
+  { on = ["e", "f"], run = 'lua "AwtarchyYaziExtractZipFolder()"', desc = "Extract ZIP to folder" },
 
   # File ops
   # Creation/search stay on Yazi defaults: a=create, /=find, n/N=next/previous match.
+  { on = ["o"],       run = 'lua "AwtarchyYaziOpen(false)"', desc = "Open selected files" },
+  { on = ["O"],       run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
+  { on = ["<S-Enter>"], run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
   { on = ["r"],       run = "rename",               desc = "Rename" },
-  { on = ["d", "d"], run = "remove",               desc = "Trash selection" },
+  { on = ["d", "d"], run = 'lua "AwtarchyYaziRemoveMenu()"', desc = "Trash or permanently delete selection" },
+  { on = ["<Delete>"], run = 'lua "AwtarchyYaziRemoveMenu()"', desc = "Trash or permanently delete selection" },
+  { on = ["t", "e"], run = 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', desc = "Open terminal here" },
+  { on = ["t", "n"], run = 'lua "AwtarchyYaziOpenHoveredTab()"', desc = "Open hovered folder in new tab" },
 
   # Display
   { on = ["m", "t"], run = 'lua "AwtarchyYaziToggleTimeFormat()"', desc = "Toggle modified time 24h/12h" },
+  { on = ["m", "v"], run = 'lua "AwtarchyYaziTogglePreview()"', desc = "Toggle preview pane" },
+  { on = ["m", "x"], run = 'lua "AwtarchyYaziTogglePreviewMax()"', desc = "Maximize/restore preview" },
+  { on = ["m", "c"], run = 'lua "AwtarchyYaziSelectPreviewText()"', desc = "Select/copy highlighted text file" },
 
   # Help
-  { on = ["?"],       run = "help",           desc = "Help" },
-
-  # ── Dragon bindings ──
-  # Drag selection (or hovered if none)
-  { on = ["<C-d>"], run = '''shell 'dragon-drop -x -i -T "$@"' --confirm''', desc = "Drag selection via dragon" },
-
-  # Drag only hovered item
-  { on = ["D"], run = '''shell 'dragon-drop -x -i -T "$1"' --confirm''', desc = "Drag hovered via dragon" }
+  { on = ["?"],       run = "help",           desc = "Help" }
 ]
 
 [input]
 prepend_keymap = [
   { on = ["<Esc>"], run = "close", desc = "Cancel input" }
+]
+
+[confirm]
+prepend_keymap = [
+  { on = ["<Space>"], run = "close --submit", desc = "Confirm" },
+  { on = ["Y"],       run = "close --submit", desc = "Confirm" },
+  { on = ["N"],       run = "close",          desc = "Cancel" }
 ]
 
 [help]

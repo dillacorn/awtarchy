@@ -32,8 +32,8 @@ declare -a PKG_GROUPS=(
   "Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk libnotify nwg-look"
   "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd ttf-jetbrains-mono-nerd noto-fonts-emoji"
   "Themes:papirus-icon-theme materia-gtk-theme kvantum-theme-materia"
-  "Terminal Apps:nano micro fastfetch btop htop curl passt devtools wget git dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip xarchiver ncdu ddcutil scx-scheds scx-tools"
-  "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
+  "Terminal Apps:nano micro fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
+  "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils udisks2 wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
   "Multimedia:ffmpeg avahi nss-mdns mpv snapshot exiv2 zathura zathura-pdf-mupdf"
   "Development:base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust dmidecode nftables"
   "Network Tools:firefox wireguard-tools wireplumber openssh iptables systemd-resolvconf dnsmasq dhcpcd inetutils openbsd-netcat"
@@ -5764,6 +5764,85 @@ ask_yes_no() {
   done
 }
 
+plan_changes_yazi() {
+  local plan_file="$1" class rel local_file target_file baseline_file
+  while IFS=$'\t' read -r class rel local_file target_file baseline_file; do
+    [[ -n "$class" ]] || continue
+    case "$rel" in
+      .config/yazi/*) return 0 ;;
+    esac
+  done <"$plan_file"
+  return 1
+}
+
+running_yazi_pids() {
+  local current_uid proc_dir comm key real_uid
+  current_uid="$(id -u)"
+  for proc_dir in /proc/[0-9]*; do
+    [[ -r "$proc_dir/comm" && -r "$proc_dir/status" ]] || continue
+    IFS= read -r comm <"$proc_dir/comm" || continue
+    [[ "$comm" == "yazi" ]] || continue
+    while IFS=$' \t' read -r key real_uid _; do
+      if [[ "$key" == "Uid:" ]]; then
+        [[ "$real_uid" == "$current_uid" ]] && printf '%s\n' "${proc_dir##*/}"
+        break
+      fi
+    done <"$proc_dir/status"
+  done
+}
+
+guard_yazi_before_managed_apply() {
+  local plan_file="$1" pids="" answer="" pid attempt
+  plan_changes_yazi "$plan_file" || return 0
+
+  pids="$(running_yazi_pids)"
+  [[ -n "$pids" ]] || return 0
+
+  log "Yazi is running and this update will change managed Yazi configuration."
+  if (( ASSUME_YES == 1 )); then
+    answer="y"
+  elif ! is_interactive; then
+    warn "Yazi is running and this update needs permission to close it. No managed files were changed."
+    return 1
+  else
+    printf 'Close Yazi and continue? [Y/n] ' >/dev/tty
+    IFS= read -r answer </dev/tty || {
+      warn "Could not read Yazi-close confirmation. No managed files were changed."
+      return 1
+    }
+  fi
+
+  case "$answer" in
+    ""|y|Y|yes|YES)
+      ;;
+    n|N|no|NO)
+      log "Update canceled. Yazi was left running and no managed files were changed."
+      return 1
+      ;;
+    *)
+      warn "Unrecognized response; update canceled before managed files were changed."
+      return 1
+      ;;
+  esac
+
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done <<<"$pids"
+
+  for (( attempt = 0; attempt < 30; attempt++ )); do
+    pids="$(running_yazi_pids)"
+    if [[ -z "$pids" ]]; then
+      log "Yazi closed; continuing managed update."
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  warn "Yazi is still running after the termination request. No managed files were changed."
+  return 1
+}
+
 acquire_lock() {
   need_cmd flock
   local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u "$TARGET_USER")}"
@@ -9160,6 +9239,10 @@ main() {
     log "Selected update mode: preserve hyprland.lua; update other managed files"
   else
     log "Selected update mode: clean"
+  fi
+
+  if ! guard_yazi_before_managed_apply "$plan_file"; then
+    return 20
   fi
 
   if target_uses_direct_aur_scanner "$target_home"; then

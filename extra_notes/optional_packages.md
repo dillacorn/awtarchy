@@ -28,13 +28,6 @@ sudo pacman -S ueberzugpp yazi chafa
 - **yazi** – fast terminal file manager
 - **chafa** – terminal graphics renderer
 
-### Drag & Drop Utility
-```bash
-aur-scan install dragon-drop
-```
-
-Simple GUI drag-and-drop from terminal.
-
 ### Image previews in "alacritty" (replaces main-line alacritty)
 
 ```bash

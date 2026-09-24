@@ -1,2 +1,2 @@
-# No external Yazi plugins are currently required.
-# System clipboard copy uses Yazi's shell action with Awtarchy's required wl-clipboard package.
+# Awtarchy vendors its managed Yazi plugins under config/yazi/plugins.
+# package.toml intentionally has no external ya-pkg locks, so updates remain self-contained.
