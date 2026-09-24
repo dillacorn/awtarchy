@@ -345,7 +345,7 @@ function AwtarchyYaziDeleteMenu:redraw()
             :area(self._area)
             :type(ui.Border.PLAIN)
             :style(th.help.border)
-            :title(ui.Line(" Delete ").align and ui.Line(" Delete ") or ui.Line(" Delete ")),
+            :title(ui.Line(" Delete "):align(ui.Align.CENTER)),
         ui.List(rows):area(self._list_area),
         ui.Text(ui.Line(" ↑/↓ choose   Enter confirm   Esc cancel "):align(ui.Align.CENTER))
             :area(self._footer_area),
