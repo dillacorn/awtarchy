@@ -14,6 +14,12 @@ The Catppuccin-derived colors in `config/hypr/themes/catppuccin-frappé`, `crims
 
 The colors in `config/hypr/themes/gruvbox` are based on [morhetz/gruvbox](https://github.com/morhetz/gruvbox), authored by Pavel Pertsev (`morhetz`) and contributors. Gruvbox identifies its license as [MIT/X11](https://github.com/morhetz/gruvbox#license).
 
+## Yazi outbound drag plugin
+
+`config/yazi/plugins/drag.yazi/main.lua` is adapted from [Joao-Queiroga/drag.yazi](https://github.com/Joao-Queiroga/drag.yazi), which is distributed under the MIT License. Awtarchy changes the ripdrag invocation and Linux-only integration while preserving the upstream license in `config/yazi/plugins/drag.yazi/LICENSE`.
+
+The runtime dependency [nik012003/ripdrag](https://github.com/nik012003/ripdrag) is installed from the Arch User Repository as `ripdrag-git` and is distributed under GPL-3.0.
+
 ## Adapted desktop-entry metadata
 
 The following launchers retain upstream application names, descriptions, translations, and action metadata while adapting execution for Awtarchy:
