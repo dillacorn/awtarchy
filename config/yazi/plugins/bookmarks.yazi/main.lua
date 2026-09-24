@@ -1,7 +1,7 @@
 local M = {}
 
 local KIND = "@awtarchy-yazi-bookmarks"
-local ROOT = "awt-bookmarks://collection/@/"
+local ROOT = "awt-bookmarks://collection//"
 local MAX_BOOKMARKS = 1000
 
 local function decode_arg(value)

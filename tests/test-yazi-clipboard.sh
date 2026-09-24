@@ -206,8 +206,8 @@ grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$Y
   || fail 'Yazi g B does not bookmark the current directory'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
-grep -Fq 'local ROOT = "awt-bookmarks://collection/@/"' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks are not exposed as a valid hub VFS collection root'
+grep -Fq 'local ROOT = "awt-bookmarks://collection//"' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks are not exposed as a flat scope VFS collection root'
 grep -Fq 'ya.emit("cd", { Url(ROOT) })' "$YAZI_BOOKMARKS" \
   || fail 'Yazi g b does not enter the bookmark collection'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
@@ -602,8 +602,8 @@ grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
   || fail 'Yazi recents are not subscribed across sessions'
 grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
   || fail 'Yazi recents are not published across sessions'
-grep -Fq 'local ROOT = "awt-recents://collection/@/"' "$YAZI_RECENT" \
-  || fail 'Yazi recents are not exposed as a valid hub VFS collection root'
+grep -Fq 'local ROOT = "awt-recents://collection//"' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not exposed as a flat scope VFS collection root'
 grep -Fq 'function M:ReadDir(job)' "$YAZI_RECENT" \
   || fail 'Yazi recents do not implement the stable VFS directory provider'
 grep -Fq 'function M:Trash(job)' "$YAZI_RECENT" \
@@ -660,8 +660,12 @@ PY_PREVIEW
 
 grep -Fq '[awt-bookmarks."*"]' "$YAZI_VFS" \
   || fail 'Yazi bookmark VFS service is not configured'
+awk '/^\[awt-bookmarks\."\*"\]/{f=1;next} /^\[/{f=0} f && /kind = "scope"/{ok=1} END{exit !ok}' "$YAZI_VFS" \
+  || fail 'Yazi bookmark VFS does not use flat scope semantics'
 grep -Fq '[awt-recents."*"]' "$YAZI_VFS" \
   || fail 'Yazi recents VFS service is not configured'
+awk '/^\[awt-recents\."\*"\]/{f=1;next} /^\[/{f=0} f && /kind = "scope"/{ok=1} END{exit !ok}' "$YAZI_VFS" \
+  || fail 'Yazi recents VFS does not use flat scope semantics'
 grep -Fq 'run  = "bookmarks"' "$YAZI_VFS" \
   || fail 'Yazi bookmark VFS service is not routed to the managed plugin'
 grep -Fq 'run  = "recent-files"' "$YAZI_VFS" \

@@ -1,7 +1,7 @@
 [awt-bookmarks."*"]
-kind = "hub"
+kind = "scope"
 run  = "bookmarks"
 
 [awt-recents."*"]
-kind = "hub"
+kind = "scope"
 run  = "recent-files"
