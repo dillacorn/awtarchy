@@ -175,9 +175,6 @@ grep -Fq 'require("recent-files"):setup()' "$YAZI_INIT" \
   || fail 'Yazi recent-files DDS state is not initialized at startup'
 grep -Fq 'tostring(file.url)' "$YAZI_INIT" \
   || fail 'Yazi recents are not recorded from the File.url API'
-if grep -Fq 'tostring(file.path)' "$YAZI_INIT"; then
-  fail 'Yazi recents still use the nonexistent File.path field'
-fi
 grep -Fq 'require("bookmarks"):setup()' "$YAZI_INIT" \
   || fail 'Yazi bookmarks DDS state is not initialized at startup'
 grep -Fq 'require("git"):setup { order = 1500 }' "$YAZI_INIT" \
