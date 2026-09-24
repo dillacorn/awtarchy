@@ -546,7 +546,7 @@ grep -Fq 'local MAX_BOOKMARKS = 35' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmark history is not bounded'
 grep -Fq 'ps.sub_remote(KIND' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks are not shared across sessions'
-grep -Fq 'content = "No bookmarked folders."' "$YAZI_BOOKMARKS" \
+grep -Fq 'content = "No bookmarked items."' "$YAZI_BOOKMARKS" \
   || fail 'Yazi empty bookmarks message changed'
 grep -Fq 'Command("udisksctl")' "$YAZI_MOUNTS" \
   || fail 'Yazi mount manager does not use udisksctl'
