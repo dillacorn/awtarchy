@@ -5764,6 +5764,85 @@ ask_yes_no() {
   done
 }
 
+plan_changes_yazi() {
+  local plan_file="$1" class rel local_file target_file baseline_file
+  while IFS=$'\t' read -r class rel local_file target_file baseline_file; do
+    [[ -n "$class" ]] || continue
+    case "$rel" in
+      .config/yazi/*) return 0 ;;
+    esac
+  done <"$plan_file"
+  return 1
+}
+
+running_yazi_pids() {
+  local current_uid proc_dir comm key real_uid
+  current_uid="$(id -u)"
+  for proc_dir in /proc/[0-9]*; do
+    [[ -r "$proc_dir/comm" && -r "$proc_dir/status" ]] || continue
+    IFS= read -r comm <"$proc_dir/comm" || continue
+    [[ "$comm" == "yazi" ]] || continue
+    while IFS=$' \t' read -r key real_uid _; do
+      if [[ "$key" == "Uid:" ]]; then
+        [[ "$real_uid" == "$current_uid" ]] && printf '%s\n' "${proc_dir##*/}"
+        break
+      fi
+    done <"$proc_dir/status"
+  done
+}
+
+guard_yazi_before_managed_apply() {
+  local plan_file="$1" pids="" answer="" pid attempt
+  plan_changes_yazi "$plan_file" || return 0
+
+  pids="$(running_yazi_pids)"
+  [[ -n "$pids" ]] || return 0
+
+  log "Yazi is running and this update will change managed Yazi configuration."
+  if (( ASSUME_YES == 1 )); then
+    answer="y"
+  elif ! is_interactive; then
+    warn "Yazi is running and this update needs permission to close it. No managed files were changed."
+    return 1
+  else
+    printf 'Close Yazi and continue? [Y/n] ' >/dev/tty
+    IFS= read -r answer </dev/tty || {
+      warn "Could not read Yazi-close confirmation. No managed files were changed."
+      return 1
+    }
+  fi
+
+  case "$answer" in
+    ""|y|Y|yes|YES)
+      ;;
+    n|N|no|NO)
+      log "Update canceled. Yazi was left running and no managed files were changed."
+      return 1
+      ;;
+    *)
+      warn "Unrecognized response; update canceled before managed files were changed."
+      return 1
+      ;;
+  esac
+
+  while IFS= read -r pid; do
+    [[ "$pid" =~ ^[0-9]+$ ]] || continue
+    kill -TERM "$pid" 2>/dev/null || true
+  done <<<"$pids"
+
+  for (( attempt = 0; attempt < 30; attempt++ )); do
+    pids="$(running_yazi_pids)"
+    if [[ -z "$pids" ]]; then
+      log "Yazi closed; continuing managed update."
+      return 0
+    fi
+    sleep 0.1
+  done
+
+  warn "Yazi is still running after the termination request. No managed files were changed."
+  return 1
+}
+
 acquire_lock() {
   need_cmd flock
   local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u "$TARGET_USER")}"
@@ -9160,6 +9239,10 @@ main() {
     log "Selected update mode: preserve hyprland.lua; update other managed files"
   else
     log "Selected update mode: clean"
+  fi
+
+  if ! guard_yazi_before_managed_apply "$plan_file"; then
+    return 20
   fi
 
   if target_uses_direct_aur_scanner "$target_home"; then

@@ -602,7 +602,7 @@ function AwtarchyYaziPreviewButton:reflow()
 end
 
 function AwtarchyYaziPreviewButton:redraw()
-    local label = AwtarchyYaziPreviewMaximized and " 󰘕 " or " 󰹶 "
+    local label = AwtarchyYaziPreviewMaximized and " 󰘕 [m x] " or " 󰹶 [m x] "
     return {
         ui.Text(ui.Line(label):style(ui.Style():reverse()))
             :area(self._area)
@@ -654,16 +654,17 @@ function Preview:new(area, tab)
 
     local me = AwtarchyYaziDefaultPreviewNew(self, preview_area, tab)
     if reserve_control_row then
+        local preview_button_width = math.min(10, area.w)
         me._awtarchy_text_select_button = AwtarchyYaziTextSelectButton:new(ui.Rect {
             x = area.x,
             y = area.y + area.h - 1,
-            w = math.min(19, math.max(0, area.w - 3)),
+            w = math.min(19, math.max(0, area.w - preview_button_width)),
             h = 1,
         })
         me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {
-            x = area.x + area.w - 3,
+            x = area.x + area.w - preview_button_width,
             y = area.y + area.h - 1,
-            w = 3,
+            w = preview_button_width,
             h = 1,
         })
     end
@@ -704,7 +705,7 @@ end
 
 function AwtarchyYaziPreviewToggleButton:redraw()
     local visible = AwtarchyYaziRatio()[3] > 0
-    local label = visible and " 󰞔 " or " 󰞓 "
+    local label = visible and " 󰞔 [m v] " or " 󰞓 [m v] "
     return {
         ui.Text(ui.Line(label):style(ui.Style():reverse()))
             :area(self._area)
@@ -730,10 +731,11 @@ function Current:new(area, tab)
 
     local me = AwtarchyYaziDefaultCurrentNew(self, current_area, tab)
     if reserve_control_row then
+        local preview_toggle_width = math.min(10, area.w)
         me._awtarchy_preview_toggle_button = AwtarchyYaziPreviewToggleButton:new(ui.Rect {
-            x = area.x + area.w - 3,
+            x = area.x + area.w - preview_toggle_width,
             y = area.y + area.h - 1,
-            w = 3,
+            w = preview_toggle_width,
             h = 1,
         })
     end

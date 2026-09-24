@@ -651,6 +651,10 @@ grep -Fq 'The highlighted item is not recognized as a text file.' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode still fails silently on unsupported files'
 grep -Fq 'Select text [m c]' "$YAZI_INIT" \
   || fail 'Yazi selectable text control does not teach the m c shortcut'
+grep -Fq 'local label = visible and " 󰞔 [m v] " or " 󰞓 [m v] "' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility control does not teach the m v shortcut'
+grep -Fq 'local label = AwtarchyYaziPreviewMaximized and " 󰘕 [m x] " or " 󰹶 [m x] "' "$YAZI_INIT" \
+  || fail 'Yazi preview maximize control does not teach the m x shortcut'
 if grep -Fq 'ya.emit("shell", { command, block = true })' "$YAZI_INIT"; then
   fail 'Yazi selectable text mode still uses the ignored positional variable form'
 fi
@@ -673,8 +677,24 @@ with open(sys.argv[2], "rb") as handle:
 current_start = init.index("function Current:new(area, tab)")
 current_end = init.index("function Current:reflow()", current_start)
 current_block = init[current_start:current_end]
-if "x = area.x + area.w - 3" not in current_block:
+if "local preview_toggle_width = math.min(10, area.w)" not in current_block:
     raise SystemExit(1)
+if "x = area.x + area.w - preview_toggle_width" not in current_block:
+    raise SystemExit(1)
+if "w = preview_toggle_width" not in current_block:
+    raise SystemExit(1)
+
+preview_start = init.index("function Preview:new(area, tab)")
+preview_end = init.index("function Preview:reflow()", preview_start)
+preview_block = init[preview_start:preview_end]
+for required in (
+    "local preview_button_width = math.min(10, area.w)",
+    "w = math.min(19, math.max(0, area.w - preview_button_width))",
+    "x = area.x + area.w - preview_button_width",
+    "w = preview_button_width",
+):
+    if required not in preview_block:
+        raise SystemExit(1)
 
 preview = config.get("preview", {})
 if preview.get("max_width") != 2000 or preview.get("max_height") != 2000:
@@ -704,4 +724,30 @@ grep -Fq 'ya.emit("remove", { permanently = true })' "$YAZI_INIT" \
   || fail 'Yazi delete modal permanent choice does not use native permanent deletion'
 grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
   || fail 'Yazi collection rows do not navigate to their real targets'
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, and migrates only the deprecated Awtarchy plugin.'
+
+grep -Fq 'plan_changes_yazi() {' "$RUNTIME" \
+  || fail 'Awtarchy updater lacks a Yazi managed-plan detector'
+grep -Fq '.config/yazi/*) return 0 ;;' "$RUNTIME" \
+  || fail 'Awtarchy updater Yazi guard is not scoped to planned managed Yazi changes'
+grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
+  || fail 'Awtarchy updater cannot identify running same-user Yazi processes'
+grep -Fq "printf 'Close Yazi and continue? [Y/n] ' >/dev/tty" "$RUNTIME" \
+  || fail 'Awtarchy updater does not ask for default-Yes Yazi close consent'
+grep -Fq 'kill -TERM "$pid"' "$RUNTIME" \
+  || fail 'Awtarchy updater does not terminate Yazi only after approval'
+grep -Fq 'Yazi is still running after the termination request. No managed files were changed.' "$RUNTIME" \
+  || fail 'Awtarchy updater does not refuse managed writes when Yazi remains running'
+python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_GUARD' || fail 'Awtarchy Yazi close guard is not ordered before managed writes'
+from pathlib import Path
+import sys
+
+runtime = Path(sys.argv[1]).read_text()
+review = runtime.index('if (( REVIEW_ONLY == 1 )); then')
+mode = runtime.index('select_update_mode', review)
+guard = runtime.index('guard_yazi_before_managed_apply "$plan_file"', mode)
+apply_plan = runtime.index('apply_plan "$plan_file"', guard)
+if not review < mode < guard < apply_plan:
+    raise SystemExit(1)
+PY_YAZI_UPDATE_GUARD
+
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, guards running Yazi before managed config writes, and migrates only the deprecated Awtarchy plugin.'
