@@ -39,3 +39,100 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  edit-v3-8-0-yazi-release-title:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Release edit: Awtarchy v3.8.0 Yazi title' &&
+      github.event.pull_request.head.ref == 'release-edit-v3-8-0-yazi-title' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      RELEASE_TAG: v3.8.0
+      RELEASE_TITLE: Awtarchy v3.8.0 Yazi
+      RELEASE_TARGET: 46eadde776a4d881507545968a69ef3cb5e2906e
+      EXPECTED_MAIN: 0a88ee94fc2d733f7cd78d97f013a8d1fd28afc7
+      RELEASE_NOTES: .github/release-v3.8.0-yazi-title.md
+      BRIDGE_BRANCH: release-edit-v3-8-0-yazi-title
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Verify current release and validate proposed body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$current_main" = "$EXPECTED_MAIN"
+
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"             --json tagName,name,targetCommitish,isDraft,isPrerelease,body,url > /tmp/before.json
+
+          python3 - "$RELEASE_TAG" "$RELEASE_TITLE" "$RELEASE_TARGET" /tmp/before.json <<'PY'
+          import json, sys
+          from pathlib import Path
+          tag, title, target, path = sys.argv[1:]
+          data = json.load(open(path, encoding="utf-8"))
+          assert data["tagName"] == tag
+          assert data["name"] == title
+          assert data["targetCommitish"] == target
+          assert data["isDraft"] is False
+          assert data["isPrerelease"] is False
+          assert data["body"].startswith("# Awtarchy v3.8.0 Quickshell\n")
+          Path("/tmp/previous-stable.md").write_text(data["body"], encoding="utf-8")
+          PY
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          test "$tag_sha" = "$RELEASE_TARGET"
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$RELEASE_TAG"             --title "$RELEASE_TITLE"             --notes "$RELEASE_NOTES"             --previous /tmp/previous-stable.md
+
+      - name: Edit only the published release body
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release edit "$RELEASE_TAG"             --repo "$GITHUB_REPOSITORY"             --notes-file "$RELEASE_NOTES"
+
+      - name: Verify published release body and immutable tag target
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY"             --json tagName,name,targetCommitish,isDraft,isPrerelease,body,url > /tmp/after.json
+
+          python3 - "$RELEASE_TAG" "$RELEASE_TITLE" "$RELEASE_TARGET" "$RELEASE_NOTES" /tmp/after.json <<'PY'
+          import json, sys
+          from pathlib import Path
+          tag, title, target, notes_path, release_path = sys.argv[1:]
+          data = json.load(open(release_path, encoding="utf-8"))
+          expected = Path(notes_path).read_text(encoding="utf-8")
+          assert data["tagName"] == tag
+          assert data["name"] == title
+          assert data["targetCommitish"] == target
+          assert data["isDraft"] is False
+          assert data["isPrerelease"] is False
+          assert data["body"] == expected
+          Path("/tmp/published.md").write_text(data["body"], encoding="utf-8")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$RELEASE_TAG"             --title "$RELEASE_TITLE"             --notes /tmp/published.md             --previous /tmp/previous-stable.md
+
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" --jq .object.sha)"
+          test "$tag_sha" = "$RELEASE_TARGET"
+
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq .object.sha)"
+          test "$current_main" = "$EXPECTED_MAIN"
+
+      - name: Delete one-use release-edit branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh api --method DELETE "repos/${GITHUB_REPOSITORY}/git/refs/heads/${BRIDGE_BRANCH}"
+
