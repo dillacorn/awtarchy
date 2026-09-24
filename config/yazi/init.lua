@@ -315,6 +315,70 @@ function Preview:redraw()
     return elements
 end
 
+AwtarchyYaziPreviewToggleButton = { _id = "awtarchy-yazi-preview-toggle-button" }
+
+function AwtarchyYaziPreviewToggleButton:new(area)
+    return setmetatable({ _area = area }, { __index = self })
+end
+
+function AwtarchyYaziPreviewToggleButton:reflow()
+    return { self }
+end
+
+function AwtarchyYaziPreviewToggleButton:redraw()
+    local visible = AwtarchyYaziRatio()[3] > 0
+    local label = visible and " 󰞔 " or " 󰞓 "
+    return {
+        ui.Text(ui.Line(label):style(ui.Style():reverse()))
+            :area(self._area)
+            :align(ui.Align.CENTER),
+    }
+end
+
+function AwtarchyYaziPreviewToggleButton:click(event, up)
+    if up or not event.is_left then
+        return
+    end
+    AwtarchyYaziTogglePreview()
+end
+
+local AwtarchyYaziDefaultCurrentNew = Current.new
+local AwtarchyYaziDefaultCurrentRedraw = Current.redraw
+
+function Current:new(area, tab)
+    local reserve_control_row = area.w >= 3 and area.h >= 2
+    local current_area = reserve_control_row
+        and ui.Rect { x = area.x, y = area.y, w = area.w, h = area.h - 1 }
+        or area
+
+    local me = AwtarchyYaziDefaultCurrentNew(self, current_area, tab)
+    if reserve_control_row then
+        me._awtarchy_preview_toggle_button = AwtarchyYaziPreviewToggleButton:new(ui.Rect {
+            x = area.x + math.floor((area.w - 3) / 2),
+            y = area.y + area.h - 1,
+            w = 3,
+            h = 1,
+        })
+    end
+    return me
+end
+
+function Current:reflow()
+    local components = { self }
+    if self._awtarchy_preview_toggle_button then
+        components[#components + 1] = self._awtarchy_preview_toggle_button
+    end
+    return components
+end
+
+function Current:redraw()
+    local elements = AwtarchyYaziDefaultCurrentRedraw(self) or {}
+    if self._awtarchy_preview_toggle_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
+    end
+    return elements
+end
+
 local function AwtarchyYaziArchiveSnapshot()
     local tab = cx.active
     local files = {}
