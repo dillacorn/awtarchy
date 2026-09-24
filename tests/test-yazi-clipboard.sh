@@ -339,16 +339,16 @@ grep -Fq 'local function AwtarchyYaziPluginHex(value)' "$YAZI_INIT" \
   || fail 'Yazi plugin argument encoder is missing'
 grep -Fq 'AwtarchyYaziPluginArgs("record", recent)' "$YAZI_INIT" \
   || fail 'Yazi recents do not pass opened file paths through the plugin argument payload'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd))' "$YAZI_INIT" \
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
   || fail 'Yazi g B does not bookmark the current directory'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url))' "$YAZI_INIT" \
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi context menu cannot bookmark a precise hovered file/folder'
 grep -Fq 'local function decode_arg(value)' "$YAZI_RECENT" \
   || fail 'Yazi recents cannot decode managed path arguments'
 grep -Fq 'paths[#paths + 1] = decode_arg(job.args[i])' "$YAZI_RECENT" \
   || fail 'Yazi recents do not decode recorded file paths'
-grep -Fq 'local path = decode_arg(job.args[2])' "$YAZI_BOOKMARKS" \
-  || fail 'Yazi bookmarks do not decode bookmark paths'
+grep -Fq 'local path = job.args[3] and decode_arg(job.args[3]) or decode_arg(job.args[2])' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not decode typed managed path arguments'
 
 grep -Fq 'function AwtarchyYaziCompressSelection()' "$YAZI_INIT" \
   || fail 'Yazi ZIP compression helper is missing'
