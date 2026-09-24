@@ -14,6 +14,7 @@ YAZI_PREVIEW_REFIT="$ROOT/config/yazi/plugins/preview-refit.yazi/main.lua"
 YAZI_VFS="$ROOT/config/yazi/vfs.toml"
 YAZI_MOUNTS="$ROOT/config/yazi/plugins/mounts.yazi/main.lua"
 YAZI_GIT="$ROOT/config/yazi/plugins/git.yazi/main.lua"
+YAZI_DRAG="$ROOT/config/yazi/plugins/drag.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
@@ -73,6 +74,7 @@ expected = {
     ("o",): 'lua "AwtarchyYaziOpen(false)"',
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
+    ("d", "g"): "plugin drag",
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -130,9 +132,8 @@ PY_KEYMAP
 grep -Fq 'desc = "Go to recently opened folder"' "$KEYMAP" \
   || fail 'Yazi g r help does not describe the virtual recent-files folder'
 
-if grep -Fq 'dragon-drop' "$KEYMAP"; then
-  fail 'Yazi keymap still contains the retired DragonDrop workflow'
-fi
+grep -Fq 'desc = "Drag selected file(s) out"' "$KEYMAP" \
+  || fail 'Yazi d g outbound drag binding is not documented'
 grep -Fq 'desc = "Copy files + system clipboard"' "$KEYMAP" \
   || fail 'Yazi Ctrl+C system-clipboard copy binding is not documented'
 grep -Fq 'on = ["<C-Space>"]' "$KEYMAP" \
@@ -428,9 +429,13 @@ grep -Fq 'AwtarchyYaziDropInto("copy"' "$YAZI_INIT" \
   || fail 'Yazi internal drag cannot copy selected items into a folder'
 grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
   || fail 'Yazi internal drag cannot move selected items into a folder'
-if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'dragon-drop' "$YAZI_INIT"; then
-  fail 'Awtarchy Yazi internal drag depends on an external Windows/DragonDrop helper'
+if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'Command("ripdrag")' "$YAZI_INIT"; then
+  fail 'Awtarchy Yazi internal drag directly depends on an external outbound-drag helper'
 fi
+grep -Fq '{ label = "Drag out...", shortcut = "d g", action = "drag_out" }' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose outbound drag'
+grep -Fq 'ya.emit("plugin", { "drag" })' "$YAZI_INIT" \
+  || fail 'Yazi context-menu outbound drag does not dispatch the managed drag plugin'
 grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use native readable file sizes'
 grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
@@ -576,6 +581,22 @@ install_count="$(grep -Fc 'run_as_target rm -rf -- "$legacy_yazi_clipboard"' "$R
 update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTIME" || true)"
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
+
+[[ -f "$YAZI_DRAG" ]] || fail 'managed outbound drag plugin is missing'
+grep -Fq 'Command("ripdrag")' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not launch ripdrag'
+grep -Fq '"--all-compact"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag does not use one compact multi-selection drag surface'
+grep -Fq '"--and-exit"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag surface does not close after the first successful drop'
+grep -Fq '"--no-click"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag surface can accidentally open files on click'
+grep -Fq 'for _, file in pairs(tab.selected)' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not include the current multi-selection'
+grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
+grep -Fq 'ripdrag-git' "$RUNTIME" \
+  || fail 'ripdrag-git is not managed for Yazi outbound drag'
 
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
@@ -750,4 +771,4 @@ if not review < mode < guard < apply_plan:
     raise SystemExit(1)
 PY_YAZI_UPDATE_GUARD
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, guards running Yazi before managed config writes, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, guards running Yazi before managed config writes, and migrates only the deprecated Awtarchy plugin.'
