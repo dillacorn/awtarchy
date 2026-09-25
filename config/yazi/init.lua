@@ -748,6 +748,15 @@ function Current:reflow()
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
     end
+
+    -- Keep the context menu inside the Current component tree. Registering it
+    -- as a Modal child makes Yazi's mouse hit-testing rebuild a separate modal
+    -- component for every click, which can swallow subsequent Current clicks.
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
+        local menu = AwtarchyYaziContextMenu:new(self._area)
+        components = ya.list_merge(components, menu:reflow())
+    end
+
     return components
 end
 
@@ -756,6 +765,14 @@ function Current:redraw()
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
     end
+
+    -- Draw the right-click menu after the file list so it overlays the pane,
+    -- while normal left-click selection/open behavior remains unchanged.
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
+        local menu = AwtarchyYaziContextMenu:new(self._area)
+        elements = ya.list_merge(elements, ui.redraw(menu))
+    end
+
     return elements
 end
 
@@ -1391,8 +1408,6 @@ function AwtarchyYaziContextMenu:click(event, up)
         self:hide()
     end
 end
-
-Modal:children_add(AwtarchyYaziContextMenu, 20)
 
 local AwtarchyYaziDefaultRootMove = Root.move
 

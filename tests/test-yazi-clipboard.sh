@@ -308,8 +308,13 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context-menu component is missing'
-grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu, 20)' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu is not registered as a clickable modal child'
+grep -Fq 'components = ya.list_merge(components, menu:reflow())' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu is not part of Current hit-testing'
+grep -Fq 'elements = ya.list_merge(elements, ui.redraw(menu))' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu is not rendered over the Current pane'
+if grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu' "$YAZI_INIT"; then
+  fail 'Yazi mouse context menu still uses the modal path that swallows pane clicks'
+fi
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \
