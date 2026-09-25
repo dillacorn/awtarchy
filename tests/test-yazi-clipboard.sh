@@ -595,8 +595,217 @@ grep -Fq 'for _, file in pairs(tab.selected)' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not include the current multi-selection'
 grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
-grep -Fq '  ripdrag' "$RUNTIME" \
-  || fail 'stable ripdrag is not managed for Yazi outbound drag'
+grep -Fq 'declare -a REQUIRED_AUR_PACKAGES=(' "$RUNTIME" \
+  || fail 'runtime has no required AUR feature dependency catalog'
+grep -Eq '^[[:space:]]+ripdrag[[:space:]]*grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
+  || fail 'fresh install does not special-case ripdrag prerequisites'
+grep -Fq 'pacman_install_one rust' "$RUNTIME" \
+  || fail 'fresh install does not ensure Rust/Cargo before ripdrag'
+grep -Fq 'pacman_install_one gtk4' "$RUNTIME" \
+  || fail 'fresh install does not ensure GTK4 before ripdrag'
+grep -Fq "if array_contains ripdrag \"\${selected_aur[@]}\"; then" "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not add ripdrag prerequisites to the Arch phase'
+grep -Fq 'runtime_array_lines REQUIRED_AUR_PACKAGES' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not load required AUR feature dependencies'
+grep -Fq 'MISSING_REQUIRED_AUR' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not track missing required AUR dependencies'
+
+grep -Fq 'repair_v380_yazi_drag_target()' "$RUNTIME" \
+  || fail 'runtime has no v3.8.0 Yazi outbound-drag post-release repair'
+# shellcheck disable=SC2016
+grep -Fq '[[ "$tag" == "v3.8.0" ]] || return 0' "$RUNTIME" \
+  || fail 'v3.8.0 Yazi outbound-drag repair is not tag scoped'
+# shellcheck disable=SC2016
+grep -Fq 'repair_v380_yazi_drag_target "$target_home" "$tag"' "$RUNTIME" \
+  || fail 'stable update path does not apply the v3.8.0 Yazi outbound-drag repair'
+grep -Fq 'ensure_yazi_ripdrag_dependency_for_target "$target_home"' "$RUNTIME" \
+  || fail 'stable/Git updater does not install ripdrag before applying a Yazi drag target'
+grep -Fq 'Command("ripdrag")' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi plugin repair does not launch ripdrag'
+grep -Fq 'run = "plugin drag"' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi repair does not add the drag key action'
+
+[[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
+[[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
+[[ -f "$YAZI_MOUNTS" ]] || fail 'managed mounts plugin is missing'
+[[ -f "$YAZI_GIT" ]] || fail 'managed git status plugin is missing'
+grep -Fq 'local KIND = "@awtarchy-yazi-bookmarks"' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not use retained DDS static state'
+grep -Fq 'local MAX_BOOKMARKS = 1000' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmark history is not bounded at the managed collection limit'
+grep -Fq 'ps.sub_remote(KIND' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks are not shared across sessions'
+grep -Fq 'local function delete_markers(markers)' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmark collection cannot delete marker entries safely'
+grep -Fq 'AwtarchyYaziDeleteCollectionSelection' "$YAZI_INIT" \
+  || fail 'Yazi collection deletion is not intercepted before real-file deletion'
+grep -Fq 'Command("udisksctl")' "$YAZI_MOUNTS" \
+  || fail 'Yazi mount manager does not use udisksctl'
+if grep -Fq 'sudo' "$YAZI_MOUNTS"; then
+  fail 'Yazi mount manager invokes sudo instead of system PolicyKit'
+fi
+grep -Fq 'Linemode:children_add' "$YAZI_GIT" \
+  || fail 'Yazi git signs do not augment the existing linemode'
+grep -Fq 'local KIND = "@dillacorn-yazi-recent-files"' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not use retained DDS static state'
+grep -Fq 'local MAX_RECENTS = 1000' "$YAZI_RECENT" \
+  || fail 'Yazi recent history is not bounded at the managed collection limit'
+grep -Fq 'local snapshot = ya.sync' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not keep state behind the plugin sync boundary'
+grep -Fq 'local record = ya.sync' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not record through plugin sync context'
+grep -Fq 'ps.sub_remote(KIND' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not subscribed across sessions'
+grep -Fq 'ps.pub_to(0, KIND, self.recents)' "$YAZI_RECENT" \
+  || fail 'Yazi recents are not published across sessions'
+grep -Fq '/collections/Recently Opened' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not materialize into a real local collection folder'
+grep -Fq 'fs.write(Url(marker), path)' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not materialize local marker files'
+if grep -Fq 'function M:provide(' "$YAZI_RECENT"; then
+  fail 'Yazi recents still depend on a custom VFS provider'
+fi
+grep -Fq 'ya.emit("cd", { Url(collection_dir()), raw = true })' "$YAZI_RECENT" \
+  || fail 'Yazi g r does not enter the real recent-files folder'
+grep -Fq 'awtarchy-recent-files.txt' "$YAZI_RECENT" \
+  || fail 'Yazi recents lack deterministic restart-safe state'
+grep -Fq 'awtarchy-bookmarks.txt' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks lack deterministic restart-safe state'
+grep -Fq 'ensure_state_dir()' "$YAZI_RECENT" \
+  || fail 'Yazi recents do not create their state directory before first write'
+grep -Fq 'ensure_state_dir()' "$YAZI_BOOKMARKS" \
+  || fail 'Yazi bookmarks do not create their state directory before first write'
+
+grep -Fq 'elseif not AwtarchyYaziPreviewMaximized and rt.mgr.ratio[3] > 0 then' "$YAZI_INIT" \
+  || fail 'Yazi Right Arrow does not use the live preview ratio without the late-local scoping bug'
+grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT" \
+  || fail 'Yazi preview ratio changes do not dispatch stable app-layer resize/reflow'
+if grep -Fq 'AwtarchyYaziQueuePreviewRefit' "$YAZI_INIT"; then
+  fail 'Yazi preview resize still schedules a redundant second re-peek'
+fi
+grep -Fq 'function AwtarchyYaziSelectPreviewText()' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode is missing'
+grep -Fq 'AwtarchyYaziTextSelectButton = {' "$YAZI_INIT" \
+  || fail 'Yazi maximized text preview lacks a clickable Select text control'
+grep -Fq 'copy with Ctrl+Shift+C' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not document Alacritty copy behavior'
+grep -Fq 'block = true' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
+grep -Fq 'ya.emit("shell", { run = command, block = true })' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not pass its command through the stable shell run field'
+grep -Fq 'AwtarchyYaziTextExtensions' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode lacks the text-extension fallback'
+grep -Fq 'The highlighted item is not recognized as a text file.' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode still fails silently on unsupported files'
+grep -Fq 'Select text [m c]' "$YAZI_INIT" \
+  || fail 'Yazi selectable text control does not teach the m c shortcut'
+grep -Fq 'local label = visible and " 󰞔 [m v] " or " 󰞓 [m v] "' "$YAZI_INIT" \
+  || fail 'Yazi preview visibility control does not teach the m v shortcut'
+grep -Fq 'local label = AwtarchyYaziPreviewMaximized and " 󰘕 [m x] " or " 󰹶 [m x] "' "$YAZI_INIT" \
+  || fail 'Yazi preview maximize control does not teach the m x shortcut'
+if grep -Fq 'ya.emit("shell", { command, block = true })' "$YAZI_INIT"; then
+  fail 'Yazi selectable text mode still uses the ignored positional variable form'
+fi
+grep -Fq 'ui.render()' "$YAZI_INIT" \
+  || fail 'Yazi time-format toggle does not request an immediate UI redraw'
+grep -Fq 'ui.Span(flags):style(th.mgr.find_keyword)' "$YAZI_INIT" \
+  || fail 'Yazi header filter/search/find suffix does not use a distinct command color'
+if grep -Fq 'Entity:children_add(function()' "$YAZI_INIT"; then
+  fail 'Yazi still adds the rejected global row/icon padding'
+fi
+python3 - "$YAZI_INIT" "$YAZI_CONFIG" <<'PY_PREVIEW' || fail 'Yazi preview layout usability contract is not configured correctly'
+from pathlib import Path
+import sys
+import tomllib
+
+init = Path(sys.argv[1]).read_text()
+with open(sys.argv[2], "rb") as handle:
+    config = tomllib.load(handle)
+
+current_start = init.index("function Current:new(area, tab)")
+current_end = init.index("function Current:reflow()", current_start)
+current_block = init[current_start:current_end]
+if "local preview_toggle_width = math.min(10, area.w)" not in current_block:
+    raise SystemExit(1)
+if "x = area.x + area.w - preview_toggle_width" not in current_block:
+    raise SystemExit(1)
+if "w = preview_toggle_width" not in current_block:
+    raise SystemExit(1)
+
+preview_start = init.index("function Preview:new(area, tab)")
+preview_end = init.index("function Preview:reflow()", preview_start)
+preview_block = init[preview_start:preview_end]
+for required in (
+    "local preview_button_width = math.min(10, area.w)",
+    "w = math.min(19, math.max(0, area.w - preview_button_width))",
+    "x = area.x + area.w - preview_button_width",
+    "w = preview_button_width",
+):
+    if required not in preview_block:
+        raise SystemExit(1)
+
+preview = config.get("preview", {})
+if preview.get("max_width") != 2000 or preview.get("max_height") != 2000:
+    raise SystemExit(1)
+if preview.get("wrap") != "yes":
+    raise SystemExit(1)
+PY_PREVIEW
+
+if grep -Eq '^[[:space:]]*\[' "$YAZI_VFS"; then
+  fail 'Yazi custom VFS services are still configured for bookmark/recent collections'
+fi
+grep -Fq 'AwtarchyYaziDeleteMenu = {' "$YAZI_INIT" \
+  || fail 'Yazi trash/permanent-delete modal is missing'
+grep -Fq 'function AwtarchyYaziDeleteMenu:move(step)' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not support arrow navigation'
+grep -Fq 'function AwtarchyYaziDeleteMenu:submit(choice)' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not submit the highlighted choice'
+grep -Fq 'local actions = {' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not render explicit choices'
+grep -Fq '{ label = "Move to trash", shortcut = "y / Enter" }' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not default to the trash choice'
+grep -Fq '{ label = "Permanently delete...", shortcut = "D" }' "$YAZI_INIT" \
+  || fail 'Yazi delete modal does not expose permanent deletion'
+grep -Fq 'ya.emit("remove", { force = true })' "$YAZI_INIT" \
+  || fail 'Yazi delete modal trash choice does not submit directly'
+grep -Fq 'ya.emit("remove", { permanently = true })' "$YAZI_INIT" \
+  || fail 'Yazi delete modal permanent choice does not use native permanent deletion'
+grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
+  || fail 'Yazi collection rows do not navigate to their real targets'
+
+grep -Fq 'plan_changes_yazi() {' "$RUNTIME" \
+  || fail 'Awtarchy updater lacks a Yazi managed-plan detector'
+grep -Fq '.config/yazi/*) return 0 ;;' "$RUNTIME" \
+  || fail 'Awtarchy updater Yazi change detection is not scoped to managed Yazi config'
+grep -Fq 'yazi_config_changed=0' "$RUNTIME" \
+  || fail 'Awtarchy updater does not track planned Yazi configuration changes'
+grep -Fq 'yazi_config_changed=1' "$RUNTIME" \
+  || fail 'Awtarchy updater does not mark planned Yazi configuration changes'
+grep -Fq 'Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.' "$RUNTIME" \
+  || fail 'Awtarchy updater does not tell users to restart Yazi after managed config changes'
+if grep -Fq 'guard_yazi_before_managed_apply' "$RUNTIME" \
+  || grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
+  || grep -Fq 'Close Yazi and continue?' "$RUNTIME"; then
+  fail 'Awtarchy updater still requires Yazi to close before managed config updates'
+fi
+python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_NOTICE' || fail 'Awtarchy Yazi restart notice is not tied to the managed update flow'
+from pathlib import Path
+import sys
+
+runtime = Path(sys.argv[1]).read_text()
+build = runtime.index('build_plan "$target_home" "$plan_file"')
+mark = runtime.index('yazi_config_changed=1', build)
+apply_plan = runtime.index('apply_plan "$plan_file"', mark)
+notice = runtime.index('Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.', apply_plan)
+if not build < mark < apply_plan < notice:
+    raise SystemExit(1)
+PY_YAZI_UPDATE_NOTICE
+
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
+ "$RUNTIME" \
+  || fail 'stable ripdrag is not a required AUR dependency for Yazi outbound drag'
+grep -Fq 'packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")' "$RUNTIME" \
+  || fail 'fresh install does not force required AUR feature dependencies'
 grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
   || fail 'fresh install does not special-case ripdrag prerequisites'
 grep -Fq 'pacman_install_one rust' "$RUNTIME" \
