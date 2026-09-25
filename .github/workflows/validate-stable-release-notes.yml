@@ -42,10 +42,7 @@ jobs:
 
 
   post-release-v381-yazi-context-popup:
-    if: >-
-      github.event_name == 'pull_request' &&
-      github.event.pull_request.title == 'TEMP: append v3.8.1 Yazi context popup post-release note' &&
-      github.head_ref == 'release/v3.8.1-yazi-context-popup-note'
+    if: ${{ false }}
     permissions:
       contents: write
     runs-on: ubuntu-latest
@@ -118,3 +115,43 @@ jobs:
           [[ "$published_tag_sha" == "$expected_tag_sha" ]]
 
           gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$GITHUB_HEAD_REF"
+
+
+  cleanup-v381-yazi-context-popup-bridge:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP: append v3.8.1 Yazi context popup post-release note' &&
+      github.head_ref == 'release/v3.8.1-yazi-context-popup-note'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Verify published release and delete helper branch
+        run: |
+          set -euo pipefail
+
+          tag='v3.8.1'
+          expected_title='Awtarchy v3.8.1 Yazi'
+          expected_target='addbda16a300e40fb51da541815d0cfae6b26173'
+          expected_tag_sha='addbda16a300e40fb51da541815d0cfae6b26173'
+          published="$RUNNER_TEMP/v3.8.1-published.md"
+
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.name')" == "$expected_title" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')" == "$expected_target" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.draft')" == "false" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.prerelease')" == "false" ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha')" == "$expected_tag_sha" ]]
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.body' >"$published"
+          grep -Fq '**2026-09-25 — Cursor-adjacent Yazi context menu:**' "$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$expected_title" \
+            --notes "$published" \
+            --previous "$published"
+
+          git push origin --delete "$GITHUB_HEAD_REF"
