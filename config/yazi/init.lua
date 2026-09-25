@@ -571,6 +571,11 @@ function AwtarchyYaziSelectPreviewText()
 end
 
 function AwtarchyYaziEscape()
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
+        AwtarchyYaziContextMenu:hide()
+        return
+    end
+
     if AwtarchyYaziDeleteMenu and AwtarchyYaziDeleteMenu._visible then
         AwtarchyYaziDeleteMenu:hide()
         return
@@ -726,33 +731,11 @@ local AwtarchyYaziDefaultCurrentRedraw = Current.redraw
 
 function Current:new(area, tab)
     local reserve_control_row = area.w >= 3 and area.h >= 2
-    local control_rows = reserve_control_row and 1 or 0
-    local drawer_rows = 0
-
-    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
-        drawer_rows = AwtarchyYaziContextMenu:height(area.w)
-        drawer_rows = math.min(drawer_rows, math.max(0, area.h - control_rows - 4))
-    end
-
-    local current_height = math.max(1, area.h - control_rows - drawer_rows)
-    local current_area = ui.Rect {
-        x = area.x,
-        y = area.y,
-        w = area.w,
-        h = current_height,
-    }
+    local current_area = reserve_control_row
+        and ui.Rect { x = area.x, y = area.y, w = area.w, h = area.h - 1 }
+        or area
 
     local me = AwtarchyYaziDefaultCurrentNew(self, current_area, tab)
-
-    if drawer_rows > 0 then
-        me._awtarchy_context_drawer = AwtarchyYaziContextMenu:new(ui.Rect {
-            x = area.x,
-            y = area.y + current_height,
-            w = area.w,
-            h = drawer_rows,
-        })
-    end
-
     if reserve_control_row then
         local preview_toggle_width = math.min(10, area.w)
         me._awtarchy_preview_toggle_button = AwtarchyYaziPreviewToggleButton:new(ui.Rect {
@@ -762,15 +745,11 @@ function Current:new(area, tab)
             h = 1,
         })
     end
-
     return me
 end
 
 function Current:reflow()
     local components = { self }
-    if self._awtarchy_context_drawer then
-        components = ya.list_merge(components, self._awtarchy_context_drawer:reflow())
-    end
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
     end
@@ -779,9 +758,6 @@ end
 
 function Current:redraw()
     local elements = AwtarchyYaziDefaultCurrentRedraw(self) or {}
-    if self._awtarchy_context_drawer then
-        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_context_drawer))
-    end
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
     end
@@ -1106,7 +1082,7 @@ AwtarchyYaziContextMenu = {
     _selection_count = 0,
     _drop_target = nil,
     _drop_sources = nil,
-    _columns = 2,
+    _columns = 3,
 }
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
@@ -1114,7 +1090,6 @@ function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
     self._selection_count = selection_count or 0
     self._hovered_action = nil
     self._visible = true
-    ya.emit("app:resize", {})
     ui.render()
 end
 
@@ -1133,7 +1108,6 @@ function AwtarchyYaziContextMenu:hide()
     self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
-    ya.emit("app:resize", {})
     ui.render()
 end
 
@@ -1239,24 +1213,34 @@ function AwtarchyYaziContextMenu:footer()
     }
 end
 
+function AwtarchyYaziContextMenu:columns(width)
+    if width >= 90 then
+        return 3
+    elseif width >= 58 then
+        return 2
+    end
+    return 1
+end
+
 function AwtarchyYaziContextMenu:height(width)
     if not self._visible or width < 24 then
         return 0
     end
-    return math.ceil(#self:actions() / self._columns) + 2
+    local columns = self:columns(width)
+    return math.ceil(#self:actions() / columns) + 2
 end
 
 function AwtarchyYaziContextMenu:new(area)
-    local me = setmetatable({}, { __index = self })
-    me._area = area
-    me._list_area = ui.Rect {
+    self._area = area
+    self._columns = self:columns(area.w)
+    self._list_area = ui.Rect {
         x = area.x + 1,
         y = area.y + 1,
         w = math.max(0, area.w - 2),
         h = math.max(0, area.h - 2),
     }
-    me._cell_width = math.max(1, math.floor(me._list_area.w / self._columns))
-    return me
+    self._cell_width = math.max(1, math.floor(self._list_area.w / self._columns))
+    return self
 end
 
 function AwtarchyYaziContextMenu:reflow()
@@ -1290,7 +1274,6 @@ function AwtarchyYaziContextMenu:redraw()
 
     local actions = self:actions()
     local rows = {}
-
     for row = 1, math.ceil(#actions / self._columns) do
         local spans = {}
         for col = 1, self._columns do
@@ -1348,7 +1331,6 @@ function AwtarchyYaziContextMenu:run(action)
     self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
-    ya.emit("app:resize", {})
     ui.render()
 
     if action == "smart_open" then
@@ -1429,6 +1411,51 @@ function AwtarchyYaziContextMenu:click(event, up)
 end
 
 
+
+local AwtarchyYaziDefaultRootLayout = Root.layout
+local AwtarchyYaziDefaultRootBuild = Root.build
+local AwtarchyYaziDefaultRootMove = Root.move
+
+function Root:layout()
+    if not AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziDefaultRootLayout(self)
+    end
+
+    local drawer_height = AwtarchyYaziContextMenu:height(self._area.w)
+    self._chunks = ui.Layout()
+        :direction(ui.Layout.VERTICAL)
+        :constraints({
+            ui.Constraint.Length(1),
+            ui.Constraint.Length(Tabs.height()),
+            ui.Constraint.Fill(1),
+            ui.Constraint.Length(drawer_height),
+            ui.Constraint.Length(1),
+        })
+        :split(self._area)
+end
+
+function Root:build()
+    if not AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziDefaultRootBuild(self)
+    end
+
+    self._children = {
+        Backdrop:new(self._area),
+        Header:new(self._chunks[1], cx.active),
+        Tabs:new(self._chunks[2]),
+        Tab:new(self._chunks[3], cx.active),
+        AwtarchyYaziContextMenu:new(self._chunks[4]),
+        Status:new(self._chunks[5], cx.active),
+        Modal:new(self._area),
+    }
+end
+
+function Root:move(event)
+    if AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziContextMenu:move(event)
+    end
+    return AwtarchyYaziDefaultRootMove(self, event)
+end
 
 local AwtarchyYaziDefaultHeaderCwd = Header.cwd
 local AwtarchyYaziBreadcrumbTarget = nil

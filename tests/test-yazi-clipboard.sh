@@ -308,21 +308,18 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context-menu component is missing'
-grep -Fq 'me._awtarchy_context_drawer = AwtarchyYaziContextMenu:new' "$YAZI_INIT" \
-  || fail 'Yazi right-click actions are not laid out as an inline Current drawer'
-grep -Fq 'components = ya.list_merge(components, self._awtarchy_context_drawer:reflow())' "$YAZI_INIT" \
-  || fail 'Yazi inline right-click drawer is not part of Current hit-testing'
-grep -Fq 'elements = ya.list_merge(elements, ui.redraw(self._awtarchy_context_drawer))' "$YAZI_INIT" \
-  || fail 'Yazi inline right-click drawer is not rendered below the file list'
-grep -Fq 'return math.ceil(#self:actions() / self._columns) + 2' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer does not use the compact two-column layout'
+grep -Fq 'local AwtarchyYaziDefaultRootLayout = Root.layout' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer does not preserve native Root layout'
+grep -Fq 'ui.Constraint.Length(drawer_height)' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer does not reserve real rows below the panes'
+grep -Fq 'AwtarchyYaziContextMenu:new(self._chunks[4])' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer is not a normal Root child'
+grep -Fq 'return math.ceil(#self:actions() / columns) + 2' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer height does not match its compact grid'
 grep -Fq 'function AwtarchyYaziContextMenu:action_at(event)' "$YAZI_INIT" \
-  || fail 'Yazi inline right-click drawer has no clickable action hit-testing'
-if grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu' "$YAZI_INIT"; then
-  fail 'Yazi right-click actions still use the old floating modal path'
-fi
-if grep -Fq 'local AwtarchyYaziDefaultRootRedraw = Root.redraw' "$YAZI_INIT"; then
-  fail 'Yazi right-click actions still use the broken floating Root overlay'
+  || fail 'Yazi right-click drawer has no clickable action hit-testing'
+if grep -Fq 'me._awtarchy_context_drawer' "$YAZI_INIT"; then
+  fail 'Yazi right-click drawer still mutates the Current pane directly'
 fi
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
