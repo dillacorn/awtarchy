@@ -65,6 +65,11 @@ declare -a VIRT_MANAGER_PACKAGES=(
   swtpm
 )
 
+# AUR dependencies required by managed Awtarchy features are not optional.
+declare -a REQUIRED_AUR_PACKAGES=(
+  ripdrag
+)
+
 declare -a PACKAGES_AUR=(
   smtty
   awtwall
@@ -2218,7 +2223,8 @@ print_install_review() {
   printf 'System type: %s\n' "$system_type"
   printf 'Virtual machine/container detected: %s\n' "$IS_VM"
   printf 'Arch packages: %s\n' "${#ARCH_SELECTED[@]}"
-  printf 'AUR packages: %s\n' "${#AUR_SELECTED[@]}"
+  printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  printf 'Selected AUR packages: %s\n' "${#AUR_SELECTED[@]}"
   printf 'Flatpak apps: %s\n' "${#FLATPAK_SELECTED_IDS[@]}"
   printf 'GPU dependencies: %s\n' "$gpu_enabled"
   printf 'Ly tty2: %s\n' "$ly_enabled"
@@ -2229,7 +2235,8 @@ print_install_review() {
   printf '  - Check disk space and install bootstrap packages\n'
   printf '  - Clone/update ~/awtarchy if missing\n'
   if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip Arch repo packages\n'; fi
-  if (( INSTALL_AUR == 1 )); then printf '  - Install selected AUR packages\n'; else printf '  - Skip AUR packages\n'; fi
+  printf '  - Install required AUR feature dependencies\n'
+  if (( INSTALL_AUR == 1 )); then printf '  - Install selected additional AUR packages\n'; else printf '  - Skip additional AUR packages\n'; fi
   if (( INSTALL_FLATPAK == 1 )); then printf '  - Install selected Flatpak apps\n'; else printf '  - Skip Flatpak apps\n'; fi
   printf '  - Install/update Alacritty themes\n'
   if [[ "$INSTALL_GPU" == 1 && "$IS_VM" == false ]]; then printf '  - Run GPU dependency automation\n'; else printf '  - Skip GPU dependency automation\n'; fi
@@ -2241,7 +2248,8 @@ print_install_review() {
   printf '  - Repair ownership and permissions\n'
 
   if (( INSTALL_ARCH == 1 )); then print_dry_run_list "Arch repo packages (${#ARCH_SELECTED[@]})" "${ARCH_SELECTED[@]}"; fi
-  if (( INSTALL_AUR == 1 )); then print_dry_run_list "AUR packages (${#AUR_SELECTED[@]})" "${AUR_SELECTED[@]}"; fi
+  print_dry_run_list "Required AUR dependencies (${#REQUIRED_AUR_PACKAGES[@]})" "${REQUIRED_AUR_PACKAGES[@]}"
+  if (( INSTALL_AUR == 1 )); then print_dry_run_list "Selected AUR packages (${#AUR_SELECTED[@]})" "${AUR_SELECTED[@]}"; fi
   if (( INSTALL_FLATPAK == 1 )); then print_dry_run_list "Flatpak apps (${#FLATPAK_SELECTED_IDS[@]})" "${FLATPAK_SELECTED_IDS[@]}"; fi
 }
 
@@ -2296,7 +2304,7 @@ Before any changes are made, you will choose:
   - system type
   - install sections
   - Arch repo packages
-  - AUR packages
+  - additional AUR packages (required feature dependencies are always installed)
   - Flatpak apps
   - shell-file overwrite behavior
 
@@ -2329,7 +2337,7 @@ In normal install mode it will overwrite awtarchy-managed config files under:
       2)
         labels=(
           "Arch repo packages"
-          "AUR packages"
+          "Additional AUR packages"
           "Flatpak apps"
           "GPU dependencies"
           "Ly TTY login manager"
@@ -2714,6 +2722,12 @@ aur_selected_package_installed() {
       done
       return 1
       ;;
+    ripdrag|ripdrag-git)
+      for alt in ripdrag ripdrag-git; do
+        pacman -Q "$alt" >/dev/null 2>&1 && return 0
+      done
+      return 1
+      ;;
     hyprmoncfg|hyprmoncfg-bin|hyprmoncfg-git)
       for alt in hyprmoncfg hyprmoncfg-bin hyprmoncfg-git; do
         pacman -Q "$alt" >/dev/null 2>&1 && return 0
@@ -2833,38 +2847,62 @@ install_obs_pipewire_audio_capture_package() {
 }
 
 install_aur_repo_apps_stage() {
-  (( INSTALL_AUR == 1 )) || { warn "Skipping AUR application install."; return 0; }
+  local -a packages_to_install=()
+  local pkg
+
+  packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")
+  if (( INSTALL_AUR == 1 )); then
+    packages_to_install+=("${AUR_SELECTED[@]}")
+  else
+    warn "Skipping additional AUR package selections; required Awtarchy AUR dependencies will still be installed."
+  fi
+
+  if (( ${#packages_to_install[@]} == 0 )); then
+    warn "No AUR packages are required or selected. Skipping AUR package stage."
+    return 0
+  fi
 
   ensure_aur_install_requirements
   ensure_aur_sudo_access
   ensure_yay
   ensure_aur_scanner
 
-  if (( ${#AUR_SELECTED[@]} == 0 )); then
-    warn "No AUR packages selected. Skipping package loop."
-  else
-    log "Installing selected AUR packages through upstream aur-scanner..."
-    local pkg
-    for pkg in "${AUR_SELECTED[@]}"; do
-      if aur_selected_package_installed "$pkg"; then
-        printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
-      else
-        printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
-        if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
-          if ! install_obs_pipewire_audio_capture_package; then
-            warn "AUR package failed: ${pkg}. Continuing with remaining selections."
-            continue
-          fi
-        else
-          if ! install_aur_with_scanner "$pkg"; then
-            warn "AUR package failed: ${pkg}. Continuing with remaining selections."
-            continue
-          fi
-        fi
-        printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
+  log "Installing required/selected AUR packages through upstream aur-scanner..."
+  for pkg in "${packages_to_install[@]}"; do
+    if aur_selected_package_installed "$pkg"; then
+      printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
+      continue
+    fi
+
+    printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
+    if [[ "$pkg" == "ripdrag" ]]; then
+      pacman_install_one rust
+      pacman_install_one gtk4
+    fi
+    if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
+      if ! install_obs_pipewire_audio_capture_package; then
+        warn "AUR package failed: ${pkg}. Continuing with remaining selections."
+        continue
       fi
-    done
-  fi
+    else
+      if ! install_aur_with_scanner "$pkg"; then
+        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+          die "Required AUR dependency failed to install: ${pkg}"
+        fi
+        warn "AUR package failed: ${pkg}. Continuing with remaining selections."
+        continue
+      fi
+    fi
+
+    if ! aur_selected_package_installed "$pkg"; then
+      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+        die "Required AUR dependency is still unavailable after installation: ${pkg}"
+      fi
+      warn "AUR package was not detected after installation: ${pkg}"
+      continue
+    fi
+    printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
+  done
 
   if pacman -Q moonlight-qt-bin >/dev/null 2>&1; then
     log "Moonlight AUR package detected. Configuring UFW rules for Moonlight..."
@@ -2877,7 +2915,6 @@ install_aur_repo_apps_stage() {
     fi
   fi
 }
-
 flatpak_effective_scope_install() {
   local root_fs_type
   root_fs_type="$(df -T / | awk 'NR==2 {print $2}')"
@@ -5775,74 +5812,6 @@ plan_changes_yazi() {
   return 1
 }
 
-running_yazi_pids() {
-  local current_uid proc_dir comm key real_uid
-  current_uid="$(id -u)"
-  for proc_dir in /proc/[0-9]*; do
-    [[ -r "$proc_dir/comm" && -r "$proc_dir/status" ]] || continue
-    IFS= read -r comm <"$proc_dir/comm" || continue
-    [[ "$comm" == "yazi" ]] || continue
-    while IFS=$' \t' read -r key real_uid _; do
-      if [[ "$key" == "Uid:" ]]; then
-        [[ "$real_uid" == "$current_uid" ]] && printf '%s\n' "${proc_dir##*/}"
-        break
-      fi
-    done <"$proc_dir/status"
-  done
-}
-
-guard_yazi_before_managed_apply() {
-  local plan_file="$1" pids="" answer="" pid attempt
-  plan_changes_yazi "$plan_file" || return 0
-
-  pids="$(running_yazi_pids)"
-  [[ -n "$pids" ]] || return 0
-
-  log "Yazi is running and this update will change managed Yazi configuration."
-  if (( ASSUME_YES == 1 )); then
-    answer="y"
-  elif ! is_interactive; then
-    warn "Yazi is running and this update needs permission to close it. No managed files were changed."
-    return 1
-  else
-    printf 'Close Yazi and continue? [Y/n] ' >/dev/tty
-    IFS= read -r answer </dev/tty || {
-      warn "Could not read Yazi-close confirmation. No managed files were changed."
-      return 1
-    }
-  fi
-
-  case "$answer" in
-    ""|y|Y|yes|YES)
-      ;;
-    n|N|no|NO)
-      log "Update canceled. Yazi was left running and no managed files were changed."
-      return 1
-      ;;
-    *)
-      warn "Unrecognized response; update canceled before managed files were changed."
-      return 1
-      ;;
-  esac
-
-  while IFS= read -r pid; do
-    [[ "$pid" =~ ^[0-9]+$ ]] || continue
-    kill -TERM "$pid" 2>/dev/null || true
-  done <<<"$pids"
-
-  for (( attempt = 0; attempt < 30; attempt++ )); do
-    pids="$(running_yazi_pids)"
-    if [[ -z "$pids" ]]; then
-      log "Yazi closed; continuing managed update."
-      return 0
-    fi
-    sleep 0.1
-  done
-
-  warn "Yazi is still running after the termination request. No managed files were changed."
-  return 1
-}
-
 acquire_lock() {
   need_cmd flock
   local runtime="${XDG_RUNTIME_DIR:-/run/user/$(id -u "$TARGET_USER")}"
@@ -8434,6 +8403,248 @@ PY_V355_CLIPBOARD
 }
 
 
+repair_v380_yazi_drag_target() {
+  local target_home="$1" tag="$2"
+  local yazi_dir="${target_home}/.config/yazi"
+  local init_file="${yazi_dir}/init.lua"
+  local keymap_file="${yazi_dir}/keymap.toml"
+  local plugin_dir="${yazi_dir}/plugins/drag.yazi"
+
+  [[ "$tag" == "v3.8.0" ]] || return 0
+  [[ -f "$init_file" && ! -L "$init_file" ]] \
+    || die "v3.8.0 Yazi init target is unavailable for the outbound-drag repair."
+  [[ -f "$keymap_file" && ! -L "$keymap_file" ]] \
+    || die "v3.8.0 Yazi keymap target is unavailable for the outbound-drag repair."
+
+  python3 - "$init_file" "$keymap_file" <<'PY_V380_YAZI_DRAG'
+from pathlib import Path
+import sys
+
+init_path = Path(sys.argv[1])
+keymap_path = Path(sys.argv[2])
+init_text = init_path.read_text(encoding="utf-8")
+keymap_text = keymap_path.read_text(encoding="utf-8")
+
+key_anchor = '''  { on = ["<S-Enter>"], run = 'lua "AwtarchyYaziOpen(true)"', desc = "Open selected files interactively" },
+'''
+key_drag = '''  { on = ["d", "g"], run = "plugin drag", desc = "Drag selected file(s) out" },
+'''
+if key_drag not in keymap_text:
+    if keymap_text.count(key_anchor) != 1:
+        raise SystemExit("v3.8.0 Yazi drag keymap anchor mismatch")
+    keymap_text = keymap_text.replace(key_anchor, key_anchor + key_drag, 1)
+
+file_old = '''    { label = "Rename", shortcut = "r", action = "rename" },
+    { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+file_new = '''    { label = "Rename", shortcut = "r", action = "rename" },
+    { label = "Drag out...", shortcut = "d g", action = "drag_out" },
+    { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+if file_new not in init_text:
+    if init_text.count(file_old) != 1:
+        raise SystemExit("v3.8.0 Yazi file-action drag anchor mismatch")
+    init_text = init_text.replace(file_old, file_new, 1)
+
+multi_old = '''            {
+                label = "Rename " .. tostring(self._selection_count) .. " items...",
+                shortcut = "r",
+                action = "bulk_rename",
+            },
+            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+multi_new = '''            {
+                label = "Rename " .. tostring(self._selection_count) .. " items...",
+                shortcut = "r",
+                action = "bulk_rename",
+            },
+            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
+            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+if multi_new not in init_text:
+    if init_text.count(multi_old) != 1:
+        raise SystemExit("v3.8.0 Yazi multi-selection drag anchor mismatch")
+    init_text = init_text.replace(multi_old, multi_new, 1)
+
+dir_old = '''            { label = "Rename", shortcut = "r", action = "rename" },
+            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+dir_new = '''            { label = "Rename", shortcut = "r", action = "rename" },
+            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
+            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
+'''
+if dir_new not in init_text:
+    if init_text.count(dir_old) != 1:
+        raise SystemExit("v3.8.0 Yazi directory drag anchor mismatch")
+    init_text = init_text.replace(dir_old, dir_new, 1)
+
+run_old = '''    elseif action == "bookmark_current" then
+        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
+    elseif action == "copy" then
+'''
+run_new = '''    elseif action == "bookmark_current" then
+        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
+    elseif action == "drag_out" then
+        ya.emit("plugin", { "drag" })
+    elseif action == "copy" then
+'''
+if run_new not in init_text:
+    if init_text.count(run_old) != 1:
+        raise SystemExit("v3.8.0 Yazi drag action-dispatch anchor mismatch")
+    init_text = init_text.replace(run_old, run_new, 1)
+
+required = (
+    '{ label = "Drag out...", shortcut = "d g", action = "drag_out" }',
+    'ya.emit("plugin", { "drag" })',
+)
+for marker in required:
+    if marker not in init_text:
+        raise SystemExit(f"v3.8.0 Yazi drag repair missing marker: {marker}")
+if key_drag not in keymap_text:
+    raise SystemExit("v3.8.0 Yazi drag repair did not add d g")
+
+init_path.write_text(init_text, encoding="utf-8")
+keymap_path.write_text(keymap_text, encoding="utf-8")
+PY_V380_YAZI_DRAG
+
+  mkdir -p -- "$plugin_dir"
+  cat >"${plugin_dir}/main.lua" <<'EOF_V380_DRAG_MAIN'
+---@param s string
+local function fail(s, ...)
+    ya.notify({
+        title = "ripdrag",
+        content = string.format(s, ...),
+        timeout = 4,
+        level = "error",
+    })
+end
+
+---@return string[]
+local selected_files = ya.sync(function()
+    local tab, paths = cx.active, {}
+
+    for _, file in pairs(tab.selected) do
+        paths[#paths + 1] = tostring(file.url)
+    end
+
+    if #paths == 0 and tab.current.hovered then
+        paths[1] = tostring(tab.current.hovered.url)
+    end
+
+    return paths
+end)
+
+return {
+    entry = function()
+        local files = selected_files()
+        if #files == 0 then
+            return
+        end
+
+        local child, err = Command("ripdrag")
+            :arg({
+                "--all-compact",
+                "--and-exit",
+                "--no-click",
+                "--basename",
+            })
+            :arg(files)
+            :spawn()
+
+        if not child then
+            fail("Unable to start ripdrag: %s", err or "unknown error")
+            return
+        end
+
+        local output
+        output, err = child:wait_with_output()
+        if not output then
+            fail("Unable to read ripdrag result: %s", err or "unknown error")
+        elseif not output.status.success and output.status.code ~= 131 then
+            fail("ripdrag exited with code %s", output.status.code)
+        end
+    end,
+}
+EOF_V380_DRAG_MAIN
+
+  cat >"${plugin_dir}/README.md" <<'EOF_V380_DRAG_README'
+# Awtarchy Yazi outbound drag
+
+This managed plugin is adapted from [Joao-Queiroga/drag.yazi](https://github.com/Joao-Queiroga/drag.yazi).
+
+Awtarchy uses it only for explicit outbound drag from Yazi:
+
+- `d g`
+- right-click an item or selected set -> **Drag out...**
+
+The plugin launches `ripdrag` as a compact drag surface and exits after the first successful drop. Internal Yazi drag-to-folder remains handled by Awtarchy's existing Yazi Lua workflow.
+
+Runtime dependency: stable `ripdrag` from the Arch User Repository.
+EOF_V380_DRAG_README
+
+  cat >"${plugin_dir}/LICENSE" <<'EOF_V380_DRAG_LICENSE'
+MIT License
+
+Copyright (c) 2024 Ciarán O'Brien
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+EOF_V380_DRAG_LICENSE
+
+  log "Applied v3.8.0 Yazi outbound-drag post-release repair to generated target."
+}
+
+target_requires_yazi_ripdrag() {
+  local target_home="$1"
+  local plugin="${target_home}/.config/yazi/plugins/drag.yazi/main.lua"
+  local keymap="${target_home}/.config/yazi/keymap.toml"
+
+  [[ -f "$plugin" && ! -L "$plugin" && -f "$keymap" && ! -L "$keymap" ]] || return 1
+  grep -Fq 'Command("ripdrag")' "$plugin" \
+    && grep -Fq 'run = "plugin drag"' "$keymap"
+}
+
+ensure_yazi_ripdrag_dependency_for_target() {
+  local target_home="$1"
+
+  target_requires_yazi_ripdrag "$target_home" || return 0
+  aur_selected_package_installed ripdrag && return 0
+
+  command -v sudo >/dev/null 2>&1 \
+    || die "ripdrag is required by the target Yazi configuration, but sudo is unavailable."
+
+  log "Installing required Yazi outbound-drag dependency: ripdrag"
+  run_target sudo -v \
+    || die "sudo authentication failed while preparing the required ripdrag dependency."
+
+  run_update_root /usr/bin/pacman -S --needed --noconfirm base-devel git gnupg rust gtk4 \
+    || die "Could not install the Arch build/runtime prerequisites required by ripdrag."
+
+  ensure_update_aur_scanner \
+    || die "ripdrag requires a working aur-scan installation before managed Yazi files can be updated."
+
+  if ! run_target /usr/bin/aur-scan install ripdrag --noconfirm; then
+    die "Required AUR dependency failed to install: ripdrag"
+  fi
+  aur_selected_package_installed ripdrag \
+    || die "ripdrag installation completed without a detectable ripdrag package."
+}
+
 repair_v373_yazi_default_editor_target() {
   local target_home="$1" tag="$2"
   local yazi_dir="${target_home}/.config/yazi"
@@ -9155,7 +9366,7 @@ main() {
 
   TMPD="$(mktemp -d)"
   local tag="$TAG_OVERRIDE" source_label="" source_revision="" stable_predecessor=""
-  local testing_branch_head=""
+  local testing_branch_head="" yazi_config_changed=0
   if [[ -n "$TESTING_COMMIT" ]]; then
     testing_branch_head="$(resolve_remote_testing_branch_head "$TESTING_BRANCH")" \
       || die "Could not resolve remote Awtarchy branch: ${TESTING_BRANCH}"
@@ -9203,6 +9414,7 @@ main() {
   TARGET_STAGE_HOME="$target_home"
   build_target_home "$repo_dir" "$target_home"
   repair_v373_yazi_default_editor_target "$target_home" "$tag"
+  repair_v380_yazi_drag_target "$target_home" "$tag"
 
   active_theme="$(infer_active_theme "$repo_dir" || true)"
   if [[ -n "$active_theme" ]]; then
@@ -9226,6 +9438,9 @@ main() {
   plan_file="${TMPD}/plan.tsv"
   build_plan "$target_home" "$plan_file"
   normalize_quickshell_update_plan "$repo_dir" "$plan_file"
+  if plan_changes_yazi "$plan_file"; then
+    yazi_config_changed=1
+  fi
   stage_quickshell_hyprland_user_patch "$target_home"
   review_plan "$plan_file"
 
@@ -9234,15 +9449,13 @@ main() {
     return 0
   fi
 
+  ensure_yazi_ripdrag_dependency_for_target "$target_home"
+
   select_update_mode
   if [[ "$UPDATE_MODE" == "preserve" ]]; then
     log "Selected update mode: preserve hyprland.lua; update other managed files"
   else
     log "Selected update mode: clean"
-  fi
-
-  if ! guard_yazi_before_managed_apply "$plan_file"; then
-    return 20
   fi
 
   if target_uses_direct_aur_scanner "$target_home"; then
@@ -9403,6 +9616,9 @@ main() {
   fi
 
   log "Changed: ${#CHANGED[@]}, preserved: ${#PRESERVED[@]}, merged: ${#MERGED[@]}, removed: ${#REMOVED[@]}"
+  if (( yazi_config_changed == 1 )); then
+    log "Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration."
+  fi
   log "Audit log: ${AUDIT_LOG}"
   log "Done."
 }

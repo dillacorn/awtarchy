@@ -985,6 +985,7 @@ local AwtarchyYaziFileActions = {
     { label = "Open with...", shortcut = "O", action = "open_with" },
     { label = "Bookmark / unbookmark", shortcut = "g B", action = "bookmark_hovered" },
     { label = "Rename", shortcut = "r", action = "rename" },
+    { label = "Drag out...", shortcut = "d g", action = "drag_out" },
     { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
     { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
     { label = "Copy path", shortcut = "cc", action = "copy_path" },
@@ -1135,6 +1136,7 @@ function AwtarchyYaziContextMenu:actions()
                 shortcut = "r",
                 action = "bulk_rename",
             },
+            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
             { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
             { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
             { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
@@ -1153,6 +1155,7 @@ function AwtarchyYaziContextMenu:actions()
                 action = "bookmark_hovered",
             },
             { label = "Rename", shortcut = "r", action = "rename" },
+            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
             { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
             { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
             { label = "Copy path", shortcut = "cc", action = "copy_path" },
@@ -1315,6 +1318,8 @@ function AwtarchyYaziContextMenu:run(action)
         end
     elseif action == "bookmark_current" then
         AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
+    elseif action == "drag_out" then
+        ya.emit("plugin", { "drag" })
     elseif action == "copy" then
         ya.emit("yank", {})
         ya.notify { title = "Yazi", content = "Copied " .. tostring(count) .. " item(s)", timeout = 2 }

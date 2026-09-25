@@ -14,6 +14,7 @@ YAZI_PREVIEW_REFIT="$ROOT/config/yazi/plugins/preview-refit.yazi/main.lua"
 YAZI_VFS="$ROOT/config/yazi/vfs.toml"
 YAZI_MOUNTS="$ROOT/config/yazi/plugins/mounts.yazi/main.lua"
 YAZI_GIT="$ROOT/config/yazi/plugins/git.yazi/main.lua"
+YAZI_DRAG="$ROOT/config/yazi/plugins/drag.yazi/main.lua"
 MIMEAPPS="$ROOT/config/mimeapps.list"
 RUNTIME="$ROOT/local/share/awtarchy/awtarchy-runtime.sh"
 
@@ -73,6 +74,7 @@ expected = {
     ("o",): 'lua "AwtarchyYaziOpen(false)"',
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
+    ("d", "g"): "plugin drag",
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -130,9 +132,8 @@ PY_KEYMAP
 grep -Fq 'desc = "Go to recently opened folder"' "$KEYMAP" \
   || fail 'Yazi g r help does not describe the virtual recent-files folder'
 
-if grep -Fq 'dragon-drop' "$KEYMAP"; then
-  fail 'Yazi keymap still contains the retired DragonDrop workflow'
-fi
+grep -Fq 'desc = "Drag selected file(s) out"' "$KEYMAP" \
+  || fail 'Yazi d g outbound drag binding is not documented'
 grep -Fq 'desc = "Copy files + system clipboard"' "$KEYMAP" \
   || fail 'Yazi Ctrl+C system-clipboard copy binding is not documented'
 grep -Fq 'on = ["<C-Space>"]' "$KEYMAP" \
@@ -428,9 +429,13 @@ grep -Fq 'AwtarchyYaziDropInto("copy"' "$YAZI_INIT" \
   || fail 'Yazi internal drag cannot copy selected items into a folder'
 grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
   || fail 'Yazi internal drag cannot move selected items into a folder'
-if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'dragon-drop' "$YAZI_INIT"; then
-  fail 'Awtarchy Yazi internal drag depends on an external Windows/DragonDrop helper'
+if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'Command("ripdrag")' "$YAZI_INIT"; then
+  fail 'Awtarchy Yazi internal drag directly depends on an external outbound-drag helper'
 fi
+grep -Fq '{ label = "Drag out...", shortcut = "d g", action = "drag_out" }' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not expose outbound drag'
+grep -Fq 'ya.emit("plugin", { "drag" })' "$YAZI_INIT" \
+  || fail 'Yazi context-menu outbound drag does not dispatch the managed drag plugin'
 grep -Fq 'ya.readable_size(size)' "$YAZI_INIT" \
   || fail 'Yazi combined linemode does not use native readable file sizes'
 grep -Fq 'self._file.cha.mtime' "$YAZI_INIT" \
@@ -577,6 +582,54 @@ update_count="$(grep -Fc 'run_target rm -rf -- "$legacy_yazi_clipboard"' "$RUNTI
 (( install_count == 1 )) || fail 'installer does not remove exactly one recognized legacy clipboard plugin'
 (( update_count == 1 )) || fail 'updater does not remove exactly one recognized legacy clipboard plugin'
 
+[[ -f "$YAZI_DRAG" ]] || fail 'managed outbound drag plugin is missing'
+grep -Fq 'Command("ripdrag")' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not launch ripdrag'
+grep -Fq '"--all-compact"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag does not use one compact multi-selection drag surface'
+grep -Fq '"--and-exit"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag surface does not close after the first successful drop'
+grep -Fq '"--no-click"' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag surface can accidentally open files on click'
+grep -Fq 'for _, file in pairs(tab.selected)' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not include the current multi-selection'
+grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
+  || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
+grep -Fq 'declare -a REQUIRED_AUR_PACKAGES=(' "$RUNTIME" \
+  || fail 'runtime has no required AUR feature dependency catalog'
+grep -Eq '^[[:space:]]+ripdrag[[:space:]]*$' "$RUNTIME" \
+  || fail 'stable ripdrag is not a required AUR dependency for Yazi outbound drag'
+# shellcheck disable=SC2016
+grep -Fq 'packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")' "$RUNTIME" \
+  || fail 'fresh install does not force required AUR feature dependencies'
+grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
+  || fail 'fresh install does not special-case ripdrag prerequisites'
+grep -Fq 'pacman_install_one rust' "$RUNTIME" \
+  || fail 'fresh install does not ensure Rust/Cargo before ripdrag'
+grep -Fq 'pacman_install_one gtk4' "$RUNTIME" \
+  || fail 'fresh install does not ensure GTK4 before ripdrag'
+grep -Fq "if array_contains ripdrag \"\${selected_aur[@]}\"; then" "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not add ripdrag prerequisites to the Arch phase'
+grep -Fq 'runtime_array_lines REQUIRED_AUR_PACKAGES' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not load required AUR feature dependencies'
+grep -Fq 'MISSING_REQUIRED_AUR' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not track missing required AUR dependencies'
+
+grep -Fq 'repair_v380_yazi_drag_target()' "$RUNTIME" \
+  || fail 'runtime has no v3.8.0 Yazi outbound-drag post-release repair'
+# shellcheck disable=SC2016
+grep -Fq '[[ "$tag" == "v3.8.0" ]] || return 0' "$RUNTIME" \
+  || fail 'v3.8.0 Yazi outbound-drag repair is not tag scoped'
+# shellcheck disable=SC2016
+grep -Fq 'repair_v380_yazi_drag_target "$target_home" "$tag"' "$RUNTIME" \
+  || fail 'stable update path does not apply the v3.8.0 Yazi outbound-drag repair'
+# shellcheck disable=SC2016
+grep -Fq 'ensure_yazi_ripdrag_dependency_for_target "$target_home"' "$RUNTIME" \
+  || fail 'stable/Git updater does not install ripdrag before applying a Yazi drag target'
+grep -Fq 'Command("ripdrag")' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi plugin repair does not launch ripdrag'
+grep -Fq 'run = "plugin drag"' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi repair does not add the drag key action'
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
 [[ -f "$YAZI_MOUNTS" ]] || fail 'managed mounts plugin is missing'
@@ -728,26 +781,29 @@ grep -Fq 'AwtarchyYaziNavigateCollection' "$YAZI_INIT" \
 grep -Fq 'plan_changes_yazi() {' "$RUNTIME" \
   || fail 'Awtarchy updater lacks a Yazi managed-plan detector'
 grep -Fq '.config/yazi/*) return 0 ;;' "$RUNTIME" \
-  || fail 'Awtarchy updater Yazi guard is not scoped to planned managed Yazi changes'
-grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
-  || fail 'Awtarchy updater cannot identify running same-user Yazi processes'
-grep -Fq "printf 'Close Yazi and continue? [Y/n] ' >/dev/tty" "$RUNTIME" \
-  || fail 'Awtarchy updater does not ask for default-Yes Yazi close consent'
-grep -Fq "kill -TERM \"\$pid\"" "$RUNTIME" \
-  || fail 'Awtarchy updater does not terminate Yazi only after approval'
-grep -Fq 'Yazi is still running after the termination request. No managed files were changed.' "$RUNTIME" \
-  || fail 'Awtarchy updater does not refuse managed writes when Yazi remains running'
-python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_GUARD' || fail 'Awtarchy Yazi close guard is not ordered before managed writes'
+  || fail 'Awtarchy updater Yazi change detection is not scoped to managed Yazi config'
+grep -Fq 'yazi_config_changed=0' "$RUNTIME" \
+  || fail 'Awtarchy updater does not track planned Yazi configuration changes'
+grep -Fq 'yazi_config_changed=1' "$RUNTIME" \
+  || fail 'Awtarchy updater does not mark planned Yazi configuration changes'
+grep -Fq 'Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.' "$RUNTIME" \
+  || fail 'Awtarchy updater does not tell users to restart Yazi after managed config changes'
+if grep -Fq 'guard_yazi_before_managed_apply' "$RUNTIME" \
+  || grep -Fq 'running_yazi_pids() {' "$RUNTIME" \
+  || grep -Fq 'Close Yazi and continue?' "$RUNTIME"; then
+  fail 'Awtarchy updater still requires Yazi to close before managed config updates'
+fi
+python3 - "$RUNTIME" <<'PY_YAZI_UPDATE_NOTICE' || fail 'Awtarchy Yazi restart notice is not tied to the managed update flow'
 from pathlib import Path
 import sys
 
 runtime = Path(sys.argv[1]).read_text()
-review = runtime.index('if (( REVIEW_ONLY == 1 )); then')
-mode = runtime.index('select_update_mode', review)
-guard = runtime.index('guard_yazi_before_managed_apply "$plan_file"', mode)
-apply_plan = runtime.index('apply_plan "$plan_file"', guard)
-if not review < mode < guard < apply_plan:
+build = runtime.index('build_plan "$target_home" "$plan_file"')
+mark = runtime.index('yazi_config_changed=1', build)
+apply_plan = runtime.index('apply_plan "$plan_file"', mark)
+notice = runtime.index('Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration.', apply_plan)
+if not build < mark < apply_plan < notice:
     raise SystemExit(1)
-PY_YAZI_UPDATE_GUARD
+PY_YAZI_UPDATE_NOTICE
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, shows highlighted modified time with a persistent 24h/12h toggle in Help, keeps clipboard behavior without DragonDrop, delegates text opening to the desktop default application, guards running Yazi before managed config writes, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'

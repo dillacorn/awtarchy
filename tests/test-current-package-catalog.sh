@@ -27,7 +27,8 @@ contains_token() {
 arch_catalog="$(array_body PKG_GROUPS)"
 optional_arch="$(array_body OPTIONAL_ARCH_PACKAGES)"
 virt_stack="$(array_body VIRT_MANAGER_PACKAGES)"
-required_aur="$(array_body PACKAGES_AUR)"
+required_feature_aur="$(array_body REQUIRED_AUR_PACKAGES)"
+default_aur="$(array_body PACKAGES_AUR)"
 optional_aur="$(array_body OPTIONAL_AUR_PACKAGES)"
 flatpak_catalog="$(array_body FLATPAK_CATALOG)"
 
@@ -62,13 +63,21 @@ done
 
 contains_token vesktop-bin "$optional_aur" \
     || fail "vesktop-bin is not an optional native AUR package"
-if contains_token vesktop-bin "$required_aur"; then
+if contains_token vesktop-bin "$default_aur"; then
     fail "vesktop-bin is in the default-selected AUR catalog instead of the optional catalog"
 fi
+contains_token ripdrag "$required_feature_aur" \
+    || fail "stable ripdrag is not a required AUR feature dependency"
+if contains_token ripdrag "$default_aur"; then
+    fail "ripdrag is still user-deselectable in the default AUR catalog"
+fi
 for pkg in smtty hyprmoncfg-bin bibata-cursor-theme-bin obs-pipewire-audio-capture-bin; do
-    contains_token "$pkg" "$required_aur" \
+    contains_token "$pkg" "$default_aur" \
         || fail "expected default-selected AUR package is missing: ${pkg}"
 done
+if contains_token ripdrag-git "$required_feature_aur" || contains_token ripdrag-git "$default_aur"; then
+    fail "ripdrag-git is selected instead of the stable ripdrag package"
+fi
 
 if grep -Eq 'dev\.vencord\.Vesktop|com\.moonlight_stream\.Moonlight|Vesktop|Moonlight' <<<"$flatpak_catalog"; then
     fail "Vesktop or Moonlight is still listed in the Flatpak catalog"
