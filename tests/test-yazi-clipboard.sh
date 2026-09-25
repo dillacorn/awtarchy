@@ -75,6 +75,7 @@ expected = {
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
     ("d", "g"): "plugin drag",
+    ("<F2>",): "rename",
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -156,6 +157,12 @@ grep -Fq 'desc = "Cut selected files"' "$KEYMAP" \
   || fail 'Yazi Ctrl+X cut binding is not documented'
 grep -Fq 'desc = "Paste copied/cut files"' "$KEYMAP" \
   || fail 'Yazi Ctrl+V paste binding is not documented'
+grep -Fq 'on = ["<F2>"]' "$KEYMAP" \
+  || fail 'Yazi F2 rename binding is missing'
+grep -Fq 'step < 0 and "prev" or "next"' "$YAZI_INIT" \
+  || fail 'Yazi Up/Down wrapper no longer uses native wraparound prev/next'
+grep -Fq 'ya.emit("arrow", { direction })' "$YAZI_INIT" \
+  || fail 'Yazi Up/Down wrapper no longer dispatches native wraparound direction'
 if grep -Fq 'XYenon/clipboard' "$PACKAGE"; then
   fail 'Yazi package lock still installs the deprecated clipboard plugin'
 fi

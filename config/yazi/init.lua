@@ -252,7 +252,8 @@ function AwtarchyYaziArrow(step)
         ya.emit("escape", { visual = true })
     end
     AwtarchyYaziShiftRangeActive = false
-    ya.emit("arrow", { step })
+    local direction = step < 0 and "prev" or "next"
+    ya.emit("arrow", { direction })
 end
 
 function AwtarchyYaziConfirmQuit(no_cwd_file)
