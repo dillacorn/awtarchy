@@ -308,21 +308,21 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context-menu component is missing'
-grep -Fq 'local AwtarchyYaziDefaultRootRedraw = Root.redraw' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu does not preserve the native Root renderer'
-grep -Fq 'function Root:redraw()' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu is not rendered as a Root overlay'
-grep -Fq 'elements = ya.list_merge(elements, ui.redraw(menu))' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu is not drawn after the normal Root UI'
-grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu does not preserve native Root click routing'
-grep -Fq 'return AwtarchyYaziDefaultRootClick(self, event, up)' "$YAZI_INIT" \
-  || fail 'Yazi normal left-click routing is not preserved'
+grep -Fq 'me._awtarchy_context_drawer = AwtarchyYaziContextMenu:new' "$YAZI_INIT" \
+  || fail 'Yazi right-click actions are not laid out as an inline Current drawer'
+grep -Fq 'components = ya.list_merge(components, self._awtarchy_context_drawer:reflow())' "$YAZI_INIT" \
+  || fail 'Yazi inline right-click drawer is not part of Current hit-testing'
+grep -Fq 'elements = ya.list_merge(elements, ui.redraw(self._awtarchy_context_drawer))' "$YAZI_INIT" \
+  || fail 'Yazi inline right-click drawer is not rendered below the file list'
+grep -Fq 'return math.ceil(#self:actions() / self._columns) + 2' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer does not use the compact two-column layout'
+grep -Fq 'function AwtarchyYaziContextMenu:action_at(event)' "$YAZI_INIT" \
+  || fail 'Yazi inline right-click drawer has no clickable action hit-testing'
 if grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu' "$YAZI_INIT"; then
-  fail 'Yazi mouse context menu still uses the modal path that swallowed pane clicks'
+  fail 'Yazi right-click actions still use the old floating modal path'
 fi
-if grep -Fq 'components = ya.list_merge(components, menu:reflow())' "$YAZI_INIT"; then
-  fail 'Yazi mouse context menu still contaminates Current hit-testing'
+if grep -Fq 'local AwtarchyYaziDefaultRootRedraw = Root.redraw' "$YAZI_INIT"; then
+  fail 'Yazi right-click actions still use the broken floating Root overlay'
 fi
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'

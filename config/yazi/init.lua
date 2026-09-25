@@ -726,11 +726,33 @@ local AwtarchyYaziDefaultCurrentRedraw = Current.redraw
 
 function Current:new(area, tab)
     local reserve_control_row = area.w >= 3 and area.h >= 2
-    local current_area = reserve_control_row
-        and ui.Rect { x = area.x, y = area.y, w = area.w, h = area.h - 1 }
-        or area
+    local control_rows = reserve_control_row and 1 or 0
+    local drawer_rows = 0
+
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
+        drawer_rows = AwtarchyYaziContextMenu:height(area.w)
+        drawer_rows = math.min(drawer_rows, math.max(0, area.h - control_rows - 4))
+    end
+
+    local current_height = math.max(1, area.h - control_rows - drawer_rows)
+    local current_area = ui.Rect {
+        x = area.x,
+        y = area.y,
+        w = area.w,
+        h = current_height,
+    }
 
     local me = AwtarchyYaziDefaultCurrentNew(self, current_area, tab)
+
+    if drawer_rows > 0 then
+        me._awtarchy_context_drawer = AwtarchyYaziContextMenu:new(ui.Rect {
+            x = area.x,
+            y = area.y + current_height,
+            w = area.w,
+            h = drawer_rows,
+        })
+    end
+
     if reserve_control_row then
         local preview_toggle_width = math.min(10, area.w)
         me._awtarchy_preview_toggle_button = AwtarchyYaziPreviewToggleButton:new(ui.Rect {
@@ -740,11 +762,15 @@ function Current:new(area, tab)
             h = 1,
         })
     end
+
     return me
 end
 
 function Current:reflow()
     local components = { self }
+    if self._awtarchy_context_drawer then
+        components = ya.list_merge(components, self._awtarchy_context_drawer:reflow())
+    end
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
     end
@@ -753,6 +779,9 @@ end
 
 function Current:redraw()
     local elements = AwtarchyYaziDefaultCurrentRedraw(self) or {}
+    if self._awtarchy_context_drawer then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_context_drawer))
+    end
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
     end
@@ -1071,23 +1100,21 @@ AwtarchyYaziContextMenu = {
     _id = "awtarchy-yazi-context-menu",
     _visible = false,
     _kind = "item",
-    _x = 0,
-    _y = 0,
     _area = ui.Rect {},
     _list_area = ui.Rect {},
-    _hovered_row = nil,
+    _hovered_action = nil,
     _selection_count = 0,
     _drop_target = nil,
     _drop_sources = nil,
+    _columns = 2,
 }
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
     self._kind = kind
-    self._x = x
-    self._y = y
     self._selection_count = selection_count or 0
-    self._hovered_row = nil
+    self._hovered_action = nil
     self._visible = true
+    ya.emit("app:resize", {})
     ui.render()
 end
 
@@ -1103,9 +1130,10 @@ function AwtarchyYaziContextMenu:hide()
     end
 
     self._visible = false
-    self._hovered_row = nil
+    self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
+    ya.emit("app:resize", {})
     ui.render()
 end
 
@@ -1211,72 +1239,78 @@ function AwtarchyYaziContextMenu:footer()
     }
 end
 
+function AwtarchyYaziContextMenu:height(width)
+    if not self._visible or width < 24 then
+        return 0
+    end
+    return math.ceil(#self:actions() / self._columns) + 2
+end
+
 function AwtarchyYaziContextMenu:new(area)
-    self._screen = area
-    if not self._visible then
-        self._area = ui.Rect {}
-        self._list_area = ui.Rect {}
-        return self
-    end
-
-    local actions = self:actions()
-    local width = math.min(56, area.w)
-    local height = math.min(#actions + 4, area.h)
-
-    if width < 28 or height < #actions + 4 then
-        self._area = ui.Rect {}
-        self._list_area = ui.Rect {}
-        return self
-    end
-
-    local max_x = area.x + area.w - width
-    local max_y = area.y + area.h - height
-    local x = math.max(area.x, math.min(self._x, max_x))
-    local y = math.max(area.y, math.min(self._y, max_y))
-
-    self._area = ui.Rect { x = x, y = y, w = width, h = height }
-    self._list_area = ui.Rect {
-        x = x + 1,
-        y = y + 1,
-        w = width - 2,
-        h = #actions,
+    local me = setmetatable({}, { __index = self })
+    me._area = area
+    me._list_area = ui.Rect {
+        x = area.x + 1,
+        y = area.y + 1,
+        w = math.max(0, area.w - 2),
+        h = math.max(0, area.h - 2),
     }
-    self._footer_area = ui.Rect {
-        x = x + 1,
-        y = y + 1 + #actions,
-        w = width - 2,
-        h = 2,
-    }
-
-    return self
+    me._cell_width = math.max(1, math.floor(me._list_area.w / self._columns))
+    return me
 end
 
 function AwtarchyYaziContextMenu:reflow()
-    return self._visible and self._area.w > 0 and { self } or {}
+    return self._visible and self._area.w > 0 and self._area.h > 0 and { self } or {}
+end
+
+local function AwtarchyYaziContextCell(action, width, hovered)
+    local shortcut = action.shortcut or ""
+    local max_label = math.max(4, width - #shortcut - 4)
+    local label = action.label
+    if #label > max_label then
+        label = label:sub(1, math.max(1, max_label - 1)) .. "…"
+    end
+
+    local gap = math.max(1, width - #label - #shortcut - 2)
+    local action_style = hovered and th.help.hovered or th.help.action
+    local shortcut_style = hovered and th.help.hovered or th.help.chord
+
+    return {
+        ui.Span(" " .. label):style(action_style),
+        ui.Span(string.rep(" ", gap)),
+        ui.Span(shortcut):style(shortcut_style),
+        ui.Span(" "),
+    }
 end
 
 function AwtarchyYaziContextMenu:redraw()
-    if not self._visible or self._area.w == 0 then
+    if not self._visible or self._area.w == 0 or self._area.h == 0 then
         return {}
     end
 
+    local actions = self:actions()
     local rows = {}
-    local content_width = self._list_area.w
-    for i, action in ipairs(self:actions()) do
-        local gap = math.max(1, content_width - #action.label - #action.shortcut - 2)
-        local row = ui.Line {
-            ui.Span(" " .. action.label):style(th.help.action),
-            ui.Span(string.rep(" ", gap)),
-            ui.Span(action.shortcut):style(th.help.chord),
-            ui.Span(" "),
-        }
-        if i == self._hovered_row then
-            row:style(th.help.hovered)
+
+    for row = 1, math.ceil(#actions / self._columns) do
+        local spans = {}
+        for col = 1, self._columns do
+            local index = (row - 1) * self._columns + col
+            local action = actions[index]
+            if action then
+                for _, span in ipairs(AwtarchyYaziContextCell(
+                    action,
+                    self._cell_width,
+                    index == self._hovered_action
+                )) do
+                    spans[#spans + 1] = span
+                end
+            else
+                spans[#spans + 1] = ui.Span(string.rep(" ", self._cell_width))
+            end
         end
-        rows[#rows + 1] = row
+        rows[#rows + 1] = ui.Line(spans)
     end
 
-    local footer = self:footer()
     return {
         ui.Clear(self._area),
         ui.Border(ui.Edge.ALL)
@@ -1285,21 +1319,36 @@ function AwtarchyYaziContextMenu:redraw()
             :style(th.help.border)
             :title(ui.Line(self:title()):align(ui.Align.CENTER)),
         ui.List(rows):area(self._list_area),
-        ui.Text({
-            ui.Line(" " .. footer[1]),
-            ui.Line(" " .. footer[2]),
-        }):area(self._footer_area),
     }
 end
+
+function AwtarchyYaziContextMenu:action_at(event)
+    if event.x < self._list_area.x
+        or event.x >= self._list_area.x + self._list_area.w
+        or event.y < self._list_area.y
+        or event.y >= self._list_area.y + self._list_area.h
+    then
+        return nil
+    end
+
+    local row = event.y - self._list_area.y
+    local col = math.floor((event.x - self._list_area.x) / self._cell_width)
+    col = math.max(0, math.min(self._columns - 1, col))
+
+    local index = row * self._columns + col + 1
+    return self:actions()[index] and index or nil
+end
+
 
 function AwtarchyYaziContextMenu:run(action)
     local count = self._selection_count > 0 and self._selection_count or 1
     local drop_target = self._drop_target
     local drop_sources = self._drop_sources
     self._visible = false
-    self._hovered_row = nil
+    self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
+    ya.emit("app:resize", {})
     ui.render()
 
     if action == "smart_open" then
@@ -1360,20 +1409,9 @@ function AwtarchyYaziContextMenu:run(action)
 end
 
 function AwtarchyYaziContextMenu:move(event)
-    local row = nil
-    if event.x >= self._list_area.x
-        and event.x < self._list_area.x + self._list_area.w
-        and event.y >= self._list_area.y
-        and event.y < self._list_area.y + self._list_area.h
-    then
-        local candidate = event.y - self._list_area.y + 1
-        if self:actions()[candidate] then
-            row = candidate
-        end
-    end
-
-    if row ~= self._hovered_row then
-        self._hovered_row = row
+    local action = self:action_at(event)
+    if action ~= self._hovered_action then
+        self._hovered_action = action
         ui.render()
     end
 end
@@ -1383,72 +1421,14 @@ function AwtarchyYaziContextMenu:click(event, up)
         return
     end
 
-    local row = event.y - self._list_area.y + 1
-    local action = self:actions()[row]
+    local index = self:action_at(event)
+    local action = index and self:actions()[index] or nil
     if action then
         self:run(action.action)
-    else
-        self:hide()
     end
 end
 
-local AwtarchyYaziDefaultRootRedraw = Root.redraw
-local AwtarchyYaziDefaultRootClick = Root.click
-local AwtarchyYaziDefaultRootMove = Root.move
 
--- The context menu is a visual overlay owned by Root, not a layout child.
--- This keeps normal left-click hit-testing untouched and gives right-click
--- actions the same popup behavior without replacing the Current pane.
-function Root:redraw()
-    local elements = AwtarchyYaziDefaultRootRedraw(self) or {}
-    if AwtarchyYaziContextMenu._visible then
-        local menu = AwtarchyYaziContextMenu:new(self._area)
-        elements = ya.list_merge(elements, ui.redraw(menu))
-    end
-    return elements
-end
-
-function Root:click(event, up)
-    if not AwtarchyYaziContextMenu._visible then
-        return AwtarchyYaziDefaultRootClick(self, event, up)
-    end
-
-    local menu = AwtarchyYaziContextMenu:new(self._area)
-    local inside = menu._area.w > 0
-        and event.x >= menu._area.x
-        and event.x < menu._area.x + menu._area.w
-        and event.y >= menu._area.y
-        and event.y < menu._area.y + menu._area.h
-
-    if inside then
-        -- Only a left click chooses a menu action. Right click never becomes a
-        -- menu action and left click never opens a context menu.
-        if event.is_left then
-            return menu:click(event, up)
-        end
-        return
-    end
-
-    if not up then
-        AwtarchyYaziContextMenu:hide()
-
-        -- A right-click outside the old popup should immediately route to the
-        -- normal pane handler so it can open a new popup at the new location.
-        if event.is_right then
-            return AwtarchyYaziDefaultRootClick(self, event, up)
-        end
-    end
-
-    -- Preserve ordinary left-click behavior while dismissing the popup.
-    return AwtarchyYaziDefaultRootClick(self, event, up)
-end
-
-function Root:move(event)
-    if AwtarchyYaziContextMenu._visible then
-        return AwtarchyYaziContextMenu:move(event)
-    end
-    return AwtarchyYaziDefaultRootMove(self, event)
-end
 
 local AwtarchyYaziDefaultHeaderCwd = Header.cwd
 local AwtarchyYaziBreadcrumbTarget = nil
