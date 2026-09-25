@@ -7406,6 +7406,7 @@ review_plan() {
     key="$(read_update_key || true)"
     case "$key" in
       $'\033[A')
+        approval_choice=""
         if (( index > 0 )); then
           ((index--)) || true
         else
@@ -7413,14 +7414,15 @@ review_plan() {
         fi
         ;;
       $'\033[B')
+        approval_choice=""
         if (( index + 1 < ${#classes[@]} )); then
           ((index++)) || true
         else
           index=0
         fi
         ;;
-      $'\033[5~') index=$((index - page_size)); (( index < 0 )) && index=0 ;;
-      $'\033[6~') index=$((index + page_size)); (( index >= ${#classes[@]} )) && index=$((${#classes[@]} - 1)) ;;
+      $'\033[5~') approval_choice=""; index=$((index - page_size)); (( index < 0 )) && index=0 ;;
+      $'\033[6~') approval_choice=""; index=$((index + page_size)); (( index >= ${#classes[@]} )) && index=$((${#classes[@]} - 1)) ;;
       $'\n'|$'\r'|"")
         if [[ "$review_mode" == "update" && -n "$approval_choice" ]]; then
           disable_mouse
@@ -7456,6 +7458,7 @@ review_plan() {
         fi
         ;;
       [1-9])
+        approval_choice=""
         i=$((10#$key - 1))
         if (( i < page_size && page_start + i < ${#classes[@]} )); then
           index=$((page_start + i))
@@ -7463,6 +7466,7 @@ review_plan() {
         fi
         ;;
       $'\033[<'*M|$'\033[<'*m)
+        approval_choice=""
         if [[ "$key" =~ ^$'\033'\[\<([0-9]+)\;([0-9]+)\;([0-9]+)(M|m)$ ]]; then
           mouse_y="${BASH_REMATCH[3]}"
           mouse_index=$((mouse_y - 6))

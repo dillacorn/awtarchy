@@ -23,6 +23,8 @@ grep -Fq 'approval_choice="n"' "$RUNTIME" \
     || fail 'review does not stage n before Enter confirmation'
 grep -Fq 'case "$approval_choice" in' "$RUNTIME" \
     || fail 'review does not require Enter to confirm the staged approval choice'
+grep -Fq 'approval_choice=""; index=$((index - page_size))' "$RUNTIME" \
+    || fail 'review does not clear pending approval when navigation resumes'
 grep -Fq 'if ! review_plan "$plan_file" update; then' "$RUNTIME" \
     || fail 'managed update is not gated directly by review approval'
 grep -Fq 'review_plan "$plan_file" review-only' "$RUNTIME" \
