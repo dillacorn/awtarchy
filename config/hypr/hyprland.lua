@@ -572,6 +572,7 @@ local qr_scan = "~/.config/hypr/scripts/qr_scan.sh"
 
 -- Utilities
 local workspace_mix = "~/.config/hypr/scripts/workspace_mix.sh"
+local scratchpad_toggle_window = "~/.config/hypr/scripts/scratchpad_toggle_window.sh"
 local zoom = "~/.config/hypr/scripts/zoom.sh"
 local hyprpicker = "hyprpicker -a -f hex"
 local hypr_ddc_brightness = "~/.config/hypr/scripts/hypr-ddc-brightness.sh"
@@ -907,9 +908,9 @@ for _, bind in ipairs({
     hl.bind(bind[1], hl.dsp.exec_cmd(zoom .. " " .. bind[2]), bind[3] and { repeating = true } or {})
 end
 
--- Scratchpad (SUPER+x, SUPER+CTRL+x)
+-- Scratchpad (SUPER+x toggles visibility; SUPER+CTRL+x sends/restores the active window)
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-hl.bind("SUPER + CTRL + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
+hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})
 
 -- Misc (SUPER+F12)
 hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})
@@ -1134,9 +1135,9 @@ hl.define_submap("noalt", function()
         hl.bind(bind[1], hl.dsp.exec_cmd(zoom .. " " .. bind[2]), bind[3] and { repeating = true } or {})
     end
 
-    -- Scratchpad in "noalt" (SUPER+x, SUPER+CTRL+x)
+    -- Scratchpad in "noalt" (SUPER+x toggles visibility; SUPER+CTRL+x sends/restores the active window)
     hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-    hl.bind("SUPER + CTRL + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
+    hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})
 
     -- Misc in "noalt" (SUPER+F12)
     hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})

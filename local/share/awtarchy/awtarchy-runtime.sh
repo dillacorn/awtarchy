@@ -7387,7 +7387,7 @@ review_plan() {
     printf '\033[H\033[2J' >/dev/tty
     printf 'Awtarchy managed-file differences: %d\n\n' "${#classes[@]}" >/dev/tty
     printf 'Click/Enter or press 1-9 to view a diff. Entries are informational, not update toggles.\n' >/dev/tty
-    printf 'Page Up/Page Down changes pages. q closes review and continues the requested operation.\n\n' >/dev/tty
+    printf 'Page Up/Page Down changes pages. q closes review; update confirmation follows before changes are applied.\n\n' >/dev/tty
 
     for (( i = 0; i < page_size && page_start + i < ${#classes[@]}; i++ )); do
       local absolute=$((page_start + i)) marker=' '
@@ -7437,6 +7437,20 @@ review_plan() {
           fi
         fi
         ;;
+    esac
+  done
+}
+
+confirm_update_after_review() {
+  local answer=""
+  is_interactive || return 0
+
+  while true; do
+    printf '\nContinue with this update? [y/N] ' >/dev/tty
+    IFS= read -r answer </dev/tty || return 1
+    case "$answer" in
+      y|Y|yes|YES) return 0 ;;
+      ""|n|N|no|NO) return 1 ;;
     esac
   done
 }
@@ -9447,6 +9461,10 @@ main() {
   if (( REVIEW_ONLY == 1 )); then
     log "Review-only mode complete. No files were changed."
     return 0
+  fi
+
+  if ! confirm_update_after_review; then
+    die "Update canceled. No managed files were changed."
   fi
 
   ensure_yazi_ripdrag_dependency_for_target "$target_home"
