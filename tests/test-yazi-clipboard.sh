@@ -597,38 +597,7 @@ grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
 grep -Fq 'declare -a REQUIRED_AUR_PACKAGES=(' "$RUNTIME" \
   || fail 'runtime has no required AUR feature dependency catalog'
-grep -Eq '^[[:space:]]+ripdrag[[:space:]]*$' "$RUNTIME" \
-  || fail 'stable ripdrag is not a required AUR dependency for Yazi outbound drag'
-grep -Fq 'packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")' "$RUNTIME" \
-  || fail 'fresh install does not force required AUR feature dependencies'
-grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
-  || fail 'fresh install does not special-case ripdrag prerequisites'
-grep -Fq 'pacman_install_one rust' "$RUNTIME" \
-  || fail 'fresh install does not ensure Rust/Cargo before ripdrag'
-grep -Fq 'pacman_install_one gtk4' "$RUNTIME" \
-  || fail 'fresh install does not ensure GTK4 before ripdrag'
-grep -Fq "if array_contains ripdrag \"\${selected_aur[@]}\"; then" "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
-  || fail 'package reconciler does not add ripdrag prerequisites to the Arch phase'
-grep -Fq 'runtime_array_lines REQUIRED_AUR_PACKAGES' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
-  || fail 'package reconciler does not load required AUR feature dependencies'
-grep -Fq 'MISSING_REQUIRED_AUR' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
-  || fail 'package reconciler does not track missing required AUR dependencies'
-
-grep -Fq 'repair_v380_yazi_drag_target()' "$RUNTIME" \
-  || fail 'runtime has no v3.8.0 Yazi outbound-drag post-release repair'
-# shellcheck disable=SC2016
-grep -Fq '[[ "$tag" == "v3.8.0" ]] || return 0' "$RUNTIME" \
-  || fail 'v3.8.0 Yazi outbound-drag repair is not tag scoped'
-# shellcheck disable=SC2016
-grep -Fq 'repair_v380_yazi_drag_target "$target_home" "$tag"' "$RUNTIME" \
-  || fail 'stable update path does not apply the v3.8.0 Yazi outbound-drag repair'
-grep -Fq 'ensure_yazi_ripdrag_dependency_for_target "$target_home"' "$RUNTIME" \
-  || fail 'stable/Git updater does not install ripdrag before applying a Yazi drag target'
-grep -Fq 'Command("ripdrag")' "$RUNTIME" \
-  || fail 'v3.8.0 post-release Yazi plugin repair does not launch ripdrag'
-grep -Fq 'run = "plugin drag"' "$RUNTIME" \
-  || fail 'v3.8.0 post-release Yazi repair does not add the drag key action'
-
+grep -Eq '^[[:space:]]+ripdrag[[:space:]]*
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
 [[ -f "$YAZI_MOUNTS" ]] || fail 'managed mounts plugin is missing'
@@ -808,6 +777,7 @@ PY_YAZI_UPDATE_NOTICE
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
  "$RUNTIME" \
   || fail 'stable ripdrag is not a required AUR dependency for Yazi outbound drag'
+# shellcheck disable=SC2016
 grep -Fq 'packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")' "$RUNTIME" \
   || fail 'fresh install does not force required AUR feature dependencies'
 grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
@@ -818,6 +788,26 @@ grep -Fq 'pacman_install_one gtk4' "$RUNTIME" \
   || fail 'fresh install does not ensure GTK4 before ripdrag'
 grep -Fq "if array_contains ripdrag \"\${selected_aur[@]}\"; then" "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
   || fail 'package reconciler does not add ripdrag prerequisites to the Arch phase'
+grep -Fq 'runtime_array_lines REQUIRED_AUR_PACKAGES' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not load required AUR feature dependencies'
+grep -Fq 'MISSING_REQUIRED_AUR' "$ROOT/local/share/awtarchy/awtarchy-package-reconcile.sh" \
+  || fail 'package reconciler does not track missing required AUR dependencies'
+
+grep -Fq 'repair_v380_yazi_drag_target()' "$RUNTIME" \
+  || fail 'runtime has no v3.8.0 Yazi outbound-drag post-release repair'
+# shellcheck disable=SC2016
+grep -Fq '[[ "$tag" == "v3.8.0" ]] || return 0' "$RUNTIME" \
+  || fail 'v3.8.0 Yazi outbound-drag repair is not tag scoped'
+# shellcheck disable=SC2016
+grep -Fq 'repair_v380_yazi_drag_target "$target_home" "$tag"' "$RUNTIME" \
+  || fail 'stable update path does not apply the v3.8.0 Yazi outbound-drag repair'
+# shellcheck disable=SC2016
+grep -Fq 'ensure_yazi_ripdrag_dependency_for_target "$target_home"' "$RUNTIME" \
+  || fail 'stable/Git updater does not install ripdrag before applying a Yazi drag target'
+grep -Fq 'Command("ripdrag")' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi plugin repair does not launch ripdrag'
+grep -Fq 'run = "plugin drag"' "$RUNTIME" \
+  || fail 'v3.8.0 post-release Yazi repair does not add the drag key action'
 
 [[ -f "$YAZI_RECENT" ]] || fail 'managed recent-files plugin is missing'
 [[ -f "$YAZI_BOOKMARKS" ]] || fail 'managed bookmarks plugin is missing'
