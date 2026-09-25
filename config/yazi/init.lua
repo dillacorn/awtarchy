@@ -1112,12 +1112,11 @@ function AwtarchyYaziContextMenu:actions()
     end
 
     if self._target_is_dir then
-        local bookmarked = self._target_bookmarked == true
         return {
             { label = "Enter folder", shortcut = "Enter / l", action = "smart_open" },
             { label = "Open in new tab", shortcut = "t n", action = "open_new_tab" },
             {
-                label = bookmarked and "Remove bookmark" or "Add bookmark",
+                label = "Bookmark / unbookmark",
                 shortcut = "g B",
                 action = "bookmark_hovered",
             },
@@ -1233,9 +1232,10 @@ function AwtarchyYaziContextMenu:show(kind, x, y, selection_count, target)
     self._drop_sources = nil
     self._target_name = target and target.name or nil
     self._target_is_dir = target and target.cha.is_dir or false
-    self._target_bookmarked = self._target_is_dir
-        and require("bookmarks"):is_bookmarked(tostring(target.url))
-        or false
+    -- The managed bookmarks plugin exposes toggle behavior, not an
+    -- is_bookmarked() query method. Keep this action as an explicit toggle
+    -- instead of calling a nonexistent method before the chooser can open.
+    self._target_bookmarked = false
     AwtarchyYaziOpenNativeContext(self)
 end
 

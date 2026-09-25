@@ -328,6 +328,11 @@ grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_I
   || fail 'Yazi blank-space right-click does not open folder actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count, self._file)' "$YAZI_INIT" \
   || fail 'Yazi item right-click does not pass the exact clicked item to the native chooser'
+grep -Fq 'label = "Bookmark / unbookmark"' "$YAZI_INIT" \
+  || fail 'Yazi folder context actions do not expose bookmark toggle behavior'
+if grep -Fq ':is_bookmarked(' "$YAZI_INIT"; then
+  fail 'Yazi folder right-click still calls the nonexistent bookmarks is_bookmarked method'
+fi
 if grep -Fq 'function Root:layout()' "$YAZI_INIT"; then
   fail 'Yazi right-click actions still override Root layout'
 fi
