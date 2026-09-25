@@ -748,15 +748,6 @@ function Current:reflow()
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
     end
-
-    -- Keep the context menu inside the Current component tree. Registering it
-    -- as a Modal child makes Yazi's mouse hit-testing rebuild a separate modal
-    -- component for every click, which can swallow subsequent Current clicks.
-    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
-        local menu = AwtarchyYaziContextMenu:new(self._area)
-        components = ya.list_merge(components, menu:reflow())
-    end
-
     return components
 end
 
@@ -765,14 +756,6 @@ function Current:redraw()
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
     end
-
-    -- Draw the right-click menu after the file list so it overlays the pane,
-    -- while normal left-click selection/open behavior remains unchanged.
-    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
-        local menu = AwtarchyYaziContextMenu:new(self._area)
-        elements = ya.list_merge(elements, ui.redraw(menu))
-    end
-
     return elements
 end
 
@@ -1409,7 +1392,56 @@ function AwtarchyYaziContextMenu:click(event, up)
     end
 end
 
+local AwtarchyYaziDefaultRootRedraw = Root.redraw
+local AwtarchyYaziDefaultRootClick = Root.click
 local AwtarchyYaziDefaultRootMove = Root.move
+
+-- The context menu is a visual overlay owned by Root, not a layout child.
+-- This keeps normal left-click hit-testing untouched and gives right-click
+-- actions the same popup behavior without replacing the Current pane.
+function Root:redraw()
+    local elements = AwtarchyYaziDefaultRootRedraw(self) or {}
+    if AwtarchyYaziContextMenu._visible then
+        local menu = AwtarchyYaziContextMenu:new(self._area)
+        elements = ya.list_merge(elements, ui.redraw(menu))
+    end
+    return elements
+end
+
+function Root:click(event, up)
+    if not AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziDefaultRootClick(self, event, up)
+    end
+
+    local menu = AwtarchyYaziContextMenu:new(self._area)
+    local inside = menu._area.w > 0
+        and event.x >= menu._area.x
+        and event.x < menu._area.x + menu._area.w
+        and event.y >= menu._area.y
+        and event.y < menu._area.y + menu._area.h
+
+    if inside then
+        -- Only a left click chooses a menu action. Right click never becomes a
+        -- menu action and left click never opens a context menu.
+        if event.is_left then
+            return menu:click(event, up)
+        end
+        return
+    end
+
+    if not up then
+        AwtarchyYaziContextMenu:hide()
+
+        -- A right-click outside the old popup should immediately route to the
+        -- normal pane handler so it can open a new popup at the new location.
+        if event.is_right then
+            return AwtarchyYaziDefaultRootClick(self, event, up)
+        end
+    end
+
+    -- Preserve ordinary left-click behavior while dismissing the popup.
+    return AwtarchyYaziDefaultRootClick(self, event, up)
+end
 
 function Root:move(event)
     if AwtarchyYaziContextMenu._visible then

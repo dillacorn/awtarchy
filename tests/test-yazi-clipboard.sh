@@ -308,12 +308,21 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context-menu component is missing'
-grep -Fq 'components = ya.list_merge(components, menu:reflow())' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu is not part of Current hit-testing'
+grep -Fq 'local AwtarchyYaziDefaultRootRedraw = Root.redraw' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu does not preserve the native Root renderer'
+grep -Fq 'function Root:redraw()' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu is not rendered as a Root overlay'
 grep -Fq 'elements = ya.list_merge(elements, ui.redraw(menu))' "$YAZI_INIT" \
-  || fail 'Yazi mouse context menu is not rendered over the Current pane'
+  || fail 'Yazi mouse context menu is not drawn after the normal Root UI'
+grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
+  || fail 'Yazi mouse context menu does not preserve native Root click routing'
+grep -Fq 'return AwtarchyYaziDefaultRootClick(self, event, up)' "$YAZI_INIT" \
+  || fail 'Yazi normal left-click routing is not preserved'
 if grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu' "$YAZI_INIT"; then
-  fail 'Yazi mouse context menu still uses the modal path that swallows pane clicks'
+  fail 'Yazi mouse context menu still uses the modal path that swallowed pane clicks'
+fi
+if grep -Fq 'components = ya.list_merge(components, menu:reflow())' "$YAZI_INIT"; then
+  fail 'Yazi mouse context menu still contaminates Current hit-testing'
 fi
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
