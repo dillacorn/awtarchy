@@ -1073,12 +1073,19 @@ local AwtarchyYaziFolderActions = {
 }
 
 AwtarchyYaziContextMenu = {
+    _id = "awtarchy-yazi-context-menu",
     _visible = false,
     _kind = "item",
+    _x = 0,
+    _y = 0,
+    _area = ui.Rect {},
+    _list_area = ui.Rect {},
+    _hovered_row = nil,
     _selection_count = 0,
     _drop_target = nil,
     _drop_sources = nil,
     _choice_actions = nil,
+    _render_actions = nil,
     _target_name = nil,
     _target_is_dir = false,
     _target_bookmarked = false,
@@ -1200,18 +1207,176 @@ end
 
 function AwtarchyYaziContextMenu:clear()
     self._visible = false
+    self._hovered_row = nil
     self._selection_count = 0
     self._drop_target = nil
     self._drop_sources = nil
     self._choice_actions = nil
+    self._render_actions = nil
     self._target_name = nil
     self._target_is_dir = false
     self._target_bookmarked = false
 end
 
+function AwtarchyYaziContextMenu:title()
+    if self._kind == "background" then
+        return " Folder actions "
+    elseif self._kind == "drop" then
+        local target = self._drop_target and Url(self._drop_target) or nil
+        return " Drop into " .. tostring(target and target.name or "folder") .. " "
+    elseif self._selection_count > 1 then
+        return " " .. tostring(self._selection_count) .. " selected "
+    end
+    return " Item actions "
+end
+
+function AwtarchyYaziContextMenu:new(area)
+    self._screen = area
+    if not self._visible then
+        self._area = ui.Rect {}
+        self._list_area = ui.Rect {}
+        return self
+    end
+
+    local actions = self._render_actions or {}
+    local width = 28
+    for _, action in ipairs(actions) do
+        local label_width = ui.Line(action.label or ""):width()
+        local shortcut_width = ui.Line(action.shortcut or ""):width()
+        width = math.max(width, label_width + shortcut_width + 5)
+    end
+    width = math.min(width, 48, area.w)
+
+    local height = #actions + 2
+    if width < 24 or height <= 2 or height > area.h then
+        self._area = ui.Rect {}
+        self._list_area = ui.Rect {}
+        return self
+    end
+
+    local right = area.x + area.w
+    local bottom = area.y + area.h
+
+    local x = self._x + 2
+    if x + width > right then
+        x = self._x - width - 1
+    end
+    x = math.max(area.x, math.min(x, right - width))
+
+    local y = self._y
+    if y + height > bottom then
+        y = self._y - height + 1
+    end
+    y = math.max(area.y, math.min(y, bottom - height))
+
+    self._area = ui.Rect { x = x, y = y, w = width, h = height }
+    self._list_area = ui.Rect {
+        x = x + 1,
+        y = y + 1,
+        w = width - 2,
+        h = #actions,
+    }
+    return self
+end
+
+function AwtarchyYaziContextMenu:reflow()
+    return self._visible and self._area.w > 0 and { self } or {}
+end
+
+function AwtarchyYaziContextMenu:redraw()
+    if not self._visible or self._area.w == 0 then
+        return {}
+    end
+
+    local rows = {}
+    local content_width = self._list_area.w
+    for i, action in ipairs(self._render_actions or {}) do
+        local left = " " .. tostring(action.label or "")
+        local right = tostring(action.shortcut or "") .. " "
+        local gap = math.max(
+            1,
+            content_width - ui.Line(left):width() - ui.Line(right):width()
+        )
+
+        local row = ui.Line {
+            ui.Span(left):style(th.help.action),
+            ui.Span(string.rep(" ", gap)),
+            ui.Span(right):style(th.help.chord),
+        }
+        if i == self._hovered_row then
+            row:style(th.help.hovered)
+        end
+        rows[#rows + 1] = row
+    end
+
+    return {
+        ui.Clear(self._area),
+        ui.Border(ui.Edge.ALL)
+            :area(self._area)
+            :type(ui.Border.PLAIN)
+            :style(th.help.border)
+            :title(ui.Line(self:title())),
+        ui.List(rows):area(self._list_area),
+    }
+end
+
+function AwtarchyYaziContextMenu:row_at(event)
+    if event.x < self._list_area.x
+        or event.x >= self._list_area.x + self._list_area.w
+        or event.y < self._list_area.y
+        or event.y >= self._list_area.y + self._list_area.h
+    then
+        return nil
+    end
+
+    local row = event.y - self._list_area.y + 1
+    return (self._render_actions or {})[row] and row or nil
+end
+
+function AwtarchyYaziContextMenu:move(event)
+    local row = self:row_at(event)
+    if row ~= self._hovered_row then
+        self._hovered_row = row
+        ui.render()
+    end
+end
+
+function AwtarchyYaziContextMenu:click(event, up)
+    if up then return end
+
+    if not event.is_left then
+        self:hide()
+        return
+    end
+
+    local index = self:row_at(event)
+    if not index then
+        self:hide()
+        return
+    end
+
+    -- The visible menu is custom, but keyboard handling stays on Yazi's
+    -- silent native Which layer. Submit the same candidate for mouse clicks.
+    if tostring(cx.layer) == "which" and cx.which.active then
+        local cand = cx.which.cands[index]
+        local tx = cx.which.tx
+        if cand and tx and tx:send(cand) then
+            ya.emit("which:dismiss", {})
+            return
+        end
+    end
+
+    local action = self._choice_actions and self._choice_actions[index] or nil
+    if action then
+        self:run(action)
+    else
+        self:hide()
+    end
+end
+
 local function AwtarchyYaziOpenNativeContext(menu)
     local actions = menu:actions()
-    local values, choices = {}, {}
+    local values, choices, render_actions = {}, {}, {}
 
     for _, action in ipairs(actions) do
         local keys = AwtarchyYaziContextChoiceKeys[action.action]
@@ -1226,6 +1391,7 @@ local function AwtarchyYaziOpenNativeContext(menu)
             values[#values + 1] = table.concat(keys, "\t")
             values[#values + 1] = desc
             choices[#choices + 1] = action.action
+            render_actions[#render_actions + 1] = action
         end
     end
 
@@ -1235,12 +1401,14 @@ local function AwtarchyYaziOpenNativeContext(menu)
     end
 
     menu._choice_actions = choices
+    menu._render_actions = render_actions
     menu._visible = true
+    menu._hovered_row = nil
+    ui.render()
 
-    -- Mouse callbacks run inside Yazi's blocking Root runtime. Do not call
-    -- ya.which() from that callback, even through an init.lua coroutine.
-    -- Hand the candidate list to a normal async plugin instead; its runtime is
-    -- non-blocking and may use Yazi's native Which UI safely.
+    -- Mouse callbacks run inside Yazi's blocking Root runtime. Keep the
+    -- asynchronous native Which machinery only as an invisible keyboard
+    -- chord engine; the visible popup is the cursor-adjacent Modal overlay.
     ya.emit("plugin", {
         "awtarchy-context-menu",
         AwtarchyYaziPluginArgs("show", values),
@@ -1249,6 +1417,8 @@ end
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count, target)
     self._kind = kind
+    self._x = x or 0
+    self._y = y or 0
     self._selection_count = selection_count or 0
     self._drop_target = nil
     self._drop_sources = nil
@@ -1263,6 +1433,8 @@ end
 
 function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
     self._kind = "drop"
+    self._x = x or 0
+    self._y = y or 0
     self._selection_count = #sources
     self._drop_target = tostring(target)
     self._drop_sources = sources
@@ -1275,6 +1447,7 @@ end
 function AwtarchyYaziContextMenu:hide()
     if not self._visible then return end
     self:clear()
+    ui.render()
     if tostring(cx.layer) == "which" and cx.which.active then
         ya.emit("which:dismiss", {})
     end
@@ -1284,6 +1457,7 @@ function AwtarchyYaziContextMenu:choose(index)
     local action = index and self._choice_actions and self._choice_actions[index] or nil
     if not action then
         self:clear()
+        ui.render()
         return
     end
     self:run(action)
@@ -1293,13 +1467,8 @@ function AwtarchyYaziContextMenu:run(action)
     local count = self._selection_count > 0 and self._selection_count or 1
     local drop_target = self._drop_target
     local drop_sources = self._drop_sources
-    self._visible = false
-    self._drop_target = nil
-    self._drop_sources = nil
-    self._choice_actions = nil
-    self._target_name = nil
-    self._target_is_dir = false
-    self._target_bookmarked = false
+    self:clear()
+    ui.render()
 
     if action == "smart_open" then
         AwtarchyYaziSmartEnter()
@@ -1359,6 +1528,17 @@ function AwtarchyYaziContextMenu:run(action)
 end
 
 
+Modal:children_add(AwtarchyYaziContextMenu, 20)
+
+local AwtarchyYaziDefaultRootMove = Root.move
+
+function Root:move(event)
+    if AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziContextMenu:move(event)
+    end
+    return AwtarchyYaziDefaultRootMove(self, event)
+end
+
 local AwtarchyYaziDefaultRootClick = Root.click
 
 local function AwtarchyYaziWhichCandidateAt(area, event)
@@ -1401,6 +1581,10 @@ local function AwtarchyYaziWhichCandidateAt(area, event)
 end
 
 function Root:click(event, up)
+    if AwtarchyYaziContextMenu._visible then
+        return AwtarchyYaziContextMenu:click(event, up)
+    end
+
     -- Yazi's native Which UI is keyboard-driven upstream. Make every visible
     -- Which prompt mouse-clickable here, including Awtarchy's right-click
     -- chooser and existing prompts such as Ctrl+F. Do not depend on separate

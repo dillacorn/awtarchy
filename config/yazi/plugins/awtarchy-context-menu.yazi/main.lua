@@ -35,7 +35,7 @@ function M:entry(job)
         return
     end
 
-    local index = ya.which { cands = cands, silent = false }
+    local index = ya.which { cands = cands, silent = true }
     local arg = index and ("--index=" .. tostring(index)) or "--cancel"
     ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })
 end
