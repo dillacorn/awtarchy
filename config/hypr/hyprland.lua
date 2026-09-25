@@ -146,6 +146,7 @@ hl.config({
         border_size = 1,
         resize_on_border = true,
         allow_tearing = true,
+        hide_special_on_workspace_change = true,
         layout = "dwindle",
 
         col = {
@@ -850,8 +851,8 @@ for _, bind in ipairs(workspace_keys) do
     local key = bind[1]
     local workspace = bind[2]
 
-    hl.bind("ALT + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
-    hl.bind("SUPER + SHIFT + " .. key, hl.dsp.window.move({ workspace = workspace, follow = false }), {})
+    hl.bind("ALT + SHIFT + " .. key, hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. workspace), {})
+    hl.bind("SUPER + SHIFT + " .. key, hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. workspace), {})
 end
 
 -- Quick resize (ALT+Y/O/I/U / hold)
@@ -1096,7 +1097,7 @@ hl.define_submap("noalt", function()
 
     -- Move window to workspace in "noalt" (SUPER+SHIFT numbers)
     for _, bind in ipairs(workspace_keys) do
-        hl.bind("SUPER + SHIFT + " .. bind[1], hl.dsp.window.move({ workspace = bind[2], follow = false }), {})
+        hl.bind("SUPER + SHIFT + " .. bind[1], hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. bind[2]), {})
     end
 
     -- Resize in "noalt" (SUPER+CTRL arrows + hjkl / hold)
@@ -1211,7 +1212,7 @@ hl.define_submap("vm", function()
 
     -- Move window to workspace (SUPER+ALT+SHIFT numbers)
     for _, bind in ipairs(workspace_keys) do
-        hl.bind("SUPER + ALT + SHIFT + " .. bind[1], hl.dsp.window.move({ workspace = bind[2], follow = false }), {})
+        hl.bind("SUPER + ALT + SHIFT + " .. bind[1], hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. bind[2]), {})
     end
 
     -- Submap binds in "vm"            (Toggle off/on)

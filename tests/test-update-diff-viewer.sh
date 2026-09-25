@@ -15,21 +15,26 @@ grep -Fq 'view_diff_file()' "$RUNTIME" \
     || fail 'updater has no internal managed-file diff viewer'
 grep -Fq 'read_update_key' "$RUNTIME" \
     || fail 'internal diff viewer does not use Awtarchy raw-key input'
-grep -Fq 'q|Q)' "$RUNTIME" \
-    || fail 'internal diff viewer does not expose a q quit path'
-grep -Fq "\$'\\033')" "$RUNTIME" \
-    || fail 'internal diff viewer does not expose an Escape quit path'
-grep -Fq 'q closes review; update confirmation follows before changes are applied.' "$RUNTIME" \
-    || fail 'managed-file review still presents q as update approval'
-grep -Fq 'confirm_update_after_review()' "$RUNTIME" \
-    || fail 'updater has no explicit post-review confirmation'
-grep -Fq 'Continue with this update? [y/N]' "$RUNTIME" \
-    || fail 'post-review update confirmation is not an explicit y/N prompt'
-grep -Fq 'if ! confirm_update_after_review; then' "$RUNTIME" \
-    || fail 'managed update does not gate mutation on post-review approval'
+grep -Fq 'y approves the update; n cancels it.' "$RUNTIME" \
+    || fail 'managed-file review does not expose direct y/n approval'
+grep -Fq 'if ! review_plan "$plan_file" update; then' "$RUNTIME" \
+    || fail 'managed update is not gated directly by review approval'
+grep -Fq 'review_plan "$plan_file" review-only' "$RUNTIME" \
+    || fail 'review-only mode does not retain a non-mutating close path'
 
+if grep -Fq 'confirm_update_after_review()' "$RUNTIME"; then
+    fail 'updater still has a second confirmation prompt after review'
+fi
+if grep -Fq 'q closes review and continues the requested operation.' "$RUNTIME"; then
+    fail 'update review still treats q as approval'
+fi
 if grep -Fq 'less -R "$tmp"' "$RUNTIME"; then
     fail 'managed-file review still delegates input to external less'
 fi
 
-printf '%s\n' 'PASS: managed-file diff review stays inside Awtarchy and requires explicit post-review update approval.'
+mode_line="$(grep -nF 'select_update_mode' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+approval_line="$(grep -nF 'if ! review_plan "$plan_file" update; then' "$RUNTIME" | tail -n1 | cut -d: -f1)"
+[[ -n "$mode_line" && -n "$approval_line" && "$mode_line" -lt "$approval_line" ]] \
+    || fail 'update mode prompt still occurs after final y/n approval'
+
+printf '%s\n' 'PASS: managed-file review uses y/n as the final Awtarchy update approval.'
