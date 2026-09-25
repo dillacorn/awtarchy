@@ -15,7 +15,7 @@ grep -Fq 'view_diff_file()' "$RUNTIME" \
     || fail 'updater has no internal managed-file diff viewer'
 grep -Fq 'read_update_key' "$RUNTIME" \
     || fail 'internal diff viewer does not use Awtarchy raw-key input'
-grep -Fq 'y approves the update; n cancels it.' "$RUNTIME" \
+grep -Fq 'Approve update? [y/N]' "$RUNTIME" \
     || fail 'managed-file review does not expose direct y/n approval'
 grep -Fq 'if ! review_plan "$plan_file" update; then' "$RUNTIME" \
     || fail 'managed update is not gated directly by review approval'

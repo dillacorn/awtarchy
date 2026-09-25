@@ -7388,7 +7388,7 @@ review_plan() {
     printf 'Awtarchy managed-file differences: %d\n\n' "${#classes[@]}" >/dev/tty
     printf 'Click/Enter or press 1-9 to view a diff. Entries are informational, not update toggles.\n' >/dev/tty
     if [[ "$review_mode" == "update" ]]; then
-      printf 'Page Up/Page Down changes pages. y approves the update; n cancels it.\n\n' >/dev/tty
+      printf 'Page Up/Page Down changes pages. Approve update? [y/N]\n\n' >/dev/tty
     else
       printf 'Page Up/Page Down changes pages. q closes review.\n\n' >/dev/tty
     fi
