@@ -50,9 +50,9 @@ jobs:
       contents: write
     runs-on: ubuntu-latest
     env:
-      GH_TOKEN: \${{ github.token }}
+      GH_TOKEN: ${{ github.token }}
       POST_RELEASE_ENTRY: >-
-        - **2026-09-25 — Cursor-adjacent Yazi context menu:** Linux Yazi right-click item, folder, background, and drop actions now open in a compact popup beside the mouse cursor with hover highlighting and direct row clicks, while displayed keyboard chords continue through Yazi's silent native Which handling. Maintainer runtime testing confirmed the popup placement, mouse actions, keyboard actions, and stable parent/current/preview panes; PR #240 passed the full Validate Awtarchy workflow before merge. Delivered from post-release \`main\` commit \`b8c61f688f4cfff2c802c86f1dbbf11dfeca4f06\`; the v3.8.1 tag remains unchanged.
+        - **2026-09-25 — Cursor-adjacent Yazi context menu:** Linux Yazi right-click item, folder, background, and drop actions now open in a compact popup beside the mouse cursor with hover highlighting and direct row clicks, while displayed keyboard chords continue through Yazi's silent native Which handling. Maintainer runtime testing confirmed the popup placement, mouse actions, keyboard actions, and stable parent/current/preview panes; PR #240 passed the full Validate Awtarchy workflow before merge. Delivered from post-release `main` commit `b8c61f688f4cfff2c802c86f1dbbf11dfeca4f06`; the v3.8.1 tag remains unchanged.
     steps:
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
       - name: Append tested v3.8.1 post-release update
