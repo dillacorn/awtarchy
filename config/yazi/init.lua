@@ -1085,8 +1085,28 @@ AwtarchyYaziContextMenu = {
 }
 
 local AwtarchyYaziContextChoiceKeys = {
-    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
-    "a", "b", "c", "d", "e", "f", "g", "h",
+    smart_open = { "<Enter>" },
+    open_with = { "O" },
+    open_new_tab = { "t", "n" },
+    bookmark_hovered = { "g", "B" },
+    bookmark_current = { "g", "B" },
+    rename = { "r" },
+    bulk_rename = { "r" },
+    drag_out = { "d", "g" },
+    copy = { "y" },
+    cut = { "Y" },
+    copy_path = { "c", "c" },
+    compress_zip = { "c", "z" },
+    details = { "<Tab>" },
+    trash = { "d", "d" },
+    extract_here = { "e", "h" },
+    extract_folder = { "e", "f" },
+    new_file = { "a" },
+    new_folder = { "/" },
+    paste = { "p" },
+    terminal = { "t", "e" },
+    drop_copy = { "c" },
+    drop_move = { "m" },
 }
 
 function AwtarchyYaziContextMenu:actions()
@@ -1193,18 +1213,20 @@ local function AwtarchyYaziOpenNativeContext(menu)
     local actions = menu:actions()
     local values, choices = {}, {}
 
-    for i, action in ipairs(actions) do
-        local key = AwtarchyYaziContextChoiceKeys[i]
-        if not key then break end
+    for _, action in ipairs(actions) do
+        local keys = AwtarchyYaziContextChoiceKeys[action.action]
+        if keys then
+            local desc = action.label
+            if action.shortcut and action.shortcut ~= "" then
+                desc = desc .. "  [" .. action.shortcut .. "]"
+            end
 
-        local desc = action.label
-        if action.shortcut and action.shortcut ~= "" then
-            desc = desc .. "  [" .. action.shortcut .. "]"
+            -- Preserve multi-key chords (for example d g, c z, and d d)
+            -- across the plugin argument boundary.
+            values[#values + 1] = table.concat(keys, "\t")
+            values[#values + 1] = desc
+            choices[#choices + 1] = action.action
         end
-
-        values[#values + 1] = key
-        values[#values + 1] = desc
-        choices[#choices + 1] = action.action
     end
 
     if #choices == 0 then

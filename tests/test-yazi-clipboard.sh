@@ -324,8 +324,19 @@ grep -Fq 'tx:send(cand)' "$YAZI_INIT" \
   || fail 'Yazi native Which mouse bridge does not submit clicked candidates'
 grep -Fq 'ya.emit("which:dismiss", {})' "$YAZI_INIT" \
   || fail 'Yazi native Which mouse bridge cannot dismiss the prompt'
-grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_INIT" \
+YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
+grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
   || fail 'Yazi native Which result is not returned to the sync action runner'
+grep -Fq 'rename = { "r" }' "$YAZI_INIT" \
+  || fail 'Yazi right-click Rename does not activate directly with r'
+grep -Fq 'drag_out = { "d", "g" }' "$YAZI_INIT" \
+  || fail 'Yazi right-click Drag out does not preserve the d g chord'
+grep -Fq 'trash = { "d", "d" }' "$YAZI_INIT" \
+  || fail 'Yazi right-click Trash does not preserve the d d chord'
+grep -Fq 'values[#values + 1] = table.concat(keys, "\t")' "$YAZI_INIT" \
+  || fail 'Yazi right-click chooser does not serialize semantic key chords'
+grep -Fq 'on = #keys == 1 and keys[1] or keys' "$YAZI_CONTEXT_CHOOSER" \
+  || fail 'Yazi native chooser does not restore single/multi-key action chords'
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \

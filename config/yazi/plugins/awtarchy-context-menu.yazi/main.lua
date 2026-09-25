@@ -17,8 +17,14 @@ function M:entry(job)
     local cands = {}
     local i = 2
     while job.args[i] and job.args[i + 1] do
+        local encoded_keys = decode_arg(job.args[i])
+        local keys = {}
+        for key in encoded_keys:gmatch("[^\t]+") do
+            keys[#keys + 1] = key
+        end
+
         cands[#cands + 1] = {
-            on = decode_arg(job.args[i]),
+            on = #keys == 1 and keys[1] or keys,
             desc = decode_arg(job.args[i + 1]),
         }
         i = i + 2
