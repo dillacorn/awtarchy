@@ -15,8 +15,14 @@ grep -Fq 'view_diff_file()' "$RUNTIME" \
     || fail 'updater has no internal managed-file diff viewer'
 grep -Fq 'read_update_key' "$RUNTIME" \
     || fail 'internal diff viewer does not use Awtarchy raw-key input'
-grep -Fq 'Approve update? [y/N]' "$RUNTIME" \
-    || fail 'managed-file review does not expose direct y/n approval'
+grep -Fq 'Approve update? y/n  (Enter confirms selection)' "$RUNTIME" \
+    || fail 'managed-file review does not explain Enter-confirmed y/n approval'
+grep -Fq 'approval_choice="y"' "$RUNTIME" \
+    || fail 'review does not stage y before Enter confirmation'
+grep -Fq 'approval_choice="n"' "$RUNTIME" \
+    || fail 'review does not stage n before Enter confirmation'
+grep -Fq 'case "$approval_choice" in' "$RUNTIME" \
+    || fail 'review does not require Enter to confirm the staged approval choice'
 grep -Fq 'if ! review_plan "$plan_file" update; then' "$RUNTIME" \
     || fail 'managed update is not gated directly by review approval'
 grep -Fq 'review_plan "$plan_file" review-only' "$RUNTIME" \
@@ -37,4 +43,11 @@ approval_line="$(grep -nF 'if ! review_plan "$plan_file" update; then' "$RUNTIME
 [[ -n "$mode_line" && -n "$approval_line" && "$mode_line" -lt "$approval_line" ]] \
     || fail 'update mode prompt still occurs after final y/n approval'
 
-printf '%s\n' 'PASS: managed-file review uses y/n as the final Awtarchy update approval.'
+grep -Fq 'Update approved. Preparing required dependencies...' "$RUNTIME" \
+    || fail 'updater gives no immediate feedback after approval'
+grep -Fq 'Applying approved managed-file changes...' "$RUNTIME" \
+    || fail 'updater gives no feedback before managed-file application'
+grep -Fq 'Reloading Hyprland and validating the updated configuration...' "$RUNTIME" \
+    || fail 'updater gives no feedback before live validation'
+
+printf '%s\n' 'PASS: managed-file review requires y/n plus Enter and reports post-approval progress.'
