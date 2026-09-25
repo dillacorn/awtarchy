@@ -65,9 +65,13 @@ declare -a VIRT_MANAGER_PACKAGES=(
   swtpm
 )
 
+# AUR dependencies required by managed Awtarchy features are not optional.
+declare -a REQUIRED_AUR_PACKAGES=(
+  ripdrag
+)
+
 declare -a PACKAGES_AUR=(
   smtty
-  ripdrag
   awtwall
   hyprmoncfg-bin
   bibata-cursor-theme-bin
@@ -2219,7 +2223,8 @@ print_install_review() {
   printf 'System type: %s\n' "$system_type"
   printf 'Virtual machine/container detected: %s\n' "$IS_VM"
   printf 'Arch packages: %s\n' "${#ARCH_SELECTED[@]}"
-  printf 'AUR packages: %s\n' "${#AUR_SELECTED[@]}"
+  printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  printf 'Selected AUR packages: %s\n' "${#AUR_SELECTED[@]}"
   printf 'Flatpak apps: %s\n' "${#FLATPAK_SELECTED_IDS[@]}"
   printf 'GPU dependencies: %s\n' "$gpu_enabled"
   printf 'Ly tty2: %s\n' "$ly_enabled"
@@ -2230,7 +2235,8 @@ print_install_review() {
   printf '  - Check disk space and install bootstrap packages\n'
   printf '  - Clone/update ~/awtarchy if missing\n'
   if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip Arch repo packages\n'; fi
-  if (( INSTALL_AUR == 1 )); then printf '  - Install selected AUR packages\n'; else printf '  - Skip AUR packages\n'; fi
+  printf '  - Install required AUR feature dependencies\n'
+  if (( INSTALL_AUR == 1 )); then printf '  - Install selected additional AUR packages\n'; else printf '  - Skip additional AUR packages\n'; fi
   if (( INSTALL_FLATPAK == 1 )); then printf '  - Install selected Flatpak apps\n'; else printf '  - Skip Flatpak apps\n'; fi
   printf '  - Install/update Alacritty themes\n'
   if [[ "$INSTALL_GPU" == 1 && "$IS_VM" == false ]]; then printf '  - Run GPU dependency automation\n'; else printf '  - Skip GPU dependency automation\n'; fi
@@ -2242,7 +2248,8 @@ print_install_review() {
   printf '  - Repair ownership and permissions\n'
 
   if (( INSTALL_ARCH == 1 )); then print_dry_run_list "Arch repo packages (${#ARCH_SELECTED[@]})" "${ARCH_SELECTED[@]}"; fi
-  if (( INSTALL_AUR == 1 )); then print_dry_run_list "AUR packages (${#AUR_SELECTED[@]})" "${AUR_SELECTED[@]}"; fi
+  print_dry_run_list "Required AUR dependencies (${#REQUIRED_AUR_PACKAGES[@]})" "${REQUIRED_AUR_PACKAGES[@]}"
+  if (( INSTALL_AUR == 1 )); then print_dry_run_list "Selected AUR packages (${#AUR_SELECTED[@]})" "${AUR_SELECTED[@]}"; fi
   if (( INSTALL_FLATPAK == 1 )); then print_dry_run_list "Flatpak apps (${#FLATPAK_SELECTED_IDS[@]})" "${FLATPAK_SELECTED_IDS[@]}"; fi
 }
 
@@ -2297,7 +2304,7 @@ Before any changes are made, you will choose:
   - system type
   - install sections
   - Arch repo packages
-  - AUR packages
+  - additional AUR packages (required feature dependencies are always installed)
   - Flatpak apps
   - shell-file overwrite behavior
 
@@ -2330,7 +2337,7 @@ In normal install mode it will overwrite awtarchy-managed config files under:
       2)
         labels=(
           "Arch repo packages"
-          "AUR packages"
+          "Additional AUR packages"
           "Flatpak apps"
           "GPU dependencies"
           "Ly TTY login manager"
