@@ -39,3 +39,140 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  edit-v381-postrelease:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Post-release notes: Awtarchy v3.8.1 Yazi' &&
+      github.event.pull_request.head.ref == 'chore/v381-postrelease-20260925-bridge' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Update and verify v3.8.1 post-release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag='v3.8.1'
+          title='Awtarchy v3.8.1 Yazi'
+          target='addbda16a300e40fb51da541815d0cfae6b26173'
+          post_release_commit='8d9d295d2d17f68c08763ddf3c156fb500ab2964'
+          marker='_Placeholder for possible tested post-release patches to v3.8.1._'
+
+          before="$(gh release view "$tag" --json name,tagName,isDraft,isPrerelease,targetCommitish,body)"
+          printf '%s' "$before" | jq -r '.body' > previous-release.md
+
+          test "$(printf '%s' "$before" | jq -r '.name')" = "$title"
+          test "$(printf '%s' "$before" | jq -r '.tagName')" = "$tag"
+          test "$(printf '%s' "$before" | jq -r '.isDraft')" = "false"
+          test "$(printf '%s' "$before" | jq -r '.isPrerelease')" = "false"
+          test "$(printf '%s' "$before" | jq -r '.targetCommitish')" = "$target"
+
+          tag_sha_before="$(git ls-remote origin "refs/tags/$tag" | awk '{print $1}')"
+          test "$tag_sha_before" = "$target"
+
+          cp previous-release.md release-notes.md
+
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("release-notes.md")
+          body = path.read_text(encoding="utf-8")
+          marker = "_Placeholder for possible tested post-release patches to v3.8.1._"
+          entry = (
+              "- **2026-09-25 — Desktop interaction and Yazi polish:** "
+              "`Super+Shift+X` now captures an area while `Super+Shift+S` selects an application/window, "
+              "scratchpad send/restore preserves the prior workspace plus floating/tiled state, and managed updates "
+              "use explicit `y/N` + Enter approval with progress feedback. Yazi right-click actions on Linux now use "
+              "Yazi's native chooser, remain mouse-clickable, and accept the displayed action chords directly "
+              "(for example `r`, `d g`, `c z`, and `d d`). Maintainer runtime testing confirmed these workflows, "
+              "and PR #238 passed all triggered checks before merge. Delivered from post-release `main` commit "
+              "`8d9d295d2d17f68c08763ddf3c156fb500ab2964`; the v3.8.1 tag remains unchanged."
+          )
+
+          if entry not in body:
+              if marker not in body:
+                  raise SystemExit("post-release placeholder missing")
+              body = body.replace(marker, entry + "\n\n" + marker, 1)
+
+          path.write_text(body, encoding="utf-8")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$title" \
+            --notes release-notes.md \
+            --previous previous-release.md
+
+          gh release edit "$tag" --notes-file release-notes.md
+
+          after="$(gh release view "$tag" --json name,tagName,isDraft,isPrerelease,targetCommitish,body)"
+          printf '%s\n' "$after"
+          printf '%s' "$after" | jq -r '.body' > published-release-notes.md
+
+          test "$(printf '%s' "$after" | jq -r '.name')" = "$title"
+          test "$(printf '%s' "$after" | jq -r '.tagName')" = "$tag"
+          test "$(printf '%s' "$after" | jq -r '.isDraft')" = "false"
+          test "$(printf '%s' "$after" | jq -r '.isPrerelease')" = "false"
+          test "$(printf '%s' "$after" | jq -r '.targetCommitish')" = "$target"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$title" \
+            --notes published-release-notes.md \
+            --previous previous-release.md
+
+          grep -Fq "$post_release_commit" published-release-notes.md
+
+          tag_sha_after="$(git ls-remote origin "refs/tags/$tag" | awk '{print $1}')"
+          test "$tag_sha_after" = "$tag_sha_before"
+          test "$tag_sha_after" = "$target"
+
+  cleanup-v381-postrelease-bridge:
+    needs:
+      - release-notes-contract
+      - edit-v381-postrelease
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Post-release notes: Awtarchy v3.8.1 Yazi' &&
+      github.event.pull_request.head.ref == 'chore/v381-postrelease-20260925-bridge' &&
+      github.event.pull_request.base.ref == 'main' &&
+      needs.release-notes-contract.result == 'success' &&
+      needs.edit-v381-postrelease.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Wait for sibling checks, then clean bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          for attempt in {1..90}; do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head_sha&event=pull_request&per_page=100")"
+            pending="$(printf '%s' "$runs" | jq --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current and .status != "completed")] | length')"
+            if [[ "$pending" == 0 ]]; then
+              failures="$(printf '%s' "$runs" | jq --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current and .status == "completed" and (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
+              test "$failures" == 0
+              break
+            fi
+            if [[ "$attempt" == 90 ]]; then
+              echo "Timed out waiting for sibling PR workflows." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          gh pr close "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/chore/v381-postrelease-20260925-bridge"
