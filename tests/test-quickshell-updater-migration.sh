@@ -702,7 +702,7 @@ EOF
 write_old_package_state() {
   printf '%s\n' \
     waybar-git fuzzel wlogout mako wofi network-manager-applet blueman \
-    networkmanager bluez bluez-utils jq \
+    networkmanager bluez bluez-utils jq ripdrag \
     >"$1"
 }
 
