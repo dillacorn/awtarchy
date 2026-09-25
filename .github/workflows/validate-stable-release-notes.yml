@@ -61,12 +61,11 @@ jobs:
           title='Awtarchy v3.8.1 Yazi'
           target='addbda16a300e40fb51da541815d0cfae6b26173'
 
+          release_exists=0
           if gh release view "$tag" >/dev/null 2>&1; then
-            echo "Release $tag already exists." >&2
-            exit 1
-          fi
-          if git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
-            echo "Tag $tag already exists." >&2
+            release_exists=1
+          elif git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag exists without a published release." >&2
             exit 1
           fi
 
@@ -112,7 +111,9 @@ jobs:
 
           python3 .github/scripts/validate-stable-release-notes.py             --version "$tag"             --title "$title"             --notes release-notes.md             --previous previous-release.md
 
-          gh release create "$tag"             --target "$target"             --title "$title"             --notes-file release-notes.md
+          if [[ "$release_exists" == 0 ]]; then
+            gh release create "$tag" --target "$target" --title "$title" --notes-file release-notes.md
+          fi
 
           published="$(gh release view "$tag" --json name,tagName,isDraft,isPrerelease,targetCommitish,body)"
           printf '%s\n' "$published"
@@ -128,3 +129,47 @@ jobs:
 
           tag_sha="$(git ls-remote origin "refs/tags/$tag" | awk '{print $1}')"
           test "$tag_sha" = "$target"
+
+  cleanup-v381-release-bridge:
+    needs:
+      - release-notes-contract
+      - release-v381-yazi
+    if: >-
+      always() &&
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Create Awtarchy v3.8.1 Yazi release' &&
+      github.event.pull_request.head.ref == 'chore/v381-yazi-release-bridge' &&
+      github.event.pull_request.base.ref == 'main' &&
+      needs.release-notes-contract.result == 'success' &&
+      needs.release-v381-yazi.result == 'success'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Wait for sibling checks, then clean bridge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          head_sha="${{ github.event.pull_request.head.sha }}"
+
+          for attempt in {1..90}; do
+            runs="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$head_sha&event=pull_request&per_page=100")"
+            pending="$(printf '%s' "$runs" | jq --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current and .status != "completed")] | length')"
+            if [[ "$pending" == 0 ]]; then
+              failures="$(printf '%s' "$runs" | jq --argjson current "$GITHUB_RUN_ID" '[.workflow_runs[] | select(.id != $current and .status == "completed" and (.conclusion != "success" and .conclusion != "skipped" and .conclusion != "neutral"))] | length')"
+              test "$failures" == 0
+              break
+            fi
+            if [[ "$attempt" == 90 ]]; then
+              echo "Timed out waiting for sibling PR workflows." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+
+          gh pr close "${{ github.event.pull_request.number }}" --repo "$GITHUB_REPOSITORY"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/chore/v381-yazi-release-bridge"
