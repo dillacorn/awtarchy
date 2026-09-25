@@ -1379,7 +1379,11 @@ local function AwtarchyYaziWhichCandidateAt(area, event)
 end
 
 function Root:click(event, up)
-    if AwtarchyYaziContextMenu._visible and tostring(cx.layer) == "which" then
+    -- Yazi's native Which UI is keyboard-driven upstream. Make every visible
+    -- Which prompt mouse-clickable here, including Awtarchy's right-click
+    -- chooser and existing prompts such as Ctrl+F. Do not depend on separate
+    -- Awtarchy visibility state; cx.which is the source of truth.
+    if tostring(cx.layer) == "which" and cx.which.active then
         if up then return end
 
         if event.is_left then
@@ -1397,7 +1401,8 @@ function Root:click(event, up)
             end
         end
 
-        AwtarchyYaziContextMenu:hide()
+        -- Any non-candidate click dismisses the chooser.
+        ya.emit("which:dismiss", {})
         return
     end
 

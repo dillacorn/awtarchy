@@ -312,6 +312,10 @@ grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT" \
   || fail 'Yazi right-click action candidates are not passed safely to the async chooser plugin'
 grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
   || fail 'Yazi native Which mouse bridge does not preserve Root click handling'
+grep -Fq 'if tostring(cx.layer) == "which" and cx.which.active then' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge is incorrectly gated by Awtarchy-only state'
+grep -Fq 'Any non-candidate click dismisses the chooser.' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge does not provide click-outside dismissal'
 grep -Fq 'local cand = cx.which.cands[index]' "$YAZI_INIT" \
   || fail 'Yazi native Which mouse bridge cannot identify clicked candidates'
 grep -Fq 'local tx = cx.which.tx' "$YAZI_INIT" \
