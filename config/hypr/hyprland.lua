@@ -146,7 +146,6 @@ hl.config({
         border_size = 1,
         resize_on_border = true,
         allow_tearing = true,
-        hide_special_on_workspace_change = true,
         layout = "dwindle",
 
         col = {
@@ -192,6 +191,10 @@ hl.config({
         -- Fullscreen HDR color-management auto-switch:
         -- cm_fs_passthrough was removed in Hyprland 0.55.
         cm_auto_hdr = 1,
+    },
+
+    binds = {
+        hide_special_on_workspace_change = true,
     },
 
     cursor = {

@@ -12,8 +12,13 @@ fail() {
 
 bash -n "$SCRIPT"
 
-grep -Fq 'hide_special_on_workspace_change = true' "$HYPR" \
+grep -Fq '    binds = {' "$HYPR" \
+  || fail 'Hyprland config has no binds option section'
+grep -Fq '        hide_special_on_workspace_change = true' "$HYPR" \
   || fail 'normal workspace changes do not hide the visible special workspace'
+if grep -A10 -F '    general = {' "$HYPR" | grep -Fq 'hide_special_on_workspace_change'; then
+  fail 'hide_special_on_workspace_change is incorrectly placed under general'
+fi
 grep -Fq 'hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})' "$HYPR" \
   || fail 'SUPER+CTRL+X is not bound to the scratchpad helper'
 grep -Fq 'scratchpad_toggle_window .. " move-to " .. workspace' "$HYPR" \
