@@ -49,9 +49,9 @@ if [[ "$workspace_name" == "special:magic" ]]; then
   fi
 
   if [[ ! "$target_workspace" =~ ^[1-9][0-9]*$ ]]; then
-    command -v notify-send >/dev/null 2>&1 \
-      && notify-send "Scratchpad" "Could not determine the window's previous workspace." \
-      || true
+    if command -v notify-send >/dev/null 2>&1; then
+      notify-send "Scratchpad" "Could not determine the window's previous workspace." || true
+    fi
     exit 1
   fi
 
@@ -61,9 +61,9 @@ if [[ "$workspace_name" == "special:magic" ]]; then
 fi
 
 if [[ ! "$workspace_id" =~ ^[1-9][0-9]*$ ]]; then
-  command -v notify-send >/dev/null 2>&1 \
-    && notify-send "Scratchpad" "The active window is not on a normal workspace." \
-    || true
+  if command -v notify-send >/dev/null 2>&1; then
+    notify-send "Scratchpad" "The active window is not on a normal workspace." || true
+  fi
   exit 1
 fi
 

@@ -75,6 +75,7 @@ jobs:
           bash -n config/hypr/scripts/screenshot_area.sh
           bash -n config/hypr/scripts/screenshot_display.sh
           bash -n config/hypr/scripts/screenshot_fullscreen.sh
+          bash -n config/hypr/scripts/scratchpad_toggle_window.sh
           bash -n config/hypr/scripts/toggle_mouse_submap.sh
           bash -n config/hypr/scripts/toggle_resize_if_ok.sh
           bash -n tests/test-awtarchy-command.sh
