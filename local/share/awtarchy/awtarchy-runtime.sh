@@ -2847,42 +2847,62 @@ install_obs_pipewire_audio_capture_package() {
 }
 
 install_aur_repo_apps_stage() {
-  (( INSTALL_AUR == 1 )) || { warn "Skipping AUR application install."; return 0; }
+  local -a packages_to_install=()
+  local pkg
+
+  packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")
+  if (( INSTALL_AUR == 1 )); then
+    packages_to_install+=("${AUR_SELECTED[@]}")
+  else
+    warn "Skipping additional AUR package selections; required Awtarchy AUR dependencies will still be installed."
+  fi
+
+  if (( ${#packages_to_install[@]} == 0 )); then
+    warn "No AUR packages are required or selected. Skipping AUR package stage."
+    return 0
+  fi
 
   ensure_aur_install_requirements
   ensure_aur_sudo_access
   ensure_yay
   ensure_aur_scanner
 
-  if (( ${#AUR_SELECTED[@]} == 0 )); then
-    warn "No AUR packages selected. Skipping package loop."
-  else
-    log "Installing selected AUR packages through upstream aur-scanner..."
-    local pkg
-    for pkg in "${AUR_SELECTED[@]}"; do
-      if aur_selected_package_installed "$pkg"; then
-        printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
-      else
-        printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
-        if [[ "$pkg" == "ripdrag" ]]; then
-          pacman_install_one rust
-          pacman_install_one gtk4
-        fi
-        if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
-          if ! install_obs_pipewire_audio_capture_package; then
-            warn "AUR package failed: ${pkg}. Continuing with remaining selections."
-            continue
-          fi
-        else
-          if ! install_aur_with_scanner "$pkg"; then
-            warn "AUR package failed: ${pkg}. Continuing with remaining selections."
-            continue
-          fi
-        fi
-        printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
+  log "Installing required/selected AUR packages through upstream aur-scanner..."
+  for pkg in "${packages_to_install[@]}"; do
+    if aur_selected_package_installed "$pkg"; then
+      printf '%s\n' "${COLOR_YELLOW}${pkg} or an equivalent installation is already present. Skipping...${COLOR_RESET}"
+      continue
+    fi
+
+    printf '%s\n' "${COLOR_CYAN}Verifying and installing ${pkg}...${COLOR_RESET}"
+    if [[ "$pkg" == "ripdrag" ]]; then
+      pacman_install_one rust
+      pacman_install_one gtk4
+    fi
+    if [[ "$pkg" == "obs-pipewire-audio-capture" ]]; then
+      if ! install_obs_pipewire_audio_capture_package; then
+        warn "AUR package failed: ${pkg}. Continuing with remaining selections."
+        continue
       fi
-    done
-  fi
+    else
+      if ! install_aur_with_scanner "$pkg"; then
+        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+          die "Required AUR dependency failed to install: ${pkg}"
+        fi
+        warn "AUR package failed: ${pkg}. Continuing with remaining selections."
+        continue
+      fi
+    fi
+
+    if ! aur_selected_package_installed "$pkg"; then
+      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+        die "Required AUR dependency is still unavailable after installation: ${pkg}"
+      fi
+      warn "AUR package was not detected after installation: ${pkg}"
+      continue
+    fi
+    printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
+  done
 
   if pacman -Q moonlight-qt-bin >/dev/null 2>&1; then
     log "Moonlight AUR package detected. Configuring UFW rules for Moonlight..."
@@ -2895,7 +2915,6 @@ install_aur_repo_apps_stage() {
     fi
   fi
 }
-
 flatpak_effective_scope_install() {
   local root_fs_type
   root_fs_type="$(df -T / | awk 'NR==2 {print $2}')"
