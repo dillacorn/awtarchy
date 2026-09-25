@@ -26,7 +26,7 @@ cd awtarchy
 sudo ./awtarchy-install.sh
 ```
 
-The installer collects the relevant hardware/package choices before applying the overlay.
+The installer collects the relevant hardware/package choices before applying the overlay. Dependencies required by managed Awtarchy features are installed automatically and are kept separate from optional package choices.
 
 After installation, use:
 
