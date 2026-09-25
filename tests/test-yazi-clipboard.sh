@@ -462,8 +462,9 @@ grep -Fq 'ya.emit("tab_create", { tostring(self._file.url), raw = true })' "$YAZ
   || fail 'Yazi middle-click does not open directories in a new tab'
 grep -Fq 'self._selection_count > 1' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose multi-selection count'
-grep -Fq 'function Root:move(event)' "$YAZI_INIT" \
-  || fail 'Yazi root does not route mouse-move events to the context menu'
+if grep -Fq 'function Root:move(event)' "$YAZI_INIT"; then
+  fail 'Yazi native Which context chooser should not override Root mouse-move routing'
+fi
 grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not highlight the hovered action'
 grep -Fq 'AwtarchyYaziContextMenu:show_drop' "$YAZI_INIT" \
