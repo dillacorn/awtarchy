@@ -39,3 +39,92 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  release-v381-yazi:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Create Awtarchy v3.8.1 Yazi release' &&
+      github.event.pull_request.head.ref == 'chore/v381-yazi-release-bridge' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Create and verify Awtarchy v3.8.1 Yazi
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          tag='v3.8.1'
+          title='Awtarchy v3.8.1 Yazi'
+          target='addbda16a300e40fb51da541815d0cfae6b26173'
+
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "Release $tag already exists." >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          fi
+
+          gh release view v3.8.0 --json body --jq '.body' > previous-release.md
+
+          cat > release-notes.md <<'EOF'
+          # Awtarchy v3.8.1 Yazi
+
+          Awtarchy v3.8.1 is a Yazi-focused bug-fix and polish release that folds the tested post-v3.8.0 work into the stable release stream.
+
+          ## Install and update
+
+          Fresh installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+
+          Existing Awtarchy installations and stable updates: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)
+
+          Quick update:
+
+          ```bash
+          awtarchy update
+          ```
+
+          ## Yazi
+
+          - Up/Down now wrap around the file list using Yazi's native previous/next movement semantics: Up from the first item goes to the bottom and Down from the last item returns to the top.
+          - `F2` now aliases native Yazi rename while the existing `r` binding remains unchanged.
+          - Enter remains context-aware: directories enter inside Yazi and files open through the managed recent-file-aware path.
+          - Esc keeps the existing native one-layer-at-a-time cancellation behavior after Awtarchy-specific preview/delete states.
+          - Includes the tested post-v3.8.0 outbound drag work: `d g` and right-click **Drag out...** use the compact `ripdrag` surface while internal drag remains Yazi Copy/Move.
+          - Stable `ripdrag` remains a required AUR feature dependency and managed Yazi updates no longer require running Yazi sessions to be terminated; users can restart existing sessions after the update when convenient.
+
+          ## Validation
+
+          - Exact release target: `addbda16a300e40fb51da541815d0cfae6b26173`.
+          - PR #236 passed every triggered check, including the full **Validate Awtarchy** workflow.
+          - The cross-platform Yazi changes preserve the existing Linux-native `wl-copy` clipboard path; no Windows-specific clipboard/runtime code was ported.
+          - Maintainer runtime testing previously confirmed Awtarchy's outbound `ripdrag` workflow; the new F2/wraparound parity changes are CI-validated on the release target.
+
+          ## Post-release updates
+
+          _Placeholder for possible tested post-release patches to v3.8.1._
+          EOF
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$tag"             --title "$title"             --notes release-notes.md             --previous previous-release.md
+
+          gh release create "$tag"             --target "$target"             --title "$title"             --notes-file release-notes.md
+
+          published="$(gh release view "$tag" --json name,tagName,isDraft,isPrerelease,targetCommitish,body)"
+          printf '%s\n' "$published"
+
+          test "$(printf '%s' "$published" | jq -r '.name')" = "$title"
+          test "$(printf '%s' "$published" | jq -r '.tagName')" = "$tag"
+          test "$(printf '%s' "$published" | jq -r '.isDraft')" = "false"
+          test "$(printf '%s' "$published" | jq -r '.isPrerelease')" = "false"
+          test "$(printf '%s' "$published" | jq -r '.targetCommitish')" = "$target"
+          printf '%s' "$published" | jq -r '.body' > published-release-notes.md
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$tag"             --title "$title"             --notes published-release-notes.md             --previous previous-release.md
+
+          tag_sha="$(git ls-remote origin "refs/tags/$tag" | awk '{print $1}')"
+          test "$tag_sha" = "$target"
