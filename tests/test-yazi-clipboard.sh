@@ -306,8 +306,10 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context action state is missing'
-grep -Fq 'local index = ya.which { cands = cands, silent = false }' "$YAZI_INIT" \
-  || fail 'Yazi right-click actions do not use the native Which UI'
+grep -Fq '"awtarchy-context-menu"' "$YAZI_INIT" \
+  || fail 'Yazi right-click actions do not leave the blocking mouse callback through the async chooser plugin'
+grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT" \
+  || fail 'Yazi right-click action candidates are not passed safely to the async chooser plugin'
 grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
   || fail 'Yazi native Which mouse bridge does not preserve Root click handling'
 grep -Fq 'local cand = cx.which.cands[index]' "$YAZI_INIT" \
@@ -440,8 +442,6 @@ grep -Fq 'ya.emit("tab_create", { tostring(self._file.url), raw = true })' "$YAZ
   || fail 'Yazi middle-click does not open directories in a new tab'
 grep -Fq 'self._selection_count > 1' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose multi-selection count'
-grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
-  || fail 'Yazi context menu hover handling is missing'
 grep -Fq 'function Root:move(event)' "$YAZI_INIT" \
   || fail 'Yazi root does not route mouse-move events to the context menu'
 grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
@@ -836,5 +836,13 @@ grep -Fq -- '--- @sync entry' "$YAZI_CONTEXT_RUNNER" \
   || fail 'Yazi native context action runner is not synchronous'
 grep -Fq 'AwtarchyYaziContextMenu:choose(tonumber(job.args.index))' "$YAZI_CONTEXT_RUNNER" \
   || fail 'Yazi native context action runner does not dispatch selected choices'
+
+YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
+[[ -f "$YAZI_CONTEXT_CHOOSER" ]] \
+  || fail 'Yazi async native context chooser plugin is missing'
+grep -Fq 'local index = ya.which { cands = cands, silent = false }' "$YAZI_CONTEXT_CHOOSER" \
+  || fail 'Yazi async context chooser does not use native Which'
+grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
+  || fail 'Yazi async context chooser does not return the selected index to the sync runner'
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'

@@ -1192,7 +1192,7 @@ end
 
 local function AwtarchyYaziOpenNativeContext(menu)
     local actions = menu:actions()
-    local cands, choices = {}, {}
+    local values, choices = {}, {}
 
     for i, action in ipairs(actions) do
         local key = AwtarchyYaziContextChoiceKeys[i]
@@ -1203,11 +1203,12 @@ local function AwtarchyYaziOpenNativeContext(menu)
             desc = desc .. "  [" .. action.shortcut .. "]"
         end
 
-        cands[#cands + 1] = { on = key, desc = desc }
+        values[#values + 1] = key
+        values[#values + 1] = desc
         choices[#choices + 1] = action.action
     end
 
-    if #cands == 0 then
+    if #choices == 0 then
         menu:clear()
         return
     end
@@ -1215,13 +1216,14 @@ local function AwtarchyYaziOpenNativeContext(menu)
     menu._choice_actions = choices
     menu._visible = true
 
-    -- Let Yazi render its own native Which prompt. This avoids changing
-    -- Root/Current geometry or drawing custom terminal overlays.
-    ya.async(function()
-        local index = ya.which { cands = cands, silent = false }
-        local arg = index and ("--index=" .. tostring(index)) or "--cancel"
-        ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })
-    end)
+    -- Mouse callbacks run inside Yazi's blocking Root runtime. Do not call
+    -- ya.which() from that callback, even through an init.lua coroutine.
+    -- Hand the candidate list to a normal async plugin instead; its runtime is
+    -- non-blocking and may use Yazi's native Which UI safely.
+    ya.emit("plugin", {
+        "awtarchy-context-menu",
+        AwtarchyYaziPluginArgs("show", values),
+    })
 end
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count, target)
