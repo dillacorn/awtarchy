@@ -314,6 +314,8 @@ grep -Fq 'ui.Constraint.Length(drawer_height)' "$YAZI_INIT" \
   || fail 'Yazi right-click drawer does not reserve real rows below the panes'
 grep -Fq 'AwtarchyYaziContextMenu:new(self._chunks[4])' "$YAZI_INIT" \
   || fail 'Yazi right-click drawer is not a normal Root child'
+grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT" \
+  || fail 'Yazi right-click drawer visibility does not trigger Root reflow'
 grep -Fq 'return math.ceil(#self:actions() / columns) + 2' "$YAZI_INIT" \
   || fail 'Yazi right-click drawer height does not match its compact grid'
 grep -Fq 'function AwtarchyYaziContextMenu:action_at(event)' "$YAZI_INIT" \

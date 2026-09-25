@@ -1090,7 +1090,10 @@ function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
     self._selection_count = selection_count or 0
     self._hovered_action = nil
     self._visible = true
-    ui.render()
+
+    -- Visibility changes alter Root's row layout. Reflow the component tree
+    -- before rendering so the manager panes and action drawer share real rows.
+    ya.emit("app:resize", {})
 end
 
 function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
@@ -1108,7 +1111,7 @@ function AwtarchyYaziContextMenu:hide()
     self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
-    ui.render()
+    ya.emit("app:resize", {})
 end
 
 function AwtarchyYaziContextMenu:title()
@@ -1331,7 +1334,7 @@ function AwtarchyYaziContextMenu:run(action)
     self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
-    ui.render()
+    ya.emit("app:resize", {})
 
     if action == "smart_open" then
         AwtarchyYaziSmartEnter()
