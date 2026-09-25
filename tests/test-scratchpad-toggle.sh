@@ -37,6 +37,13 @@ grep -Fq 'width = window.size.x' "$HYPR" \
   || fail 'scratchpad send does not record the prior floating size'
 grep -Fq 'scratchpad_restore_geometry(window, origin)' "$HYPR" \
   || fail 'scratchpad restore does not attempt to restore saved geometry'
+grep -Fq 'action = "enable", window = window' "$HYPR" \
+  || fail 'floating scratchpad restore does not explicitly enable floating state'
+grep -Fq 'action = "disable", window = window' "$HYPR" \
+  || fail 'tiled scratchpad restore does not explicitly disable floating state'
+if grep -Eq 'action = "(set|unset)", window = window' "$HYPR"; then
+  fail 'scratchpad restore uses invalid set/unset toggle-action names'
+fi
 grep -Fq 'scratchpad_hide_if_empty()' "$HYPR" \
   || fail 'numbered moves do not close an empty visible scratchpad'
 grep -Fq 'hl.bind("SUPER + CTRL + X", scratchpad_toggle_active_window, {})' "$HYPR" \

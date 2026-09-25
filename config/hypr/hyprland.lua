@@ -655,7 +655,10 @@ local function scratchpad_restore_geometry(window, origin)
     end
 
     if origin.floating then
-        hl.dispatch(hl.dsp.window.float({ action = "set", window = window }))
+        -- Hyprland Lua uses enable/disable for togglable dispatchers.
+        -- "set"/"unset" are not valid here and fall back to toggle, which
+        -- inverted the saved floating/tiled state on every restore.
+        hl.dispatch(hl.dsp.window.float({ action = "enable", window = window }))
         hl.dispatch(hl.dsp.window.resize({
             x = origin.width,
             y = origin.height,
@@ -669,7 +672,10 @@ local function scratchpad_restore_geometry(window, origin)
             window = window,
         }))
     else
-        hl.dispatch(hl.dsp.window.float({ action = "unset", window = window }))
+        -- Returning a tiled window to its old workspace lets the active layout
+        -- recalculate the correct tile size/position instead of forcing the
+        -- scratchpad geometry back onto it.
+        hl.dispatch(hl.dsp.window.float({ action = "disable", window = window }))
     end
 end
 
