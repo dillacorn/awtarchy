@@ -367,6 +367,7 @@ Use existing tests as regression guards and add focused coverage when a bug can 
 - Distinguish official Arch packages, AUR packages, and Flatpak application IDs.
 - Do not silently move a package between these sources.
 - Preserve laptop/desktop, GPU, filesystem, optional-package, and user-choice behavior unless the requested task changes it.
+- Feature dependencies declared in `REQUIRED_AUR_PACKAGES` are not optional picker choices. Fresh installs, package reconciliation, stable updates, and Git-testing updates must ensure those dependencies before applying managed configuration that requires them; keep optional/default AUR choices separate so users can still deselect non-required applications.
 - Installation assumptions must remain compatible with a fresh vanilla Arch base.
 
 ## Git workflow
