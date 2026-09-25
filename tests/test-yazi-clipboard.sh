@@ -597,7 +597,11 @@ grep -Fq 'tab.current.hovered' "$YAZI_DRAG" \
   || fail 'Yazi outbound drag plugin does not fall back to the hovered item'
 grep -Fq 'declare -a REQUIRED_AUR_PACKAGES=(' "$RUNTIME" \
   || fail 'runtime has no required AUR feature dependency catalog'
-grep -Eq '^[[:space:]]+ripdrag[[:space:]]*grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
+grep -Eq '^[[:space:]]+ripdrag[[:space:]]*$' "$RUNTIME" \
+  || fail 'stable ripdrag is not a required AUR dependency for Yazi outbound drag'
+grep -Fq 'packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")' "$RUNTIME" \
+  || fail 'fresh install does not force required AUR feature dependencies'
+grep -Fq "if [[ \"\$pkg\" == \"ripdrag\" ]]; then" "$RUNTIME" \
   || fail 'fresh install does not special-case ripdrag prerequisites'
 grep -Fq 'pacman_install_one rust' "$RUNTIME" \
   || fail 'fresh install does not ensure Rust/Cargo before ripdrag'
