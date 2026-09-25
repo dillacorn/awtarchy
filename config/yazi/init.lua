@@ -1376,7 +1376,7 @@ end
 
 local function AwtarchyYaziOpenNativeContext(menu)
     local actions = menu:actions()
-    local values, choices = {}, {}
+    local values, choices, render_actions = {}, {}, {}
 
     for _, action in ipairs(actions) do
         local keys = AwtarchyYaziContextChoiceKeys[action.action]
@@ -1391,6 +1391,7 @@ local function AwtarchyYaziOpenNativeContext(menu)
             values[#values + 1] = table.concat(keys, "\t")
             values[#values + 1] = desc
             choices[#choices + 1] = action.action
+            render_actions[#render_actions + 1] = action
         end
     end
 
@@ -1400,7 +1401,7 @@ local function AwtarchyYaziOpenNativeContext(menu)
     end
 
     menu._choice_actions = choices
-    menu._render_actions = actions
+    menu._render_actions = render_actions
     menu._visible = true
     menu._hovered_row = nil
     ui.render()
