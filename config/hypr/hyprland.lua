@@ -576,7 +576,6 @@ local qr_scan = "~/.config/hypr/scripts/qr_scan.sh"
 
 -- Utilities
 local workspace_mix = "~/.config/hypr/scripts/workspace_mix.sh"
-local scratchpad_toggle_window = "~/.config/hypr/scripts/scratchpad_toggle_window.sh"
 local zoom = "~/.config/hypr/scripts/zoom.sh"
 local hyprpicker = "hyprpicker -a -f hex"
 local hypr_ddc_brightness = "~/.config/hypr/scripts/hypr-ddc-brightness.sh"
@@ -618,6 +617,131 @@ local workspace_keys = {
     { "9", 9 },
     { "0", 10 },
 }
+
+-- Scratchpad state lives in Hyprland's Lua runtime so scratchpad keybinds do
+-- not depend on an external process. The state is intentionally per-window and
+-- lasts until the config is reloaded.
+local scratchpad_origins = {}
+
+local function scratchpad_window_key(window)
+    if window.stable_id ~= nil then
+        return tostring(window.stable_id)
+    end
+    return tostring(window.address)
+end
+
+local function scratchpad_is_magic(workspace)
+    if workspace == nil or not workspace.special then
+        return false
+    end
+    return workspace.name == "magic" or workspace.name == "special:magic"
+end
+
+local function scratchpad_hide_if_empty()
+    local special = hl.get_active_special_workspace()
+    if not scratchpad_is_magic(special) then
+        return
+    end
+
+    local windows = hl.get_workspace_windows(special)
+    if #windows == 0 then
+        hl.dispatch(hl.dsp.workspace.toggle_special("magic"))
+    end
+end
+
+local function scratchpad_restore_geometry(window, origin)
+    if origin == nil then
+        return
+    end
+
+    if origin.floating then
+        hl.dispatch(hl.dsp.window.float({ action = "set", window = window }))
+        hl.dispatch(hl.dsp.window.resize({
+            x = origin.width,
+            y = origin.height,
+            relative = false,
+            window = window,
+        }))
+        hl.dispatch(hl.dsp.window.move({
+            x = origin.x,
+            y = origin.y,
+            relative = false,
+            window = window,
+        }))
+    else
+        hl.dispatch(hl.dsp.window.float({ action = "unset", window = window }))
+    end
+end
+
+local function scratchpad_toggle_active_window()
+    local window = hl.get_active_window()
+    if window == nil then
+        return
+    end
+
+    local key = scratchpad_window_key(window)
+
+    if scratchpad_is_magic(window.workspace) then
+        local origin = scratchpad_origins[key]
+        local target_workspace = origin and origin.workspace or nil
+
+        if target_workspace == nil then
+            local active = hl.get_active_workspace()
+            target_workspace = active and active.id or nil
+        end
+
+        if target_workspace == nil then
+            return
+        end
+
+        hl.dispatch(hl.dsp.window.move({
+            window = window,
+            workspace = target_workspace,
+            follow = true,
+        }))
+        scratchpad_restore_geometry(window, origin)
+        scratchpad_origins[key] = nil
+        return
+    end
+
+    scratchpad_origins[key] = {
+        workspace = window.workspace.id,
+        floating = window.floating,
+        x = window.at.x,
+        y = window.at.y,
+        width = window.size.x,
+        height = window.size.y,
+    }
+
+    hl.dispatch(hl.dsp.window.move({
+        window = window,
+        workspace = "special:magic",
+        follow = true,
+    }))
+end
+
+local function scratchpad_move_active_to_workspace(workspace)
+    local window = hl.get_active_window()
+    if window == nil then
+        return
+    end
+
+    local from_scratchpad = scratchpad_is_magic(window.workspace)
+    local key = scratchpad_window_key(window)
+
+    hl.dispatch(hl.dsp.window.move({
+        window = window,
+        workspace = workspace,
+        follow = false,
+    }))
+
+    if from_scratchpad then
+        scratchpad_origins[key] = nil
+        hl.timer(function()
+            scratchpad_hide_if_empty()
+        end, { timeout = 25, type = "oneshot" })
+    end
+end
 
 local movement_keys = {
     { "left", "l" },
@@ -854,8 +978,12 @@ for _, bind in ipairs(workspace_keys) do
     local key = bind[1]
     local workspace = bind[2]
 
-    hl.bind("ALT + SHIFT + " .. key, hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. workspace), {})
-    hl.bind("SUPER + SHIFT + " .. key, hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. workspace), {})
+    hl.bind("ALT + SHIFT + " .. key, function()
+        scratchpad_move_active_to_workspace(workspace)
+    end, {})
+    hl.bind("SUPER + SHIFT + " .. key, function()
+        scratchpad_move_active_to_workspace(workspace)
+    end, {})
 end
 
 -- Quick resize (ALT+Y/O/I/U / hold)
@@ -914,7 +1042,7 @@ end
 
 -- Scratchpad (SUPER+x toggles visibility; SUPER+CTRL+x sends/restores the active window)
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})
+hl.bind("SUPER + CTRL + X", scratchpad_toggle_active_window, {})
 
 -- Misc (SUPER+F12)
 hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})
@@ -1100,7 +1228,10 @@ hl.define_submap("noalt", function()
 
     -- Move window to workspace in "noalt" (SUPER+SHIFT numbers)
     for _, bind in ipairs(workspace_keys) do
-        hl.bind("SUPER + SHIFT + " .. bind[1], hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. bind[2]), {})
+        local workspace = bind[2]
+        hl.bind("SUPER + SHIFT + " .. bind[1], function()
+            scratchpad_move_active_to_workspace(workspace)
+        end, {})
     end
 
     -- Resize in "noalt" (SUPER+CTRL arrows + hjkl / hold)
@@ -1141,7 +1272,7 @@ hl.define_submap("noalt", function()
 
     -- Scratchpad in "noalt" (SUPER+x toggles visibility; SUPER+CTRL+x sends/restores the active window)
     hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-    hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})
+    hl.bind("SUPER + CTRL + X", scratchpad_toggle_active_window, {})
 
     -- Misc in "noalt" (SUPER+F12)
     hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})
@@ -1215,7 +1346,10 @@ hl.define_submap("vm", function()
 
     -- Move window to workspace (SUPER+ALT+SHIFT numbers)
     for _, bind in ipairs(workspace_keys) do
-        hl.bind("SUPER + ALT + SHIFT + " .. bind[1], hl.dsp.exec_cmd(scratchpad_toggle_window .. " move-to " .. bind[2]), {})
+        local workspace = bind[2]
+        hl.bind("SUPER + ALT + SHIFT + " .. bind[1], function()
+            scratchpad_move_active_to_workspace(workspace)
+        end, {})
     end
 
     -- Submap binds in "vm"            (Toggle off/on)

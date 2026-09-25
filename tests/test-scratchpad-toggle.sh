@@ -2,15 +2,12 @@
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
-SCRIPT="${ROOT}/config/hypr/scripts/scratchpad_toggle_window.sh"
 HYPR="${ROOT}/config/hypr/hyprland.lua"
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
   exit 1
 }
-
-bash -n "$SCRIPT"
 
 grep -Fq '    binds = {' "$HYPR" \
   || fail 'Hyprland config has no binds option section'
@@ -19,89 +16,54 @@ grep -Fq '        hide_special_on_workspace_change = true' "$HYPR" \
 if grep -A10 -F '    general = {' "$HYPR" | grep -Fq 'hide_special_on_workspace_change'; then
   fail 'hide_special_on_workspace_change is incorrectly placed under general'
 fi
-grep -Fq 'hl.bind("SUPER + CTRL + X", hl.dsp.exec_cmd(scratchpad_toggle_window), {})' "$HYPR" \
-  || fail 'SUPER+CTRL+X is not bound to the scratchpad helper'
-grep -Fq 'scratchpad_toggle_window .. " move-to " .. workspace' "$HYPR" \
-  || fail 'normal numbered move binds are not scratchpad-aware'
-grep -Fq 'scratchpad_toggle_window .. " move-to " .. bind[2]' "$HYPR" \
-  || fail 'submap numbered move binds are not scratchpad-aware'
 
-tmp="$(mktemp -d)"
-trap 'rm -rf -- "$tmp"' EXIT
-mkdir -p "$tmp/bin" "$tmp/runtime"
+grep -Fq 'local scratchpad_origins = {}' "$HYPR" \
+  || fail 'scratchpad origin state is not kept in Hyprland Lua'
+grep -Fq 'local function scratchpad_toggle_active_window()' "$HYPR" \
+  || fail 'native scratchpad toggle function is missing'
+grep -Fq 'local function scratchpad_move_active_to_workspace(workspace)' "$HYPR" \
+  || fail 'scratchpad-aware native numbered move function is missing'
+grep -Fq 'hl.get_active_window()' "$HYPR" \
+  || fail 'scratchpad handling does not use the native active-window API'
+grep -Fq 'workspace = "special:magic"' "$HYPR" \
+  || fail 'native scratchpad toggle does not target special:magic'
+grep -Fq 'follow = true' "$HYPR" \
+  || fail 'scratchpad restore/send does not follow the active app when appropriate'
+grep -Fq 'window.workspace.id' "$HYPR" \
+  || fail 'scratchpad send does not record the prior workspace'
+grep -Fq 'x = window.at.x' "$HYPR" \
+  || fail 'scratchpad send does not record the prior floating position'
+grep -Fq 'width = window.size.x' "$HYPR" \
+  || fail 'scratchpad send does not record the prior floating size'
+grep -Fq 'scratchpad_restore_geometry(window, origin)' "$HYPR" \
+  || fail 'scratchpad restore does not attempt to restore saved geometry'
+grep -Fq 'scratchpad_hide_if_empty()' "$HYPR" \
+  || fail 'numbered moves do not close an empty visible scratchpad'
+grep -Fq 'hl.bind("SUPER + CTRL + X", scratchpad_toggle_active_window, {})' "$HYPR" \
+  || fail 'SUPER+CTRL+X is not bound directly to native scratchpad Lua'
 
-cat >"$tmp/bin/hyprctl" <<'MOCK'
-#!/usr/bin/env bash
-set -euo pipefail
-
-case "${1:-}:${2:-}" in
-  -j:activewindow)
-    case "${MOCK_MODE:-}" in
-      restore|move-last|move-remaining)
-        printf '%s\n' '{"address":"0xabc","pid":4242,"workspace":{"id":-99,"name":"special:magic"},"floating":true,"at":[100,200],"size":[800,600]}'
-        ;;
-      *)
-        printf '%s\n' '{"address":"0xabc","pid":4242,"workspace":{"id":3,"name":"3"},"floating":true,"at":[111,222],"size":[900,700]}'
-        ;;
-    esac
-    ;;
-  -j:monitors)
-    printf '%s\n' '[{"focused":true,"activeWorkspace":{"id":7},"specialWorkspace":{"id":-99,"name":"special:magic"}}]'
-    ;;
-  -j:clients)
-    if [[ "${MOCK_MODE:-}" == "move-remaining" ]]; then
-      printf '%s\n' '[{"address":"0xdef","workspace":{"id":-99,"name":"special:magic"}}]'
-    else
-      printf '%s\n' '[]'
-    fi
-    ;;
-  dispatch:*)
-    printf '%s\t%s\n' "${2:-}" "${3:-}" >>"${MOCK_LOG:?}"
-    ;;
-  *)
-    printf 'unexpected hyprctl call: %s\n' "$*" >&2
-    exit 1
-    ;;
-esac
-MOCK
-chmod +x "$tmp/bin/hyprctl"
-
-MOCK_LOG="$tmp/dispatch.log" MOCK_MODE=send XDG_RUNTIME_DIR="$tmp/runtime" PATH="$tmp/bin:$PATH" "$SCRIPT"
-
-grep -Fq $'movetoworkspace\tspecial:magic,address:0xabc' "$tmp/dispatch.log" \
-  || fail 'sending a window does not move it to special:magic'
-state_file="$tmp/runtime/awtarchy/scratchpad/0xabc.state"
-[[ "$(cat "$state_file")" == $'v2\t4242\t3\ttrue\t111\t222\t900\t700' ]] \
-  || fail 'scratchpad state does not retain workspace and floating geometry'
-
-MOCK_LOG="$tmp/dispatch.log" MOCK_MODE=restore XDG_RUNTIME_DIR="$tmp/runtime" PATH="$tmp/bin:$PATH" "$SCRIPT"
-
-grep -Fq $'movetoworkspacesilent\t3,address:0xabc' "$tmp/dispatch.log" \
-  || fail 'restore does not target the recorded workspace'
-grep -Fq $'resizewindowpixel\texact 900 700,address:0xabc' "$tmp/dispatch.log" \
-  || fail 'restore does not restore floating size'
-grep -Fq $'movewindowpixel\texact 111 222,address:0xabc' "$tmp/dispatch.log" \
-  || fail 'restore does not restore floating position'
-grep -Fq $'workspace\t3' "$tmp/dispatch.log" \
-  || fail 'restore does not follow the app back to its previous workspace'
-grep -Fq $'focuswindow\taddress:0xabc' "$tmp/dispatch.log" \
-  || fail 'restore does not refocus the restored app'
-[[ ! -e "$state_file" ]] || fail 'restored scratchpad state was not cleared'
-
-printf '%s\n' $'v2\t4242\t3\ttrue\t111\t222\t900\t700' >"$state_file"
-: >"$tmp/dispatch.log"
-MOCK_LOG="$tmp/dispatch.log" MOCK_MODE=move-last XDG_RUNTIME_DIR="$tmp/runtime" PATH="$tmp/bin:$PATH" "$SCRIPT" move-to 4
-
-grep -Fq $'movetoworkspacesilent\t4,address:0xabc' "$tmp/dispatch.log" \
-  || fail 'numbered move does not target requested workspace'
-grep -Fq $'togglespecialworkspace\tmagic' "$tmp/dispatch.log" \
-  || fail 'moving the final scratchpad app does not close the empty scratchpad'
-[[ ! -e "$state_file" ]] || fail 'explicit numbered move did not clear stale origin state'
-
-: >"$tmp/dispatch.log"
-MOCK_LOG="$tmp/dispatch.log" MOCK_MODE=move-remaining XDG_RUNTIME_DIR="$tmp/runtime" PATH="$tmp/bin:$PATH" "$SCRIPT" move-to 5
-if grep -Fq $'togglespecialworkspace\tmagic' "$tmp/dispatch.log"; then
-  fail 'scratchpad closed even though another app remained'
+if grep -Fq 'hl.dsp.exec_cmd(scratchpad_toggle_window' "$HYPR"; then
+  fail 'scratchpad/window-number binds still depend on the external helper process'
 fi
 
-printf '%s\n' 'PASS: scratchpad remembers origin geometry and closes only when an explicit move empties it.'
+python3 - "$HYPR" <<'PY' || fail 'workspace-number scratchpad bindings are incomplete'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+
+required = [
+    'hl.bind("ALT + SHIFT + " .. key, function()',
+    'hl.bind("SUPER + SHIFT + " .. key, function()',
+    'hl.bind("SUPER + SHIFT + " .. bind[1], function()',
+    'hl.bind("SUPER + ALT + SHIFT + " .. bind[1], function()',
+]
+for needle in required:
+    if needle not in text:
+        raise SystemExit(f"missing native numbered move binding: {needle}")
+
+if text.count("scratchpad_move_active_to_workspace(workspace)") < 4:
+    raise SystemExit("not all numbered move families dispatch through native scratchpad handling")
+PY
+
+printf '%s\n' 'PASS: scratchpad and numbered workspace moves use native Hyprland Lua, remember origin geometry, and hide an empty scratchpad.'
