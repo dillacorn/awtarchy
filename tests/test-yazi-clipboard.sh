@@ -310,20 +310,34 @@ grep -Fq '"awtarchy-context-menu"' "$YAZI_INIT" \
   || fail 'Yazi right-click actions do not leave the blocking mouse callback through the async chooser plugin'
 grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT" \
   || fail 'Yazi right-click action candidates are not passed safely to the async chooser plugin'
-grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge does not preserve Root click handling'
-grep -Fq 'if tostring(cx.layer) == "which" and cx.which.active then' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge is incorrectly gated by Awtarchy-only state'
-grep -Fq 'Any non-candidate click dismisses the chooser.' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge does not provide click-outside dismissal'
+grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu, 20)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup is not registered as a modal overlay'
+grep -Fq 'function AwtarchyYaziContextMenu:new(area)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup does not calculate overlay geometry'
+grep -Fq 'local x = self._x + 2' "$YAZI_INIT" \
+  || fail 'Yazi context popup is not positioned adjacent to the right-click cursor'
+grep -Fq 'x = self._x - width - 1' "$YAZI_INIT" \
+  || fail 'Yazi context popup does not flip beside the cursor near the right edge'
+grep -Fq 'function AwtarchyYaziContextMenu:redraw()' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup has no custom overlay renderer'
+grep -Fq ':type(ui.Border.PLAIN)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup does not preserve square borders'
+grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup cannot highlight mouse-hovered actions'
+grep -Fq 'function AwtarchyYaziContextMenu:click(event, up)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup cannot submit mouse-clicked actions'
 grep -Fq 'local cand = cx.which.cands[index]' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge cannot identify clicked candidates'
+  || fail 'Yazi cursor context popup does not map mouse rows to silent Which candidates'
 grep -Fq 'local tx = cx.which.tx' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge cannot complete a clicked choice'
+  || fail 'Yazi cursor context popup cannot submit through the silent Which channel'
 grep -Fq 'tx:send(cand)' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge does not submit clicked candidates'
+  || fail 'Yazi cursor context popup does not submit clicked candidates'
 grep -Fq 'ya.emit("which:dismiss", {})' "$YAZI_INIT" \
-  || fail 'Yazi native Which mouse bridge cannot dismiss the prompt'
+  || fail 'Yazi cursor context popup cannot dismiss the silent chooser'
+grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
+  || fail 'Yazi context popup does not preserve default Root click handling outside the popup'
+grep -Fq 'if AwtarchyYaziContextMenu._visible then' "$YAZI_INIT" \
+  || fail 'Yazi Root click routing does not prioritize the visible context popup'
 YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
 grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
   || fail 'Yazi native Which result is not returned to the sync action runner'
@@ -351,9 +365,8 @@ fi
 if grep -Fq 'function Root:layout()' "$YAZI_INIT"; then
   fail 'Yazi right-click actions still override Root layout'
 fi
-if grep -Fq 'function AwtarchyYaziContextMenu:redraw()' "$YAZI_INIT"; then
-  fail 'Yazi right-click actions still use a custom Lua renderer'
-fi
+grep -Fq 'ui.Clear(self._area)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup does not clear only its overlay area before drawing'
 grep -Fq 'function Header:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi header path mouse clipboard behavior is missing'
 grep -Fq 'ya.emit("copy", { "dirpath" })' "$YAZI_INIT" \
@@ -462,9 +475,10 @@ grep -Fq 'ya.emit("tab_create", { tostring(self._file.url), raw = true })' "$YAZ
   || fail 'Yazi middle-click does not open directories in a new tab'
 grep -Fq 'self._selection_count > 1' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose multi-selection count'
-if grep -Fq 'function Root:move(event)' "$YAZI_INIT"; then
-  fail 'Yazi native Which context chooser should not override Root mouse-move routing'
-fi
+grep -Fq 'function Root:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup does not receive mouse-move events'
+grep -Fq 'return AwtarchyYaziDefaultRootMove(self, event)' "$YAZI_INIT" \
+  || fail 'Yazi cursor context popup does not preserve default Root mouse-move behavior when hidden'
 grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not highlight the hovered action'
 grep -Fq 'AwtarchyYaziContextMenu:show_drop' "$YAZI_INIT" \
@@ -861,8 +875,8 @@ grep -Fq 'AwtarchyYaziContextMenu:choose(tonumber(job.args.index))' "$YAZI_CONTE
 YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
 [[ -f "$YAZI_CONTEXT_CHOOSER" ]] \
   || fail 'Yazi async native context chooser plugin is missing'
-grep -Fq 'local index = ya.which { cands = cands, silent = false }' "$YAZI_CONTEXT_CHOOSER" \
-  || fail 'Yazi async context chooser does not use native Which'
+grep -Fq 'local index = ya.which { cands = cands, silent = true }' "$YAZI_CONTEXT_CHOOSER" \
+  || fail 'Yazi async context chooser does not use silent native Which for keyboard chords'
 grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
   || fail 'Yazi async context chooser does not return the selected index to the sync runner'
 
