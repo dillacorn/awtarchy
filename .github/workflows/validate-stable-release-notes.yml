@@ -39,3 +39,82 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  post-release-v381-yazi-context-popup:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP: append v3.8.1 Yazi context popup post-release note' &&
+      github.head_ref == 'release/v3.8.1-yazi-context-popup-note'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: \${{ github.token }}
+      POST_RELEASE_ENTRY: >-
+        - **2026-09-25 — Cursor-adjacent Yazi context menu:** Linux Yazi right-click item, folder, background, and drop actions now open in a compact popup beside the mouse cursor with hover highlighting and direct row clicks, while displayed keyboard chords continue through Yazi's silent native Which handling. Maintainer runtime testing confirmed the popup placement, mouse actions, keyboard actions, and stable parent/current/preview panes; PR #240 passed the full Validate Awtarchy workflow before merge. Delivered from post-release \`main\` commit \`b8c61f688f4cfff2c802c86f1dbbf11dfeca4f06\`; the v3.8.1 tag remains unchanged.
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Append tested v3.8.1 post-release update
+        run: |
+          set -euo pipefail
+
+          tag='v3.8.1'
+          expected_release_id='396748845'
+          expected_title='Awtarchy v3.8.1 Yazi'
+          expected_target='addbda16a300e40fb51da541815d0cfae6b26173'
+          expected_tag_sha='addbda16a300e40fb51da541815d0cfae6b26173'
+          placeholder='_Placeholder for possible tested post-release patches to v3.8.1._'
+
+          previous="$RUNNER_TEMP/v3.8.1-before.md"
+          proposed="$RUNNER_TEMP/v3.8.1-proposed.md"
+          published="$RUNNER_TEMP/v3.8.1-published.md"
+
+          release_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.id')"
+          release_title="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.name')"
+          release_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')"
+          release_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.draft')"
+          release_prerelease="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.prerelease')"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha')"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.body' >"$previous"
+
+          [[ "$release_id" == "$expected_release_id" ]]
+          [[ "$release_title" == "$expected_title" ]]
+          [[ "$release_target" == "$expected_target" ]]
+          [[ "$release_draft" == "false" ]]
+          [[ "$release_prerelease" == "false" ]]
+          [[ "$tag_sha" == "$expected_tag_sha" ]]
+
+          python3 -c 'from pathlib import Path; import os, sys; src=Path(sys.argv[1]); dst=Path(sys.argv[2]); marker=sys.argv[3]; entry=os.environ["POST_RELEASE_ENTRY"]; body=src.read_text(encoding="utf-8"); assert body.count(marker) == 1, "post-release placeholder count changed"; body = body if entry in body else body.replace(marker, entry + "\n\n" + marker); dst.write_text(body, encoding="utf-8")' "$previous" "$proposed" "$placeholder"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$expected_title" \
+            --notes "$proposed" \
+            --previous "$previous"
+
+          gh release edit "$tag" --notes-file "$proposed"
+
+          published_id="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.id')"
+          published_title="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.name')"
+          published_target="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.target_commitish')"
+          published_draft="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.draft')"
+          published_prerelease="$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.prerelease')"
+          published_tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq '.object.sha')"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.body' >"$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$expected_title" \
+            --notes "$published" \
+            --previous "$previous"
+
+          cmp -s "$proposed" "$published"
+          [[ "$published_id" == "$expected_release_id" ]]
+          [[ "$published_title" == "$expected_title" ]]
+          [[ "$published_target" == "$expected_target" ]]
+          [[ "$published_draft" == "false" ]]
+          [[ "$published_prerelease" == "false" ]]
+          [[ "$published_tag_sha" == "$expected_tag_sha" ]]
+
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$GITHUB_HEAD_REF"
