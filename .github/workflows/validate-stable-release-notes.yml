@@ -39,3 +39,92 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  v380-post-release-yazi-drag-bridge:
+    if: ${{ github.event_name == 'pull_request' && github.event.pull_request.title == 'Temporary v3.8.0 release notes bridge' && github.event.pull_request.head.ref == 'chore/v380-post-release-yazi-drag-bridge' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Update existing v3.8.0 release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+
+          tag='v3.8.0'
+          title='Awtarchy v3.8.0 Yazi'
+          before_meta="$RUNNER_TEMP/v380-release-before.json"
+          after_meta="$RUNNER_TEMP/v380-release-after.json"
+          previous="$RUNNER_TEMP/v380-release-previous.md"
+          proposed="$RUNNER_TEMP/v380-release-proposed.md"
+          published="$RUNNER_TEMP/v380-release-published.md"
+
+          gh release view "$tag" --json name,tagName,targetCommitish,isDraft,isPrerelease >"$before_meta"
+          gh release view "$tag" --json body --jq '.body' >"$previous"
+
+          actual_title="$(jq -r '.name' "$before_meta")"
+          if [[ "$actual_title" != "$title" ]]; then
+            printf 'Unexpected release title: %s\n' "$actual_title" >&2
+            return 1
+          fi
+
+          tag_sha_before="$(git ls-remote --tags origin "refs/tags/$tag" | awk 'NR == 1 { print $1 }')"
+          if [[ "$tag_sha_before" != '46eadde776a4d881507545968a69ef3cb5e2906e' ]]; then
+            printf 'Unexpected %s tag SHA: %s\n' "$tag" "$tag_sha_before" >&2
+            return 1
+          fi
+
+          cp "$previous" "$proposed"
+          python3 - "$proposed" <<'PY'
+          from pathlib import Path
+          import sys
+
+          path = Path(sys.argv[1])
+          body = path.read_text(encoding="utf-8")
+          placeholder = "_Placeholder for possible tested post-release patches to v3.8.0._"
+          entry = (
+              "- **2026-09-24 — Yazi outbound drag:** Adds explicit outbound drag through "
+              "`d g` and right-click **Drag out...** using a compact `ripdrag` surface. "
+              "Stable `ripdrag` is now a required AUR feature dependency delivered by fresh "
+              "installation, `awtarchy packages`, stable updates, and Git-testing updates. "
+              "Managed Yazi configuration updates no longer require Yazi to be closed; they "
+              "finish normally and print a restart notice when Yazi files changed. Maintainer "
+              "runtime testing confirmed outbound drag/drop works on Awtarchy. Delivered from "
+              "post-release `main` commit "
+              "`a8fdea169a03afc794887c51fd0af90107af9452`; the v3.8.0 tag remains unchanged.\n\n"
+              + placeholder
+          )
+          if body.count(placeholder) != 1:
+              raise SystemExit("expected exactly one v3.8.0 post-release placeholder")
+          path.write_text(body.replace(placeholder, entry), encoding="utf-8")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$tag"             --title "$title"             --notes "$proposed"             --previous "$previous"
+
+          gh release edit "$tag" --notes-file "$proposed"
+
+          gh release view "$tag" --json name,tagName,targetCommitish,isDraft,isPrerelease >"$after_meta"
+          gh release view "$tag" --json body --jq '.body' >"$published"
+          tag_sha_after="$(git ls-remote --tags origin "refs/tags/$tag" | awk 'NR == 1 { print $1 }')"
+
+          if ! diff -u <(jq -S . "$before_meta") <(jq -S . "$after_meta"); then
+            printf 'Release metadata changed unexpectedly.\n' >&2
+            return 1
+          fi
+          if [[ "$tag_sha_after" != "$tag_sha_before" ]]; then
+            printf 'Release tag moved unexpectedly: %s -> %s\n' "$tag_sha_before" "$tag_sha_after" >&2
+            return 1
+          fi
+          if ! cmp -s "$proposed" "$published"; then
+            diff -u "$proposed" "$published" || true
+            printf 'Published release body does not match the intended body.\n' >&2
+            return 1
+          fi
+
+          python3 .github/scripts/validate-stable-release-notes.py             --version "$tag"             --title "$title"             --notes "$published"             --previous "$previous"
+
+          printf 'Updated %s release notes; tag SHA remains %s.\n' "$tag" "$tag_sha_after"
