@@ -5,6 +5,15 @@
 
 set -euo pipefail
 
+CAPTURE_MODE="${1:-area}"
+case "$CAPTURE_MODE" in
+  area|window) ;;
+  *)
+    echo "Usage: ${0##*/} [area|window]" >&2
+    exit 2
+    ;;
+esac
+
 lock_dir="${XDG_RUNTIME_DIR:-/tmp}/awtarchy-locks"
 mkdir -p "$lock_dir"
 lock_file="$lock_dir/screenshot_capture.lock"
@@ -19,6 +28,15 @@ for cmd in grim slurp wl-copy satty notify-send mktemp flock hyprpicker; do
     exit 1
   }
 done
+
+if [[ "$CAPTURE_MODE" == "window" ]]; then
+  for cmd in hyprctl jq; do
+    command -v "$cmd" >/dev/null 2>&1 || {
+      echo "$cmd missing" >&2
+      exit 1
+    }
+  done
+fi
 
 DEBUG_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/screenshot-debug"
 mkdir -p "$DEBUG_DIR"
@@ -164,10 +182,46 @@ suspend_flyout_outside_click
 log_event "slurp-start" "cursor=$(cursor_snapshot)"
 
 slurp_rc=0
-if GEOM="$(slurp -b '#ffffff20' -c '#00000040' 9>&- 2>"$SLURP_ERR")"; then
-  slurp_rc=0
+if [[ "$CAPTURE_MODE" == "window" ]]; then
+  monitors_json="$(hyprctl -j monitors)"
+  clients_json="$(hyprctl -j clients)"
+  visible_workspaces="$(jq -c '
+    [
+      .[] |
+      .activeWorkspace.id,
+      .specialWorkspace.id
+    ]
+    | map(select(. != null and . != 0))
+    | unique
+  ' <<<"$monitors_json")"
+
+  window_rects="$(jq -r --argjson visible "$visible_workspaces" '
+    .[]
+    | select(.mapped == true and .hidden == false)
+    | select((.monitor // -1) >= 0)
+    | select((.size[0] // 0) > 1 and (.size[1] // 0) > 1)
+    | .workspace.id as $workspace
+    | select((.pinned == true) or (($visible | index($workspace)) != null))
+    | "\(.at[0]),\(.at[1]) \(.size[0])x\(.size[1]) \((.class // "window") | gsub("[\\r\\n]"; " ")) — \((.title // "") | gsub("[\\r\\n]"; " "))"
+  ' <<<"$clients_json")"
+
+  if [[ -z "$window_rects" ]]; then
+    restore_flyout_outside_click
+    notify-send "Screenshot" "No visible application windows found."
+    exit 1
+  fi
+
+  if GEOM="$(printf '%s\n' "$window_rects" | slurp -r -f '%x,%y %wx%h' -b '#ffffff20' -c '#00000040' 9>&- 2>"$SLURP_ERR")"; then
+    slurp_rc=0
+  else
+    slurp_rc=$?
+  fi
 else
-  slurp_rc=$?
+  if GEOM="$(slurp -b '#ffffff20' -c '#00000040' 9>&- 2>"$SLURP_ERR")"; then
+    slurp_rc=0
+  else
+    slurp_rc=$?
+  fi
 fi
 restore_flyout_outside_click
 

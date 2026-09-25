@@ -563,6 +563,7 @@ local theme_select = "~/.config/hypr/scripts/theme_select.sh"
 
 -- Capture / clipboard / QR
 local screenshot_select = "env XDG_ACTIVATION_TOKEN=$XDG_ACTIVATION_TOKEN ~/.config/hypr/scripts/screenshot_area.sh"
+local screenshot_window = "env XDG_ACTIVATION_TOKEN=$XDG_ACTIVATION_TOKEN ~/.config/hypr/scripts/screenshot_area.sh window"
 local screenshot_full = "~/.config/hypr/scripts/screenshot_fullscreen.sh"
 local screenshot_display = "~/.config/hypr/scripts/screenshot_display.sh"
 local gif_capture = "~/.config/hypr/scripts/gif_capture.sh"
@@ -762,7 +763,8 @@ end
 for _, bind in ipairs({
     { "SUPER + C", clipboard_history },
     { "SUPER + S", qr_scan },
-    { "SUPER + SHIFT + S", screenshot_select },
+    { "SUPER + SHIFT + X", screenshot_select },
+    { "SUPER + SHIFT + S", screenshot_window },
     { "SUPER + SHIFT + F", screenshot_full },
     { "SUPER + SHIFT + D", screenshot_display },
     { "SUPER + SHIFT + G", gif_capture },
@@ -905,9 +907,9 @@ for _, bind in ipairs({
     hl.bind(bind[1], hl.dsp.exec_cmd(zoom .. " " .. bind[2]), bind[3] and { repeating = true } or {})
 end
 
--- Scratchpad (SUPER+x,X)
+-- Scratchpad (SUPER+x, SUPER+CTRL+x)
 hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-hl.bind("SUPER + SHIFT + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
+hl.bind("SUPER + CTRL + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
 
 -- Misc (SUPER+F12)
 hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})
@@ -1033,7 +1035,8 @@ hl.define_submap("noalt", function()
     for _, bind in ipairs({
         { "SUPER + C", clipboard_history },
         { "SUPER + S", qr_scan },
-        { "SUPER + SHIFT + S", screenshot_select },
+        { "SUPER + SHIFT + X", screenshot_select },
+        { "SUPER + SHIFT + S", screenshot_window },
         { "SUPER + SHIFT + F", screenshot_full },
         { "SUPER + SHIFT + D", screenshot_display },
         { "SUPER + SHIFT + G", gif_capture },
@@ -1131,9 +1134,9 @@ hl.define_submap("noalt", function()
         hl.bind(bind[1], hl.dsp.exec_cmd(zoom .. " " .. bind[2]), bind[3] and { repeating = true } or {})
     end
 
-    -- Scratchpad in "noalt" (SUPER+x,X)
+    -- Scratchpad in "noalt" (SUPER+x, SUPER+CTRL+x)
     hl.bind("SUPER + X", hl.dsp.workspace.toggle_special("magic"), {})
-    hl.bind("SUPER + SHIFT + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
+    hl.bind("SUPER + CTRL + X", hl.dsp.window.move({ workspace = "special:magic", follow = true }), {})
 
     -- Misc in "noalt" (SUPER+F12)
     hl.bind("SUPER + F12", hl.dsp.exec_cmd("sh -c 'ver=$(hyprctl version | awk \"/^Hyprland /{print \\$2; exit}\"); [ -z \\\"$ver\\\" ] && ver=\\\"unknown\\\"; notify-send \"Hyprland Version\" \"$ver\"'"), {})
@@ -1187,7 +1190,8 @@ hl.define_submap("vm", function()
         { "SUPER + ALT + C", hl.dsp.exec_cmd(calculator), {} },
         { "SUPER + ALT + CTRL + V", hl.dsp.exec_cmd(wiremix), {} },
         { "SUPER + ALT + CTRL + S", hl.dsp.exec_cmd(qr_scan), {} },
-        { "SUPER + ALT + S", hl.dsp.exec_cmd(screenshot_select), {} },
+        { "SUPER + ALT + X", hl.dsp.exec_cmd(screenshot_select), {} },
+        { "SUPER + ALT + S", hl.dsp.exec_cmd(screenshot_window), {} },
         { "SUPER + ALT + D", hl.dsp.exec_cmd(screenshot_display), {} },
         { "SUPER + ALT + G", hl.dsp.exec_cmd(gif_capture), {} },
         { "SUPER + ALT + RETURN", hl.dsp.exec_cmd(terminal), {} },
