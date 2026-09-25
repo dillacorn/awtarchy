@@ -1500,3 +1500,6 @@ ec705b01285cd8054b90d8ae50e5a83ac17a62f7205594df96437360318534c2	.config/quicksh
 102c624439686656acee6a7225194a052b6ad43bc2d7ad7e5a3561ba30806cb3	.config/quickshell/awtarchy/Bar.qml
 c0647b0a5aeaae9df09b57243c8b31e9b29b694d37f5330d802739abd79452b4	.config/quickshell/awtarchy/KeyboardLockState.qml
 1a2969f98b260953365e3511b1eee5e332c619aec5110e91f1bc51e829a9678e	.config/hypr/hyprland.lua
+
+# 2026-09-25 screenshot, scratchpad, and workspace-bind update.
+c396883b406efc093e90389bbf686fd859f7dbe293ed4ab02f9c50f6d457b73c	.config/hypr/hyprland.lua
