@@ -121,6 +121,7 @@ jobs:
           bash -n tests/test-hybrid-brightness.sh
           bash -n tests/test-hardware-reconcile-sudo.sh
           bash -n tests/test-hypridle-restart.sh
+          bash -n tests/test-scratchpad-toggle.sh
           bash -n tests/test-flyout-toggle-debounce.sh
           bash -n tests/test-flyout-edge-layout.sh
           bash -n tests/test-flyout-runtime-centering.sh
@@ -251,6 +252,7 @@ jobs:
             tests/test-hybrid-brightness.sh \
             tests/test-hardware-reconcile-sudo.sh \
             tests/test-hypridle-restart.sh \
+            tests/test-scratchpad-toggle.sh \
             tests/test-flyout-toggle-debounce.sh \
             tests/test-quickshell-hotkey-latency.sh \
             tests/test-flyout-edge-layout.sh \
@@ -345,6 +347,7 @@ jobs:
           bash tests/test-hybrid-brightness.sh
           bash tests/test-hardware-reconcile-sudo.sh
           bash tests/test-hypridle-restart.sh
+          bash tests/test-scratchpad-toggle.sh
           bash tests/test-flyout-toggle-debounce.sh
           bash tests/test-flyout-edge-layout.sh
           bash tests/test-flyout-runtime-centering.sh

@@ -7346,7 +7346,7 @@ show_diff() {
   enable_mouse
 }
 review_plan() {
-  local plan_file="$1"
+  local plan_file="$1" review_mode="${2:-update}"
   local -a classes=() rels=() locals=() targets=() baselines=()
   local class rel local_file target_file baseline_file
   while IFS=$'\t' read -r class rel local_file target_file baseline_file; do
@@ -7374,7 +7374,7 @@ review_plan() {
     return 0
   fi
 
-  local index=0 page_start=0 page_size=12 key="" i mouse_y mouse_index
+  local index=0 page_start=0 page_size=12 key="" i mouse_y mouse_index approval_choice=""
   enable_mouse
   while true; do
     local lines
@@ -7387,7 +7387,15 @@ review_plan() {
     printf '\033[H\033[2J' >/dev/tty
     printf 'Awtarchy managed-file differences: %d\n\n' "${#classes[@]}" >/dev/tty
     printf 'Click/Enter or press 1-9 to view a diff. Entries are informational, not update toggles.\n' >/dev/tty
-    printf 'Page Up/Page Down changes pages. q closes review and continues the requested operation.\n\n' >/dev/tty
+    if [[ "$review_mode" == "update" ]]; then
+      if [[ -n "$approval_choice" ]]; then
+        printf 'Page Up/Page Down changes pages. Approve update? y/n: %s  (Enter confirms)\n\n' "$approval_choice" >/dev/tty
+      else
+        printf 'Page Up/Page Down changes pages. Approve update? y/n  (Enter confirms selection)\n\n' >/dev/tty
+      fi
+    else
+      printf 'Page Up/Page Down changes pages. q closes review.\n\n' >/dev/tty
+    fi
 
     for (( i = 0; i < page_size && page_start + i < ${#classes[@]}; i++ )); do
       local absolute=$((page_start + i)) marker=' '
@@ -7398,6 +7406,7 @@ review_plan() {
     key="$(read_update_key || true)"
     case "$key" in
       $'\033[A')
+        approval_choice=""
         if (( index > 0 )); then
           ((index--)) || true
         else
@@ -7405,22 +7414,51 @@ review_plan() {
         fi
         ;;
       $'\033[B')
+        approval_choice=""
         if (( index + 1 < ${#classes[@]} )); then
           ((index++)) || true
         else
           index=0
         fi
         ;;
-      $'\033[5~') index=$((index - page_size)); (( index < 0 )) && index=0 ;;
-      $'\033[6~') index=$((index + page_size)); (( index >= ${#classes[@]} )) && index=$((${#classes[@]} - 1)) ;;
+      $'\033[5~') approval_choice=""; index=$((index - page_size)); (( index < 0 )) && index=0 ;;
+      $'\033[6~') approval_choice=""; index=$((index + page_size)); (( index >= ${#classes[@]} )) && index=$((${#classes[@]} - 1)) ;;
       $'\n'|$'\r'|"")
+        if [[ "$review_mode" == "update" && -n "$approval_choice" ]]; then
+          disable_mouse
+          case "$approval_choice" in
+            y) return 0 ;;
+            n) return 1 ;;
+          esac
+        fi
         show_diff "${classes[index]}" "${rels[index]}" "${locals[index]}" "${targets[index]}" "${baselines[index]}"
         ;;
+      y|Y)
+        if [[ "$review_mode" == "update" ]]; then
+          approval_choice="y"
+        fi
+        ;;
+      n|N)
+        if [[ "$review_mode" == "update" ]]; then
+          approval_choice="n"
+        else
+          disable_mouse
+          return 0
+        fi
+        ;;
+      $'\177'|$'\b')
+        if [[ "$review_mode" == "update" ]]; then
+          approval_choice=""
+        fi
+        ;;
       q|Q)
-        disable_mouse
-        return 0
+        if [[ "$review_mode" != "update" ]]; then
+          disable_mouse
+          return 0
+        fi
         ;;
       [1-9])
+        approval_choice=""
         i=$((10#$key - 1))
         if (( i < page_size && page_start + i < ${#classes[@]} )); then
           index=$((page_start + i))
@@ -7428,6 +7466,7 @@ review_plan() {
         fi
         ;;
       $'\033[<'*M|$'\033[<'*m)
+        approval_choice=""
         if [[ "$key" =~ ^$'\033'\[\<([0-9]+)\;([0-9]+)\;([0-9]+)(M|m)$ ]]; then
           mouse_y="${BASH_REMATCH[3]}"
           mouse_index=$((mouse_y - 6))
@@ -9442,14 +9481,12 @@ main() {
     yazi_config_changed=1
   fi
   stage_quickshell_hyprland_user_patch "$target_home"
-  review_plan "$plan_file"
 
   if (( REVIEW_ONLY == 1 )); then
+    review_plan "$plan_file" review-only
     log "Review-only mode complete. No files were changed."
     return 0
   fi
-
-  ensure_yazi_ripdrag_dependency_for_target "$target_home"
 
   select_update_mode
   if [[ "$UPDATE_MODE" == "preserve" ]]; then
@@ -9458,6 +9495,14 @@ main() {
     log "Selected update mode: clean"
   fi
 
+  if ! review_plan "$plan_file" update; then
+    die "Update canceled. No managed files were changed."
+  fi
+
+  log "Update approved. Preparing required dependencies..."
+  ensure_yazi_ripdrag_dependency_for_target "$target_home"
+
+  log "Checking Awtarchy system integration..."
   if target_uses_direct_aur_scanner "$target_home"; then
     ensure_update_aur_scanner       || die "aur-scanner is required before replacing the AurGuard-era managed shell. No managed files were changed."
   fi
@@ -9471,16 +9516,21 @@ main() {
   if (( REVIEW_ONLY == 0 )); then
     cleanup_legacy_keyring_pam_stage "$repo_dir"
   fi
+  log "Checking desktop update prerequisites..."
   ensure_quickshell_update_prerequisites
+  log "Preparing package and rollback state..."
   migrate_cheese_to_snapshot_stage \
     "${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh" \
     "${repo_dir}/local/share/awtarchy/awtarchy-runtime.sh"
   snapshot_quickshell_update_legacy_paths
 
+  log "Pausing Quickshell before managed files are replaced..."
   stop_quickshell_update_shell \
     || die "Could not stop Quickshell safely before updating managed files."
+  log "Applying approved managed-file changes..."
   apply_plan "$plan_file" || die "Update failed and user files were rolled back."
 
+  log "Refreshing Awtarchy PolicyKit integration..."
   if ! install_awtarchy_polkit_agent_runtime "$repo_dir"; then
     rollback_quickshell_update
     die "Could not install the root-owned Awtarchy PolicyKit authentication runtime."
@@ -9514,10 +9564,12 @@ main() {
       ;;
   esac
 
+  log "Finalizing managed file permissions and desktop assets..."
   fix_managed_perms "$target_home"
   normalize_managed_executables "$HOME_DIR"
   refresh_cursor_assets
 
+  log "Reloading Hyprland and validating the updated configuration..."
   if ! reload_quickshell_update_hyprland; then
     rollback_quickshell_update
     die "Hyprland reload failed. User files were rolled back."
@@ -9528,6 +9580,7 @@ main() {
     die "Live validation failed. User files were rolled back."
   fi
 
+  log "Restarting Quickshell..."
   if ! start_quickshell_update_shell; then
     rollback_quickshell_update
     report_quickshell_update_failure "$source_label" "$target_home"
@@ -9539,8 +9592,10 @@ main() {
   fi
 
   # Do not mutate hardware/package state until the user accepts the live config.
+  log "Reconciling hardware and managed packages..."
   hardware_reconcile
 
+  log "Cleaning retired managed shell state..."
   if ! remove_quickshell_update_legacy_files; then
     rollback_quickshell_update
     die "Legacy shell cleanup failed. User files were rolled back."
@@ -9555,6 +9610,7 @@ main() {
     remove_legacy_polkit_gnome_package
   fi
 
+  log "Saving Awtarchy update state..."
   commit_baseline "$target_home" "$source_label" "$active_theme"
   write_hardware_state
   [[ -n "$active_theme" ]] && printf '%s\n' "$active_theme" >"$ACTIVE_THEME_FILE"
