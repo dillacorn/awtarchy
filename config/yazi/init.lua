@@ -1073,59 +1073,21 @@ local AwtarchyYaziFolderActions = {
 }
 
 AwtarchyYaziContextMenu = {
-    _id = "awtarchy-yazi-context-menu",
     _visible = false,
     _kind = "item",
-    _area = ui.Rect {},
-    _list_area = ui.Rect {},
-    _hovered_action = nil,
     _selection_count = 0,
     _drop_target = nil,
     _drop_sources = nil,
-    _columns = 3,
+    _choice_actions = nil,
+    _target_name = nil,
+    _target_is_dir = false,
+    _target_bookmarked = false,
 }
 
-function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
-    self._kind = kind
-    self._selection_count = selection_count or 0
-    self._hovered_action = nil
-    self._visible = true
-
-    -- Visibility changes alter Root's row layout. Reflow the component tree
-    -- before rendering so the manager panes and action drawer share real rows.
-    ya.emit("app:resize", {})
-end
-
-function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
-    self._drop_target = tostring(target)
-    self._drop_sources = sources
-    self:show("drop", x, y, #sources)
-end
-
-function AwtarchyYaziContextMenu:hide()
-    if not self._visible then
-        return
-    end
-
-    self._visible = false
-    self._hovered_action = nil
-    self._drop_target = nil
-    self._drop_sources = nil
-    ya.emit("app:resize", {})
-end
-
-function AwtarchyYaziContextMenu:title()
-    if self._kind == "background" then
-        return " Folder actions "
-    elseif self._kind == "drop" then
-        local target = self._drop_target and Url(self._drop_target) or nil
-        return " Drop into " .. tostring(target and target.name or "folder") .. " "
-    elseif self._selection_count > 1 then
-        return " " .. tostring(self._selection_count) .. " selected "
-    end
-
-    return " Item actions "
-end
+local AwtarchyYaziContextChoiceKeys = {
+    "1", "2", "3", "4", "5", "6", "7", "8", "9", "0",
+    "a", "b", "c", "d", "e", "f", "g", "h",
+}
 
 function AwtarchyYaziContextMenu:actions()
     if self._kind == "background" then
@@ -1134,7 +1096,6 @@ function AwtarchyYaziContextMenu:actions()
         return AwtarchyYaziDropActions
     end
 
-    local hovered = cx.active.current.hovered
     if self._selection_count > 1 then
         return {
             {
@@ -1150,8 +1111,8 @@ function AwtarchyYaziContextMenu:actions()
         }
     end
 
-    if hovered and hovered.cha.is_dir then
-        local bookmarked = require("bookmarks"):is_bookmarked(tostring(hovered.url))
+    if self._target_is_dir then
+        local bookmarked = self._target_bookmarked == true
         return {
             { label = "Enter folder", shortcut = "Enter / l", action = "smart_open" },
             { label = "Open in new tab", shortcut = "t n", action = "open_new_tab" },
@@ -1176,13 +1137,14 @@ function AwtarchyYaziContextMenu:actions()
         actions[#actions + 1] = action
     end
 
-    if hovered and hovered.name:lower():sub(-4) == ".zip" then
+    if self._target_name and self._target_name:lower():sub(-4) == ".zip" then
         actions[#actions + 1] = { label = "Extract here", shortcut = "e h", action = "extract_here" }
         actions[#actions + 1] = { label = "Extract to folder", shortcut = "e f", action = "extract_folder" }
     end
 
     return actions
 end
+
 
 function AwtarchyYaziContextMenu:footer()
     if self._kind == "background" then
@@ -1216,125 +1178,104 @@ function AwtarchyYaziContextMenu:footer()
     }
 end
 
-function AwtarchyYaziContextMenu:columns(width)
-    if width >= 90 then
-        return 3
-    elseif width >= 58 then
-        return 2
-    end
-    return 1
+
+function AwtarchyYaziContextMenu:clear()
+    self._visible = false
+    self._selection_count = 0
+    self._drop_target = nil
+    self._drop_sources = nil
+    self._choice_actions = nil
+    self._target_name = nil
+    self._target_is_dir = false
+    self._target_bookmarked = false
 end
 
-function AwtarchyYaziContextMenu:height(width)
-    if not self._visible or width < 24 then
-        return 0
-    end
-    local columns = self:columns(width)
-    return math.ceil(#self:actions() / columns) + 2
-end
+local function AwtarchyYaziOpenNativeContext(menu)
+    local actions = menu:actions()
+    local cands, choices = {}, {}
 
-function AwtarchyYaziContextMenu:new(area)
-    self._area = area
-    self._columns = self:columns(area.w)
-    self._list_area = ui.Rect {
-        x = area.x + 1,
-        y = area.y + 1,
-        w = math.max(0, area.w - 2),
-        h = math.max(0, area.h - 2),
-    }
-    self._cell_width = math.max(1, math.floor(self._list_area.w / self._columns))
-    return self
-end
+    for i, action in ipairs(actions) do
+        local key = AwtarchyYaziContextChoiceKeys[i]
+        if not key then break end
 
-function AwtarchyYaziContextMenu:reflow()
-    return self._visible and self._area.w > 0 and self._area.h > 0 and { self } or {}
-end
-
-local function AwtarchyYaziContextCell(action, width, hovered)
-    local shortcut = action.shortcut or ""
-    local max_label = math.max(4, width - #shortcut - 4)
-    local label = action.label
-    if #label > max_label then
-        label = label:sub(1, math.max(1, max_label - 1)) .. "…"
-    end
-
-    local gap = math.max(1, width - #label - #shortcut - 2)
-    local action_style = hovered and th.help.hovered or th.help.action
-    local shortcut_style = hovered and th.help.hovered or th.help.chord
-
-    return {
-        ui.Span(" " .. label):style(action_style),
-        ui.Span(string.rep(" ", gap)),
-        ui.Span(shortcut):style(shortcut_style),
-        ui.Span(" "),
-    }
-end
-
-function AwtarchyYaziContextMenu:redraw()
-    if not self._visible or self._area.w == 0 or self._area.h == 0 then
-        return {}
-    end
-
-    local actions = self:actions()
-    local rows = {}
-    for row = 1, math.ceil(#actions / self._columns) do
-        local spans = {}
-        for col = 1, self._columns do
-            local index = (row - 1) * self._columns + col
-            local action = actions[index]
-            if action then
-                for _, span in ipairs(AwtarchyYaziContextCell(
-                    action,
-                    self._cell_width,
-                    index == self._hovered_action
-                )) do
-                    spans[#spans + 1] = span
-                end
-            else
-                spans[#spans + 1] = ui.Span(string.rep(" ", self._cell_width))
-            end
+        local desc = action.label
+        if action.shortcut and action.shortcut ~= "" then
+            desc = desc .. "  [" .. action.shortcut .. "]"
         end
-        rows[#rows + 1] = ui.Line(spans)
+
+        cands[#cands + 1] = { on = key, desc = desc }
+        choices[#choices + 1] = action.action
     end
 
-    return {
-        ui.Clear(self._area),
-        ui.Border(ui.Edge.ALL)
-            :area(self._area)
-            :type(ui.Border.PLAIN)
-            :style(th.help.border)
-            :title(ui.Line(self:title()):align(ui.Align.CENTER)),
-        ui.List(rows):area(self._list_area),
-    }
-end
-
-function AwtarchyYaziContextMenu:action_at(event)
-    if event.x < self._list_area.x
-        or event.x >= self._list_area.x + self._list_area.w
-        or event.y < self._list_area.y
-        or event.y >= self._list_area.y + self._list_area.h
-    then
-        return nil
+    if #cands == 0 then
+        menu:clear()
+        return
     end
 
-    local row = event.y - self._list_area.y
-    local col = math.floor((event.x - self._list_area.x) / self._cell_width)
-    col = math.max(0, math.min(self._columns - 1, col))
+    menu._choice_actions = choices
+    menu._visible = true
 
-    local index = row * self._columns + col + 1
-    return self:actions()[index] and index or nil
+    -- Let Yazi render its own native Which prompt. This avoids changing
+    -- Root/Current geometry or drawing custom terminal overlays.
+    ya.async(function()
+        local index = ya.which { cands = cands, silent = false }
+        local arg = index and ("--index=" .. tostring(index)) or "--cancel"
+        ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })
+    end)
 end
 
+function AwtarchyYaziContextMenu:show(kind, x, y, selection_count, target)
+    self._kind = kind
+    self._selection_count = selection_count or 0
+    self._drop_target = nil
+    self._drop_sources = nil
+    self._target_name = target and target.name or nil
+    self._target_is_dir = target and target.cha.is_dir or false
+    self._target_bookmarked = self._target_is_dir
+        and require("bookmarks"):is_bookmarked(tostring(target.url))
+        or false
+    AwtarchyYaziOpenNativeContext(self)
+end
+
+function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
+    self._kind = "drop"
+    self._selection_count = #sources
+    self._drop_target = tostring(target)
+    self._drop_sources = sources
+    self._target_name = nil
+    self._target_is_dir = false
+    self._target_bookmarked = false
+    AwtarchyYaziOpenNativeContext(self)
+end
+
+function AwtarchyYaziContextMenu:hide()
+    if not self._visible then return end
+    self:clear()
+    if tostring(cx.layer) == "which" and cx.which.active then
+        ya.emit("which:dismiss", {})
+    end
+end
+
+function AwtarchyYaziContextMenu:choose(index)
+    local action = index and self._choice_actions and self._choice_actions[index] or nil
+    if not action then
+        self:clear()
+        return
+    end
+    self:run(action)
+end
 
 function AwtarchyYaziContextMenu:run(action)
     local count = self._selection_count > 0 and self._selection_count or 1
     local drop_target = self._drop_target
     local drop_sources = self._drop_sources
     self._visible = false
-    self._hovered_action = nil
     self._drop_target = nil
     self._drop_sources = nil
-    ya.emit("app:resize", {})
+    self._choice_actions = nil
+    self._target_name = nil
+    self._target_is_dir = false
+    self._target_bookmarked = false
 
     if action == "smart_open" then
         AwtarchyYaziSmartEnter()
@@ -1393,71 +1334,72 @@ function AwtarchyYaziContextMenu:run(action)
     end
 end
 
-function AwtarchyYaziContextMenu:move(event)
-    local action = self:action_at(event)
-    if action ~= self._hovered_action then
-        self._hovered_action = action
-        ui.render()
+
+local AwtarchyYaziDefaultRootClick = Root.click
+
+local function AwtarchyYaziWhichCandidateAt(area, event)
+    local cands = cx.which.cands
+    local count = #cands
+    if count == 0 then return nil end
+
+    local cols = tonumber(th.which.cols) or 3
+    cols = math.max(1, math.min(3, cols))
+    local rows = math.ceil(count / cols)
+
+    -- Mirror Yazi 26.9.1's native Which geometry.
+    local outer_height = math.min(area.h, rows + 2)
+    if outer_height <= 2 then return nil end
+
+    local outer_x = area.x + math.min(1, area.w)
+    local outer_y = area.y + math.max(0, area.h - (outer_height + 2))
+    local outer_width = math.max(0, area.w - 2)
+
+    local inner_x = outer_x + 1
+    local inner_y = outer_y + 1
+    local inner_width = math.max(0, outer_width - 2)
+    local inner_height = math.max(0, outer_height - 2)
+
+    if inner_width == 0
+        or event.x < inner_x
+        or event.x >= inner_x + inner_width
+        or event.y < inner_y
+        or event.y >= inner_y + inner_height
+    then
+        return nil
     end
+
+    local row = event.y - inner_y
+    local col = math.floor((event.x - inner_x) * cols / inner_width)
+    col = math.max(0, math.min(cols - 1, col))
+
+    local index = row * cols + col + 1
+    return index <= count and index or nil
 end
 
-function AwtarchyYaziContextMenu:click(event, up)
-    if up or not event.is_left then
+function Root:click(event, up)
+    if AwtarchyYaziContextMenu._visible and tostring(cx.layer) == "which" then
+        if up then return end
+
+        if event.is_left then
+            local index = AwtarchyYaziWhichCandidateAt(self._area, event)
+            if index then
+                local cand = cx.which.cands[index]
+                local tx = cx.which.tx
+                if cand and tx then
+                    local ok = tx:send(cand)
+                    if ok then
+                        ya.emit("which:dismiss", {})
+                        return
+                    end
+                end
+            end
+        end
+
+        AwtarchyYaziContextMenu:hide()
         return
     end
 
-    local index = self:action_at(event)
-    local action = index and self:actions()[index] or nil
-    if action then
-        self:run(action.action)
-    end
-end
-
-
-
-local AwtarchyYaziDefaultRootLayout = Root.layout
-local AwtarchyYaziDefaultRootBuild = Root.build
-local AwtarchyYaziDefaultRootMove = Root.move
-
-function Root:layout()
-    if not AwtarchyYaziContextMenu._visible then
-        return AwtarchyYaziDefaultRootLayout(self)
-    end
-
-    local drawer_height = AwtarchyYaziContextMenu:height(self._area.w)
-    self._chunks = ui.Layout()
-        :direction(ui.Layout.VERTICAL)
-        :constraints({
-            ui.Constraint.Length(1),
-            ui.Constraint.Length(Tabs.height()),
-            ui.Constraint.Fill(1),
-            ui.Constraint.Length(drawer_height),
-            ui.Constraint.Length(1),
-        })
-        :split(self._area)
-end
-
-function Root:build()
-    if not AwtarchyYaziContextMenu._visible then
-        return AwtarchyYaziDefaultRootBuild(self)
-    end
-
-    self._children = {
-        Backdrop:new(self._area),
-        Header:new(self._chunks[1], cx.active),
-        Tabs:new(self._chunks[2]),
-        Tab:new(self._chunks[3], cx.active),
-        AwtarchyYaziContextMenu:new(self._chunks[4]),
-        Status:new(self._chunks[5], cx.active),
-        Modal:new(self._area),
-    }
-end
-
-function Root:move(event)
-    if AwtarchyYaziContextMenu._visible then
-        return AwtarchyYaziContextMenu:move(event)
-    end
-    return AwtarchyYaziDefaultRootMove(self, event)
+    return AwtarchyYaziDefaultRootClick(self, event, up)
 end
 
 local AwtarchyYaziDefaultHeaderCwd = Header.cwd
@@ -1772,7 +1714,7 @@ function Entity:click(event, up)
         end
 
         ya.emit("reveal", { self._file.url })
-        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)
+        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count, self._file)
         return
     end
 

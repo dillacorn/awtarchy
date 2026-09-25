@@ -260,8 +260,6 @@ grep -Fq 'AwtarchyYaziBreadcrumbTarget' "$YAZI_INIT" \
   || fail 'Yazi breadcrumb forward trail state is missing'
 grep -Fq 'local segments = AwtarchyYaziBreadcrumbSegments(cwd) or {}' "$YAZI_INIT" \
   || fail 'Yazi breadcrumb click handling does not recompute live hit regions'
-grep -Fq ':type(ui.Border.PLAIN)' "$YAZI_INIT" \
-  || fail 'Yazi custom context menu border is still rounded'
 grep -Fq 'ui.Style():dim()' "$YAZI_INIT" \
   || fail 'Yazi breadcrumb forward trail is not visually dimmed'
 grep -Fq 'function Status:task_summary()' "$YAZI_INIT" \
@@ -307,28 +305,33 @@ grep -Fq 'No:  N / Esc' "$YAZI_INIT" \
 grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
-  || fail 'Yazi mouse context-menu component is missing'
-grep -Fq 'local AwtarchyYaziDefaultRootLayout = Root.layout' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer does not preserve native Root layout'
-grep -Fq 'ui.Constraint.Length(drawer_height)' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer does not reserve real rows below the panes'
-grep -Fq 'AwtarchyYaziContextMenu:new(self._chunks[4])' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer is not a normal Root child'
-grep -Fq 'ya.emit("app:resize", {})' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer visibility does not trigger Root reflow'
-grep -Fq 'return math.ceil(#self:actions() / columns) + 2' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer height does not match its compact grid'
-grep -Fq 'function AwtarchyYaziContextMenu:action_at(event)' "$YAZI_INIT" \
-  || fail 'Yazi right-click drawer has no clickable action hit-testing'
-if grep -Fq 'me._awtarchy_context_drawer' "$YAZI_INIT"; then
-  fail 'Yazi right-click drawer still mutates the Current pane directly'
-fi
+  || fail 'Yazi mouse context action state is missing'
+grep -Fq 'local index = ya.which { cands = cands, silent = false }' "$YAZI_INIT" \
+  || fail 'Yazi right-click actions do not use the native Which UI'
+grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge does not preserve Root click handling'
+grep -Fq 'local cand = cx.which.cands[index]' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge cannot identify clicked candidates'
+grep -Fq 'local tx = cx.which.tx' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge cannot complete a clicked choice'
+grep -Fq 'tx:send(cand)' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge does not submit clicked candidates'
+grep -Fq 'ya.emit("which:dismiss", {})' "$YAZI_INIT" \
+  || fail 'Yazi native Which mouse bridge cannot dismiss the prompt'
+grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_INIT" \
+  || fail 'Yazi native Which result is not returned to the sync action runner'
 grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi current-pane click handler does not support blank-space actions'
 grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \
   || fail 'Yazi blank-space right-click does not open folder actions'
-grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)' "$YAZI_INIT" \
-  || fail 'Yazi item right-click does not open selection-aware item actions'
+grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count, self._file)' "$YAZI_INIT" \
+  || fail 'Yazi item right-click does not pass the exact clicked item to the native chooser'
+if grep -Fq 'function Root:layout()' "$YAZI_INIT"; then
+  fail 'Yazi right-click actions still override Root layout'
+fi
+if grep -Fq 'function AwtarchyYaziContextMenu:redraw()' "$YAZI_INIT"; then
+  fail 'Yazi right-click actions still use a custom Lua renderer'
+fi
 grep -Fq 'function Header:click(event, up)' "$YAZI_INIT" \
   || fail 'Yazi header path mouse clipboard behavior is missing'
 grep -Fq 'ya.emit("copy", { "dirpath" })' "$YAZI_INIT" \
@@ -825,5 +828,13 @@ notice = runtime.index('Yazi configuration was updated. Restart any open Yazi se
 if not build < mark < apply_plan < notice:
     raise SystemExit(1)
 PY_YAZI_UPDATE_NOTICE
+
+YAZI_CONTEXT_RUNNER="${ROOT}/config/yazi/plugins/awtarchy-context-run.yazi/main.lua"
+[[ -f "$YAZI_CONTEXT_RUNNER" ]] \
+  || fail 'Yazi native context action runner plugin is missing'
+grep -Fq -- '--- @sync entry' "$YAZI_CONTEXT_RUNNER" \
+  || fail 'Yazi native context action runner is not synchronous'
+grep -Fq 'AwtarchyYaziContextMenu:choose(tonumber(job.args.index))' "$YAZI_CONTEXT_RUNNER" \
+  || fail 'Yazi native context action runner does not dispatch selected choices'
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
