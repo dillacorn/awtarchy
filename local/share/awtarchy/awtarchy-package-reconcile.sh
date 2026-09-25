@@ -61,6 +61,7 @@ declare -a RETIRED_ARCH=(
 
 declare -a ARCH_CATALOG=()
 declare -a OPTIONAL_ARCH_CATALOG=()
+declare -a REQUIRED_AUR_CATALOG=()
 declare -a AUR_CATALOG=()
 declare -a OPTIONAL_AUR_CATALOG=()
 declare -a FLATPAK_IDS=()
@@ -70,6 +71,7 @@ declare -a OPTIONAL_FLATPAK_NAMES=()
 declare -a MISSING_REQUIRED=()
 declare -a MISSING_ARCH=()
 declare -a MISSING_OPTIONAL_ARCH=()
+declare -a MISSING_REQUIRED_AUR=()
 declare -a MISSING_AUR=()
 declare -a MISSING_OPTIONAL_AUR=()
 declare -a MISSING_FLATPAK_IDS=()
@@ -278,6 +280,13 @@ load_catalogs() {
     [[ -n $raw ]] || continue
     entry="$(strip_outer_quotes "$raw")"
     [[ $entry =~ ^[A-Za-z0-9@._+:-]+$ ]] || continue
+    REQUIRED_AUR_CATALOG+=("$entry")
+  done < <(runtime_array_lines REQUIRED_AUR_PACKAGES)
+
+  while IFS= read -r raw; do
+    [[ -n $raw ]] || continue
+    entry="$(strip_outer_quotes "$raw")"
+    [[ $entry =~ ^[A-Za-z0-9@._+:-]+$ ]] || continue
     AUR_CATALOG+=("$entry")
   done < <(runtime_array_lines PACKAGES_AUR)
 
@@ -304,6 +313,7 @@ load_catalogs() {
 
   sort_unique_array ARCH_CATALOG
   sort_unique_array OPTIONAL_ARCH_CATALOG
+  sort_unique_array REQUIRED_AUR_CATALOG
   sort_unique_array AUR_CATALOG
   sort_unique_array OPTIONAL_AUR_CATALOG
 }
@@ -458,7 +468,12 @@ collect_state() {
     package_satisfied "$pkg" || MISSING_OPTIONAL_ARCH+=("$pkg")
   done
 
+  for pkg in "${REQUIRED_AUR_CATALOG[@]}"; do
+    aur_package_satisfied "$pkg" || MISSING_REQUIRED_AUR+=("$pkg")
+  done
+
   for pkg in "${AUR_CATALOG[@]}"; do
+    array_contains "$pkg" "${REQUIRED_AUR_CATALOG[@]}" && continue
     aur_package_satisfied "$pkg" || MISSING_AUR+=("$pkg")
   done
 
@@ -503,7 +518,9 @@ print_review() {
   printf '%s\n' 'Awtarchy package reconciliation review'
   printf 'System type: %s\n' "$SYSTEM_TYPE"
   printf 'Arch catalog packages: %d (%d default, %d optional)\n'     "$(( ${#ARCH_CATALOG[@]} + ${#OPTIONAL_ARCH_CATALOG[@]} ))"     "${#ARCH_CATALOG[@]}" "${#OPTIONAL_ARCH_CATALOG[@]}"
-  printf 'AUR catalog packages: %d (%d default, %d optional)\n'     "$(( ${#AUR_CATALOG[@]} + ${#OPTIONAL_AUR_CATALOG[@]} ))"     "${#AUR_CATALOG[@]}" "${#OPTIONAL_AUR_CATALOG[@]}"
+  printf 'AUR catalog packages: %d (%d required, %d default, %d optional)\n' \
+    "$(( ${#REQUIRED_AUR_CATALOG[@]} + ${#AUR_CATALOG[@]} + ${#OPTIONAL_AUR_CATALOG[@]} ))" \
+    "${#REQUIRED_AUR_CATALOG[@]}" "${#AUR_CATALOG[@]}" "${#OPTIONAL_AUR_CATALOG[@]}"
   printf 'Flatpak catalog apps: %d (%d default, %d optional)\n'     "$(( ${#FLATPAK_IDS[@]} + ${#OPTIONAL_FLATPAK_IDS[@]} ))"     "${#FLATPAK_IDS[@]}" "${#OPTIONAL_FLATPAK_IDS[@]}"
   printf 'Ly TTY login manager: %s\n' "$LY_STATUS"
   printf '\n'
@@ -519,6 +536,8 @@ print_review() {
   print_list 'Other missing current Arch catalog packages:' "${MISSING_ARCH[@]}"
   printf '\n'
   print_list 'Optional Arch packages not installed:' "${MISSING_OPTIONAL_ARCH[@]}"
+  printf '\n'
+  print_list 'Missing required Awtarchy AUR dependencies:' "${MISSING_REQUIRED_AUR[@]}"
   printf '\n'
   print_list 'Missing current AUR catalog packages:' "${MISSING_AUR[@]}"
   printf '\n'
@@ -2276,6 +2295,7 @@ package_reconciliation_needs_action() {
   (( CHEESE_REPLACEMENT_NEEDED == 1 )) && return 0
   (( ${#MISSING_REQUIRED[@]} > 0 )) && return 0
   (( ${#MISSING_ARCH[@]} > 0 )) && return 0
+  (( ${#MISSING_REQUIRED_AUR[@]} > 0 )) && return 0
   (( ${#MISSING_AUR[@]} > 0 )) && return 0
   (( ${#MISSING_FLATPAK_IDS[@]} > 0 )) && return 0
   (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
@@ -2355,6 +2375,7 @@ fi
 
 print_review >/dev/tty
 printf '\nOptional choices are listed first and start unchecked.\n' >/dev/tty
+printf 'Required feature dependencies are installed automatically.\n' >/dev/tty
 printf 'Missing default packages start selected; Space opts out.\n' >/dev/tty
 printf 'Installed current packages are preserved even when not selected here.\n\n' >/dev/tty
 confirm_yes_no 'Continue to package choices?' 1 || { log 'Package reconciliation canceled.'; exit 0; }
@@ -2400,6 +2421,8 @@ if (( ${#aur_labels[@]} )); then
     || { log 'Package reconciliation canceled.'; exit 0; }
 fi
 selected_values aur_values aur_flags selected_aur
+selected_aur=("${MISSING_REQUIRED_AUR[@]}" "${selected_aur[@]}")
+sort_unique_array selected_aur
 
 # Optional Flatpaks are shown first and unchecked; missing defaults follow selected.
 declare -a flatpak_labels=()
