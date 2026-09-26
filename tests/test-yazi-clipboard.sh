@@ -51,7 +51,7 @@ for binding in bindings:
     if isinstance(keys, list):
         by_keys[tuple(keys)] = binding
 
-for keys in [("g",), ("a",), ("/",), ("n",), ("N",)]:
+for keys in [("g",), ("g", "B"), ("a",), ("/",), ("n",), ("N",)]:
     if keys in by_keys:
         raise SystemExit(1)
 
@@ -65,9 +65,12 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
-    ("g", "r"): "plugin recent-files",
-    ("g", "b"): "plugin bookmarks",
-    ("g", "B"): 'lua "AwtarchyYaziToggleBookmark()"',
+    ("b",): 'lua "AwtarchyYaziToggleBookmarks()"',
+    ("B",): 'lua "AwtarchyYaziBookmarkHovered()"',
+    ("r",): 'lua "AwtarchyYaziToggleRecents()"',
+    ("R",): "rename",
+    ("g", "r"): 'lua "AwtarchyYaziGoRecents()"',
+    ("g", "b"): 'lua "AwtarchyYaziGoBookmarks()"',
     ("g", "m"): "plugin mounts",
     ("<C-f>",): 'lua "AwtarchyYaziSearchMenu()"',
     ("<Esc>",): 'lua "AwtarchyYaziEscape()"',
@@ -124,7 +127,13 @@ if (
 
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
-if by_keys.get(("g", "B"), {}).get("desc") != "Bookmark current directory":
+if by_keys.get(("b",), {}).get("desc") != "Toggle bookmarks":
+    raise SystemExit(1)
+if by_keys.get(("B",), {}).get("desc") != "Bookmark/unbookmark highlighted item":
+    raise SystemExit(1)
+if by_keys.get(("r",), {}).get("desc") != "Toggle recent files":
+    raise SystemExit(1)
+if by_keys.get(("R",), {}).get("desc") != "Rename":
     raise SystemExit(1)
 
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
@@ -209,12 +218,22 @@ grep -Fq '{ on = "n", desc = "Name search" }' "$YAZI_INIT" \
   || fail 'Yazi recursive search chooser label is too verbose or changed'
 grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
-grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
-  || fail 'Yazi bookmark toggle helper is missing'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
-  || fail 'Yazi g B does not bookmark the current directory'
+grep -Fq 'function AwtarchyYaziToggleBookmarks()' "$YAZI_INIT" \
+  || fail 'Yazi one-key bookmarks toggle helper is missing'
+grep -Fq 'function AwtarchyYaziToggleRecents()' "$YAZI_INIT" \
+  || fail 'Yazi one-key recents toggle helper is missing'
+grep -Fq 'local tab_key = tostring(cx.active.id)' "$YAZI_INIT" \
+  || fail 'Yazi collection return targets are not scoped per tab'
+grep -Fq 'state[kind] = tostring(cx.active.current.cwd)' "$YAZI_INIT" \
+  || fail 'Yazi collection toggles do not remember the exact source directory'
+grep -Fq 'ya.emit("cd", { Url(target), raw = true })' "$YAZI_INIT" \
+  || fail 'Yazi collection toggles do not return to the remembered source directory'
+grep -Fq 'function AwtarchyYaziBookmarkHovered()' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item bookmark helper is missing'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
-  || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
+  || fail 'Yazi highlighted-item bookmarking does not target the hovered file or folder'
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
+  || fail 'Yazi blank-space context menu cannot bookmark the current directory'
 grep -Fq '/collections/Bookmarks' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks do not materialize into a real local collection folder'
 grep -Fq 'fs.create("dir_all", Url(root))' "$YAZI_BOOKMARKS" \
@@ -306,87 +325,48 @@ grep -Fq 'ya.emit("quit", { no_cwd_file = no_cwd_file == true })' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation does not preserve q/Q cwd-file semantics'
 grep -Fq 'AwtarchyYaziContextMenu = {' "$YAZI_INIT" \
   || fail 'Yazi mouse context action state is missing'
-grep -Fq '"awtarchy-context-menu"' "$YAZI_INIT" \
-  || fail 'Yazi right-click actions do not leave the blocking mouse callback through the async chooser plugin'
-grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT" \
-  || fail 'Yazi right-click action candidates are not passed safely to the async chooser plugin'
 grep -Fq 'Modal:children_add(AwtarchyYaziContextMenu, 20)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup is not registered as a modal overlay'
-grep -Fq 'function AwtarchyYaziContextMenu:new(area)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup does not calculate overlay geometry'
-grep -Fq 'local x = self._x + 2' "$YAZI_INIT" \
-  || fail 'Yazi context popup is not positioned adjacent to the right-click cursor'
-grep -Fq 'x = self._x - width - 1' "$YAZI_INIT" \
-  || fail 'Yazi context popup does not flip beside the cursor near the right edge'
-grep -Fq 'function AwtarchyYaziContextMenu:redraw()' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup has no custom overlay renderer'
-grep -Fq ':type(ui.Border.PLAIN)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup does not preserve square borders'
-grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup cannot highlight mouse-hovered actions'
+  || fail 'Yazi custom context menu is not registered as a Modal child'
 grep -Fq 'function AwtarchyYaziContextMenu:click(event, up)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup cannot submit mouse-clicked actions'
-grep -Fq 'local cand = cx.which.cands[index]' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup does not map mouse rows to silent Which candidates'
-grep -Fq 'local tx = cx.which.tx' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup cannot submit through the silent Which channel'
-grep -Fq 'tx:send(cand)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup does not submit clicked candidates'
-grep -Fq 'ya.emit("which:dismiss", {})' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup cannot dismiss the silent chooser'
-grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
-  || fail 'Yazi context popup does not preserve default Root click handling outside the popup'
-grep -Fq 'if AwtarchyYaziContextMenu._visible then' "$YAZI_INIT" \
-  || fail 'Yazi Root click routing does not prioritize the visible context popup'
-YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
-grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
-  || fail 'Yazi native Which result is not returned to the sync action runner'
-grep -Fq 'rename = { "r" }' "$YAZI_INIT" \
-  || fail 'Yazi right-click Rename does not activate directly with r'
-grep -Fq 'drag_out = { "d", "g" }' "$YAZI_INIT" \
-  || fail 'Yazi right-click Drag out does not preserve the d g chord'
-grep -Fq 'trash = { "d", "d" }' "$YAZI_INIT" \
-  || fail 'Yazi right-click Trash does not preserve the d d chord'
-grep -Fq 'values[#values + 1] = table.concat(keys, "\t")' "$YAZI_INIT" \
-  || fail 'Yazi right-click chooser does not serialize semantic key chords'
-grep -Fq 'on = #keys == 1 and keys[1] or keys' "$YAZI_CONTEXT_CHOOSER" \
-  || fail 'Yazi native chooser does not restore single/multi-key action chords'
-grep -Fq 'function Current:click(event, up)' "$YAZI_INIT" \
-  || fail 'Yazi current-pane click handler does not support blank-space actions'
-grep -Fq 'AwtarchyYaziContextMenu:show("background", event.x, event.y)' "$YAZI_INIT" \
-  || fail 'Yazi blank-space right-click does not open folder actions'
-grep -Fq 'AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count, self._file)' "$YAZI_INIT" \
-  || fail 'Yazi item right-click does not pass the exact clicked item to the native chooser'
+  || fail 'Yazi custom context menu has no direct click handler'
+grep -Fq 'local row = event.y - self._list_area.y + 1' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not use the proven direct row hit test'
+grep -Fq 'local action = self:actions()[row]' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not map rows directly to actions'
+grep -Fq 'self:run(action.action)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not directly dispatch clicked actions'
+grep -Fq 'function AwtarchyYaziContextMenu:footer()' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not keep the proven footer layout'
+grep -Fq 'local width = math.min(56, area.w)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not keep the proven stable width'
+grep -Fq 'local height = math.min(#actions + 4, area.h)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not keep the proven action-plus-footer height'
+grep -Fq ':title(ui.Line(self:title()):align(ui.Align.CENTER))' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not keep the proven centered title'
+grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not support hover highlighting'
+grep -Fq 'function Root:move(event)' "$YAZI_INIT" \
+  || fail 'Yazi Root does not forward mouse movement to the open custom menu'
+if grep -Fq 'local AwtarchyYaziDefaultRootClick = Root.click' "$YAZI_INIT" \
+  || grep -Fq 'function Root:click(event, up)' "$YAZI_INIT"; then
+  fail 'Yazi custom context menu must rely on upstream Root click routing'
+fi
+if grep -Fq 'function Root:redraw()' "$YAZI_INIT" \
+  || grep -Fq 'function Root:layout()' "$YAZI_INIT" \
+  || grep -Fq 'function Root:reflow()' "$YAZI_INIT"; then
+  fail 'Yazi custom context menu must not replace Root drawing or layout'
+fi
+if grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT"; then
+  fail 'Yazi custom context menu must not depend on the async Which chooser'
+fi
+grep -Fq 'shortcut = "c z"' "$YAZI_INIT" \
+  || fail 'Yazi ZIP context action does not expose the c z chord'
+grep -Fq 'shortcut = "d d"' "$YAZI_INIT" \
+  || fail 'Yazi Trash context action does not expose the d d chord'
+grep -Fq '{ label = "Rename", shortcut = "R", action = "rename" }' "$YAZI_INIT" \
+  || fail 'Yazi item context menu lacks Shift+R Rename shortcut hint'
 grep -Fq 'label = "Bookmark / unbookmark"' "$YAZI_INIT" \
   || fail 'Yazi folder context actions do not expose bookmark toggle behavior'
-if grep -Fq ':is_bookmarked(' "$YAZI_INIT"; then
-  fail 'Yazi folder right-click still calls the nonexistent bookmarks is_bookmarked method'
-fi
-if grep -Fq 'function Root:layout()' "$YAZI_INIT"; then
-  fail 'Yazi right-click actions still override Root layout'
-fi
-grep -Fq 'ui.Clear(self._area)' "$YAZI_INIT" \
-  || fail 'Yazi cursor context popup does not clear only its overlay area before drawing'
-grep -Fq 'function Header:click(event, up)' "$YAZI_INIT" \
-  || fail 'Yazi header path mouse clipboard behavior is missing'
-grep -Fq 'ya.emit("copy", { "dirpath" })' "$YAZI_INIT" \
-  || fail 'Yazi header click does not use native current-directory path copying'
-grep -Fq 'Copied to clipboard: ' "$YAZI_INIT" \
-  || fail 'Yazi header click does not report clipboard success'
-grep -Fq '{ label = "New file", shortcut = "a", action = "new_file" }' "$YAZI_INIT" \
-  || fail 'Yazi folder context menu lacks New file with keyboard hint'
-grep -Fq '{ label = "New folder", shortcut = "a /", action = "new_folder" }' "$YAZI_INIT" \
-  || fail 'Yazi folder context menu lacks New folder with create convention hint'
-grep -Fq '{ label = "Terminal here", shortcut = "t e", action = "terminal" }' "$YAZI_INIT" \
-  || fail 'Yazi folder context menu lacks Terminal here with keyboard parity'
-grep -Fq '{ label = "Rename", shortcut = "r", action = "rename" }' "$YAZI_INIT" \
-  || fail 'Yazi item context menu lacks Rename shortcut hint'
-grep -Fq '{ label = "Trash", shortcut = "dd", action = "trash" }' "$YAZI_INIT" \
-  || fail 'Yazi item context menu lacks Trash shortcut hint'
-grep -Fq 'Keys: Enter open | r rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
-  || fail 'Yazi item context footer does not teach keyboard equivalents'
-grep -Fq 'Keys: a create | Ctrl+V/p paste | t e terminal' "$YAZI_INIT" \
-  || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
   || fail 'Yazi New folder does not use the stable native create dir flag'
 if grep -Fq 'ya.sync(' "$YAZI_INIT"; then
@@ -409,8 +389,8 @@ grep -Fq 'local function AwtarchyYaziPluginHex(value)' "$YAZI_INIT" \
   || fail 'Yazi plugin argument encoder is missing'
 grep -Fq 'AwtarchyYaziPluginArgs("record", recent)' "$YAZI_INIT" \
   || fail 'Yazi recents do not pass opened file paths through the plugin argument payload'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
-  || fail 'Yazi g B does not bookmark the current directory'
+grep -Fq 'function AwtarchyYaziBookmarkHovered()' "$YAZI_INIT" \
+  || fail 'Yazi Shift+B highlighted-item bookmark helper is missing'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi context menu cannot bookmark a precise hovered file/folder'
 grep -Fq 'local function decode_arg(value)' "$YAZI_RECENT" \
@@ -863,21 +843,5 @@ notice = runtime.index('Yazi configuration was updated. Restart any open Yazi se
 if not build < mark < apply_plan < notice:
     raise SystemExit(1)
 PY_YAZI_UPDATE_NOTICE
-
-YAZI_CONTEXT_RUNNER="${ROOT}/config/yazi/plugins/awtarchy-context-run.yazi/main.lua"
-[[ -f "$YAZI_CONTEXT_RUNNER" ]] \
-  || fail 'Yazi native context action runner plugin is missing'
-grep -Fq -- '--- @sync entry' "$YAZI_CONTEXT_RUNNER" \
-  || fail 'Yazi native context action runner is not synchronous'
-grep -Fq 'AwtarchyYaziContextMenu:choose(tonumber(job.args.index))' "$YAZI_CONTEXT_RUNNER" \
-  || fail 'Yazi native context action runner does not dispatch selected choices'
-
-YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
-[[ -f "$YAZI_CONTEXT_CHOOSER" ]] \
-  || fail 'Yazi async native context chooser plugin is missing'
-grep -Fq 'local index = ya.which { cands = cands, silent = true }' "$YAZI_CONTEXT_CHOOSER" \
-  || fail 'Yazi async context chooser does not use silent native Which for keyboard chords'
-grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
-  || fail 'Yazi async context chooser does not return the selected index to the sync runner'
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
