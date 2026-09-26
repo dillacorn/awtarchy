@@ -10,6 +10,7 @@ on:
       - 'config/quickshell/awtarchy/QuickSettings.qml'
       - 'local/share/awtarchy/quickshell-managed-history.sha256'
       - 'tests/test-floating-windows-quicksettings.sh'
+      - 'tests/test-floating-windows-global-mode.sh'
   workflow_dispatch:
 
 permissions:
@@ -26,9 +27,13 @@ jobs:
         run: |
           bash -n config/hypr/scripts/quickshell_floating_windows.sh
           bash -n tests/test-floating-windows-quicksettings.sh
+          bash -n tests/test-floating-windows-global-mode.sh
       - name: ShellCheck
         run: |
           shellcheck config/hypr/scripts/quickshell_floating_windows.sh
           shellcheck tests/test-floating-windows-quicksettings.sh
+          shellcheck tests/test-floating-windows-global-mode.sh
       - name: Floating Windows regression
-        run: bash tests/test-floating-windows-quicksettings.sh
+        run: |
+          bash tests/test-floating-windows-quicksettings.sh
+          bash tests/test-floating-windows-global-mode.sh
