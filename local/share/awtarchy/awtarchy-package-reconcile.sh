@@ -1773,7 +1773,7 @@ stop_aur_sudo_keepalive() {
 }
 
 start_aur_sudo_keepalive() {
-  local owner_pid="$"
+  local owner_pid="$$"
 
   (( EUID == 0 )) && return 0
   stop_aur_sudo_keepalive
