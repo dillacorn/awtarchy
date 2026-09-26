@@ -423,10 +423,9 @@ grep -Fq '{ label = "Rename", shortcut = "R", action = "rename" }' "$YAZI_INIT" 
   || fail 'Yazi item context menu lacks Shift+R Rename shortcut hint'
 grep -Fq '{ label = "Trash", shortcut = "d d", action = "trash" }' "$YAZI_INIT" \
   || fail 'Yazi item context menu lacks Trash shortcut hint'
-grep -Fq 'Keys: Enter open | R rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
-  || fail 'Yazi item context footer does not teach keyboard equivalents'
-grep -Fq 'Keys: a create | Ctrl+V/p paste | t e terminal' "$YAZI_INIT" \
-  || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
+if grep -Fq 'function AwtarchyYaziContextMenu:footer()' "$YAZI_INIT"; then
+  fail 'Yazi compact context popup should remain action-only without a footer'
+fi
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
   || fail 'Yazi New folder does not use the stable native create dir flag'
 if grep -Fq 'ya.sync(' "$YAZI_INIT"; then
