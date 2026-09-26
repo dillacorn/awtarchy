@@ -358,6 +358,7 @@ Use existing tests as regression guards and add focused coverage when a bug can 
 - Treat `config/hypr/hyprland.lua` as the current primary configuration format.
 - Follow existing `hl.*` conventions instead of converting sections back to `hyprland.conf` syntax.
 - Verify current Hyprland syntax and behavior when version-sensitive.
+- Keep persistent global Floating Windows spawn behavior owned by the visible Quick Settings/bar surfaces. Do not bind `Super+Alt+F` to that persistent mode in default or `noalt`; VM deliberately retains `Super+Alt+F` only for toggling the active window floating.
 - Plugin behavior may depend on Hyprland/hyprpm ABI state. Inspect current plugin/reload helpers before changing plugin startup behavior.
 - Do not resurrect temporary regression patches after upstream behavior no longer requires them.
 
