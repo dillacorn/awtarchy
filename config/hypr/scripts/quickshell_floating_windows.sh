@@ -26,7 +26,7 @@ notify_state() {
     local state="$1" title="" body="" timeout=2500
     if [[ "$state" == "enabled" ]]; then
         title="Floating windows: ON"
-        body="Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling."
+        body="Global floating mode is active. New windows will float. Use Quick Settings to restore tiling."
         timeout=5000
     else
         title="Floating windows: OFF"

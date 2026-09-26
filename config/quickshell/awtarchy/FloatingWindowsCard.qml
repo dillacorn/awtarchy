@@ -99,8 +99,8 @@ Rectangle {
                 : (FloatingWindowsState.message.length > 0
                     ? FloatingWindowsState.message
                     : (root.floatingState === "enabled"
-                        ? "GLOBAL MODE ACTIVE: new windows open floating by default. Existing windows keep their current state. Restore tiling here or press SUPER+ALT+F. SUPER+F only changes the focused window."
-                        : "New windows use Awtarchy's normal tiling behavior. SUPER+ALT+F toggles global floating mode; SUPER+F only changes the focused window."))
+                        ? "GLOBAL MODE ACTIVE: new windows open floating by default. Existing windows keep their current state. Restore tiling here. SUPER+F only changes the focused window."
+                        : "New windows use Awtarchy's normal tiling behavior. Use this setting to change the global spawn mode; SUPER+F only changes the focused window."))
             color: (FloatingWindowsState.errorMessage.length > 0 || root.floatingState === "enabled")
                 ? Theme.urgent
                 : Theme.muted

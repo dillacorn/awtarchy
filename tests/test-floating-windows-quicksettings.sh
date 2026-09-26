@@ -58,6 +58,11 @@ contains "$CARD" 'GLOBAL MODE ACTIVE: new windows open floating by default.' \
   'Floating Windows card does not explain enabled behavior'
 contains "$CARD" 'Existing windows keep their current state.' \
   'Floating Windows card does not explain map-time behavior'
+contains "$CARD" 'Use this setting to change the global spawn mode; SUPER+F only changes the focused window.' \
+  'Floating Windows card does not make Quick Settings ownership clear'
+if grep -Fq 'SUPER+ALT+F' "$CARD"; then
+  fail 'Floating Windows card still advertises the removed persistent-mode hotkey'
+fi
 contains "$CARD" 'return "FLOATING ON";' \
   'Floating Windows card does not make the active global mode obvious'
 contains "$CARD" 'label: root.floatingState === "enabled" ? "Restore tiling" : "Enable floating"' \
