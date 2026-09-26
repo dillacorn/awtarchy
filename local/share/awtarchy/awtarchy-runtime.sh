@@ -2636,7 +2636,7 @@ ensure_aur_sudo_access() {
 }
 
 start_aur_sudo_keepalive() {
-  local owner_pid="$"
+  local owner_pid="$$"
 
   (( DRY_RUN == 1 )) && return 0
   stop_aur_sudo_keepalive
@@ -5421,7 +5421,7 @@ stop_update_aur_sudo_keepalive() {
 }
 
 start_update_aur_sudo_keepalive() {
-  local owner_pid="$"
+  local owner_pid="$$"
 
   stop_update_aur_sudo_keepalive
   (
