@@ -12,6 +12,9 @@ from pathlib import Path
 REQUIRED_HEADINGS = (
     "## Install and update",
     "## Validation",
+)
+
+FORBIDDEN_HEADINGS = (
     "## Post-release updates",
 )
 
@@ -91,11 +94,9 @@ def validate(
     if not validation:
         fail("Validation section is empty")
 
-    post_release = section(body, "## Post-release updates")
-    expected_placeholder = (
-        f"_Placeholder for possible tested post-release patches to {version}._"
-    )
-    require_text(post_release, expected_placeholder, "Post-release updates")
+    for heading in FORBIDDEN_HEADINGS:
+        if heading in body:
+            fail(f"retired stable release section is not allowed: {heading}")
 
     if previous_path is not None:
         previous = previous_path.read_text(encoding="utf-8")
