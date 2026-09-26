@@ -51,7 +51,7 @@ for binding in bindings:
     if isinstance(keys, list):
         by_keys[tuple(keys)] = binding
 
-for keys in [("g",), ("a",), ("/",), ("n",), ("N",)]:
+for keys in [("g",), ("g", "B"), ("a",), ("/",), ("n",), ("N",)]:
     if keys in by_keys:
         raise SystemExit(1)
 
@@ -65,9 +65,12 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
-    ("g", "r"): "plugin recent-files",
-    ("g", "b"): "plugin bookmarks",
-    ("g", "B"): 'lua "AwtarchyYaziToggleBookmark()"',
+    ("b",): 'lua "AwtarchyYaziToggleBookmarks()"',
+    ("B",): 'lua "AwtarchyYaziBookmarkHovered()"',
+    ("r",): 'lua "AwtarchyYaziToggleRecents()"',
+    ("R",): "rename",
+    ("g", "r"): 'lua "AwtarchyYaziGoRecents()"',
+    ("g", "b"): 'lua "AwtarchyYaziGoBookmarks()"',
     ("g", "m"): "plugin mounts",
     ("<C-f>",): 'lua "AwtarchyYaziSearchMenu()"',
     ("<Esc>",): 'lua "AwtarchyYaziEscape()"',
@@ -209,12 +212,22 @@ grep -Fq '{ on = "n", desc = "Name search" }' "$YAZI_INIT" \
   || fail 'Yazi recursive search chooser label is too verbose or changed'
 grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
-grep -Fq 'function AwtarchyYaziToggleBookmark()' "$YAZI_INIT" \
-  || fail 'Yazi bookmark toggle helper is missing'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
-  || fail 'Yazi g B does not bookmark the current directory'
+grep -Fq 'function AwtarchyYaziToggleBookmarks()' "$YAZI_INIT" \
+  || fail 'Yazi one-key bookmarks toggle helper is missing'
+grep -Fq 'function AwtarchyYaziToggleRecents()' "$YAZI_INIT" \
+  || fail 'Yazi one-key recents toggle helper is missing'
+grep -Fq 'local tab_key = tostring(cx.active.id)' "$YAZI_INIT" \
+  || fail 'Yazi collection return targets are not scoped per tab'
+grep -Fq 'state[kind] = tostring(cx.active.current.cwd)' "$YAZI_INIT" \
+  || fail 'Yazi collection toggles do not remember the exact source directory'
+grep -Fq 'ya.emit("cd", { Url(target), raw = true })' "$YAZI_INIT" \
+  || fail 'Yazi collection toggles do not return to the remembered source directory'
+grep -Fq 'function AwtarchyYaziBookmarkHovered()' "$YAZI_INIT" \
+  || fail 'Yazi highlighted-item bookmark helper is missing'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
-  || fail 'Yazi item context menu cannot bookmark the actual hovered file or folder'
+  || fail 'Yazi highlighted-item bookmarking does not target the hovered file or folder'
+grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
+  || fail 'Yazi blank-space context menu cannot bookmark the current directory'
 grep -Fq '/collections/Bookmarks' "$YAZI_BOOKMARKS" \
   || fail 'Yazi bookmarks do not materialize into a real local collection folder'
 grep -Fq 'fs.create("dir_all", Url(root))' "$YAZI_BOOKMARKS" \
@@ -379,11 +392,11 @@ grep -Fq '{ label = "New folder", shortcut = "a /", action = "new_folder" }' "$Y
   || fail 'Yazi folder context menu lacks New folder with create convention hint'
 grep -Fq '{ label = "Terminal here", shortcut = "t e", action = "terminal" }' "$YAZI_INIT" \
   || fail 'Yazi folder context menu lacks Terminal here with keyboard parity'
-grep -Fq '{ label = "Rename", shortcut = "r", action = "rename" }' "$YAZI_INIT" \
-  || fail 'Yazi item context menu lacks Rename shortcut hint'
+grep -Fq '{ label = "Rename", shortcut = "R", action = "rename" }' "$YAZI_INIT" \
+  || fail 'Yazi item context menu lacks Shift+R Rename shortcut hint'
 grep -Fq '{ label = "Trash", shortcut = "dd", action = "trash" }' "$YAZI_INIT" \
   || fail 'Yazi item context menu lacks Trash shortcut hint'
-grep -Fq 'Keys: Enter open | r rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
+grep -Fq 'Keys: Enter open | R rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
   || fail 'Yazi item context footer does not teach keyboard equivalents'
 grep -Fq 'Keys: a create | Ctrl+V/p paste | t e terminal' "$YAZI_INIT" \
   || fail 'Yazi blank-space context footer does not teach keyboard equivalents'
@@ -409,8 +422,8 @@ grep -Fq 'local function AwtarchyYaziPluginHex(value)' "$YAZI_INIT" \
   || fail 'Yazi plugin argument encoder is missing'
 grep -Fq 'AwtarchyYaziPluginArgs("record", recent)' "$YAZI_INIT" \
   || fail 'Yazi recents do not pass opened file paths through the plugin argument payload'
-grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)' "$YAZI_INIT" \
-  || fail 'Yazi g B does not bookmark the current directory'
+grep -Fq 'function AwtarchyYaziBookmarkHovered()' "$YAZI_INIT" \
+  || fail 'Yazi Shift+B highlighted-item bookmark helper is missing'
 grep -Fq 'AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)' "$YAZI_INIT" \
   || fail 'Yazi context menu cannot bookmark a precise hovered file/folder'
 grep -Fq 'local function decode_arg(value)' "$YAZI_RECENT" \
