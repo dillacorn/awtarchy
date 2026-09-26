@@ -158,6 +158,14 @@ fi
 if ! declare -F install_selected_aur_packages >/dev/null; then
   fail 'reconciler has no per-package AUR installer'
 else
+  grep -Fq '/usr/bin/sudo -v' "$RECONCILER" \
+    || fail 'reconciler does not authenticate before a long AUR package build'
+  grep -Fq '/usr/bin/sudo -n -v' "$RECONCILER" \
+    || fail 'reconciler does not keep an approved sudo timestamp alive during a long AUR build'
+  grep -Fq 'start_aur_sudo_keepalive' "$RECONCILER" \
+    || fail 'reconciler AUR installs do not start the sudo keepalive'
+  grep -Fq 'stop_aur_sudo_keepalive' "$RECONCILER" \
+    || fail 'reconciler AUR installs do not stop the sudo keepalive'
   record_managed_packages() {
     :
   }
