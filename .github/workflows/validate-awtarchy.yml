@@ -399,3 +399,133 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+  release-v3-8-2-yazi:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP publish Awtarchy v3.8.2 Yazi' &&
+      github.event.pull_request.head.ref == 'release/v3.8.2-yazi' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v3.8.2
+      RELEASE_TITLE: Awtarchy v3.8.2 Yazi
+      RELEASE_TARGET: afbe46269ba0d4937ebaf3783e37f59365251155
+      PREVIOUS_TAG: v3.8.1
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Build and validate release notes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
+            echo "Release already exists: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" >/dev/null 2>&1; then
+            echo "Tag already exists: ${RELEASE_TAG}" >&2
+            exit 1
+          fi
+
+          gh release view "${PREVIOUS_TAG}" --repo "${GITHUB_REPOSITORY}" --json body -q .body > /tmp/previous-release.md
+
+          python3 - <<'PY'
+          notes = """# Awtarchy v3.8.2 Yazi
+
+          Awtarchy v3.8.2 folds the tested post-v3.8.1 desktop and Yazi work into the stable release stream so normal stable updates install the approved configuration.
+
+          ## Install and update
+
+          Fresh installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+
+          Existing Awtarchy installations and stable updates: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)
+
+          Quick update:
+
+          ```bash
+          awtarchy update
+          ```
+
+          ## Desktop interaction and updater
+
+          - `Super+Shift+X` captures an area while `Super+Shift+S` selects an application/window.
+          - Scratchpad send/restore preserves the prior workspace and floating/tiled state.
+          - Managed updates use explicit `y/N` + Enter approval with progress feedback.
+
+          ## Yazi
+
+          - Right-click item, folder, blank-space, and drop actions use the proven custom Lua `Modal` path with directly clickable rows while upstream Root click/layout routing remains untouched.
+          - `b` toggles Bookmarks and returns to the exact per-tab source directory; `B` bookmarks/unbookmarks the highlighted item.
+          - `r` toggles Recents and returns to the exact per-tab source directory; `R` renames, with `F2` retained as an alias.
+          - `g b` and `g r` remain explicit Go commands; the old `g B` bookmark-mutation binding is removed.
+          - The earlier cursor-adjacent silent-Which experiment documented after v3.8.1 is superseded by this compatibility-first custom menu.
+          - The v3.8.1 wraparound navigation, context-aware Enter/Esc behavior, and outbound `ripdrag` workflow remain included.
+
+          ## Validation
+
+          - Exact release target: `afbe46269ba0d4937ebaf3783e37f59365251155`.
+          - PR #243 passed the full **Validate Awtarchy** workflow and all triggered checks, and the maintainer runtime-tested the final Linux right-click and collection-key behavior.
+          - The release target also includes the previously tested post-v3.8.1 desktop interaction and updater changes.
+
+          ## Post-release updates
+
+          _Placeholder for possible tested post-release patches to v3.8.2._
+          """
+          notes = "\n".join(line[10:] if line.startswith("          ") else line for line in notes.splitlines()) + "\n"
+          open("/tmp/release-notes.md", "w", encoding="utf-8", newline="\n").write(notes)
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "${RELEASE_TAG}" \
+            --title "${RELEASE_TITLE}" \
+            --notes /tmp/release-notes.md \
+            --previous /tmp/previous-release.md
+
+      - name: Publish release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release create "${RELEASE_TAG}" \
+            --repo "${GITHUB_REPOSITORY}" \
+            --target "${RELEASE_TARGET}" \
+            --title "${RELEASE_TITLE}" \
+            --notes-file /tmp/release-notes.md
+
+      - name: Verify published release
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json body -q .body > /tmp/published-release.md
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > /tmp/release.json
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" > /tmp/tag.json
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "${RELEASE_TAG}" \
+            --title "${RELEASE_TITLE}" \
+            --notes /tmp/published-release.md \
+            --previous /tmp/previous-release.md
+
+          python3 - <<'PY'
+          import json, os
+          release = json.load(open("/tmp/release.json", encoding="utf-8"))
+          tag = json.load(open("/tmp/tag.json", encoding="utf-8"))
+          assert release["tag_name"] == os.environ["RELEASE_TAG"]
+          assert release["name"] == os.environ["RELEASE_TITLE"]
+          assert release["draft"] is False
+          assert release["prerelease"] is False
+          assert release["target_commitish"] == os.environ["RELEASE_TARGET"]
+          assert tag["object"]["type"] == "commit"
+          assert tag["object"]["sha"] == os.environ["RELEASE_TARGET"]
+          print("PASS: Awtarchy v3.8.2 release and tag target verified.")
+          PY
+
+      - name: Remove one-use helper branch
+        if: success()
+        shell: bash
+        run: git push origin --delete "${{ github.head_ref }}"
+
