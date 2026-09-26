@@ -59,9 +59,6 @@ New stable release with release-specific changes and canonical documentation lin
 
 - New validation evidence.
 
-## Post-release updates
-
-_Placeholder for possible tested post-release patches to v3.5.6._
 EOF
 
 [[ -f "$VALIDATOR" ]] || fail "stable release notes validator is missing"
@@ -89,16 +86,21 @@ if run_validator "${TMP_DIR}/stale-install-link.md" "${TMP_DIR}/previous.md" >/d
   fail "release with non-canonical INSTALL.md link was accepted"
 fi
 
-sed 's/_Placeholder for possible tested post-release patches to v3\.5\.6\._/_Placeholder for possible tested post-release patches to v3.5.5._/' \
-  "${TMP_DIR}/valid.md" >"${TMP_DIR}/wrong-placeholder.md"
-if run_validator "${TMP_DIR}/wrong-placeholder.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
-  fail "release with a stale post-release placeholder was accepted"
+cp "${TMP_DIR}/valid.md" "${TMP_DIR}/post-release-section.md"
+cat >>"${TMP_DIR}/post-release-section.md" <<'EOF'
+
+## Post-release updates
+
+_Retired placeholder._
+EOF
+if run_validator "${TMP_DIR}/post-release-section.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
+  fail "release with retired Post-release updates section was accepted"
 fi
 
-sed '/^## Validation$/,/^## Post-release updates$/ { /^## Validation$/d; }' \
+sed '/^## Validation$/d' \
   "${TMP_DIR}/valid.md" >"${TMP_DIR}/missing-validation.md"
 if run_validator "${TMP_DIR}/missing-validation.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
   fail "release without Validation was accepted"
 fi
 
-printf '%s\n' 'PASS: stable release notes validator enforces canonical guide links and release structure'
+printf '%s\n' 'PASS: stable release notes validator enforces canonical guide links and rejects retired post-release sections'
