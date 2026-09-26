@@ -5325,6 +5325,14 @@ QUICKSHELL_UPDATE_RESTORE_ON_EXIT=0
 QUICKSHELL_UPDATE_RECOVERY_MARKER=""
 UPDATE_AUR_SUDO_KEEPALIVE_PID=""
 
+stop_update_aur_sudo_keepalive() {
+  local pid="${UPDATE_AUR_SUDO_KEEPALIVE_PID:-}"
+  UPDATE_AUR_SUDO_KEEPALIVE_PID=""
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
 restore_quickshell_update_shell_on_exit() {
   local marker="${QUICKSHELL_UPDATE_RECOVERY_MARKER:-}" marker_pending=0
   if [[ -n "$marker" && -f "$marker" && ! -L "$marker" ]]; then
@@ -5410,14 +5418,6 @@ run_target() {
   else
     "$@"
   fi
-}
-
-stop_update_aur_sudo_keepalive() {
-  local pid="${UPDATE_AUR_SUDO_KEEPALIVE_PID:-}"
-  UPDATE_AUR_SUDO_KEEPALIVE_PID=""
-  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
-  kill "$pid" 2>/dev/null || true
-  wait "$pid" 2>/dev/null || true
 }
 
 start_update_aur_sudo_keepalive() {
