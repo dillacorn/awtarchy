@@ -84,6 +84,7 @@ declare -a FAILED_AUR=()
 SYSTEM_TYPE="unknown"
 LY_STATUS="not installed"
 CHEESE_REPLACEMENT_NEEDED=0
+AUR_SUDO_KEEPALIVE_PID=""
 AUR_SCAN_BIN="/usr/bin/aur-scan"
 if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && -n ${AWTARCHY_AUR_SCAN_BIN:-} ]]; then
   AUR_SCAN_BIN="$AWTARCHY_AUR_SCAN_BIN"
@@ -1763,6 +1764,29 @@ as_root() {
   fi
 }
 
+stop_aur_sudo_keepalive() {
+  local pid="${AUR_SUDO_KEEPALIVE_PID:-}"
+  AUR_SUDO_KEEPALIVE_PID=""
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
+
+start_aur_sudo_keepalive() {
+  local owner_pid="$"
+
+  (( EUID == 0 )) && return 0
+  stop_aur_sudo_keepalive
+  (
+    while kill -0 "$owner_pid" 2>/dev/null; do
+      sleep 30
+      kill -0 "$owner_pid" 2>/dev/null || break
+      /usr/bin/sudo -n -v >/dev/null 2>&1 || break
+    done
+  ) &
+  AUR_SUDO_KEEPALIVE_PID=$!
+}
+
 pacman_recovery_supported_runtime() {
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     return 0
@@ -2124,15 +2148,23 @@ install_selected_aur_packages() {
       continue
     fi
 
-    if (( EUID != 0 )); then
-      sudo -k
+    if (( EUID != 0 )) && [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+      /usr/bin/sudo -k
+      if ! /usr/bin/sudo -v; then
+        warn "sudo authentication failed before AUR package install: ${pkg}"
+        FAILED_AUR+=("$pkg")
+        continue
+      fi
+      start_aur_sudo_keepalive
     fi
     log "Installing AUR package through upstream aur-scanner: ${pkg}"
     if ! "$AUR_SCAN_BIN" install "$pkg" --noconfirm; then
+      stop_aur_sudo_keepalive
       warn "AUR package failed: ${pkg}. Continuing with remaining package actions."
       FAILED_AUR+=("$pkg")
       continue
     fi
+    stop_aur_sudo_keepalive
 
     if ! aur_package_satisfied "$pkg"; then
       warn "aur-scanner returned success but ${pkg} is still not detected. Continuing with remaining package actions."
