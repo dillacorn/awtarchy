@@ -360,8 +360,10 @@ grep -Fq 'if AwtarchyYaziContextMenu._visible then' "$YAZI_INIT" \
 YAZI_CONTEXT_CHOOSER="${ROOT}/config/yazi/plugins/awtarchy-context-menu.yazi/main.lua"
 grep -Fq 'ya.emit("plugin", { "awtarchy-context-run", arg, mode = "sync" })' "$YAZI_CONTEXT_CHOOSER" \
   || fail 'Yazi native Which result is not returned to the sync action runner'
-grep -Fq 'rename = { "r" }' "$YAZI_INIT" \
-  || fail 'Yazi right-click Rename does not activate directly with r'
+grep -Fq 'rename = { "R" }' "$YAZI_INIT" \
+  || fail 'Yazi right-click Rename does not activate directly with Shift+R'
+grep -Fq 'bookmark_hovered = { "B" }' "$YAZI_INIT" \
+  || fail 'Yazi right-click Bookmark does not activate directly with Shift+B'
 grep -Fq 'drag_out = { "d", "g" }' "$YAZI_INIT" \
   || fail 'Yazi right-click Drag out does not preserve the d g chord'
 grep -Fq 'trash = { "d", "d" }' "$YAZI_INIT" \
