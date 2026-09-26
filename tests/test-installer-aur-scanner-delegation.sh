@@ -29,6 +29,8 @@ def function_body(name: str) -> str:
 for required in (
     "ensure_yay",
     "ensure_aur_scanner",
+    "start_aur_sudo_keepalive",
+    "stop_aur_sudo_keepalive",
     "install_aur_with_scanner",
     "install_aur_repo_apps_stage",
     "install_obs_pipewire_audio_capture_package",
@@ -51,6 +53,12 @@ if "aur-scanner" not in ensure_scanner or "/usr/bin/aur-scan" not in ensure_scan
 if "--pgpfetch" not in ensure_scanner:
     raise SystemExit("fresh aur-scanner bootstrap does not request upstream validpgpkeys import through yay")
 
+sudo_keepalive = function_body("start_aur_sudo_keepalive")
+if "run_as_target /usr/bin/sudo -n -v" not in sudo_keepalive:
+    raise SystemExit("installer AUR sudo keepalive does not refresh the target user's existing credential noninteractively")
+if "sleep 30" not in sudo_keepalive or "kill -0" not in sudo_keepalive:
+    raise SystemExit("installer AUR sudo keepalive is not bounded to the owning installer process")
+
 scanner_install = function_body("install_aur_with_scanner")
 if "/usr/bin/aur-scan" not in scanner_install or " install " not in scanner_install:
     raise SystemExit("installer AUR install helper does not delegate to aur-scan install")
@@ -58,7 +66,7 @@ if "yay -S" in scanner_install or "paru -S" in scanner_install:
     raise SystemExit("normal installer AUR writes still use an AUR helper")
 
 stage = function_body("install_aur_repo_apps_stage")
-for required in ("ensure_yay", "ensure_aur_scanner", "install_aur_with_scanner"):
+for required in ("ensure_aur_sudo_access", "start_aur_sudo_keepalive", "ensure_yay", "ensure_aur_scanner", "install_aur_with_scanner", "stop_aur_sudo_keepalive"):
     if required not in stage:
         raise SystemExit(f"installer AUR stage is missing {required}")
 if "AUR Guard" in stage or "aurinstall" in stage:

@@ -117,9 +117,18 @@ ARCH_SELECTED=()
 AUR_SELECTED=()
 FLATPAK_SELECTED_IDS=()
 FLATPAK_SELECTED_NAMES=()
+AUR_SUDO_KEEPALIVE_PID=""
+
+stop_aur_sudo_keepalive() {
+  local pid="${AUR_SUDO_KEEPALIVE_PID:-}"
+  AUR_SUDO_KEEPALIVE_PID=""
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
 
 cleanup_install_temp() {
-  :
+  stop_aur_sudo_keepalive
 }
 trap cleanup_install_temp EXIT
 
@@ -2618,12 +2627,27 @@ install_arch_repo_apps_stage() {
 }
 
 ensure_aur_sudo_access() {
-  command -v sudo >/dev/null 2>&1 \
+  [[ -x /usr/bin/sudo ]] \
     || die "sudo is required for AUR package transactions."
   log "Confirming the target user's normal sudo authorization for AUR package installation..."
-  if ! run_as_target sudo -v; then
+  if ! run_as_target /usr/bin/sudo -v; then
     die "AUR installation requires the target user's normal sudo authorization."
   fi
+}
+
+start_aur_sudo_keepalive() {
+  local owner_pid="$$"
+
+  (( DRY_RUN == 1 )) && return 0
+  stop_aur_sudo_keepalive
+  (
+    while kill -0 "$owner_pid" 2>/dev/null; do
+      sleep 30
+      kill -0 "$owner_pid" 2>/dev/null || break
+      run_as_target /usr/bin/sudo -n -v >/dev/null 2>&1 || break
+    done
+  ) &
+  AUR_SUDO_KEEPALIVE_PID=$!
 }
 
 ensure_aur_install_requirements() {
@@ -2864,6 +2888,7 @@ install_aur_repo_apps_stage() {
 
   ensure_aur_install_requirements
   ensure_aur_sudo_access
+  start_aur_sudo_keepalive
   ensure_yay
   ensure_aur_scanner
 
@@ -2903,6 +2928,8 @@ install_aur_repo_apps_stage() {
     fi
     printf '%s\n' "${COLOR_GREEN}${pkg} installed successfully.${COLOR_RESET}"
   done
+
+  stop_aur_sudo_keepalive
 
   if pacman -Q moonlight-qt-bin >/dev/null 2>&1; then
     log "Moonlight AUR package detected. Configuring UFW rules for Moonlight..."
@@ -5296,6 +5323,15 @@ TMPD=""
 TARGET_STAGE_HOME=""
 QUICKSHELL_UPDATE_RESTORE_ON_EXIT=0
 QUICKSHELL_UPDATE_RECOVERY_MARKER=""
+UPDATE_AUR_SUDO_KEEPALIVE_PID=""
+
+stop_update_aur_sudo_keepalive() {
+  local pid="${UPDATE_AUR_SUDO_KEEPALIVE_PID:-}"
+  UPDATE_AUR_SUDO_KEEPALIVE_PID=""
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 0
+  kill "$pid" 2>/dev/null || true
+  wait "$pid" 2>/dev/null || true
+}
 
 restore_quickshell_update_shell_on_exit() {
   local marker="${QUICKSHELL_UPDATE_RECOVERY_MARKER:-}" marker_pending=0
@@ -5356,6 +5392,7 @@ recover_interrupted_quickshell_update() {
 
 cleanup_update() {
   local exit_rc=$?
+  stop_update_aur_sudo_keepalive
   if (( MOUSE_ENABLED == 1 )); then
     printf '\033[?1000l\033[?1006l' >/dev/tty 2>/dev/null || true
   fi
@@ -5381,6 +5418,20 @@ run_target() {
   else
     "$@"
   fi
+}
+
+start_update_aur_sudo_keepalive() {
+  local owner_pid="$$"
+
+  stop_update_aur_sudo_keepalive
+  (
+    while kill -0 "$owner_pid" 2>/dev/null; do
+      sleep 30
+      kill -0 "$owner_pid" 2>/dev/null || break
+      run_target /usr/bin/sudo -n -v >/dev/null 2>&1 || break
+    done
+  ) &
+  UPDATE_AUR_SUDO_KEEPALIVE_PID=$!
 }
 
 reapply_cursor_theme_after_update() {
@@ -8668,8 +8719,9 @@ ensure_yazi_ripdrag_dependency_for_target() {
     || die "ripdrag is required by the target Yazi configuration, but sudo is unavailable."
 
   log "Installing required Yazi outbound-drag dependency: ripdrag"
-  run_target sudo -v \
+  run_target /usr/bin/sudo -v \
     || die "sudo authentication failed while preparing the required ripdrag dependency."
+  start_update_aur_sudo_keepalive
 
   run_update_root /usr/bin/pacman -S --needed --noconfirm base-devel git gnupg rust gtk4 \
     || die "Could not install the Arch build/runtime prerequisites required by ripdrag."
@@ -8678,8 +8730,10 @@ ensure_yazi_ripdrag_dependency_for_target() {
     || die "ripdrag requires a working aur-scan installation before managed Yazi files can be updated."
 
   if ! run_target /usr/bin/aur-scan install ripdrag --noconfirm; then
+    stop_update_aur_sudo_keepalive
     die "Required AUR dependency failed to install: ripdrag"
   fi
+  stop_update_aur_sudo_keepalive
   aur_selected_package_installed ripdrag \
     || die "ripdrag installation completed without a detectable ripdrag package."
 }

@@ -29,9 +29,11 @@ extract_function restore_quickshell_update_shell_on_exit "$TMPD/restore.fn" \
   || fail 'runtime is missing Quickshell interrupted-update recovery'
 extract_function recover_interrupted_quickshell_update "$TMPD/recover.fn" \
   || fail 'runtime is missing durable previous-update Quickshell recovery'
+extract_function stop_update_aur_sudo_keepalive "$TMPD/aur-sudo-cleanup.fn" \
+  || fail 'runtime AUR sudo keepalive cleanup function is unavailable'
 extract_function cleanup_update "$TMPD/cleanup.fn" \
   || fail 'runtime cleanup function is unavailable'
-cat "$TMPD/restore.fn" "$TMPD/recover.fn" "$TMPD/cleanup.fn" >"$HARNESS"
+cat "$TMPD/restore.fn" "$TMPD/recover.fn" "$TMPD/aur-sudo-cleanup.fn" "$TMPD/cleanup.fn" >"$HARNESS"
 
 prepare_fixture() {
   local fixture="$1" initial_state="$2" start_rc="$3" marker_present="$4"
