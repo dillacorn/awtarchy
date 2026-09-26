@@ -394,7 +394,7 @@ A normal Awtarchy stable release body must include:
 - an **Install and update** section linking to the canonical `main` versions of `INSTALL.md` and `UPDATING.md`; it may also include `awtarchy update` inline for convenience;
 - feature/change sections appropriate to the release;
 - a **Validation** section grounded in tests and CI that actually passed for the release target;
-- a final **Post-release updates** section containing a version-specific placeholder such as `_Placeholder for possible tested post-release patches to vX.Y.Z._`.
+- no **Post-release updates** section or placeholder. Managed configuration is delivered from immutable published release tags, so any merged change to release-managed configuration that users should receive through normal stable update/reset must be published as a new patch/minor/major release first.
 
 Release notes should be proportionate to the release. Routine patch/minor releases should default to a short overview and concise categorized bullets focused on user-visible behavior. Avoid copying debugging chronology, implementation internals, or test-by-test detail when a PR, issue, documentation page, or full-changelog link is a better home for it. Major architectural, migration, or security releases may be substantially longer when the additional explanation is useful. There is no fixed word-count ceiling; concision is a review standard, not a mechanical length failure.
 
@@ -418,13 +418,15 @@ python3 .github/scripts/validate-stable-release-notes.py \
   --previous /path/to/previous-stable-release.md
 ```
 
-A release bridge or other automated release writer must run this validator as a hard pre-write dependency and pass the actual GitHub Release title with `--title`. If validation fails, the release write must not execute. The validator enforces the versioned H1/title match plus objective structure such as canonical guide links, Validation, and the version-specific post-release placeholder; it must not impose an arbitrary word-count limit.
+A release bridge or other automated release writer must run this validator as a hard pre-write dependency and pass the actual GitHub Release title with `--title`. If validation fails, the release write must not execute. The validator enforces the versioned H1/title match plus objective structure such as canonical guide links and Validation, and rejects the retired Post-release updates section; it must not impose an arbitrary word-count limit.
 
 After publishing or editing a release, re-read the complete published body into a file and run the same validator against that published body before declaring the release complete. Continue to verify the release name, draft/prerelease state, target commit, and tag SHA separately; release-note validation does not replace tag/target verification.
 
 `tests/test-stable-release-notes-validator.sh`, `tests/test-install-update-docs.sh`, and `.github/workflows/validate-stable-release-notes.yml` are the permanent regression guards for this contract. Update the validator and its tests together when the intentionally supported stable-release structure changes.
 
 A GitHub release, Git tag, branch, release notes body, and repository documentation are different targets.
+
+Do not use post-release release-note entries as a delivery mechanism. Awtarchy stable update/reset/review reads managed configuration from immutable published release tags; editing an existing release body does not change the files users receive. If a merged change affects release-managed configuration and should reach normal users, publish a new semantic stable release after the change is tested and approved. Runtime/maintenance-command fixes may still refresh from `main` where the current architecture explicitly supports that independent lifecycle, but they must not be presented as a "post-release patch" to the previous configuration release.
 
 When working on a release:
 
