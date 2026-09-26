@@ -399,3 +399,81 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+  post-release-v3-8-1-yazi-context-compat:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP append v3.8.1 Yazi context compatibility post release note' &&
+      github.event.pull_request.head.ref == 'release/v3.8.1-yazi-context-compat-note' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v3.8.1
+      EXPECTED_TAG_SHA: addbda16a300e40fb51da541815d0cfae6b26173
+      EXPECTED_TARGET: addbda16a300e40fb51da541815d0cfae6b26173
+      EXPECTED_NAME: Awtarchy v3.8.1 Yazi
+      NOTE: "- **2026-09-26 — Yazi context-menu compatibility and collection shortcuts:** Replaced the experimental silent-Which/cursor-popup path with the proven custom Lua `Modal` right-click architecture for reliable item, folder, background, and drop actions while leaving upstream Root click/layout routing intact. Bookmarks/Recents are now quick toggles with `b`/`r`, `B` bookmarks the highlighted item, `R` renames, and `g b`/`g r` remain explicit Go commands. Maintainer runtime testing confirmed the final Linux behavior; PR #243 passed the full Validate Awtarchy workflow and all triggered checks before merge. Delivered from post-release `main` commit `afbe46269ba0d4937ebaf3783e37f59365251155`; the v3.8.1 tag remains unchanged."
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Append verified v3.8.1 post-release update
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > /tmp/release-before.json
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" > /tmp/tag-before.json
+
+          python3 - <<'PY'
+          import json, os
+          release = json.load(open("/tmp/release-before.json", encoding="utf-8"))
+          tag = json.load(open("/tmp/tag-before.json", encoding="utf-8"))
+          assert release["tag_name"] == os.environ["RELEASE_TAG"]
+          assert release["name"] == os.environ["EXPECTED_NAME"]
+          assert release["draft"] is False
+          assert release["prerelease"] is False
+          assert release["target_commitish"] == os.environ["EXPECTED_TARGET"]
+          assert tag["object"]["type"] == "commit"
+          assert tag["object"]["sha"] == os.environ["EXPECTED_TAG_SHA"]
+
+          body = release["body"]
+          note = os.environ["NOTE"]
+          placeholder = "_Placeholder for possible tested post-release patches to v3.8.1._"
+          assert "## Post-release updates" in body
+          assert placeholder in body
+          if note not in body:
+              body = body.replace(placeholder, note + "\n\n" + placeholder, 1)
+          open("/tmp/release-notes.md", "w", encoding="utf-8", newline="\n").write(body)
+          PY
+
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file /tmp/release-notes.md
+
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > /tmp/release-after.json
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" > /tmp/tag-after.json
+
+          python3 - <<'PY'
+          import json, os
+          before = json.load(open("/tmp/release-before.json", encoding="utf-8"))
+          after = json.load(open("/tmp/release-after.json", encoding="utf-8"))
+          tag = json.load(open("/tmp/tag-after.json", encoding="utf-8"))
+          intended = open("/tmp/release-notes.md", encoding="utf-8").read()
+
+          assert after["tag_name"] == before["tag_name"] == os.environ["RELEASE_TAG"]
+          assert after["name"] == before["name"] == os.environ["EXPECTED_NAME"]
+          assert after["draft"] == before["draft"] is False
+          assert after["prerelease"] == before["prerelease"] is False
+          assert after["target_commitish"] == before["target_commitish"] == os.environ["EXPECTED_TARGET"]
+          assert after["body"] == intended
+          assert os.environ["NOTE"] in after["body"]
+          assert tag["object"]["type"] == "commit"
+          assert tag["object"]["sha"] == os.environ["EXPECTED_TAG_SHA"]
+          print("PASS: v3.8.1 release body updated; release metadata and tag SHA unchanged.")
+          PY
+
+      - name: Remove one-use helper branch
+        if: success()
+        shell: bash
+        run: git push origin --delete "${{ github.head_ref }}"
+
