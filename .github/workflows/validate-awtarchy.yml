@@ -399,3 +399,82 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+  remove-v3-8-2-post-release-section:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP remove v3.8.2 Post-release updates section' &&
+      github.event.pull_request.head.ref == 'release/remove-v3.8.2-post-release' &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_TAG: v3.8.2
+      RELEASE_TITLE: Awtarchy v3.8.2 Yazi
+      EXPECTED_TARGET: afbe46269ba0d4937ebaf3783e37f59365251155
+      PREVIOUS_TAG: v3.8.1
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+
+      - name: Remove retired section and validate
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json body -q .body > /tmp/current.md
+          gh release view "${PREVIOUS_TAG}" --repo "${GITHUB_REPOSITORY}" --json body -q .body > /tmp/previous.md
+
+          python3 - <<'PY'
+          from pathlib import Path
+          body = Path("/tmp/current.md").read_text(encoding="utf-8")
+          marker = "\n## Post-release updates\n"
+          assert marker in body, "current release has no Post-release updates section"
+          body = body.split(marker, 1)[0].rstrip() + "\n"
+          Path("/tmp/updated.md").write_text(body, encoding="utf-8", newline="\n")
+          PY
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "${RELEASE_TAG}" \
+            --title "${RELEASE_TITLE}" \
+            --notes /tmp/updated.md \
+            --previous /tmp/previous.md
+
+          gh release edit "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --notes-file /tmp/updated.md
+
+      - name: Verify release and tag unchanged
+        shell: bash
+        run: |
+          set -euo pipefail
+          gh release view "${RELEASE_TAG}" --repo "${GITHUB_REPOSITORY}" --json body -q .body > /tmp/published.md
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${RELEASE_TAG}" > /tmp/release.json
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${RELEASE_TAG}" > /tmp/tag.json
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "${RELEASE_TAG}" \
+            --title "${RELEASE_TITLE}" \
+            --notes /tmp/published.md \
+            --previous /tmp/previous.md
+
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          release = json.load(open("/tmp/release.json", encoding="utf-8"))
+          tag = json.load(open("/tmp/tag.json", encoding="utf-8"))
+          body = Path("/tmp/published.md").read_text(encoding="utf-8")
+          assert "## Post-release updates" not in body
+          assert release["tag_name"] == os.environ["RELEASE_TAG"]
+          assert release["name"] == os.environ["RELEASE_TITLE"]
+          assert release["draft"] is False
+          assert release["prerelease"] is False
+          assert release["target_commitish"] == os.environ["EXPECTED_TARGET"]
+          assert tag["object"]["type"] == "commit"
+          assert tag["object"]["sha"] == os.environ["EXPECTED_TARGET"]
+          print("PASS: v3.8.2 release notes cleaned; tag/target unchanged.")
+          PY
+
+      - name: Remove one-use helper branch
+        if: success()
+        shell: bash
+        run: git push origin --delete "${{ github.head_ref }}"
+
