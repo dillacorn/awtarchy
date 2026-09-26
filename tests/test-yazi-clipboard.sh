@@ -127,7 +127,13 @@ if (
 
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
-if by_keys.get(("g", "B"), {}).get("desc") != "Bookmark current directory":
+if by_keys.get(("b",), {}).get("desc") != "Toggle bookmarks":
+    raise SystemExit(1)
+if by_keys.get(("B",), {}).get("desc") != "Bookmark/unbookmark highlighted item":
+    raise SystemExit(1)
+if by_keys.get(("r",), {}).get("desc") != "Toggle recent files":
+    raise SystemExit(1)
+if by_keys.get(("R",), {}).get("desc") != "Rename":
     raise SystemExit(1)
 
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
