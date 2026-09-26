@@ -1262,7 +1262,7 @@ function AwtarchyYaziContextMenu:footer()
     local hovered = cx.active.current.hovered
     if hovered and hovered.cha.is_dir then
         return {
-            "Keys: Enter open | g B bookmark | r rename | Ctrl+C/X copy/cut",
+            "Keys: Enter open | B bookmark | R rename | Ctrl+C/X copy/cut",
             "More: c c path | Tab info | c z ZIP | d d trash",
         }
     end
