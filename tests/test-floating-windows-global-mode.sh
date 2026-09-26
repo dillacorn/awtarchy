@@ -29,7 +29,7 @@ contains "$HELPER" '--notify' \
     'Floating Windows helper has no notification-capable toggle path'
 contains "$HELPER" 'title="Floating windows: ON"' \
     'Floating Windows enable feedback does not clearly identify global mode'
-contains "$HELPER" 'body="Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling."' \
+contains "$HELPER" 'body="Global floating mode is active. New windows will float. Use Quick Settings to restore tiling."' \
     'Floating Windows enable feedback does not explain how to restore tiling'
 contains "$HELPER" 'timeout=5000' \
     'Floating Windows enable feedback is too brief to be useful'
@@ -37,13 +37,16 @@ if grep -Fq -- '-a Awtarchy' "$HELPER"; then
     fail 'Floating Windows feedback still uses the persistent Awtarchy notification identity'
 fi
 
-contains "$HYPR_LUA" 'local floating_windows_toggle = "~/.config/hypr/scripts/quickshell_floating_windows.sh toggle --notify"' \
-    'hyprland.lua does not define the approved global floating-spawn toggle command'
+if grep -Fq 'floating_windows_toggle' "$HYPR_LUA"; then
+    fail 'global/noalt floating-spawn keyboard toggle returned'
+fi
 bind_count="$(grep -Fc '{ "SUPER + ALT + F", floating_windows_toggle },' "$HYPR_LUA" || true)"
-[[ "$bind_count" == 2 ]] \
-    || fail 'SUPER+ALT+F must toggle global floating-spawn mode in default and noalt modes'
+[[ "$bind_count" == 0 ]] \
+    || fail 'SUPER+ALT+F must not toggle persistent floating-spawn mode outside VM'
 contains "$HYPR_LUA" '{ "SUPER + F", hl.dsp.window.float({ action = "toggle" }) },' \
     'existing SUPER+F focused-window float/tile bind changed or disappeared'
+contains "$HYPR_LUA" '{ "SUPER + ALT + F", hl.dsp.window.float({ action = "toggle" }), {} },' \
+    'VM SUPER+ALT+F active-window floating bind changed or disappeared'
 
 contains "$STATE_QML" 'pragma Singleton' \
     'FloatingWindowsState is not a singleton'
@@ -144,8 +147,8 @@ printf '0\n' >"$CONFIGERROR_COUNT"
     || fail 'toggle did not publish enabled runtime state'
 contains "$TEST_LUA" 'local awtarchy_floating_windows = true -- AWTARCHY_FLOATING_WINDOWS' \
     'toggle did not persist the enabled marker'
-contains "$NOTIFY_LOG" '-a Hyprland -t 5000 Floating windows: ON Global floating mode is active. New windows will float. Press SUPER+ALT+F or use Quick Settings to restore tiling.' \
-    'keyboard enable feedback does not provide an obvious global-mode warning'
+contains "$NOTIFY_LOG" '-a Hyprland -t 5000 Floating windows: ON Global floating mode is active. New windows will float. Use Quick Settings to restore tiling.' \
+    'enable feedback does not provide an obvious global-mode warning'
 
 printf '0\n' >"$CONFIGERROR_COUNT"
 [[ "$(run_helper toggle --notify)" == "disabled" ]] \
@@ -173,4 +176,4 @@ done
 (( missing_history == 0 )) \
     || fail 'managed history is missing current global Floating Windows QML hashes'
 
-printf '%s\n' 'PASS: global Floating Windows mode has shared state, obvious active-state feedback, keyboard toggle, and clear restore-tiling escape hatches.'
+printf '%s\n' 'PASS: global Floating Windows mode has shared state, obvious active-state feedback, Quick Settings ownership, and no ambiguous normal/noalt hotkey.'
