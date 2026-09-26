@@ -1503,3 +1503,8 @@ c0647b0a5aeaae9df09b57243c8b31e9b29b694d37f5330d802739abd79452b4	.config/quicksh
 
 # 2026-09-25 screenshot, scratchpad, and workspace-bind update.
 c396883b406efc093e90389bbf686fd859f7dbe293ed4ab02f9c50f6d457b73c	.config/hypr/hyprland.lua
+
+# 2026-09-26 keep persistent Floating Windows mode in Quick Settings only.
+13e735894f6ba80d55fe5380aee4f9d80d2724b7d6791c13bf4923fce4dc605d	.config/hypr/hyprland.lua
+7e34f82032bddd8fad94e950b2d44c9a6caf15d9fb02cf5b9bfa39f9e7439923	.config/hypr/scripts/quickshell_floating_windows.sh
+b327d115cf03cdf0221bd3b28f60a842a21e9e4f343a1f20a9bfa72082279217	.config/quickshell/awtarchy/FloatingWindowsCard.qml
