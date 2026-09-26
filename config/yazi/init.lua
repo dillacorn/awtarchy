@@ -1063,10 +1063,10 @@ local AwtarchyYaziFileActions = {
     { label = "Drag out...", shortcut = "d g", action = "drag_out" },
     { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
     { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
-    { label = "Copy path", shortcut = "cc", action = "copy_path" },
+    { label = "Copy path", shortcut = "c c", action = "copy_path" },
     { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
     { label = "Details", shortcut = "Tab", action = "details" },
-    { label = "Trash", shortcut = "dd", action = "trash" },
+    { label = "Trash", shortcut = "d d", action = "trash" },
 }
 
 local AwtarchyYaziDropActions = {
@@ -1203,7 +1203,7 @@ function AwtarchyYaziContextMenu:actions()
             { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
             { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
             { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
-            { label = "Trash " .. tostring(self._selection_count) .. " items", shortcut = "dd", action = "trash" },
+            { label = "Trash " .. tostring(self._selection_count) .. " items", shortcut = "d d", action = "trash" },
         }
     end
 
@@ -1220,10 +1220,10 @@ function AwtarchyYaziContextMenu:actions()
             { label = "Drag out...", shortcut = "d g", action = "drag_out" },
             { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
             { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
-            { label = "Copy path", shortcut = "cc", action = "copy_path" },
+            { label = "Copy path", shortcut = "c c", action = "copy_path" },
             { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
             { label = "Details", shortcut = "Tab", action = "details" },
-            { label = "Trash", shortcut = "dd", action = "trash" },
+            { label = "Trash", shortcut = "d d", action = "trash" },
         }
     end
 
@@ -1255,7 +1255,7 @@ function AwtarchyYaziContextMenu:footer()
     elseif self._selection_count > 1 then
         return {
             "Keys: R bulk rename | Ctrl+C/X copy/cut | c z ZIP",
-            "Delete: dd trash | Shift+D permanent delete",
+            "Delete: d d trash | Shift+D permanent delete",
         }
     end
 
@@ -1263,13 +1263,13 @@ function AwtarchyYaziContextMenu:footer()
     if hovered and hovered.cha.is_dir then
         return {
             "Keys: Enter open | g B bookmark | r rename | Ctrl+C/X copy/cut",
-            "More: cc path | Tab info | c z ZIP | dd trash",
+            "More: c c path | Tab info | c z ZIP | d d trash",
         }
     end
 
     return {
         "Keys: Enter open | R rename | Ctrl+C/X copy/cut | c z ZIP",
-        "More: cc path | Tab info | dd trash | e h/e f extract ZIP",
+        "More: c c path | Tab info | d d trash | e h/e f extract ZIP",
     }
 end
 
@@ -1352,6 +1352,36 @@ function AwtarchyYaziContextMenu:reflow()
     return self._visible and self._area.w > 0 and { self } or {}
 end
 
+local function AwtarchyYaziContextShortcutSpans(shortcut)
+    local text = tostring(shortcut or "")
+    if text == "" then return {} end
+
+    local alt_left, alt_right = text:match("^(.-) / (.-)$")
+    if alt_left and alt_right then
+        return {
+            ui.Span(alt_left):style(th.which.cand),
+            ui.Span(" / "):style(th.which.separator_style),
+            ui.Span(alt_right):style(th.which.cand),
+        }
+    end
+
+    local keys = {}
+    for key in text:gmatch("%S+") do
+        keys[#keys + 1] = key
+    end
+
+    if #keys <= 1 then
+        return { ui.Span(text):style(th.which.cand) }
+    end
+
+    local spans = { ui.Span(keys[1]):style(th.which.cand) }
+    for i = 2, #keys do
+        spans[#spans + 1] = ui.Span(" ")
+        spans[#spans + 1] = ui.Span(keys[i]):style(th.which.rest)
+    end
+    return spans
+end
+
 function AwtarchyYaziContextMenu:redraw()
     if not self._visible or self._area.w == 0 then
         return {}
@@ -1361,17 +1391,23 @@ function AwtarchyYaziContextMenu:redraw()
     local content_width = self._list_area.w
     for i, action in ipairs(self._render_actions or {}) do
         local left = " " .. tostring(action.label or "")
-        local right = tostring(action.shortcut or "") .. " "
+        local shortcut_spans = AwtarchyYaziContextShortcutSpans(action.shortcut)
+        local right_width = ui.Line(shortcut_spans):width() + 1
         local gap = math.max(
             1,
-            content_width - ui.Line(left):width() - ui.Line(right):width()
+            content_width - ui.Line(left):width() - right_width
         )
 
-        local row = ui.Line {
+        local row_spans = {
             ui.Span(left):style(th.help.action),
             ui.Span(string.rep(" ", gap)),
-            ui.Span(right):style(th.help.chord),
         }
+        for _, span in ipairs(shortcut_spans) do
+            row_spans[#row_spans + 1] = span
+        end
+        row_spans[#row_spans + 1] = ui.Span(" ")
+
+        local row = ui.Line(row_spans)
         if i == self._hovered_row then
             row:style(th.help.hovered)
         end
