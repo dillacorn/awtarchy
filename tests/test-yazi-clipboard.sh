@@ -339,6 +339,25 @@ grep -Fq 'x = self._x - width - 1' "$YAZI_INIT" \
   || fail 'Yazi context popup does not flip beside the cursor near the right edge'
 grep -Fq 'function AwtarchyYaziContextMenu:redraw()' "$YAZI_INIT" \
   || fail 'Yazi cursor context popup has no custom overlay renderer'
+grep -Fq 'local function AwtarchyYaziContextShortcutSpans(shortcut)' "$YAZI_INIT" \
+  || fail 'Yazi context shortcuts are not split into styled chord keys'
+grep -Fq 'ui.Span(keys[1]):style(th.which.cand)' "$YAZI_INIT" \
+  || fail 'Yazi context shortcut first key does not use primary chord highlighting'
+grep -Fq 'ui.Span(keys[i]):style(th.which.rest)' "$YAZI_INIT" \
+  || fail 'Yazi context shortcut secondary key does not use distinct highlighting'
+grep -Fq 'shortcut = "c z"' "$YAZI_INIT" \
+  || fail 'Yazi ZIP context action does not expose the c z chord'
+grep -Fq 'shortcut = "d d"' "$YAZI_INIT" \
+  || fail 'Yazi Trash context action does not expose the spaced d d chord'
+grep -Fq 'cand = { fg = "lightcyan", bold = true }' "$YAZI_THEME" \
+  || fail 'Yazi primary context chord key highlight is missing'
+grep -Fq 'rest = { fg = "lightmagenta", bold = true }' "$YAZI_THEME" \
+  || fail 'Yazi secondary context chord key highlight is missing'
+if grep -Fq 'function Root:redraw()' "$YAZI_INIT" \
+  || grep -Fq 'function Root:layout()' "$YAZI_INIT" \
+  || grep -Fq 'function Root:reflow()' "$YAZI_INIT"; then
+  fail 'Yazi context popup must not replace Root drawing or layout'
+fi
 grep -Fq ':type(ui.Border.PLAIN)' "$YAZI_INIT" \
   || fail 'Yazi cursor context popup does not preserve square borders'
 grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
@@ -402,7 +421,7 @@ grep -Fq '{ label = "Terminal here", shortcut = "t e", action = "terminal" }' "$
   || fail 'Yazi folder context menu lacks Terminal here with keyboard parity'
 grep -Fq '{ label = "Rename", shortcut = "R", action = "rename" }' "$YAZI_INIT" \
   || fail 'Yazi item context menu lacks Shift+R Rename shortcut hint'
-grep -Fq '{ label = "Trash", shortcut = "dd", action = "trash" }' "$YAZI_INIT" \
+grep -Fq '{ label = "Trash", shortcut = "d d", action = "trash" }' "$YAZI_INIT" \
   || fail 'Yazi item context menu lacks Trash shortcut hint'
 grep -Fq 'Keys: Enter open | R rename | Ctrl+C/X copy/cut | c z ZIP' "$YAZI_INIT" \
   || fail 'Yazi item context footer does not teach keyboard equivalents'
