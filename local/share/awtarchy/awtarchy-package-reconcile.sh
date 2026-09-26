@@ -2125,11 +2125,22 @@ ensure_aur_scanner() {
     return 1
   fi
 
+  if (( EUID != 0 )) && [[ ${AWTARCHY_TEST_MODE:-0} != 1 ]]; then
+    /usr/bin/sudo -k
+    if ! /usr/bin/sudo -v; then
+      warn "sudo authentication failed before the aur-scanner bootstrap."
+      return 1
+    fi
+    start_aur_sudo_keepalive
+  fi
+
   log "Installing stable aur-scanner through yay for the one-time bootstrap..."
   if ! /usr/bin/yay -S --noconfirm --pgpfetch aur-scanner; then
+    stop_aur_sudo_keepalive
     warn "Failed to bootstrap stable aur-scanner."
     return 1
   fi
+  stop_aur_sudo_keepalive
 
   if [[ ! -x /usr/bin/aur-scan ]] || ! /usr/bin/aur-scan --version >/dev/null 2>&1; then
     warn "aur-scanner installed without a usable /usr/bin/aur-scan."
