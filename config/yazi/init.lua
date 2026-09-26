@@ -46,6 +46,62 @@ local function AwtarchyYaziCollectionCwd()
     return AwtarchyYaziCollectionKind(cx.active.current.cwd)
 end
 
+local AwtarchyYaziCollectionReturns = {}
+
+local function AwtarchyYaziCollectionReturnState()
+    local tab_key = tostring(cx.active.id)
+    local state = AwtarchyYaziCollectionReturns[tab_key]
+    if not state then
+        state = {}
+        AwtarchyYaziCollectionReturns[tab_key] = state
+    end
+    return state
+end
+
+local function AwtarchyYaziOpenCollection(kind)
+    local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
+    local state = AwtarchyYaziCollectionReturnState()
+
+    if AwtarchyYaziCollectionCwd() ~= kind then
+        state[kind] = tostring(cx.active.current.cwd)
+    end
+
+    ya.emit("plugin", { plugin })
+end
+
+local function AwtarchyYaziToggleCollection(kind)
+    local state = AwtarchyYaziCollectionReturnState()
+
+    if AwtarchyYaziCollectionCwd() == kind then
+        local target = state[kind]
+        state[kind] = nil
+        if target and target ~= "" then
+            ya.emit("cd", { Url(target), raw = true })
+        else
+            ya.emit("back", {})
+        end
+        return
+    end
+
+    AwtarchyYaziOpenCollection(kind)
+end
+
+function AwtarchyYaziGoBookmarks()
+    AwtarchyYaziOpenCollection("bookmarks")
+end
+
+function AwtarchyYaziToggleBookmarks()
+    AwtarchyYaziToggleCollection("bookmarks")
+end
+
+function AwtarchyYaziGoRecents()
+    AwtarchyYaziOpenCollection("recents")
+end
+
+function AwtarchyYaziToggleRecents()
+    AwtarchyYaziToggleCollection("recents")
+end
+
 local AwtarchyYaziDefaultEntityHighlights = Entity.highlights
 local AwtarchyYaziDefaultEntitySymlink = Entity.symlink
 
@@ -430,8 +486,21 @@ function AwtarchyYaziSearchMenu()
     end)
 end
 
-function AwtarchyYaziToggleBookmark()
-    AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
+function AwtarchyYaziBookmarkHovered()
+    if AwtarchyYaziContextMenu
+        and AwtarchyYaziContextMenu._visible
+        and AwtarchyYaziContextMenu._kind == "background"
+    then
+        AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
+        return
+    end
+
+    local hovered = cx.active.current.hovered
+    if not hovered or AwtarchyYaziIsCollectionItemUrl(hovered.url) then
+        return
+    end
+
+    AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)
 end
 
 function AwtarchyYaziOpenHoveredTab()
@@ -989,8 +1058,8 @@ end
 local AwtarchyYaziFileActions = {
     { label = "Open", shortcut = "Enter", action = "smart_open" },
     { label = "Open with...", shortcut = "O", action = "open_with" },
-    { label = "Bookmark / unbookmark", shortcut = "g B", action = "bookmark_hovered" },
-    { label = "Rename", shortcut = "r", action = "rename" },
+    { label = "Bookmark / unbookmark", shortcut = "B", action = "bookmark_hovered" },
+    { label = "Rename", shortcut = "R", action = "rename" },
     { label = "Drag out...", shortcut = "d g", action = "drag_out" },
     { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
     { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
@@ -1069,7 +1138,7 @@ local AwtarchyYaziFolderActions = {
     { label = "New folder", shortcut = "a /", action = "new_folder" },
     { label = "Paste", shortcut = "Ctrl+V / p", action = "paste" },
     { label = "Terminal here", shortcut = "t e", action = "terminal" },
-    { label = "Bookmark / unbookmark folder", shortcut = "g B", action = "bookmark_current" },
+    { label = "Bookmark / unbookmark folder", shortcut = "B", action = "bookmark_current" },
 }
 
 AwtarchyYaziContextMenu = {
@@ -1095,10 +1164,10 @@ local AwtarchyYaziContextChoiceKeys = {
     smart_open = { "<Enter>" },
     open_with = { "O" },
     open_new_tab = { "t", "n" },
-    bookmark_hovered = { "g", "B" },
-    bookmark_current = { "g", "B" },
-    rename = { "r" },
-    bulk_rename = { "r" },
+    bookmark_hovered = { "B" },
+    bookmark_current = { "B" },
+    rename = { "R" },
+    bulk_rename = { "R" },
     drag_out = { "d", "g" },
     copy = { "y" },
     cut = { "Y" },
@@ -1127,7 +1196,7 @@ function AwtarchyYaziContextMenu:actions()
         return {
             {
                 label = "Rename " .. tostring(self._selection_count) .. " items...",
-                shortcut = "r",
+                shortcut = "R",
                 action = "bulk_rename",
             },
             { label = "Drag out...", shortcut = "d g", action = "drag_out" },
@@ -1144,10 +1213,10 @@ function AwtarchyYaziContextMenu:actions()
             { label = "Open in new tab", shortcut = "t n", action = "open_new_tab" },
             {
                 label = "Bookmark / unbookmark",
-                shortcut = "g B",
+                shortcut = "B",
                 action = "bookmark_hovered",
             },
-            { label = "Rename", shortcut = "r", action = "rename" },
+            { label = "Rename", shortcut = "R", action = "rename" },
             { label = "Drag out...", shortcut = "d g", action = "drag_out" },
             { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
             { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
@@ -1175,7 +1244,7 @@ end
 function AwtarchyYaziContextMenu:footer()
     if self._kind == "background" then
         return {
-            "Keys: a create | Ctrl+V/p paste | t e terminal | g B bookmark",
+            "Keys: a create | Ctrl+V/p paste | t e terminal | B bookmark",
             "Navigate: g b bookmarks | g m mounts | Ctrl+F recursive search",
         }
     elseif self._kind == "drop" then
@@ -1185,7 +1254,7 @@ function AwtarchyYaziContextMenu:footer()
         }
     elseif self._selection_count > 1 then
         return {
-            "Keys: r bulk rename | Ctrl+C/X copy/cut | c z ZIP",
+            "Keys: R bulk rename | Ctrl+C/X copy/cut | c z ZIP",
             "Delete: dd trash | Shift+D permanent delete",
         }
     end
@@ -1199,7 +1268,7 @@ function AwtarchyYaziContextMenu:footer()
     end
 
     return {
-        "Keys: Enter open | r rename | Ctrl+C/X copy/cut | c z ZIP",
+        "Keys: Enter open | R rename | Ctrl+C/X copy/cut | c z ZIP",
         "More: cc path | Tab info | dd trash | e h/e f extract ZIP",
     }
 end
@@ -1481,10 +1550,7 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "bulk_rename" then
         ya.emit("rename", {})
     elseif action == "bookmark_hovered" then
-        local hovered = cx.active.current.hovered
-        if hovered then
-            AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)
-        end
+        AwtarchyYaziBookmarkHovered()
     elseif action == "bookmark_current" then
         AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
     elseif action == "drag_out" then
