@@ -39,3 +39,99 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  release-v3-8-3:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Release Awtarchy v3.8.3' &&
+      github.head_ref == 'release/awtarchy-v3.8.3' &&
+      github.base_ref == 'main'
+    needs:
+      - release-notes-contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+      - name: Validate, publish, and verify Awtarchy v3.8.3
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          tag='v3.8.3'
+          title='Awtarchy v3.8.3'
+          target='43668ed7d72571c0927e0b9897642faf04861ea6'
+          notes='.github/release-v3.8.3.md'
+          previous='/tmp/awtarchy-v3.8.2.md'
+          published='/tmp/awtarchy-v3.8.3-published.md'
+
+          latest="$(gh release list --repo "$GITHUB_REPOSITORY" --limit 1 --json tagName --jq '.[0].tagName')"
+          [[ "$latest" == 'v3.8.2' ]] || {
+            echo "Expected latest stable release v3.8.2, found $latest" >&2
+            exit 1
+          }
+
+          gh release view v3.8.2 --repo "$GITHUB_REPOSITORY" --json body --jq '.body' > "$previous"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$title" \
+            --notes "$notes" \
+            --previous "$previous"
+
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $tag already exists" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null 2>&1; then
+            echo "Tag $tag already exists" >&2
+            exit 1
+          fi
+
+          git cat-file -e "$target^{commit}"
+          gh release create "$tag" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$target" \
+            --title "$title" \
+            --notes-file "$notes"
+
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,targetCommitish,isDraft,isPrerelease,body > /tmp/release.json
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' > "$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" \
+            --title "$title" \
+            --notes "$published" \
+            --previous "$previous"
+
+          python3 - "$notes" "$target" "$title" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          notes_path = Path(sys.argv[1])
+          target = sys.argv[2]
+          title = sys.argv[3]
+          release = json.loads(Path("/tmp/release.json").read_text(encoding="utf-8"))
+          expected_body = notes_path.read_text(encoding="utf-8").rstrip("\n")
+          assert release["tagName"] == "v3.8.3", release
+          assert release["name"] == title, release
+          assert release["targetCommitish"] == target, release
+          assert release["isDraft"] is False, release
+          assert release["isPrerelease"] is False, release
+          assert release["body"].rstrip("\n") == expected_body, release
+          PY
+
+          git fetch --force origin "refs/tags/$tag:refs/tags/$tag"
+          [[ "$(git rev-list -n1 "$tag")" == "$target" ]] || {
+            echo "Published tag does not resolve to intended target" >&2
+            exit 1
+          }
+
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/release/awtarchy-v3.8.3"
