@@ -8,7 +8,7 @@ Use the installed `awtarchy` maintenance command for normal updates. Do not recl
 awtarchy update
 ```
 
-Stable update/reset/review operations target published Awtarchy releases. The maintenance command/runtime itself can refresh from `main` independently so updater fixes do not require a new configuration release. When a tested post-release configuration adds a required feature dependency, `awtarchy update` installs that dependency before applying the managed configuration; optional package choices remain separate.
+Stable update/reset/review operations target published Awtarchy releases. The maintenance command/runtime itself can refresh from `main` independently so updater-only fixes do not require a new configuration release. Changes to release-managed configuration are available to normal stable updates only after a new published stable release includes them; editing release notes does not change the configuration payload users receive. Optional package choices remain separate.
 
 ## Review changes before applying them
 
