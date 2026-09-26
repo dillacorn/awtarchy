@@ -664,6 +664,12 @@ grep -Fq 'repair_v380_yazi_drag_target "$target_home" "$tag"' "$RUNTIME" \
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_ripdrag_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not install ripdrag before applying a Yazi drag target'
+grep -Fq 'start_update_aur_sudo_keepalive' "$RUNTIME" \
+  || fail 'stable/Git updater does not keep the approved sudo timestamp alive during long AUR builds'
+grep -Fq 'run_target /usr/bin/sudo -n -v' "$RUNTIME" \
+  || fail 'stable/Git updater sudo keepalive does not refresh credentials noninteractively'
+grep -Fq 'stop_update_aur_sudo_keepalive' "$RUNTIME" \
+  || fail 'stable/Git updater does not stop its AUR sudo keepalive after the dependency install'
 grep -Fq 'Command("ripdrag")' "$RUNTIME" \
   || fail 'v3.8.0 post-release Yazi plugin repair does not launch ripdrag'
 grep -Fq 'run = "plugin drag"' "$RUNTIME" \
