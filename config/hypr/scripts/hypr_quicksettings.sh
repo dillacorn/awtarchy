@@ -309,14 +309,18 @@ machine_status() {
 }
 
 machine_brightness_adjust() {
-  local monitor="$1" delta="$2" target
+  local monitor="$1" delta="$2" current_percent target_percent target
   [[ "$delta" =~ ^-?[0-9]+$ ]] || return 2
   BRIGHTNESS_MONITOR="$monitor"
   refresh_brightness
   [[ "$BR_CUR" =~ ^[0-9]+$ && "$BR_MAX" =~ ^[1-9][0-9]*$ ]] || return 1
-  target=$(( BR_CUR + delta ))
-  (( target < 0 )) && target=0
-  (( target > BR_MAX )) && target="$BR_MAX"
+
+  current_percent=$(( (BR_CUR * 100 + BR_MAX / 2) / BR_MAX ))
+  target_percent=$(( current_percent + delta ))
+  (( target_percent < 0 )) && target_percent=0
+  (( target_percent > 100 )) && target_percent=100
+  target=$(( (BR_MAX * target_percent + 50) / 100 ))
+
   brightness_quiet set "$target"
 }
 
