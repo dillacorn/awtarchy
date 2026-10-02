@@ -9,6 +9,7 @@
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] status
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] set-percent <0-100>
 
 set -euo pipefail
 
@@ -141,6 +142,12 @@ case "$cmd" in
     [[ "$2" =~ ^[0-9]+$ ]] || { echo "hypr-ddc-brightness: set value must be integer" >&2; exit 2; }
     set_value="$2"
     ;;
+  set-percent)
+    [[ -n "${2:-}" ]] || { echo "hypr-ddc-brightness: usage: $0 set-percent <0-100>" >&2; exit 2; }
+    [[ "$2" =~ ^[0-9]+$ ]] || { echo "hypr-ddc-brightness: percentage must be integer" >&2; exit 2; }
+    set_percent="$2"
+    (( set_percent > 100 )) && set_percent=100
+    ;;
   ""|-h|--help|help)
     cat <<'EOF'
 Usage:
@@ -148,6 +155,7 @@ Usage:
   hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
   hypr-ddc-brightness.sh [--monitor CONNECTOR] status
   hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] set-percent <0-100>
 EOF
     exit 0
     ;;
@@ -521,7 +529,7 @@ if [[ "$MODE" == "client" && "$cmd" == "status" ]]; then
   exit 0
 fi
 
-if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
+if [[ "$MODE" == "client" && ( "$cmd" == "set" || "$cmd" == "set-percent" ) ]]; then
   focused_line="$(must_focused_info)"
   IFS=$'\t' read -r conn make model serial desc <<<"$focused_line"
 
@@ -541,7 +549,11 @@ if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
     fi
   fi
 
-  target="$set_value"
+  if [[ "$cmd" == "set-percent" ]]; then
+    target=$(( (max * set_percent + 50) / 100 ))
+  else
+    target="$set_value"
+  fi
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
 
