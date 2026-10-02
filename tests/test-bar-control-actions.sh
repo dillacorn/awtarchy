@@ -389,6 +389,15 @@ PATH="${volume_bin}:$PATH" \
 [[ $(<"$volume_state") == 200 ]] \
   || fail "absolute volume set did not preserve the 200 percent safety cap"
 
+grep -Fq 'property int brightnessRequestedValue: -1' "$BAR_QML" \
+  || fail "bar brightness does not keep an immediate requested value"
+grep -Fq 'brightnessDisplayValue + direction * brightnessStep' "$BAR_QML" \
+  || fail "bar brightness wheel feedback still waits on the helper path"
+grep -Fq 'data.pending !== true && brightnessRequestedValue >= 0' "$BAR_QML" \
+  || fail "bar brightness optimistic state does not reconcile against confirmed hardware state"
+grep -Fq 'interval: 5000' "$BAR_QML" \
+  || fail "bar brightness optimistic state has no bounded fallback"
+
 grep -Fq 'volumeLimitBlockedScrolls < 7' "$BAR_QML" \
   || fail "volume limit discovery hint does not require seven blocked scrolls"
 grep -Fq 'now - volumeLimitAttemptStartedAt < 1200' "$BAR_QML" \
