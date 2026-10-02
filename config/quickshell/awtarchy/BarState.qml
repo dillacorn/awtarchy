@@ -424,7 +424,6 @@ Singleton {
         return ({
             enabled: true,
             update_notifications_enabled: true,
-            volume_limit_hint_seen: false,
             lockscreen_animation: "split",
             lockscreen_entry_transition: "fade",
             lockscreen_logo_physics_hz: 30,
@@ -497,8 +496,6 @@ Singleton {
                 parsed.enabled = true;
             if (parsed.update_notifications_enabled === undefined)
                 parsed.update_notifications_enabled = true;
-            if (parsed.volume_limit_hint_seen === undefined)
-                parsed.volume_limit_hint_seen = false;
             return parsed;
         } catch (error) {
             console.warn("Awtarchy Quickshell: invalid shell state:", error);
@@ -516,10 +513,6 @@ Singleton {
     function data() {
         const dependency = revision;
         return stateCacheReady ? stateCache : emptyData();
-    }
-
-    function volumeLimitHintSeen() {
-        return data().volume_limit_hint_seen === true;
     }
 
     function lockscreenMonitorProfiles() {
