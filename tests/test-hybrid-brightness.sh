@@ -410,16 +410,20 @@ done
 
 grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness does not request immediate hardware writes while scrolling"
+# shellcheck disable=SC2016
 grep -Fq 'debounce_file="$rundir/debounce_${conn}.txt"' "$CONTROLLER_SOURCE" \
   || fail "brightness worker does not track debounce timing per input batch"
+# shellcheck disable=SC2016
 grep -Fq 'batch_debounce="$(read_uint_file "$debounce_file" "$DEBOUNCE_MS")"' "$CONTROLLER_SOURCE" \
   || fail "brightness worker does not honor source-aware batch timing"
 grep -Fq 'AWTARCHY_DDC_SCROLL_MAX_WAIT_MS:-500' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness still allows long continuous-scroll latency"
 grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness adjustments do not suppress routine notifications"
+# shellcheck disable=SC2016
 grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
   || fail "Quick Settings brightness adjustments do not suppress routine notifications"
+# shellcheck disable=SC2016
 grep -Fq 'brightness_quiet set-percent "$percent"' "$QUICKSETTINGS_BACKEND" \
   || fail "Quick Settings brightness drag does not use the cached percentage write path"
 grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
@@ -448,6 +452,7 @@ grep -Fq 'AudioLimitState.setLimit(root.outputVolumeHoverPercent);' "$QUICK_SETT
   || fail "Quick Settings maximum volume does not commit the dragged value on release"
 grep -Fq 'function previewLimit(value)' "$AUDIO_LIMIT_STATE" \
   || fail "maximum volume state has no lightweight drag preview path"
+# shellcheck disable=SC2016
 grep -Fq '[[ "${HYPR_DDC_NOTIFY:-1}" == "0" ]] && return 0' "$CONTROLLER_SOURCE" \
   || fail "brightness controller no longer defaults notifications on for direct calls"
 grep -Fq 'hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})' "$HYPR_CONFIG" \
