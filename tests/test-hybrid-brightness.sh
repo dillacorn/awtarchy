@@ -410,6 +410,9 @@ done
 
 grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness does not request immediate hardware writes while scrolling"
+# These assertions intentionally search for literal shell syntax in managed
+# source files; the single quotes are not meant to expand here.
+# shellcheck disable=SC2016
 # shellcheck disable=SC2016
 grep -Fq 'debounce_file="$rundir/debounce_${conn}.txt"' "$CONTROLLER_SOURCE" \
   || fail "brightness worker does not track debounce timing per input batch"
