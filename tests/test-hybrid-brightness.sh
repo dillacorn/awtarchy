@@ -439,8 +439,8 @@ grep -Fq 'label: bar.brightnessDisplayText' "$BAR_QML" \
   || fail "horizontal bar brightness does not render the immediate optimistic value"
 grep -Fq 'bar.brightnessDisplayValue + "%"' "$BAR_QML" \
   || fail "vertical bar brightness does not render the immediate optimistic value"
-grep -Fq 'brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));' "$QUICK_SETTINGS" \
-  || fail "Quick Settings +/- brightness does not update its visible target immediately"
+grep -Fq 'setBrightnessPercent(base + delta);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings +/- brightness does not route through the optimistic percentage setter"
 grep -Fq 'brightnessPreviewPercent = next;' "$QUICK_SETTINGS" \
   || fail "Quick Settings brightness track does not update its visible target immediately"
 grep -Fq 'if (pressed)' "$QUICK_SETTINGS" \
