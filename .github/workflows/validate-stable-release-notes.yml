@@ -65,22 +65,22 @@ jobs:
           current_main="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
           [[ "$current_main" == "$RELEASE_TARGET" ]] || {
             printf 'main moved: expected %s, got %s\n' "$RELEASE_TARGET" "$current_main" >&2
-            return 1 2>/dev/null || false
+            false
           }
 
           latest_stable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
           [[ "$latest_stable" == "$PREVIOUS_STABLE" ]] || {
             printf 'latest stable changed: expected %s, got %s\n' "$PREVIOUS_STABLE" "$latest_stable" >&2
-            return 1 2>/dev/null || false
+            false
           }
 
           if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             printf 'release %s already exists; refusing to recreate it\n' "$VERSION" >&2
-            return 1 2>/dev/null || false
+            false
           fi
           if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
             printf 'tag %s already exists; refusing to move or reuse it\n' "$VERSION" >&2
-            return 1 2>/dev/null || false
+            false
           fi
 
           gh release view "$PREVIOUS_STABLE" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' \
