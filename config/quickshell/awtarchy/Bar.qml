@@ -275,16 +275,20 @@ PanelWindow {
         }
 
         const now = Date.now();
-        if (volumeLimitLastAttemptAt <= 0 || now - volumeLimitLastAttemptAt > 5000) {
+        const gap = volumeLimitLastAttemptAt > 0 ? now - volumeLimitLastAttemptAt : -1;
+
+        if (volumeLimitLastAttemptAt <= 0 || gap > 2500) {
             volumeLimitBlockedScrolls = 1;
             volumeLimitAttemptStartedAt = now;
-        } else {
+        } else if (gap >= 100) {
+            // Count deliberate wheel steps, not a dense stream of high-resolution
+            // events from an infinity/free-spinning wheel.
             volumeLimitBlockedScrolls++;
         }
         volumeLimitLastAttemptAt = now;
 
-        // Require both repeated intent and some dwell time so a single
-        // free-spinning/infinity-wheel fling is unlikely to trigger the hint.
+        // Seven counted attempts plus a minimum dwell time makes this a
+        // discovery fallback rather than normal volume feedback.
         if (volumeLimitBlockedScrolls < 7 || now - volumeLimitAttemptStartedAt < 1200)
             return;
 
