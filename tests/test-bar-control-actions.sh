@@ -8,6 +8,9 @@ VOLUME_SCRIPT="${AWTARCHY_TEST_VOLUME_SCRIPT:-${ROOT}/config/hypr/scripts/quicks
 SYSTEM_STATE="${ROOT}/config/quickshell/awtarchy/SystemState.qml"
 KEYBOARD_LOCK_STATE="${ROOT}/config/quickshell/awtarchy/KeyboardLockState.qml"
 BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
+AUDIO_LIMIT_STATE="${ROOT}/config/quickshell/awtarchy/AudioLimitState.qml"
+BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
+APP_STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
 TMP="$(mktemp -d)"
@@ -385,5 +388,30 @@ PATH="${volume_bin}:$PATH" \
 
 [[ $(<"$volume_state") == 200 ]] \
   || fail "absolute volume set did not preserve the 200 percent safety cap"
+
+grep -Fq 'volumeLimitBlockedScrolls < 7' "$BAR_QML" \
+  || fail "volume limit discovery hint does not require seven blocked scrolls"
+grep -Fq 'now - volumeLimitAttemptStartedAt < 1200' "$BAR_QML" \
+  || fail "volume limit discovery hint lacks infinity-wheel dwell protection"
+grep -Fq 'now - volumeLimitLastAttemptAt > 5000' "$BAR_QML" \
+  || fail "volume limit discovery hint does not reset stale attempts"
+grep -Fq 'Max volume is 100%. Adjust Max Volume in Quick Settings.' "$BAR_QML" \
+  || fail "volume limit discovery hint does not direct users to Quick Settings"
+grep -Fq 'BarState.volumeLimitHintSeen()' "$BAR_QML" \
+  || fail "volume limit discovery hint is not one-time"
+grep -Fq 'if (next > 100)' "$AUDIO_LIMIT_STATE" \
+  || fail "raising max volume does not mark the discovery hint as already understood"
+grep -Fq 'function volumeLimitHintSeen()' "$BAR_STATE" \
+  || fail "BarState does not expose the persisted volume hint discovery state"
+
+hint_cache="${TMP}/hint-cache"
+mkdir -p "$hint_cache/awtarchy"
+printf '%s\n' '{}' >"$hint_cache/awtarchy/quickshell-state.json"
+XDG_CACHE_HOME="$hint_cache" \
+  HYPR_QUICKSHELL_SCRIPT=/bin/false \
+  "$APP_STATE" set-volume-limit-hint-seen true
+jq -e '.volume_limit_hint_seen == true' \
+  "$hint_cache/awtarchy/quickshell-state.json" >/dev/null \
+  || fail "volume limit hint discovery state did not persist"
 
 printf '%s\n' "Bar control action regression test passed."
