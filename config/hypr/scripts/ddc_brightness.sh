@@ -8,7 +8,6 @@ export LC_ALL=C
 
 BRIGHTNESS_SCRIPT="${HYPR_BRIGHTNESS_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/hypr-ddc-brightness.sh}"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/hypr-ddc-brightness"
-HELPER_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/hypr-ddc-brightness-$(id -u)"
 CACHE_MAX_AGE_MS="${AWTARCHY_DDC_CACHE_MAX_AGE_MS:-30000}"
 PREVIEW_MAX_AGE_MS="${AWTARCHY_DDC_PREVIEW_MAX_AGE_MS:-10000}"
 STEP="${AWTARCHY_DDC_STEP:-5}"
@@ -99,10 +98,6 @@ state_file() {
 
 preview_file() {
   printf '%s/preview_%s.tsv\n' "$CACHE_DIR" "$1"
-}
-
-helper_pending_file() {
-  printf '%s/pending_%s.txt\n' "$HELPER_RUNTIME_DIR" "$1"
 }
 
 safe_name() {
@@ -419,19 +414,17 @@ watch_status() {
   exec sleep infinity
 }
 
-update_preview_from_pending() {
-  local monitor="$1" cur max _timestamp pending target pending_path
+update_preview_for_adjustment() {
+  local monitor="$1" direction="$2" cur max _timestamp delta target
 
-  read -r cur max _timestamp < <(read_status_record "$(state_file "$monitor")") || return 0
-
-  pending_path="$(helper_pending_file "$monitor")"
-  pending=0
-  if [[ -r "$pending_path" ]]; then
-    IFS= read -r pending <"$pending_path" || pending=0
+  if ! read -r cur max < <(read_preview_status "$monitor"); then
+    read -r cur max _timestamp < <(read_status_record "$(state_file "$monitor")") || return 0
   fi
-  [[ "$pending" =~ ^-?[0-9]+$ ]] || pending=0
 
-  target=$((cur + pending))
+  delta="$STEP"
+  [[ "$direction" == "down" ]] && delta=$((-STEP))
+
+  target=$((cur + delta))
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
 
@@ -442,15 +435,20 @@ adjust() {
   local direction="$1"
   local monitor
 
-  monitor="$(monitor_under_cursor || true)"
-  [[ -n "$monitor" ]] || monitor="$(resolve_monitor)"
+  # Bar.qml supplies the exact output that received the wheel event. Honor it
+  # first to avoid extra Hyprland queries and prevent pointer movement between
+  # the QML event and this detached helper from changing the target display.
+  monitor="$(resolve_monitor)"
 
   HYPR_DDC_NOTIFY=0 \
     HYPR_DDC_DEBOUNCE_MS="$SCROLL_DEBOUNCE_MS" \
     HYPR_DDC_MAX_WAIT_MS="$SCROLL_MAX_WAIT_MS" \
     "$BRIGHTNESS_SCRIPT" --monitor "$monitor" "$direction" "$STEP"
 
-  update_preview_from_pending "$monitor"
+  # Update the bar from the last optimistic target rather than the worker's
+  # pending file. This keeps consecutive wheel events visually immediate even
+  # while a previous DDC write is still in flight.
+  update_preview_for_adjustment "$monitor" "$direction"
 }
 
 toggle_quick_settings() {
