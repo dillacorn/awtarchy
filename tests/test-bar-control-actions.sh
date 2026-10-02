@@ -9,8 +9,6 @@ SYSTEM_STATE="${ROOT}/config/quickshell/awtarchy/SystemState.qml"
 KEYBOARD_LOCK_STATE="${ROOT}/config/quickshell/awtarchy/KeyboardLockState.qml"
 BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
 AUDIO_LIMIT_STATE="${ROOT}/config/quickshell/awtarchy/AudioLimitState.qml"
-BAR_STATE="${ROOT}/config/quickshell/awtarchy/BarState.qml"
-APP_STATE="${ROOT}/config/hypr/scripts/quickshell_application_state.sh"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
 TMP="$(mktemp -d)"
@@ -408,21 +406,18 @@ grep -Fq 'gap >= 100' "$BAR_QML" \
   || fail "volume limit discovery hint does not filter dense infinity-wheel events"
 grep -Fq 'Max volume is 100%. Adjust Max Volume in Quick Settings.' "$BAR_QML" \
   || fail "volume limit discovery hint does not direct users to Quick Settings"
-grep -Fq 'BarState.volumeLimitHintSeen()' "$BAR_QML" \
-  || fail "volume limit discovery hint is not one-time"
-grep -Fq 'if (next > 100)' "$AUDIO_LIMIT_STATE" \
-  || fail "raising max volume does not mark the discovery hint as already understood"
-grep -Fq 'function volumeLimitHintSeen()' "$BAR_STATE" \
-  || fail "BarState does not expose the persisted volume hint discovery state"
-
-hint_cache="${TMP}/hint-cache"
-mkdir -p "$hint_cache/awtarchy"
-printf '%s\n' '{}' >"$hint_cache/awtarchy/quickshell-state.json"
-XDG_CACHE_HOME="$hint_cache" \
-  HYPR_QUICKSHELL_SCRIPT=/bin/false \
-  "$APP_STATE" set-volume-limit-hint-seen true
-jq -e '.volume_limit_hint_seen == true' \
-  "$hint_cache/awtarchy/quickshell-state.json" >/dev/null \
-  || fail "volume limit hint discovery state did not persist"
+grep -Fq 'volumeLimitHintCooldown.running' "$BAR_QML" \
+  || fail "volume limit discovery hint has no repeat-notification cooldown"
+grep -Fq 'interval: 60000' "$BAR_QML" \
+  || fail "volume limit discovery hint cooldown is not bounded"
+grep -Fq -- '--action=open=Open Quick Settings' "$BAR_QML" \
+  || fail "volume limit discovery notification has no Quick Settings action"
+grep -Fq 'QuickSettings.openForScreen(bar.screen);' "$BAR_QML" \
+  || fail "volume limit discovery action does not open Quick Settings on the bar display"
+if grep -Fq 'volumeLimitHintSeen' "$BAR_QML"; then
+  fail "volume limit discovery hint is still permanently suppressed after one display"
+fi
+grep -Fq 'function previewLimit(value)' "$AUDIO_LIMIT_STATE" \
+  || fail "maximum volume state has no non-persistent drag preview"
 
 printf '%s\n' "Bar control action regression test passed."
