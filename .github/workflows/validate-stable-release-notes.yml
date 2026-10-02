@@ -39,3 +39,88 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v3-8-4:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Publish Awtarchy v3.8.4' &&
+      github.event.pull_request.head.ref == 'release/v3.8.4-bridge' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      VERSION: v3.8.4
+      RELEASE_TITLE: Awtarchy v3.8.4 Brightness and Volume Controls
+      RELEASE_TARGET: a8f34b93310f5d1da53a2d5e11ad5ab0ea9c1f60
+      PREVIOUS_STABLE: v3.8.3
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Validate and publish exact stable release
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          current_main="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
+          [[ "$current_main" == "$RELEASE_TARGET" ]] || {
+            printf 'main moved: expected %s, got %s\n' "$RELEASE_TARGET" "$current_main" >&2
+            return 1 2>/dev/null || false
+          }
+
+          latest_stable="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          [[ "$latest_stable" == "$PREVIOUS_STABLE" ]] || {
+            printf 'latest stable changed: expected %s, got %s\n' "$PREVIOUS_STABLE" "$latest_stable" >&2
+            return 1 2>/dev/null || false
+          }
+
+          if gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'release %s already exists; refusing to recreate it\n' "$VERSION" >&2
+            return 1 2>/dev/null || false
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${VERSION}" >/dev/null 2>&1; then
+            printf 'tag %s already exists; refusing to move or reuse it\n' "$VERSION" >&2
+            return 1 2>/dev/null || false
+          fi
+
+          gh release view "$PREVIOUS_STABLE" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' \
+            > /tmp/previous-stable-release.md
+          printf '%s' 'IyBBd3RhcmNoeSB2My44LjQgQnJpZ2h0bmVzcyBhbmQgVm9sdW1lIENvbnRyb2xzCgpBd3RhcmNoeSB2My44LjQgbWFrZXMgYnJpZ2h0bmVzcyBhbmQgdm9sdW1lLWxpbWl0IGNvbnRyb2xzIGZlZWwgbW9yZSBpbW1lZGlhdGUgd2hpbGUga2VlcGluZyByb3V0aW5lIGJyaWdodG5lc3MgZmVlZGJhY2sgdW5vYnRydXNpdmUuCgojIyBJbnN0YWxsIGFuZCB1cGRhdGUKCi0gTmV3IGluc3RhbGxhdGlvbjogW0lOU1RBTEwubWRdKGh0dHBzOi8vZ2l0aHViLmNvbS9kaWxsYWNvcm4vYXd0YXJjaHkvYmxvYi9tYWluL0lOU1RBTEwubWQpCi0gRXhpc3RpbmcgQXd0YXJjaHkgdXNlcnM6IFtVUERBVElORy5tZF0oaHR0cHM6Ly9naXRodWIuY29tL2RpbGxhY29ybi9hd3RhcmNoeS9ibG9iL21haW4vVVBEQVRJTkcubWQpIG9yIHJ1biBgYXd0YXJjaHkgdXBkYXRlYC4KCiMjIEJyaWdodG5lc3MKCi0gQmFyIGJyaWdodG5lc3Mgc2Nyb2xsaW5nIG5vdyB1cGRhdGVzIGltbWVkaWF0ZWx5IGFuZCBhcHBsaWVzIHBoeXNpY2FsIGJyaWdodG5lc3MgY2hhbmdlcyB3aGlsZSBzY3JvbGxpbmcsIHdpdGggcGVyY2VudGFnZS1jb3JyZWN0IEREQyBzdGVwcyBhY3Jvc3Mgbm9uLTDigJMxMDAgbmF0aXZlIHJhbmdlcy4KLSBRdWljayBTZXR0aW5ncyBicmlnaHRuZXNzIHN1cHBvcnRzIGhlbGQgTW91c2UxIGRyYWdnaW5nIHdpdGggY29hbGVzY2VkIHdyaXRlcyBmb3Igc21vb3RoIGxpdmUgYWRqdXN0bWVudC4KLSBCYXIgYW5kIFF1aWNrIFNldHRpbmdzIGJyaWdodG5lc3MgY2hhbmdlcyBhcmUgc2lsZW50LCB3aGlsZSBleGlzdGluZyBrZXlib2FyZCBicmlnaHRuZXNzIGJpbmRpbmdzIGtlZXAgdGhlaXIgbm90aWZpY2F0aW9ucy4KCiMjIFZvbHVtZSBsaW1pdAoKLSBRdWljayBTZXR0aW5ncyBNYXggVm9sdW1lIHN1cHBvcnRzIGhlbGQgTW91c2UxIGRyYWdnaW5nIGZyb20gMTAw4oCTMjAwJSB3aXRoIGxpdmUgcHJldmlldyBhbmQgY29tbWl0IG9uIHJlbGVhc2UuCi0gUmVwZWF0ZWQgZGVsaWJlcmF0ZSB1cHdhcmQgc2Nyb2xsaW5nIGF0IHRoZSAxMDAlIGxpbWl0IGNhbiBzaG93IGEgcmVwZWF0YWJsZSBkaXNjb3Zlcnkgbm90aWZpY2F0aW9uIHdpdGggKipPcGVuIFF1aWNrIFNldHRpbmdzKiosIHdoaWxlIGRlbnNlIGZyZWUtc2Nyb2xsIGV2ZW50cyBhcmUgZmlsdGVyZWQgYW5kIGEgNjAtc2Vjb25kIGNvb2xkb3duIHByZXZlbnRzIHNwYW0uCgojIyBWYWxpZGF0aW9uCgotIFBSICMyNTIgcGFzc2VkIGFsbCAyOSB0cmlnZ2VyZWQgY2hlY2tzIG9uIGV4YWN0IGhlYWQgYDAyNDNkMWVlNGFkMGNlNTk3MmRkNTBkMWM5NWVlMzNjNzk2NTg2MzJgLCBpbmNsdWRpbmcgdGhlIGZ1bGwgKipWYWxpZGF0ZSBBd3RhcmNoeSoqIHdvcmtmbG93LgotIEFsbCAxNiBwb3N0LW1lcmdlIGBtYWluYCBwdXNoIHdvcmtmbG93cyBwYXNzZWQgb24gZXhhY3QgcmVsZWFzZSB0YXJnZXQgYGE4ZjM0YjkzMzEwZjVkMWRhNTNhMmQ1ZTExYWQ1YWIwZWE5YzFmNjBgLgotIFRoZSBtYWludGFpbmVyIHJ1bnRpbWUtdGVzdGVkIHRoZSBmZWF0dXJlIGJyYW5jaCBhbmQgY29uZmlybWVkIHRoZSBicmlnaHRuZXNzIGJlaGF2aW9yIHdhcyBzdWJzdGFudGlhbGx5IGltcHJvdmVkIGJlZm9yZSBhcHByb3ZpbmcgbWVyZ2UgYW5kIHJlbGVhc2UuCg==' | base64 --decode \
+            > /tmp/proposed-release.md
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --title "$RELEASE_TITLE" \
+            --notes /tmp/proposed-release.md \
+            --previous /tmp/previous-stable-release.md
+
+          gh release create "$VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_TARGET" \
+            --title "$RELEASE_TITLE" \
+            --notes-file /tmp/proposed-release.md
+
+          gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' \
+            > /tmp/published-release.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$VERSION" \
+            --title "$RELEASE_TITLE" \
+            --notes /tmp/published-release.md \
+            --previous /tmp/previous-stable-release.md
+
+          actual_title="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json name --jq '.name')"
+          actual_draft="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+          actual_prerelease="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')"
+          actual_target="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')"
+          actual_tag="$(gh release view "$VERSION" --repo "$GITHUB_REPOSITORY" --json tagName --jq '.tagName')"
+          resolved_tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${VERSION}" --jq '.sha')"
+
+          [[ "$actual_title" == "$RELEASE_TITLE" ]]
+          [[ "$actual_draft" == "false" ]]
+          [[ "$actual_prerelease" == "false" ]]
+          [[ "$actual_target" == "$RELEASE_TARGET" ]]
+          [[ "$actual_tag" == "$VERSION" ]]
+          [[ "$resolved_tag_sha" == "$RELEASE_TARGET" ]]
+
+          printf 'PASS: published %s at %s with validated notes and tag target\n' \
+            "$VERSION" "$RELEASE_TARGET"
