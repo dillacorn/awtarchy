@@ -149,9 +149,9 @@ brightness_capture() {
 
 brightness_quiet() {
   if [[ -n "$BRIGHTNESS_MONITOR" ]]; then
-    run_quiet "$BRIGHTNESS_SCRIPT" --monitor "$BRIGHTNESS_MONITOR" "$@"
+    HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT" --monitor "$BRIGHTNESS_MONITOR" "$@"
   else
-    run_quiet "$BRIGHTNESS_SCRIPT" "$@"
+    HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT" "$@"
   fi
 }
 
