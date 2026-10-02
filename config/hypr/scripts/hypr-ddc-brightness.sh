@@ -576,7 +576,15 @@ if [[ "$MODE" == "client" ]]; then
   new_pending=$((old_pending + delta))
 
   printf '%s\n' "$new_pending" >"$pending_file"
-  if [[ "${HYPR_DDC_NOTIFY:-1}" != "0" ]]; then
+  request_notify=0
+  [[ "${HYPR_DDC_NOTIFY:-1}" != "0" ]] && request_notify=1
+  if [[ "$old_pending" == "0" ]]; then
+    # A zero pending total starts a fresh batch. Replace any stale flag left by
+    # an interrupted worker rather than letting it leak into this request.
+    printf '%s\n' "$request_notify" >"$notify_file"
+  elif (( request_notify == 1 )); then
+    # Any notifying request makes the combined batch notifying; a later silent
+    # bar request must never erase keybind feedback already queued in the batch.
     printf '1\n' >"$notify_file"
   elif [[ ! -e "$notify_file" ]]; then
     printf '0\n' >"$notify_file"
