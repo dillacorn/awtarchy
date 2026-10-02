@@ -564,6 +564,7 @@ if [[ "$MODE" == "client" ]]; then
   delta=$((sign * step))
 
   pending_file="$rundir/pending_${conn}.txt"
+  notify_file="$rundir/notify_${conn}.txt"
   last_file="$rundir/last_${conn}.txt"
   first_file="$rundir/first_${conn}.txt"
   pid_file="$rundir/worker_${conn}.pid"
@@ -575,6 +576,11 @@ if [[ "$MODE" == "client" ]]; then
   new_pending=$((old_pending + delta))
 
   printf '%s\n' "$new_pending" >"$pending_file"
+  if [[ "${HYPR_DDC_NOTIFY:-1}" != "0" ]]; then
+    printf '1\n' >"$notify_file"
+  elif [[ ! -e "$notify_file" ]]; then
+    printf '0\n' >"$notify_file"
+  fi
   printf '%s\n' "$(now_ms)" >"$last_file"
   if [[ "$old_pending" == "0" ]]; then
     printf '%s\n' "$(now_ms)" >"$first_file"
@@ -590,12 +596,16 @@ if [[ "$MODE" == "client" ]]; then
   fi
 
   script_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-  nohup "$script_self" --worker "$conn" >/dev/null 2>&1 &
+  # The worker may combine requests from different input surfaces. Keep error
+  # notifications available in the worker, while success feedback is decided
+  # per dequeued batch from notify_file below.
+  HYPR_DDC_NOTIFY=1 nohup "$script_self" --worker "$conn" >/dev/null 2>&1 &
   exit 0
 fi
 
 conn="$WORKER_CONN"
 pending_file="$rundir/pending_${conn}.txt"
+notify_file="$rundir/notify_${conn}.txt"
 last_file="$rundir/last_${conn}.txt"
 first_file="$rundir/first_${conn}.txt"
 pid_file="$rundir/worker_${conn}.pid"
@@ -621,7 +631,9 @@ while :; do
 
   lock_acquire "$lock_dir" || exit 0
   pending="$(read_int_file "$pending_file" 0)"
+  batch_notify="$(read_uint_file "$notify_file" 0)"
   printf '0\n' >"$pending_file"
+  printf '0\n' >"$notify_file"
   printf '0\n' >"$first_file"
   lock_release "$lock_dir"
 
@@ -679,5 +691,7 @@ while :; do
   fi
 
   write_state "$conn" "$target" "$max"
-  notify_level "$conn" "$target" "$max"
+  if (( batch_notify == 1 )); then
+    notify_level "$conn" "$target" "$max"
+  fi
 done
