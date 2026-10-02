@@ -1125,7 +1125,7 @@ Singleton {
         }
         onExited: {
             root.statusLoading = false;
-            if (!actionRunner.running && root.actionQueue.length === 0)
+            if (!actionRunner.running && root.actionQueue.length === 0 && !root.refreshPending)
                 root.brightnessPreviewPercent = -1;
             if (root.refreshPending)
                 Qt.callLater(() => root.refreshStatus());
