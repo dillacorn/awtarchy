@@ -6,6 +6,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTROLLER_SOURCE="${ROOT}/config/hypr/scripts/hypr-ddc-brightness.sh"
 BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
 QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
+QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
 CONTROLLER="${TMP}/hypr-ddc-brightness.sh"
@@ -42,6 +43,7 @@ backlight_target="${TMP}/sys/devices/pci0000:00/0000:00:02.0/drm/card2/card2-LVD
 monitor_json="${TMP}/monitors.json"
 brightness_state="${TMP}/brightness.state"
 brightness_log="${TMP}/brightness.log"
+notify_log="${TMP}/notify.log"
 ddc_state="${TMP}/ddc.state"
 ddc_log="${TMP}/ddc.log"
 
@@ -57,6 +59,7 @@ ln -s "$backlight_target" "$backlight_root/intel_backlight"
 printf '%s\n' '2458 4710' >"$brightness_state"
 printf '%s\n' '40 100' >"$ddc_state"
 : >"$brightness_log"
+: >"$notify_log"
 : >"$ddc_log"
 
 cat >"${fakebin}/hyprctl" <<'EOF'
@@ -155,6 +158,12 @@ done
 exit 8
 EOF
 
+cat >"${fakebin}/notify-send" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${AWTARCHY_TEST_NOTIFY_LOG:?}"
+EOF
+
 chmod 0755 "${fakebin}/"*
 
 write_monitor() {
@@ -174,7 +183,9 @@ write_monitor() {
     }]' >"$monitor_json"
 }
 
-run_controller() {
+run_controller_mode() {
+  local notify_mode="$1" debounce_ms="$2" max_wait_ms="$3"
+  shift 3
   env \
     PATH="${fakebin}:$PATH" \
     HOME="$TMP" \
@@ -182,15 +193,20 @@ run_controller() {
     XDG_CACHE_HOME="$cache_home" \
     XDG_RUNTIME_DIR="$runtime_dir" \
     HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
-    HYPR_DDC_NOTIFY=0 \
-    HYPR_DDC_DEBOUNCE_MS=10 \
-    HYPR_DDC_MAX_WAIT_MS=100 \
+    HYPR_DDC_NOTIFY="$notify_mode" \
+    HYPR_DDC_DEBOUNCE_MS="$debounce_ms" \
+    HYPR_DDC_MAX_WAIT_MS="$max_wait_ms" \
     AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
     AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
     AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+    AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
     AWTARCHY_TEST_DDC_STATE="$ddc_state" \
     AWTARCHY_TEST_DDC_LOG="$ddc_log" \
     "$CONTROLLER" "$@"
+}
+
+run_controller() {
+  run_controller_mode 0 10 100 "$@"
 }
 
 write_monitor "LVDS-1" "AU Optronics" "0x203E" ""
@@ -239,6 +255,74 @@ done
 [[ $raw == 2120 && $maximum == 4710 ]] \
   || fail "debounced internal adjustment did not apply five percentage points"
 
+# A silent bar-style adjustment followed by a notifying keybind-style adjustment
+# can share one worker. Notification intent must be accumulated per batch rather
+# than inherited from whichever request happened to create the worker.
+: >"$notify_log"
+run_controller_mode 0 250 500 --monitor LVDS-1 up 5
+sleep 0.05
+run_controller_mode 1 250 500 --monitor LVDS-1 up 5
+for _ in {1..100}; do
+  if grep -Fq 'Brightness LVDS-1' "$notify_log"; then
+    break
+  fi
+  sleep 0.05
+done
+grep -Fq 'Brightness LVDS-1' "$notify_log" \
+  || fail "keybind-style brightness feedback was lost when a silent request started the worker"
+
+: >"$notify_log"
+run_controller_mode 0 80 200 --monitor LVDS-1 up 5
+sleep 0.4
+[[ ! -s "$notify_log" ]] \
+  || fail "silent brightness adjustment emitted a routine notification"
+
+# Bar preview should advance immediately per wheel event, independently of the
+# hardware worker's delayed DDC/backlight write.
+env \
+  PATH="${fakebin}:$PATH" \
+  HOME="$TMP" \
+  XDG_CONFIG_HOME="$config_home" \
+  XDG_CACHE_HOME="$cache_home" \
+  XDG_RUNTIME_DIR="$runtime_dir" \
+  HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
+  HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
+  AWTARCHY_OUTPUT_NAME=LVDS-1 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
+  AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
+  AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+  AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
+  AWTARCHY_TEST_DDC_STATE="$ddc_state" \
+  AWTARCHY_TEST_DDC_LOG="$ddc_log" \
+  "$BAR_MODULE" up
+preview_file="$cache_home/hypr-ddc-brightness/preview_LVDS-1.tsv"
+read -r preview_once preview_max _preview_ts <"$preview_file"
+env \
+  PATH="${fakebin}:$PATH" \
+  HOME="$TMP" \
+  XDG_CONFIG_HOME="$config_home" \
+  XDG_CACHE_HOME="$cache_home" \
+  XDG_RUNTIME_DIR="$runtime_dir" \
+  HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
+  HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
+  AWTARCHY_OUTPUT_NAME=LVDS-1 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
+  AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
+  AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+  AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
+  AWTARCHY_TEST_DDC_STATE="$ddc_state" \
+  AWTARCHY_TEST_DDC_LOG="$ddc_log" \
+  "$BAR_MODULE" up
+read -r preview_twice preview_max _preview_ts <"$preview_file"
+(( preview_twice == preview_once + 5 )) \
+  || fail "bar brightness preview did not advance immediately for consecutive wheel events"
+[[ "$preview_max" == 100 ]] \
+  || fail "bar brightness preview lost the logical maximum"
+
 edp_target="${TMP}/sys/devices/pci0000:00/0000:00:02.0/drm/card2/card2-eDP-1/intel_backlight"
 mkdir -p "$edp_target"
 ln -sfn "$edp_target" "$backlight_root/intel_backlight"
@@ -272,6 +356,12 @@ grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness adjustments do not suppress routine notifications"
 grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
   || fail "Quick Settings brightness adjustments do not suppress routine notifications"
+grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness lacks immediate optimistic feedback"
+grep -Fq 'brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));' "$QUICK_SETTINGS" \
+  || fail "Quick Settings +/- brightness does not update its visible target immediately"
+grep -Fq 'brightnessPreviewPercent = next;' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness track does not update its visible target immediately"
 grep -Fq '[[ "${HYPR_DDC_NOTIFY:-1}" == "0" ]] && return 0' "$CONTROLLER_SOURCE" \
   || fail "brightness controller no longer defaults notifications on for direct calls"
 grep -Fq 'hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})' "$HYPR_CONFIG" \
