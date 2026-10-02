@@ -5,6 +5,8 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTROLLER_SOURCE="${ROOT}/config/hypr/scripts/hypr-ddc-brightness.sh"
 BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
+QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
+HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
 CONTROLLER="${TMP}/hypr-ddc-brightness.sh"
 BAR_MODULE="${TMP}/ddc_brightness.sh"
@@ -261,5 +263,18 @@ IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
 [[ $(wc -l <"$brightness_log") == "$brightness_calls_before" ]] \
   || fail "external DDC brightness invoked brightnessctl"
 grep -Fq -- '--bus 7' "$ddc_log" || fail "external DDC command did not retain its bus selection"
+
+grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-160' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness still uses the old slow scroll debounce"
+grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness adjustments do not suppress routine notifications"
+grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
+  || fail "Quick Settings brightness adjustments do not suppress routine notifications"
+grep -Fq '[[ "${HYPR_DDC_NOTIFY:-1}" == "0" ]] && return 0' "$CONTROLLER_SOURCE" \
+  || fail "brightness controller no longer defaults notifications on for direct calls"
+grep -Fq 'hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})' "$HYPR_CONFIG" \
+  || fail "brightness increase keybind no longer calls the notifying controller directly"
+grep -Fq 'hl.bind("SUPER + ALT + minus", hl.dsp.exec_cmd(hypr_ddc_brightness .. " down 5"), {})' "$HYPR_CONFIG" \
+  || fail "brightness decrease keybind no longer calls the notifying controller directly"
 
 printf '%s\n' "Hybrid brightness backend tests passed."
