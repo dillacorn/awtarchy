@@ -625,7 +625,6 @@ idle_loops=0
 
 while :; do
   while :; do
-    sleep 0.05
     now="$(now_ms)"
     last="$(read_uint_file "$last_file" 0)"
     first="$(read_uint_file "$first_file" 0)"
@@ -635,6 +634,7 @@ while :; do
 
     if (( idle_age >= DEBOUNCE_MS )); then break; fi
     if (( first > 0 && elapsed >= MAX_WAIT_MS )); then break; fi
+    sleep 0.02
   done
 
   lock_acquire "$lock_dir" || exit 0
