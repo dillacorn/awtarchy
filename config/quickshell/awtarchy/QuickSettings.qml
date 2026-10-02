@@ -17,6 +17,7 @@ Singleton {
     property string actionMessage: ""
     property string actionError: ""
     property var actionQueue: []
+    property string runningActionKind: ""
     property string placement: "center"
     readonly property bool bottomEdgeLayout: FlyoutEdgeLayout.isBottom(placement)
     property string brightnessTarget: ""
@@ -573,7 +574,14 @@ Singleton {
     }
 
     function queueAction(commandArgs, message) {
-        const nextQueue = actionQueue.slice();
+        let nextQueue = actionQueue.slice();
+        if (commandArgs.length >= 2 && commandArgs[0] === "brightness-percent") {
+            const target = String(commandArgs[1]);
+            nextQueue = nextQueue.filter(item =>
+                !(item.args && item.args.length >= 2
+                    && item.args[0] === "brightness-percent"
+                    && String(item.args[1]) === target));
+        }
         nextQueue.push({ args: commandArgs, message: message || "" });
         actionQueue = nextQueue;
         runNextAction();
@@ -586,21 +594,23 @@ Singleton {
         actionQueue = actionQueue.slice(1);
         actionMessage = next.message;
         actionError = "";
+        runningActionKind = next.args.length > 0 ? String(next.args[0]) : "";
         actionRunner.exec([backend, "--action", ...next.args]);
     }
 
     function adjustBrightness(delta) {
-        const target = brightnessTarget.length > 0 ? brightnessTarget : activeMonitorName;
         const base = brightnessPreviewPercent >= 0 ? brightnessPreviewPercent : brightnessPercent;
-        if (base >= 0)
-            brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));
-        queueAction(["brightness-adjust", target, String(delta)],
-            "Adjusting brightness on " + target + "…");
+        if (base < 0)
+            return;
+        setBrightnessPercent(base + delta);
     }
 
     function setBrightnessPercent(percent) {
         const target = brightnessTarget.length > 0 ? brightnessTarget : activeMonitorName;
         const next = Math.max(0, Math.min(100, Math.round(percent)));
+        if (brightnessPreviewPercent === next
+                || (brightnessPreviewPercent < 0 && brightnessPercent === next))
+            return;
         brightnessPreviewPercent = next;
         queueAction(["brightness-percent", target, String(next)],
             "Setting brightness on " + target + "…");
@@ -1142,11 +1152,16 @@ Singleton {
             }
         }
         onExited: {
+            const finishedKind = root.runningActionKind;
+            root.runningActionKind = "";
             if (root.actionError.length > 0)
                 root.actionMessage = root.actionError;
             else
                 root.actionMessage = "Updated";
-            root.refreshStatus();
+            const hasQueuedBrightness = root.actionQueue.some(item =>
+                item.args && item.args.length > 0 && item.args[0] === "brightness-percent");
+            if (finishedKind !== "brightness-percent" || !hasQueuedBrightness)
+                root.refreshStatus();
             Qt.callLater(() => root.runNextAction());
         }
     }
@@ -1582,10 +1597,26 @@ Singleton {
                                             enabled: root.brightnessPercent >= 0
                                             hoverEnabled: true
                                             cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
-                                            onPositionChanged: mouse => root.brightnessHoverPercent = Math.max(0,
-                                                Math.min(100, Math.round(mouse.x * 100 / width)))
-                                            onExited: root.brightnessHoverPercent = -1
-                                            onPressed: mouse => root.setBrightnessPercent(mouse.x * 100 / width)
+                                            onPositionChanged: mouse => {
+                                                root.brightnessHoverPercent = Math.max(0,
+                                                    Math.min(100, Math.round(mouse.x * 100 / width)));
+                                                if (pressed)
+                                                    root.setBrightnessPercent(root.brightnessHoverPercent);
+                                            }
+                                            onExited: {
+                                                if (!pressed)
+                                                    root.brightnessHoverPercent = -1;
+                                            }
+                                            onPressed: mouse => {
+                                                root.brightnessHoverPercent = Math.max(0,
+                                                    Math.min(100, Math.round(mouse.x * 100 / width)));
+                                                root.setBrightnessPercent(root.brightnessHoverPercent);
+                                            }
+                                            onReleased: mouse => {
+                                                root.brightnessHoverPercent = Math.max(0,
+                                                    Math.min(100, Math.round(mouse.x * 100 / width)));
+                                                root.setBrightnessPercent(root.brightnessHoverPercent);
+                                            }
                                         }
                                     }
 
@@ -1701,14 +1732,28 @@ Singleton {
                                             anchors.fill: parent
                                             hoverEnabled: true
                                             cursorShape: Qt.PointingHandCursor
-                                            onPositionChanged: mouse => root.outputVolumeHoverPercent
-                                                = root.outputLimitForPosition(mouse.x, width)
-                                            onExited: root.outputVolumeHoverPercent = -1
+                                            onPositionChanged: mouse => {
+                                                root.outputVolumeHoverPercent
+                                                    = root.outputLimitForPosition(mouse.x, width);
+                                                if (pressed)
+                                                    AudioLimitState.previewLimit(root.outputVolumeHoverPercent);
+                                            }
+                                            onExited: {
+                                                if (!pressed)
+                                                    root.outputVolumeHoverPercent = -1;
+                                            }
                                             onPressed: mouse => {
+                                                root.outputVolumeHoverPercent
+                                                    = root.outputLimitForPosition(mouse.x, width);
+                                                AudioLimitState.previewLimit(root.outputVolumeHoverPercent);
+                                            }
+                                            onReleased: mouse => {
                                                 root.outputVolumeHoverPercent
                                                     = root.outputLimitForPosition(mouse.x, width);
                                                 AudioLimitState.setLimit(root.outputVolumeHoverPercent);
                                             }
+                                            onCanceled: AudioLimitState.setLimit(
+                                                AudioLimitState.limitPercent)
                                         }
                                     }
 
@@ -1730,7 +1775,7 @@ Singleton {
 
                                 Text {
                                     Layout.fillWidth: true
-                                    text: "Global limit for Wiremix and bar volume scrolling · click bar to set · range 100–200%"
+                                    text: "Global limit for Wiremix and bar volume scrolling · click or drag · range 100–200%"
                                     color: Theme.muted
                                     font.family: Theme.fontFamily
                                     font.pixelSize: root.scaledText(8)
