@@ -33,6 +33,10 @@ PanelWindow {
     property string brightnessText: ""
     property string brightnessTooltip: "Brightness unavailable"
     property int brightnessValue: -1
+    property int volumeLimitBlockedScrolls: 0
+    property real volumeLimitAttemptStartedAt: 0
+    property real volumeLimitLastAttemptAt: 0
+    property bool volumeLimitHintNotified: false
     property bool clockDate: BarState.clockDateFor(monitorName)
     property bool clockDatePersistPending: false
     property date now: new Date()
@@ -248,9 +252,61 @@ PanelWindow {
             sink.audio.muted = !sink.audio.muted;
     }
 
+    function resetVolumeLimitHintAttempt() {
+        volumeLimitBlockedScrolls = 0;
+        volumeLimitAttemptStartedAt = 0;
+        volumeLimitLastAttemptAt = 0;
+    }
+
+    function maybeShowVolumeLimitHint() {
+        const sink = Pipewire.defaultAudioSink;
+        if (!sink || !sink.audio
+                || AudioLimitState.limitPercent !== 100
+                || BarState.volumeLimitHintSeen()
+                || volumeLimitHintNotified) {
+            resetVolumeLimitHintAttempt();
+            return;
+        }
+
+        const currentPercent = Math.round(Number(sink.audio.volume) * 100);
+        if (!Number.isFinite(currentPercent) || currentPercent < 100) {
+            resetVolumeLimitHintAttempt();
+            return;
+        }
+
+        const now = Date.now();
+        if (volumeLimitLastAttemptAt <= 0 || now - volumeLimitLastAttemptAt > 5000) {
+            volumeLimitBlockedScrolls = 1;
+            volumeLimitAttemptStartedAt = now;
+        } else {
+            volumeLimitBlockedScrolls++;
+        }
+        volumeLimitLastAttemptAt = now;
+
+        // Require both repeated intent and some dwell time so a single
+        // free-spinning/infinity-wheel fling is unlikely to trigger the hint.
+        if (volumeLimitBlockedScrolls < 7 || now - volumeLimitAttemptStartedAt < 1200)
+            return;
+
+        volumeLimitHintNotified = true;
+        resetVolumeLimitHintAttempt();
+        Quickshell.execDetached([stateScript, "set-volume-limit-hint-seen", "true"]);
+        Quickshell.execDetached([
+            "notify-send",
+            "--app-name=Awtarchy",
+            "--expire-time=5000",
+            "Volume limit reached",
+            "Max volume is 100%. Adjust Max Volume in Quick Settings."
+        ]);
+    }
+
     function adjustAudio(delta) {
         if (delta === 0)
             return;
+        if (delta > 0)
+            maybeShowVolumeLimitHint();
+        else
+            resetVolumeLimitHintAttempt();
         Quickshell.execDetached([
             volumeScript,
             delta > 0 ? "up" : "down",
