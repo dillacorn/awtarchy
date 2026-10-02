@@ -565,6 +565,8 @@ if [[ "$MODE" == "client" ]]; then
 
   pending_file="$rundir/pending_${conn}.txt"
   notify_file="$rundir/notify_${conn}.txt"
+  debounce_file="$rundir/debounce_${conn}.txt"
+  max_wait_file="$rundir/max_wait_${conn}.txt"
   last_file="$rundir/last_${conn}.txt"
   first_file="$rundir/first_${conn}.txt"
   pid_file="$rundir/worker_${conn}.pid"
@@ -578,16 +580,30 @@ if [[ "$MODE" == "client" ]]; then
   printf '%s\n' "$new_pending" >"$pending_file"
   request_notify=0
   [[ "${HYPR_DDC_NOTIFY:-1}" != "0" ]] && request_notify=1
+  request_debounce="${HYPR_DDC_DEBOUNCE_MS:-160}"
+  request_max_wait="${HYPR_DDC_MAX_WAIT_MS:-3500}"
+  [[ "$request_debounce" =~ ^[0-9]+$ ]] || request_debounce=160
+  [[ "$request_max_wait" =~ ^[0-9]+$ ]] || request_max_wait=3500
+
   if [[ "$old_pending" == "0" ]]; then
-    # A zero pending total starts a fresh batch. Replace any stale flag left by
+    # A zero pending total starts a fresh batch. Replace stale metadata left by
     # an interrupted worker rather than letting it leak into this request.
     printf '%s\n' "$request_notify" >"$notify_file"
-  elif (( request_notify == 1 )); then
-    # Any notifying request makes the combined batch notifying; a later silent
-    # bar request must never erase keybind feedback already queued in the batch.
-    printf '1\n' >"$notify_file"
-  elif [[ ! -e "$notify_file" ]]; then
-    printf '0\n' >"$notify_file"
+    printf '%s\n' "$request_debounce" >"$debounce_file"
+    printf '%s\n' "$request_max_wait" >"$max_wait_file"
+  else
+    if (( request_notify == 1 )); then
+      # Any notifying request makes the combined batch notifying; a later silent
+      # bar request must never erase keybind feedback already queued in the batch.
+      printf '1\n' >"$notify_file"
+    elif [[ ! -e "$notify_file" ]]; then
+      printf '0\n' >"$notify_file"
+    fi
+
+    batch_debounce="$(read_uint_file "$debounce_file" "$request_debounce")"
+    batch_max_wait="$(read_uint_file "$max_wait_file" "$request_max_wait")"
+    (( request_debounce < batch_debounce )) && printf '%s\n' "$request_debounce" >"$debounce_file"
+    (( request_max_wait < batch_max_wait )) && printf '%s\n' "$request_max_wait" >"$max_wait_file"
   fi
   printf '%s\n' "$(now_ms)" >"$last_file"
   if [[ "$old_pending" == "0" ]]; then
@@ -614,6 +630,8 @@ fi
 conn="$WORKER_CONN"
 pending_file="$rundir/pending_${conn}.txt"
 notify_file="$rundir/notify_${conn}.txt"
+debounce_file="$rundir/debounce_${conn}.txt"
+max_wait_file="$rundir/max_wait_${conn}.txt"
 last_file="$rundir/last_${conn}.txt"
 first_file="$rundir/first_${conn}.txt"
 pid_file="$rundir/worker_${conn}.pid"
@@ -631,9 +649,11 @@ while :; do
 
     idle_age=$((now - last))
     elapsed=$(( first > 0 ? now - first : 0 ))
+    batch_debounce="$(read_uint_file "$debounce_file" "$DEBOUNCE_MS")"
+    batch_max_wait="$(read_uint_file "$max_wait_file" "$MAX_WAIT_MS")"
 
-    if (( idle_age >= DEBOUNCE_MS )); then break; fi
-    if (( first > 0 && elapsed >= MAX_WAIT_MS )); then break; fi
+    if (( idle_age >= batch_debounce )); then break; fi
+    if (( first > 0 && elapsed >= batch_max_wait )); then break; fi
     sleep 0.02
   done
 
