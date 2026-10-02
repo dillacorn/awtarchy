@@ -12,6 +12,7 @@ Singleton {
         || (Quickshell.env("HOME") + "/.config")
     readonly property string configPath: configHome + "/wiremix/wiremix.toml"
     readonly property string volumeScript: configHome + "/hypr/scripts/quickshell_volume.sh"
+    readonly property string stateScript: configHome + "/hypr/scripts/quickshell_application_state.sh"
     readonly property int minimumPercent: 100
     readonly property int maximumPercent: 200
     readonly property int stepPercent: 5
@@ -47,6 +48,12 @@ Singleton {
             Quickshell.execDetached([volumeScript, "set", String(limitPercent)]);
     }
 
+    function markVolumeLimitHintSeen() {
+        if (BarState.volumeLimitHintSeen())
+            return;
+        Quickshell.execDetached([stateScript, "set-volume-limit-hint-seen", "true"]);
+    }
+
     function setLimit(value) {
         const next = normalized(value);
         let text = String(configFile.text() || "");
@@ -54,6 +61,8 @@ Singleton {
         text = replaceOrAppend(text, "enforce_max_volume", "true");
         limitPercent = next;
         configFile.setText(text);
+        if (next > 100)
+            markVolumeLimitHintSeen();
         clampCurrentOutput();
     }
 
@@ -67,7 +76,11 @@ Singleton {
         watchChanges: true
         blockLoading: false
         printErrors: false
-        onLoaded: root.limitPercent = root.parseLimit(text())
+        onLoaded: {
+            root.limitPercent = root.parseLimit(text());
+            if (root.limitPercent > 100)
+                root.markVolumeLimitHintSeen();
+        }
         onFileChanged: reload()
     }
 }
