@@ -689,9 +689,11 @@ while :; do
     write_state "$conn" "$cur" "$max"
   fi
 
-  target=$((cur + pending))
-  (( target < 0 )) && target=0
-  (( target > max )) && target="$max"
+  current_percent=$(( (cur * 100 + max / 2) / max ))
+  target_percent=$((current_percent + pending))
+  (( target_percent < 0 )) && target_percent=0
+  (( target_percent > 100 )) && target_percent=100
+  target=$(( (max * target_percent + 50) / 100 ))
 
   if ! brightness_set_abs_fast "$backend" "$controller_id" "$target"; then
     notify "$NOTIFY_MS" "Brightness $conn" "write failed" "hypr-ddc-$conn"
