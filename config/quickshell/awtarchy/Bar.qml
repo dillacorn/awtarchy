@@ -50,7 +50,6 @@ PanelWindow {
     property int volumeLimitBlockedScrolls: 0
     property real volumeLimitAttemptStartedAt: 0
     property real volumeLimitLastAttemptAt: 0
-    property bool volumeLimitHintNotified: false
     property bool clockDate: BarState.clockDateFor(monitorName)
     property bool clockDatePersistPending: false
     property date now: new Date()
@@ -288,8 +287,8 @@ PanelWindow {
         const sink = Pipewire.defaultAudioSink;
         if (!sink || !sink.audio
                 || AudioLimitState.limitPercent !== 100
-                || BarState.volumeLimitHintSeen()
-                || volumeLimitHintNotified) {
+                || volumeLimitHintCooldown.running
+                || volumeLimitHintNotification.running) {
             resetVolumeLimitHintAttempt();
             return;
         }
@@ -318,13 +317,13 @@ PanelWindow {
         if (volumeLimitBlockedScrolls < 7 || now - volumeLimitAttemptStartedAt < 1200)
             return;
 
-        volumeLimitHintNotified = true;
         resetVolumeLimitHintAttempt();
-        Quickshell.execDetached([stateScript, "set-volume-limit-hint-seen", "true"]);
-        Quickshell.execDetached([
+        volumeLimitHintCooldown.restart();
+        volumeLimitHintNotification.exec([
             "notify-send",
             "--app-name=Awtarchy",
-            "--expire-time=5000",
+            "--expire-time=7000",
+            "--action=open=Open Quick Settings",
             "Volume limit reached",
             "Max volume is 100%. Adjust Max Volume in Quick Settings."
         ]);
@@ -399,6 +398,16 @@ PanelWindow {
     }
 
     Process {
+        id: volumeLimitHintNotification
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.trim() === "open")
+                    QuickSettings.openForScreen(bar.screen);
+            }
+        }
+    }
+
+    Process {
         id: clockDateWriter
         onExited: {
             BarState.refresh();
@@ -412,6 +421,12 @@ PanelWindow {
         interval: 5000
         repeat: false
         onTriggered: bar.brightnessRequestedValue = -1
+    }
+
+    Timer {
+        id: volumeLimitHintCooldown
+        interval: 60000
+        repeat: false
     }
 
     Timer {
