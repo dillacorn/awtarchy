@@ -29,6 +29,7 @@ Singleton {
     property string schedulerAuthError: ""
     property string schedulerAuthPendingPassword: ""
     property int brightnessHoverPercent: -1
+    property int brightnessPreviewPercent: -1
     property int outputVolumeHoverPercent: -1
     property bool nightLightScheduleEditorOpen: false
     property string nightLightScheduleStartDraft: "20:00"
@@ -129,6 +130,14 @@ Singleton {
         if (!Number.isFinite(current) || !Number.isFinite(maximum) || maximum <= 0)
             return -1;
         return Math.max(0, Math.min(100, Math.round(current * 100 / maximum)));
+    }
+    readonly property int brightnessDisplayPercent: brightnessPreviewPercent >= 0
+        ? brightnessPreviewPercent : brightnessPercent
+    readonly property int brightnessDisplayCurrent: {
+        const maximum = Number(brightnessStatus.max);
+        if (brightnessDisplayPercent < 0 || !Number.isFinite(maximum) || maximum <= 0)
+            return -1;
+        return Math.round(maximum * brightnessDisplayPercent / 100);
     }
 
     onBottomEdgeLayoutChanged: Qt.callLater(() => alignContentToBar())
@@ -582,14 +591,18 @@ Singleton {
 
     function adjustBrightness(delta) {
         const target = brightnessTarget.length > 0 ? brightnessTarget : activeMonitorName;
+        const base = brightnessPreviewPercent >= 0 ? brightnessPreviewPercent : brightnessPercent;
+        if (base >= 0)
+            brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));
         queueAction(["brightness-adjust", target, String(delta)],
             "Adjusting brightness on " + target + "…");
     }
 
     function setBrightnessPercent(percent) {
         const target = brightnessTarget.length > 0 ? brightnessTarget : activeMonitorName;
-        queueAction(["brightness-percent", target,
-            String(Math.max(0, Math.min(100, Math.round(percent))))],
+        const next = Math.max(0, Math.min(100, Math.round(percent)));
+        brightnessPreviewPercent = next;
+        queueAction(["brightness-percent", target, String(next)],
             "Setting brightness on " + target + "…");
     }
 
@@ -957,6 +970,7 @@ Singleton {
         else
             schedulerPasswordInput.text = "";
         brightnessHoverPercent = -1;
+        brightnessPreviewPercent = -1;
         outputVolumeHoverPercent = -1;
     }
 
@@ -1111,6 +1125,8 @@ Singleton {
         }
         onExited: {
             root.statusLoading = false;
+            if (!actionRunner.running && root.actionQueue.length === 0)
+                root.brightnessPreviewPercent = -1;
             if (root.refreshPending)
                 Qt.callLater(() => root.refreshStatus());
         }
@@ -1484,11 +1500,11 @@ Singleton {
                                         elide: Text.ElideRight
                                     }
                                     Text {
-                                        text: root.brightnessPercent >= 0
-                                            ? root.brightnessPercent + "%  (" + root.brightnessStatus.current
+                                        text: root.brightnessDisplayPercent >= 0
+                                            ? root.brightnessDisplayPercent + "%  (" + root.brightnessDisplayCurrent
                                                 + "/" + root.brightnessStatus.max + ")"
                                             : "Unavailable"
-                                        color: root.brightnessPercent >= 0 ? Theme.foreground : Theme.muted
+                                        color: root.brightnessDisplayPercent >= 0 ? Theme.foreground : Theme.muted
                                         font.family: Theme.fontFamily
                                         font.pixelSize: root.scaledText(10)
                                     }
@@ -1508,6 +1524,7 @@ Singleton {
                                             textSize: root.scaledText(9)
                                             onClicked: {
                                                 root.brightnessTarget = String(modelData);
+                                                root.brightnessPreviewPercent = -1;
                                                 root.refreshStatus();
                                             }
                                         }
@@ -1533,8 +1550,8 @@ Singleton {
                                         border.width: 0
 
                                         Rectangle {
-                                            width: root.brightnessPercent >= 0
-                                                ? parent.width * root.brightnessPercent / 100 : 0
+                                            width: root.brightnessDisplayPercent >= 0
+                                                ? parent.width * root.brightnessDisplayPercent / 100 : 0
                                             height: parent.height
                                             color: Theme.focus
                                         }
