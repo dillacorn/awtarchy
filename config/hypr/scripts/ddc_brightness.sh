@@ -415,7 +415,7 @@ watch_status() {
 }
 
 update_preview_for_adjustment() {
-  local monitor="$1" direction="$2" cur max _timestamp delta target
+  local monitor="$1" direction="$2" cur max _timestamp delta current_percent target_percent target
 
   if ! read -r cur max < <(read_preview_status "$monitor"); then
     read -r cur max _timestamp < <(read_status_record "$(state_file "$monitor")") || return 0
@@ -424,9 +424,11 @@ update_preview_for_adjustment() {
   delta="$STEP"
   [[ "$direction" == "down" ]] && delta=$((-STEP))
 
-  target=$((cur + delta))
-  (( target < 0 )) && target=0
-  (( target > max )) && target="$max"
+  current_percent=$(( (cur * 100 + max / 2) / max ))
+  target_percent=$((current_percent + delta))
+  (( target_percent < 0 )) && target_percent=0
+  (( target_percent > 100 )) && target_percent=100
+  target=$(( (max * target_percent + 50) / 100 ))
 
   write_preview_status "$monitor" "$target" "$max"
 }
