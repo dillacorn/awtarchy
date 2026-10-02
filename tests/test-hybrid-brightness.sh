@@ -266,6 +266,8 @@ grep -Fq -- '--bus 7' "$ddc_log" || fail "external DDC command did not retain it
 
 grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-160' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness still uses the old slow scroll debounce"
+grep -Fq 'AWTARCHY_DDC_SCROLL_MAX_WAIT_MS:-500' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness still allows long continuous-scroll latency"
 grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness adjustments do not suppress routine notifications"
 grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
