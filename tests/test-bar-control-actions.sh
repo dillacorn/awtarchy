@@ -393,8 +393,10 @@ grep -Fq 'volumeLimitBlockedScrolls < 7' "$BAR_QML" \
   || fail "volume limit discovery hint does not require seven blocked scrolls"
 grep -Fq 'now - volumeLimitAttemptStartedAt < 1200' "$BAR_QML" \
   || fail "volume limit discovery hint lacks infinity-wheel dwell protection"
-grep -Fq 'now - volumeLimitLastAttemptAt > 5000' "$BAR_QML" \
+grep -Fq 'gap > 2500' "$BAR_QML" \
   || fail "volume limit discovery hint does not reset stale attempts"
+grep -Fq 'gap >= 100' "$BAR_QML" \
+  || fail "volume limit discovery hint does not filter dense infinity-wheel events"
 grep -Fq 'Max volume is 100%. Adjust Max Volume in Quick Settings.' "$BAR_QML" \
   || fail "volume limit discovery hint does not direct users to Quick Settings"
 grep -Fq 'BarState.volumeLimitHintSeen()' "$BAR_QML" \
