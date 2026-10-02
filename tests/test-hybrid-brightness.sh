@@ -261,6 +261,7 @@ done
 # A bar request must be able to make an already-running, slower keybind worker
 # write immediately. Worker timing is batch metadata, not inherited forever from
 # whichever input source happened to spawn the worker.
+: >"$notify_log"
 run_controller_mode 1 500 1000 --monitor LVDS-1 up 5
 sleep 0.05
 run_controller_mode 0 0 500 --monitor LVDS-1 up 5
@@ -275,6 +276,14 @@ for _ in {1..12}; do
 done
 [[ "$active_scroll_applied" == true ]] \
   || fail "bar brightness request did not lower an existing worker batch to immediate write timing"
+for _ in {1..100}; do
+  if grep -Fq 'Brightness LVDS-1' "$notify_log"; then
+    break
+  fi
+  sleep 0.02
+done
+grep -Fq 'Brightness LVDS-1' "$notify_log" \
+  || fail "keybind-style timing batch did not finish its expected notification"
 
 # A silent bar-style adjustment followed by a notifying keybind-style adjustment
 # can share one worker. Notification intent must be accumulated per batch rather
