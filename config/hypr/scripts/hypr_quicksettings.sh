@@ -325,14 +325,11 @@ machine_brightness_adjust() {
 }
 
 machine_brightness_percent() {
-  local monitor="$1" percent="$2" target
+  local monitor="$1" percent="$2"
   [[ "$percent" =~ ^[0-9]+$ ]] || return 2
   (( percent > 100 )) && percent=100
   BRIGHTNESS_MONITOR="$monitor"
-  refresh_brightness
-  [[ "$BR_MAX" =~ ^[1-9][0-9]*$ ]] || return 1
-  target=$(( (BR_MAX * percent + 50) / 100 ))
-  brightness_quiet set "$target"
+  brightness_quiet set-percent "$percent"
 }
 
 machine_scheduler_authorize_stdin() {
