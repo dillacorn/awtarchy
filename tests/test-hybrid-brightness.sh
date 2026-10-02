@@ -6,6 +6,7 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTROLLER_SOURCE="${ROOT}/config/hypr/scripts/hypr-ddc-brightness.sh"
 BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
 QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
+QUICKSETTINGS_BACKEND="${ROOT}/config/hypr/scripts/hypr_quicksettings.sh"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
@@ -323,6 +324,23 @@ read -r preview_twice preview_max _preview_ts <"$preview_file"
 [[ "$preview_max" == 100 ]] \
   || fail "bar brightness preview lost the logical maximum"
 
+state_file="$cache_home/hypr-ddc-brightness/state_LVDS-1.tsv"
+settled=false
+for _ in {1..100}; do
+  if [[ -r "$state_file" ]]; then
+    read -r settled_cur _settled_max _settled_ts <"$state_file" || true
+    if [[ "${settled_cur:-}" == "$preview_twice" ]]; then
+      settled=true
+      break
+    fi
+  fi
+  sleep 0.05
+done
+[[ "$settled" == true ]] \
+  || fail "hardware brightness state did not converge to the optimistic bar target"
+[[ ! -s "$notify_log" ]] \
+  || fail "bar brightness scrolling emitted a routine notification"
+
 edp_target="${TMP}/sys/devices/pci0000:00/0000:00:02.0/drm/card2/card2-eDP-1/intel_backlight"
 mkdir -p "$edp_target"
 ln -sfn "$edp_target" "$backlight_root/intel_backlight"
@@ -356,6 +374,8 @@ grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness adjustments do not suppress routine notifications"
 grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
   || fail "Quick Settings brightness adjustments do not suppress routine notifications"
+grep -Fq 'current_percent=$(( (BR_CUR * 100 + BR_MAX / 2) / BR_MAX ))' "$QUICKSETTINGS_BACKEND" \
+  || fail "Quick Settings +/- brightness is not percentage-based on non-100 display ranges"
 grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
   || fail "Quick Settings brightness lacks immediate optimistic feedback"
 grep -Fq 'brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));' "$QUICK_SETTINGS" \
