@@ -393,13 +393,19 @@ rm -f "$cache_home/hypr-ddc-brightness/state_DP-1.tsv"
 external_scaled_status="$(run_controller --monitor DP-1 status)"
 grep -Fxq 'cur=80' <<<"$external_scaled_status" || fail "scaled DDC test did not start at raw 80"
 grep -Fxq 'max=200' <<<"$external_scaled_status" || fail "scaled DDC test did not expose native max 200"
+
+run_controller --monitor DP-1 set-percent 45
+IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
+[[ $ddc_current == 90 && $ddc_maximum == 200 ]] \
+  || fail "cached percentage DDC write did not scale 45 percent to the native range"
+
 run_controller --monitor DP-1 up 5
 for _ in {1..100}; do
   IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
-  [[ $ddc_current == 90 && $ddc_maximum == 200 ]] && break
+  [[ $ddc_current == 100 && $ddc_maximum == 200 ]] && break
   sleep 0.05
 done
-[[ $ddc_current == 90 && $ddc_maximum == 200 ]] \
+[[ $ddc_current == 100 && $ddc_maximum == 200 ]] \
   || fail "five-point DDC brightness step did not scale against the monitor native range"
 
 grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-0' "$BAR_MODULE_SOURCE" \
@@ -414,8 +420,8 @@ grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness adjustments do not suppress routine notifications"
 grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
   || fail "Quick Settings brightness adjustments do not suppress routine notifications"
-grep -Fq 'current_percent=$(( (BR_CUR * 100 + BR_MAX / 2) / BR_MAX ))' "$QUICKSETTINGS_BACKEND" \
-  || fail "Quick Settings +/- brightness is not percentage-based on non-100 display ranges"
+grep -Fq 'brightness_quiet set-percent "$percent"' "$QUICKSETTINGS_BACKEND" \
+  || fail "Quick Settings brightness drag does not use the cached percentage write path"
 grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
   || fail "Quick Settings brightness lacks immediate optimistic feedback"
 grep -Fq 'property int brightnessRequestedValue: -1' "$BAR_QML" \
