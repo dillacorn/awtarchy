@@ -8,6 +8,7 @@ BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
 QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
 QUICKSETTINGS_BACKEND="${ROOT}/config/hypr/scripts/hypr_quicksettings.sh"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
+AUDIO_LIMIT_STATE="${ROOT}/config/quickshell/awtarchy/AudioLimitState.qml"
 BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
@@ -257,6 +258,24 @@ done
 [[ $raw == 2120 && $maximum == 4710 ]] \
   || fail "debounced internal adjustment did not apply five percentage points"
 
+# A bar request must be able to make an already-running, slower keybind worker
+# write immediately. Worker timing is batch metadata, not inherited forever from
+# whichever input source happened to spawn the worker.
+run_controller_mode 1 500 1000 --monitor LVDS-1 up 5
+sleep 0.05
+run_controller_mode 0 0 500 --monitor LVDS-1 up 5
+active_scroll_applied=false
+for _ in {1..12}; do
+  IFS=' ' read -r raw maximum <"$brightness_state"
+  if [[ $raw == 2591 && $maximum == 4710 ]]; then
+    active_scroll_applied=true
+    break
+  fi
+  sleep 0.02
+done
+[[ "$active_scroll_applied" == true ]] \
+  || fail "bar brightness request did not lower an existing worker batch to immediate write timing"
+
 # A silent bar-style adjustment followed by a notifying keybind-style adjustment
 # can share one worker. Notification intent must be accumulated per batch rather
 # than inherited from whichever request happened to create the worker.
@@ -383,8 +402,12 @@ done
 [[ $ddc_current == 90 && $ddc_maximum == 200 ]] \
   || fail "five-point DDC brightness step did not scale against the monitor native range"
 
-grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-160' "$BAR_MODULE_SOURCE" \
-  || fail "bar brightness still uses the old slow scroll debounce"
+grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-0' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness does not request immediate hardware writes while scrolling"
+grep -Fq 'debounce_file="$rundir/debounce_${conn}.txt"' "$CONTROLLER_SOURCE" \
+  || fail "brightness worker does not track debounce timing per input batch"
+grep -Fq 'batch_debounce="$(read_uint_file "$debounce_file" "$DEBOUNCE_MS")"' "$CONTROLLER_SOURCE" \
+  || fail "brightness worker does not honor source-aware batch timing"
 grep -Fq 'AWTARCHY_DDC_SCROLL_MAX_WAIT_MS:-500' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness still allows long continuous-scroll latency"
 grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
@@ -407,6 +430,18 @@ grep -Fq 'brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));' 
   || fail "Quick Settings +/- brightness does not update its visible target immediately"
 grep -Fq 'brightnessPreviewPercent = next;' "$QUICK_SETTINGS" \
   || fail "Quick Settings brightness track does not update its visible target immediately"
+grep -Fq 'if (pressed)' "$QUICK_SETTINGS" \
+  || fail "Quick Settings tracks do not support held left-button dragging"
+grep -Fq 'root.setBrightnessPercent(root.brightnessHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness does not adjust continuously while dragging"
+grep -Fq 'item.args[0] === "brightness-percent"' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness drag does not coalesce superseded hardware writes"
+grep -Fq 'AudioLimitState.previewLimit(root.outputVolumeHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings maximum volume does not preview continuously while dragging"
+grep -Fq 'AudioLimitState.setLimit(root.outputVolumeHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings maximum volume does not commit the dragged value on release"
+grep -Fq 'function previewLimit(value)' "$AUDIO_LIMIT_STATE" \
+  || fail "maximum volume state has no lightweight drag preview path"
 grep -Fq '[[ "${HYPR_DDC_NOTIFY:-1}" == "0" ]] && return 0' "$CONTROLLER_SOURCE" \
   || fail "brightness controller no longer defaults notifications on for direct calls"
 grep -Fq 'hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})' "$HYPR_CONFIG" \
