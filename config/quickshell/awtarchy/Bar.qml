@@ -33,6 +33,23 @@ PanelWindow {
     property string brightnessText: ""
     property string brightnessTooltip: "Brightness unavailable"
     property int brightnessValue: -1
+    property int brightnessRequestedValue: -1
+    readonly property int brightnessStep: {
+        const configured = Number(Quickshell.env("AWTARCHY_DDC_STEP"));
+        return Number.isFinite(configured) && configured > 0 ? Math.round(configured) : 5;
+    }
+    readonly property int brightnessDisplayValue: brightnessRequestedValue >= 0
+        ? brightnessRequestedValue : brightnessValue
+    readonly property string brightnessDisplayText: brightnessDisplayValue >= 0
+        ? " " + brightnessDisplayValue + "%" : brightnessText
+    readonly property string brightnessDisplayTooltip: brightnessRequestedValue >= 0
+        ? "Brightness " + monitorName + ": " + brightnessRequestedValue + "% target (pending)"
+            + "\nHover briefly, then scroll to adjust this display"
+            + "\nLeft/right click to toggle Hypr Quick Settings"
+        : brightnessTooltip
+    property int volumeLimitBlockedScrolls: 0
+    property real volumeLimitAttemptStartedAt: 0
+    property real volumeLimitLastAttemptAt: 0
     property bool clockDate: BarState.clockDateFor(monitorName)
     property bool clockDatePersistPending: false
     property date now: new Date()
@@ -214,9 +231,14 @@ PanelWindow {
             brightnessText = data.text || "";
             brightnessTooltip = data.tooltip || "Brightness";
             const percentage = Number(data.percentage);
-            if (Number.isFinite(percentage))
+            if (Number.isFinite(percentage)) {
                 brightnessValue = Math.max(0, Math.min(100, Math.round(percentage)));
-            else {
+                if (data.pending !== true && brightnessRequestedValue >= 0
+                        && brightnessValue === brightnessRequestedValue) {
+                    brightnessRequestedValue = -1;
+                    brightnessOptimisticFallback.stop();
+                }
+            } else {
                 const match = brightnessText.match(/(-?\d+)\s*%?\s*$/);
                 brightnessValue = match ? Number(match[1]) : -1;
             }
@@ -227,6 +249,13 @@ PanelWindow {
     }
 
     function ddcAction(action) {
+        const direction = action === "up" ? 1 : (action === "down" ? -1 : 0);
+        if (direction !== 0 && brightnessDisplayValue >= 0) {
+            brightnessRequestedValue = Math.max(0, Math.min(100,
+                brightnessDisplayValue + direction * brightnessStep));
+            brightnessOptimisticFallback.restart();
+        }
+
         Quickshell.execDetached({
             command: [ddcScript, action],
             environment: ({ AWTARCHY_OUTPUT_NAME: monitorName })
@@ -248,9 +277,65 @@ PanelWindow {
             sink.audio.muted = !sink.audio.muted;
     }
 
+    function resetVolumeLimitHintAttempt() {
+        volumeLimitBlockedScrolls = 0;
+        volumeLimitAttemptStartedAt = 0;
+        volumeLimitLastAttemptAt = 0;
+    }
+
+    function maybeShowVolumeLimitHint() {
+        const sink = Pipewire.defaultAudioSink;
+        if (!sink || !sink.audio
+                || AudioLimitState.limitPercent !== 100
+                || volumeLimitHintCooldown.running
+                || volumeLimitHintNotification.running) {
+            resetVolumeLimitHintAttempt();
+            return;
+        }
+
+        const currentPercent = Math.round(Number(sink.audio.volume) * 100);
+        if (!Number.isFinite(currentPercent) || currentPercent < 100) {
+            resetVolumeLimitHintAttempt();
+            return;
+        }
+
+        const now = Date.now();
+        const gap = volumeLimitLastAttemptAt > 0 ? now - volumeLimitLastAttemptAt : -1;
+
+        if (volumeLimitLastAttemptAt <= 0 || gap > 2500) {
+            volumeLimitBlockedScrolls = 1;
+            volumeLimitAttemptStartedAt = now;
+        } else if (gap >= 100) {
+            // Count deliberate wheel steps, not a dense stream of high-resolution
+            // events from an infinity/free-spinning wheel.
+            volumeLimitBlockedScrolls++;
+        }
+        volumeLimitLastAttemptAt = now;
+
+        // Seven counted attempts plus a minimum dwell time makes this a
+        // discovery fallback rather than normal volume feedback.
+        if (volumeLimitBlockedScrolls < 7 || now - volumeLimitAttemptStartedAt < 1200)
+            return;
+
+        resetVolumeLimitHintAttempt();
+        volumeLimitHintCooldown.restart();
+        volumeLimitHintNotification.exec([
+            "notify-send",
+            "--app-name=Awtarchy",
+            "--expire-time=7000",
+            "--action=open=Open Quick Settings",
+            "Volume limit reached",
+            "Max volume is 100%. Adjust Max Volume in Quick Settings."
+        ]);
+    }
+
     function adjustAudio(delta) {
         if (delta === 0)
             return;
+        if (delta > 0)
+            maybeShowVolumeLimitHint();
+        else
+            resetVolumeLimitHintAttempt();
         Quickshell.execDetached([
             volumeScript,
             delta > 0 ? "up" : "down",
@@ -313,12 +398,35 @@ PanelWindow {
     }
 
     Process {
+        id: volumeLimitHintNotification
+        stdout: StdioCollector {
+            onStreamFinished: {
+                if (text.trim() === "open")
+                    QuickSettings.openForScreen(bar.screen);
+            }
+        }
+    }
+
+    Process {
         id: clockDateWriter
         onExited: {
             BarState.refresh();
             if (bar.clockDatePersistPending)
                 bar.persistClockDate();
         }
+    }
+
+    Timer {
+        id: brightnessOptimisticFallback
+        interval: 5000
+        repeat: false
+        onTriggered: bar.brightnessRequestedValue = -1
+    }
+
+    Timer {
+        id: volumeLimitHintCooldown
+        interval: 60000
+        repeat: false
     }
 
     Timer {
@@ -819,8 +927,8 @@ PanelWindow {
             }
 
             BarControl {
-                label: bar.brightnessText
-                tooltip: bar.brightnessTooltip
+                label: bar.brightnessDisplayText
+                tooltip: bar.brightnessDisplayTooltip
                 onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)
@@ -1077,9 +1185,9 @@ PanelWindow {
 
             BarControl {
                 vertical: true; fixedWidth: bar.barSize
-                label: bar.brightnessValue >= 0
-                    ? "\n" + bar.brightnessValue + "%" : ""
-                tooltip: bar.brightnessTooltip
+                label: bar.brightnessDisplayValue >= 0
+                    ? "\n" + bar.brightnessDisplayValue + "%" : ""
+                tooltip: bar.brightnessDisplayTooltip
                 onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)

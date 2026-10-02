@@ -9,6 +9,7 @@
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] status
 #   hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
+#   hypr-ddc-brightness.sh [--monitor CONNECTOR] set-percent <0-100>
 
 set -euo pipefail
 
@@ -141,6 +142,12 @@ case "$cmd" in
     [[ "$2" =~ ^[0-9]+$ ]] || { echo "hypr-ddc-brightness: set value must be integer" >&2; exit 2; }
     set_value="$2"
     ;;
+  set-percent)
+    [[ -n "${2:-}" ]] || { echo "hypr-ddc-brightness: usage: $0 set-percent <0-100>" >&2; exit 2; }
+    [[ "$2" =~ ^[0-9]+$ ]] || { echo "hypr-ddc-brightness: percentage must be integer" >&2; exit 2; }
+    set_percent="$2"
+    (( set_percent > 100 )) && set_percent=100
+    ;;
   ""|-h|--help|help)
     cat <<'EOF'
 Usage:
@@ -148,6 +155,7 @@ Usage:
   hypr-ddc-brightness.sh [--monitor CONNECTOR] down [step]
   hypr-ddc-brightness.sh [--monitor CONNECTOR] status
   hypr-ddc-brightness.sh [--monitor CONNECTOR] set <absolute_value>
+  hypr-ddc-brightness.sh [--monitor CONNECTOR] set-percent <0-100>
 EOF
     exit 0
     ;;
@@ -521,7 +529,7 @@ if [[ "$MODE" == "client" && "$cmd" == "status" ]]; then
   exit 0
 fi
 
-if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
+if [[ "$MODE" == "client" && ( "$cmd" == "set" || "$cmd" == "set-percent" ) ]]; then
   focused_line="$(must_focused_info)"
   IFS=$'\t' read -r conn make model serial desc <<<"$focused_line"
 
@@ -541,7 +549,11 @@ if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
     fi
   fi
 
-  target="$set_value"
+  if [[ "$cmd" == "set-percent" ]]; then
+    target=$(( (max * set_percent + 50) / 100 ))
+  else
+    target="$set_value"
+  fi
   (( target < 0 )) && target=0
   (( target > max )) && target="$max"
 
@@ -556,14 +568,25 @@ if [[ "$MODE" == "client" && "$cmd" == "set" ]]; then
 fi
 
 if [[ "$MODE" == "client" ]]; then
-  focused_line="$(must_focused_info)"
-  IFS=$'\t' read -r conn _make _model _serial _desc <<<"$focused_line"
+  if [[ -n "${TARGET_CONN:-}" ]]; then
+    [[ "$TARGET_CONN" =~ ^[A-Za-z0-9._:-]+$ ]] || {
+      echo "hypr-ddc-brightness: invalid connector name: $TARGET_CONN" >&2
+      exit 2
+    }
+    conn="$TARGET_CONN"
+  else
+    focused_line="$(must_focused_info)"
+    IFS=$'\t' read -r conn _make _model _serial _desc <<<"$focused_line"
+  fi
 
   sign=1
   [[ "$dir" == "down" ]] && sign=-1
   delta=$((sign * step))
 
   pending_file="$rundir/pending_${conn}.txt"
+  notify_file="$rundir/notify_${conn}.txt"
+  debounce_file="$rundir/debounce_${conn}.txt"
+  max_wait_file="$rundir/max_wait_${conn}.txt"
   last_file="$rundir/last_${conn}.txt"
   first_file="$rundir/first_${conn}.txt"
   pid_file="$rundir/worker_${conn}.pid"
@@ -575,6 +598,33 @@ if [[ "$MODE" == "client" ]]; then
   new_pending=$((old_pending + delta))
 
   printf '%s\n' "$new_pending" >"$pending_file"
+  request_notify=0
+  [[ "${HYPR_DDC_NOTIFY:-1}" != "0" ]] && request_notify=1
+  request_debounce="${HYPR_DDC_DEBOUNCE_MS:-160}"
+  request_max_wait="${HYPR_DDC_MAX_WAIT_MS:-3500}"
+  [[ "$request_debounce" =~ ^[0-9]+$ ]] || request_debounce=160
+  [[ "$request_max_wait" =~ ^[0-9]+$ ]] || request_max_wait=3500
+
+  if [[ "$old_pending" == "0" ]]; then
+    # A zero pending total starts a fresh batch. Replace stale metadata left by
+    # an interrupted worker rather than letting it leak into this request.
+    printf '%s\n' "$request_notify" >"$notify_file"
+    printf '%s\n' "$request_debounce" >"$debounce_file"
+    printf '%s\n' "$request_max_wait" >"$max_wait_file"
+  else
+    if (( request_notify == 1 )); then
+      # Any notifying request makes the combined batch notifying; a later silent
+      # bar request must never erase keybind feedback already queued in the batch.
+      printf '1\n' >"$notify_file"
+    elif [[ ! -e "$notify_file" ]]; then
+      printf '0\n' >"$notify_file"
+    fi
+
+    batch_debounce="$(read_uint_file "$debounce_file" "$request_debounce")"
+    batch_max_wait="$(read_uint_file "$max_wait_file" "$request_max_wait")"
+    (( request_debounce < batch_debounce )) && printf '%s\n' "$request_debounce" >"$debounce_file"
+    (( request_max_wait < batch_max_wait )) && printf '%s\n' "$request_max_wait" >"$max_wait_file"
+  fi
   printf '%s\n' "$(now_ms)" >"$last_file"
   if [[ "$old_pending" == "0" ]]; then
     printf '%s\n' "$(now_ms)" >"$first_file"
@@ -590,12 +640,18 @@ if [[ "$MODE" == "client" ]]; then
   fi
 
   script_self="$(readlink -f "$0" 2>/dev/null || echo "$0")"
-  nohup "$script_self" --worker "$conn" >/dev/null 2>&1 &
+  # The worker may combine requests from different input surfaces. Keep error
+  # notifications available in the worker, while success feedback is decided
+  # per dequeued batch from notify_file below.
+  HYPR_DDC_NOTIFY=1 nohup "$script_self" --worker "$conn" >/dev/null 2>&1 &
   exit 0
 fi
 
 conn="$WORKER_CONN"
 pending_file="$rundir/pending_${conn}.txt"
+notify_file="$rundir/notify_${conn}.txt"
+debounce_file="$rundir/debounce_${conn}.txt"
+max_wait_file="$rundir/max_wait_${conn}.txt"
 last_file="$rundir/last_${conn}.txt"
 first_file="$rundir/first_${conn}.txt"
 pid_file="$rundir/worker_${conn}.pid"
@@ -604,24 +660,30 @@ lock_dir="$rundir/lock_${conn}.d"
 printf '%s\n' "$$" >"$pid_file"
 
 idle_loops=0
+backend=""
+controller_id=""
 
 while :; do
   while :; do
-    sleep 0.05
     now="$(now_ms)"
     last="$(read_uint_file "$last_file" 0)"
     first="$(read_uint_file "$first_file" 0)"
 
     idle_age=$((now - last))
     elapsed=$(( first > 0 ? now - first : 0 ))
+    batch_debounce="$(read_uint_file "$debounce_file" "$DEBOUNCE_MS")"
+    batch_max_wait="$(read_uint_file "$max_wait_file" "$MAX_WAIT_MS")"
 
-    if (( idle_age >= DEBOUNCE_MS )); then break; fi
-    if (( first > 0 && elapsed >= MAX_WAIT_MS )); then break; fi
+    if (( idle_age >= batch_debounce )); then break; fi
+    if (( first > 0 && elapsed >= batch_max_wait )); then break; fi
+    sleep 0.02
   done
 
   lock_acquire "$lock_dir" || exit 0
   pending="$(read_int_file "$pending_file" 0)"
+  batch_notify="$(read_uint_file "$notify_file" 0)"
   printf '0\n' >"$pending_file"
+  printf '0\n' >"$notify_file"
   printf '0\n' >"$first_file"
   lock_release "$lock_dir"
 
@@ -633,20 +695,24 @@ while :; do
   fi
   idle_loops=0
 
-  monitor_info="$(
-    TARGET_CONN="$conn" get_focused_monitor_tsv || true
-  )"
-  hypr_make="" hypr_model="" hypr_serial="" hypr_desc=""
-
-  if [[ -n "${monitor_info:-}" ]]; then
-    IFS=$'\t' read -r _conn hypr_make hypr_model hypr_serial hypr_desc <<<"$monitor_info"
-  fi
-
-  controller="$(controller_for_conn "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc" || true)"
-  IFS=$'\t' read -r backend controller_id <<<"$controller"
   if [[ -z "${backend:-}" || -z "${controller_id:-}" ]]; then
-    notify "$NOTIFY_MS" "Brightness $conn" "controller unavailable" "hypr-ddc-$conn"
-    continue
+    monitor_info="$(
+      TARGET_CONN="$conn" get_focused_monitor_tsv || true
+    )"
+    hypr_make="" hypr_model="" hypr_serial="" hypr_desc=""
+
+    if [[ -n "${monitor_info:-}" ]]; then
+      IFS=$'\t' read -r _conn hypr_make hypr_model hypr_serial hypr_desc <<<"$monitor_info"
+    fi
+
+    controller="$(controller_for_conn "$conn" "$hypr_make" "$hypr_model" "$hypr_serial" "$hypr_desc" || true)"
+    IFS=$'\t' read -r backend controller_id <<<"$controller"
+    if [[ -z "${backend:-}" || -z "${controller_id:-}" ]]; then
+      backend=""
+      controller_id=""
+      notify "$NOTIFY_MS" "Brightness $conn" "controller unavailable" "hypr-ddc-$conn"
+      continue
+    fi
   fi
 
   cur="" max="" ts=""
@@ -669,9 +735,11 @@ while :; do
     write_state "$conn" "$cur" "$max"
   fi
 
-  target=$((cur + pending))
-  (( target < 0 )) && target=0
-  (( target > max )) && target="$max"
+  current_percent=$(( (cur * 100 + max / 2) / max ))
+  target_percent=$((current_percent + pending))
+  (( target_percent < 0 )) && target_percent=0
+  (( target_percent > 100 )) && target_percent=100
+  target=$(( (max * target_percent + 50) / 100 ))
 
   if ! brightness_set_abs_fast "$backend" "$controller_id" "$target"; then
     notify "$NOTIFY_MS" "Brightness $conn" "write failed" "hypr-ddc-$conn"
@@ -679,5 +747,7 @@ while :; do
   fi
 
   write_state "$conn" "$target" "$max"
-  notify_level "$conn" "$target" "$max"
+  if (( batch_notify == 1 )); then
+    notify_level "$conn" "$target" "$max"
+  fi
 done

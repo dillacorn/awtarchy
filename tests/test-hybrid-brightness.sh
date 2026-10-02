@@ -5,6 +5,12 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTROLLER_SOURCE="${ROOT}/config/hypr/scripts/hypr-ddc-brightness.sh"
 BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
+QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
+QUICKSETTINGS_BACKEND="${ROOT}/config/hypr/scripts/hypr_quicksettings.sh"
+QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
+AUDIO_LIMIT_STATE="${ROOT}/config/quickshell/awtarchy/AudioLimitState.qml"
+BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
+HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
 CONTROLLER="${TMP}/hypr-ddc-brightness.sh"
 BAR_MODULE="${TMP}/ddc_brightness.sh"
@@ -40,6 +46,7 @@ backlight_target="${TMP}/sys/devices/pci0000:00/0000:00:02.0/drm/card2/card2-LVD
 monitor_json="${TMP}/monitors.json"
 brightness_state="${TMP}/brightness.state"
 brightness_log="${TMP}/brightness.log"
+notify_log="${TMP}/notify.log"
 ddc_state="${TMP}/ddc.state"
 ddc_log="${TMP}/ddc.log"
 
@@ -55,6 +62,7 @@ ln -s "$backlight_target" "$backlight_root/intel_backlight"
 printf '%s\n' '2458 4710' >"$brightness_state"
 printf '%s\n' '40 100' >"$ddc_state"
 : >"$brightness_log"
+: >"$notify_log"
 : >"$ddc_log"
 
 cat >"${fakebin}/hyprctl" <<'EOF'
@@ -153,6 +161,12 @@ done
 exit 8
 EOF
 
+cat >"${fakebin}/notify-send" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >>"${AWTARCHY_TEST_NOTIFY_LOG:?}"
+EOF
+
 chmod 0755 "${fakebin}/"*
 
 write_monitor() {
@@ -172,7 +186,9 @@ write_monitor() {
     }]' >"$monitor_json"
 }
 
-run_controller() {
+run_controller_mode() {
+  local notify_mode="$1" debounce_ms="$2" max_wait_ms="$3"
+  shift 3
   env \
     PATH="${fakebin}:$PATH" \
     HOME="$TMP" \
@@ -180,15 +196,20 @@ run_controller() {
     XDG_CACHE_HOME="$cache_home" \
     XDG_RUNTIME_DIR="$runtime_dir" \
     HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
-    HYPR_DDC_NOTIFY=0 \
-    HYPR_DDC_DEBOUNCE_MS=10 \
-    HYPR_DDC_MAX_WAIT_MS=100 \
+    HYPR_DDC_NOTIFY="$notify_mode" \
+    HYPR_DDC_DEBOUNCE_MS="$debounce_ms" \
+    HYPR_DDC_MAX_WAIT_MS="$max_wait_ms" \
     AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
     AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
     AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+    AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
     AWTARCHY_TEST_DDC_STATE="$ddc_state" \
     AWTARCHY_TEST_DDC_LOG="$ddc_log" \
     "$CONTROLLER" "$@"
+}
+
+run_controller() {
+  run_controller_mode 0 10 100 "$@"
 }
 
 write_monitor "LVDS-1" "AU Optronics" "0x203E" ""
@@ -237,6 +258,118 @@ done
 [[ $raw == 2120 && $maximum == 4710 ]] \
   || fail "debounced internal adjustment did not apply five percentage points"
 
+# A bar request must be able to make an already-running, slower keybind worker
+# write immediately. Worker timing is batch metadata, not inherited forever from
+# whichever input source happened to spawn the worker.
+: >"$notify_log"
+run_controller_mode 1 500 1000 --monitor LVDS-1 up 5
+sleep 0.05
+run_controller_mode 0 0 500 --monitor LVDS-1 up 5
+active_scroll_applied=false
+for _ in {1..12}; do
+  IFS=' ' read -r raw maximum <"$brightness_state"
+  if [[ $raw == 2591 && $maximum == 4710 ]]; then
+    active_scroll_applied=true
+    break
+  fi
+  sleep 0.02
+done
+[[ "$active_scroll_applied" == true ]] \
+  || fail "bar brightness request did not lower an existing worker batch to immediate write timing"
+for _ in {1..100}; do
+  if grep -Fq 'Brightness LVDS-1' "$notify_log"; then
+    break
+  fi
+  sleep 0.02
+done
+grep -Fq 'Brightness LVDS-1' "$notify_log" \
+  || fail "keybind-style timing batch did not finish its expected notification"
+
+# A silent bar-style adjustment followed by a notifying keybind-style adjustment
+# can share one worker. Notification intent must be accumulated per batch rather
+# than inherited from whichever request happened to create the worker.
+: >"$notify_log"
+run_controller_mode 0 250 500 --monitor LVDS-1 up 5
+sleep 0.05
+run_controller_mode 1 250 500 --monitor LVDS-1 up 5
+for _ in {1..100}; do
+  if grep -Fq 'Brightness LVDS-1' "$notify_log"; then
+    break
+  fi
+  sleep 0.05
+done
+grep -Fq 'Brightness LVDS-1' "$notify_log" \
+  || fail "keybind-style brightness feedback was lost when a silent request started the worker"
+
+: >"$notify_log"
+run_controller_mode 0 80 200 --monitor LVDS-1 up 5
+sleep 0.4
+[[ ! -s "$notify_log" ]] \
+  || fail "silent brightness adjustment emitted a routine notification"
+
+# Bar preview should advance immediately per wheel event, independently of the
+# hardware worker's delayed DDC/backlight write.
+env \
+  PATH="${fakebin}:$PATH" \
+  HOME="$TMP" \
+  XDG_CONFIG_HOME="$config_home" \
+  XDG_CACHE_HOME="$cache_home" \
+  XDG_RUNTIME_DIR="$runtime_dir" \
+  HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
+  HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
+  AWTARCHY_OUTPUT_NAME=LVDS-1 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
+  AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
+  AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+  AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
+  AWTARCHY_TEST_DDC_STATE="$ddc_state" \
+  AWTARCHY_TEST_DDC_LOG="$ddc_log" \
+  "$BAR_MODULE" up
+preview_file="$cache_home/hypr-ddc-brightness/preview_LVDS-1.tsv"
+read -r preview_once preview_max _preview_ts <"$preview_file"
+env \
+  PATH="${fakebin}:$PATH" \
+  HOME="$TMP" \
+  XDG_CONFIG_HOME="$config_home" \
+  XDG_CACHE_HOME="$cache_home" \
+  XDG_RUNTIME_DIR="$runtime_dir" \
+  HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
+  HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
+  AWTARCHY_OUTPUT_NAME=LVDS-1 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
+  AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
+  AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
+  AWTARCHY_TEST_NOTIFY_LOG="$notify_log" \
+  AWTARCHY_TEST_DDC_STATE="$ddc_state" \
+  AWTARCHY_TEST_DDC_LOG="$ddc_log" \
+  "$BAR_MODULE" up
+read -r preview_twice preview_max _preview_ts <"$preview_file"
+(( preview_twice == preview_once + 5 )) \
+  || fail "bar brightness preview did not advance immediately for consecutive wheel events"
+[[ "$preview_max" == 100 ]] \
+  || fail "bar brightness preview lost the logical maximum"
+
+state_file="$cache_home/hypr-ddc-brightness/state_LVDS-1.tsv"
+settled=false
+for _ in {1..100}; do
+  if [[ -r "$state_file" ]]; then
+    read -r settled_cur _settled_max _settled_ts <"$state_file" || true
+    if [[ "${settled_cur:-}" == "$preview_twice" ]]; then
+      settled=true
+      break
+    fi
+  fi
+  sleep 0.05
+done
+[[ "$settled" == true ]] \
+  || fail "hardware brightness state did not converge to the optimistic bar target"
+[[ ! -s "$notify_log" ]] \
+  || fail "bar brightness scrolling emitted a routine notification"
+
 edp_target="${TMP}/sys/devices/pci0000:00/0000:00:02.0/drm/card2/card2-eDP-1/intel_backlight"
 mkdir -p "$edp_target"
 ln -sfn "$edp_target" "$backlight_root/intel_backlight"
@@ -261,5 +394,82 @@ IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
 [[ $(wc -l <"$brightness_log") == "$brightness_calls_before" ]] \
   || fail "external DDC brightness invoked brightnessctl"
 grep -Fq -- '--bus 7' "$ddc_log" || fail "external DDC command did not retain its bus selection"
+
+# Scroll/keybind steps are percentage points, even when the monitor exposes a
+# native DDC range other than 0-100.
+printf '%s\n' '80 200' >"$ddc_state"
+rm -f "$cache_home/hypr-ddc-brightness/state_DP-1.tsv"
+external_scaled_status="$(run_controller --monitor DP-1 status)"
+grep -Fxq 'cur=80' <<<"$external_scaled_status" || fail "scaled DDC test did not start at raw 80"
+grep -Fxq 'max=200' <<<"$external_scaled_status" || fail "scaled DDC test did not expose native max 200"
+
+run_controller --monitor DP-1 set-percent 45
+IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
+[[ $ddc_current == 90 && $ddc_maximum == 200 ]] \
+  || fail "cached percentage DDC write did not scale 45 percent to the native range"
+
+run_controller --monitor DP-1 up 5
+for _ in {1..100}; do
+  IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
+  [[ $ddc_current == 100 && $ddc_maximum == 200 ]] && break
+  sleep 0.05
+done
+[[ $ddc_current == 100 && $ddc_maximum == 200 ]] \
+  || fail "five-point DDC brightness step did not scale against the monitor native range"
+
+grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-0' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness does not request immediate hardware writes while scrolling"
+# These assertions intentionally search for literal shell syntax in managed
+# source files; the single quotes are not meant to expand here.
+# shellcheck disable=SC2016
+# shellcheck disable=SC2016
+grep -Fq 'debounce_file="$rundir/debounce_${conn}.txt"' "$CONTROLLER_SOURCE" \
+  || fail "brightness worker does not track debounce timing per input batch"
+# shellcheck disable=SC2016
+grep -Fq 'batch_debounce="$(read_uint_file "$debounce_file" "$DEBOUNCE_MS")"' "$CONTROLLER_SOURCE" \
+  || fail "brightness worker does not honor source-aware batch timing"
+grep -Fq 'AWTARCHY_DDC_SCROLL_MAX_WAIT_MS:-500' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness still allows long continuous-scroll latency"
+grep -Fq 'HYPR_DDC_NOTIFY=0' "$BAR_MODULE_SOURCE" \
+  || fail "bar brightness adjustments do not suppress routine notifications"
+# shellcheck disable=SC2016
+grep -Fq 'HYPR_DDC_NOTIFY=0 run_quiet "$BRIGHTNESS_SCRIPT"' "$QUICKSETTINGS_CORE" \
+  || fail "Quick Settings brightness adjustments do not suppress routine notifications"
+# shellcheck disable=SC2016
+grep -Fq 'brightness_quiet set-percent "$percent"' "$QUICKSETTINGS_BACKEND" \
+  || fail "Quick Settings brightness drag does not use the cached percentage write path"
+grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness lacks immediate optimistic feedback"
+grep -Fq 'property int brightnessRequestedValue: -1' "$BAR_QML" \
+  || fail "bar brightness lacks a local optimistic target"
+grep -Fq 'brightnessDisplayValue + direction * brightnessStep' "$BAR_QML" \
+  || fail "bar brightness does not update the visible value directly from the wheel event"
+grep -Fq 'label: bar.brightnessDisplayText' "$BAR_QML" \
+  || fail "horizontal bar brightness does not render the immediate optimistic value"
+grep -Fq 'bar.brightnessDisplayValue + "%"' "$BAR_QML" \
+  || fail "vertical bar brightness does not render the immediate optimistic value"
+grep -Fq 'setBrightnessPercent(base + delta);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings +/- brightness does not route through the optimistic percentage setter"
+grep -Fq 'brightnessPreviewPercent = next;' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness track does not update its visible target immediately"
+grep -Fq 'if (pressed)' "$QUICK_SETTINGS" \
+  || fail "Quick Settings tracks do not support held left-button dragging"
+grep -Fq 'root.setBrightnessPercent(root.brightnessHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness does not adjust continuously while dragging"
+grep -Fq 'item.args[0] === "brightness-percent"' "$QUICK_SETTINGS" \
+  || fail "Quick Settings brightness drag does not coalesce superseded hardware writes"
+grep -Fq 'AudioLimitState.previewLimit(root.outputVolumeHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings maximum volume does not preview continuously while dragging"
+grep -Fq 'AudioLimitState.setLimit(root.outputVolumeHoverPercent);' "$QUICK_SETTINGS" \
+  || fail "Quick Settings maximum volume does not commit the dragged value on release"
+grep -Fq 'function previewLimit(value)' "$AUDIO_LIMIT_STATE" \
+  || fail "maximum volume state has no lightweight drag preview path"
+# shellcheck disable=SC2016
+grep -Fq '[[ "${HYPR_DDC_NOTIFY:-1}" == "0" ]] && return 0' "$CONTROLLER_SOURCE" \
+  || fail "brightness controller no longer defaults notifications on for direct calls"
+grep -Fq 'hl.bind("SUPER + ALT + equal", hl.dsp.exec_cmd(hypr_ddc_brightness .. " up 5"), {})' "$HYPR_CONFIG" \
+  || fail "brightness increase keybind no longer calls the notifying controller directly"
+grep -Fq 'hl.bind("SUPER + ALT + minus", hl.dsp.exec_cmd(hypr_ddc_brightness .. " down 5"), {})' "$HYPR_CONFIG" \
+  || fail "brightness decrease keybind no longer calls the notifying controller directly"
 
 printf '%s\n' "Hybrid brightness backend tests passed."

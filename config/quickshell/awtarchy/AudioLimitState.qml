@@ -47,6 +47,10 @@ Singleton {
             Quickshell.execDetached([volumeScript, "set", String(limitPercent)]);
     }
 
+    function previewLimit(value) {
+        limitPercent = normalized(value);
+    }
+
     function setLimit(value) {
         const next = normalized(value);
         let text = String(configFile.text() || "");
