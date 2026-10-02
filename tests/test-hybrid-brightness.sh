@@ -8,6 +8,7 @@ BAR_MODULE_SOURCE="${ROOT}/config/hypr/scripts/ddc_brightness.sh"
 QUICKSETTINGS_CORE="${ROOT}/config/hypr/scripts/hypr_quicksettings_core.sh"
 QUICKSETTINGS_BACKEND="${ROOT}/config/hypr/scripts/hypr_quicksettings.sh"
 QUICK_SETTINGS="${ROOT}/config/quickshell/awtarchy/QuickSettings.qml"
+BAR_QML="${ROOT}/config/quickshell/awtarchy/Bar.qml"
 HYPR_CONFIG="${ROOT}/config/hypr/hyprland.lua"
 TMP="$(mktemp -d)"
 CONTROLLER="${TMP}/hypr-ddc-brightness.sh"
@@ -366,6 +367,22 @@ IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
   || fail "external DDC brightness invoked brightnessctl"
 grep -Fq -- '--bus 7' "$ddc_log" || fail "external DDC command did not retain its bus selection"
 
+# Scroll/keybind steps are percentage points, even when the monitor exposes a
+# native DDC range other than 0-100.
+printf '%s\n' '80 200' >"$ddc_state"
+rm -f "$cache_home/hypr-ddc-brightness/state_DP-1.tsv"
+external_scaled_status="$(run_controller --monitor DP-1 status)"
+grep -Fxq 'cur=80' <<<"$external_scaled_status" || fail "scaled DDC test did not start at raw 80"
+grep -Fxq 'max=200' <<<"$external_scaled_status" || fail "scaled DDC test did not expose native max 200"
+run_controller --monitor DP-1 up 5
+for _ in {1..100}; do
+  IFS=' ' read -r ddc_current ddc_maximum <"$ddc_state"
+  [[ $ddc_current == 90 && $ddc_maximum == 200 ]] && break
+  sleep 0.05
+done
+[[ $ddc_current == 90 && $ddc_maximum == 200 ]] \
+  || fail "five-point DDC brightness step did not scale against the monitor native range"
+
 grep -Fq 'AWTARCHY_DDC_SCROLL_DEBOUNCE_MS:-160' "$BAR_MODULE_SOURCE" \
   || fail "bar brightness still uses the old slow scroll debounce"
 grep -Fq 'AWTARCHY_DDC_SCROLL_MAX_WAIT_MS:-500' "$BAR_MODULE_SOURCE" \
@@ -378,6 +395,14 @@ grep -Fq 'current_percent=$(( (BR_CUR * 100 + BR_MAX / 2) / BR_MAX ))' "$QUICKSE
   || fail "Quick Settings +/- brightness is not percentage-based on non-100 display ranges"
 grep -Fq 'property int brightnessPreviewPercent: -1' "$QUICK_SETTINGS" \
   || fail "Quick Settings brightness lacks immediate optimistic feedback"
+grep -Fq 'property int brightnessRequestedValue: -1' "$BAR_QML" \
+  || fail "bar brightness lacks a local optimistic target"
+grep -Fq 'brightnessDisplayValue + direction * brightnessStep' "$BAR_QML" \
+  || fail "bar brightness does not update the visible value directly from the wheel event"
+grep -Fq 'label: bar.brightnessDisplayText' "$BAR_QML" \
+  || fail "horizontal bar brightness does not render the immediate optimistic value"
+grep -Fq 'bar.brightnessDisplayValue + "%"' "$BAR_QML" \
+  || fail "vertical bar brightness does not render the immediate optimistic value"
 grep -Fq 'brightnessPreviewPercent = Math.max(0, Math.min(100, base + delta));' "$QUICK_SETTINGS" \
   || fail "Quick Settings +/- brightness does not update its visible target immediately"
 grep -Fq 'brightnessPreviewPercent = next;' "$QUICK_SETTINGS" \
