@@ -33,6 +33,20 @@ PanelWindow {
     property string brightnessText: ""
     property string brightnessTooltip: "Brightness unavailable"
     property int brightnessValue: -1
+    property int brightnessRequestedValue: -1
+    readonly property int brightnessStep: {
+        const configured = Number(Quickshell.env("AWTARCHY_DDC_STEP"));
+        return Number.isFinite(configured) && configured > 0 ? Math.round(configured) : 5;
+    }
+    readonly property int brightnessDisplayValue: brightnessRequestedValue >= 0
+        ? brightnessRequestedValue : brightnessValue
+    readonly property string brightnessDisplayText: brightnessDisplayValue >= 0
+        ? " " + brightnessDisplayValue + "%" : brightnessText
+    readonly property string brightnessDisplayTooltip: brightnessRequestedValue >= 0
+        ? "Brightness " + monitorName + ": " + brightnessRequestedValue + "% target (pending)"
+            + "\nHover briefly, then scroll to adjust this display"
+            + "\nLeft/right click to toggle Hypr Quick Settings"
+        : brightnessTooltip
     property int volumeLimitBlockedScrolls: 0
     property real volumeLimitAttemptStartedAt: 0
     property real volumeLimitLastAttemptAt: 0
@@ -218,9 +232,14 @@ PanelWindow {
             brightnessText = data.text || "";
             brightnessTooltip = data.tooltip || "Brightness";
             const percentage = Number(data.percentage);
-            if (Number.isFinite(percentage))
+            if (Number.isFinite(percentage)) {
                 brightnessValue = Math.max(0, Math.min(100, Math.round(percentage)));
-            else {
+                if (data.pending !== true && brightnessRequestedValue >= 0
+                        && brightnessValue === brightnessRequestedValue) {
+                    brightnessRequestedValue = -1;
+                    brightnessOptimisticFallback.stop();
+                }
+            } else {
                 const match = brightnessText.match(/(-?\d+)\s*%?\s*$/);
                 brightnessValue = match ? Number(match[1]) : -1;
             }
@@ -231,6 +250,13 @@ PanelWindow {
     }
 
     function ddcAction(action) {
+        const direction = action === "up" ? 1 : (action === "down" ? -1 : 0);
+        if (direction !== 0 && brightnessDisplayValue >= 0) {
+            brightnessRequestedValue = Math.max(0, Math.min(100,
+                brightnessDisplayValue + direction * brightnessStep));
+            brightnessOptimisticFallback.restart();
+        }
+
         Quickshell.execDetached({
             command: [ddcScript, action],
             environment: ({ AWTARCHY_OUTPUT_NAME: monitorName })
@@ -379,6 +405,13 @@ PanelWindow {
             if (bar.clockDatePersistPending)
                 bar.persistClockDate();
         }
+    }
+
+    Timer {
+        id: brightnessOptimisticFallback
+        interval: 5000
+        repeat: false
+        onTriggered: bar.brightnessRequestedValue = -1
     }
 
     Timer {
@@ -879,8 +912,8 @@ PanelWindow {
             }
 
             BarControl {
-                label: bar.brightnessText
-                tooltip: bar.brightnessTooltip
+                label: bar.brightnessDisplayText
+                tooltip: bar.brightnessDisplayTooltip
                 onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)
@@ -1137,9 +1170,9 @@ PanelWindow {
 
             BarControl {
                 vertical: true; fixedWidth: bar.barSize
-                label: bar.brightnessValue >= 0
-                    ? "\n" + bar.brightnessValue + "%" : ""
-                tooltip: bar.brightnessTooltip
+                label: bar.brightnessDisplayValue >= 0
+                    ? "\n" + bar.brightnessDisplayValue + "%" : ""
+                tooltip: bar.brightnessDisplayTooltip
                 onHoverEntered: QuickSettings.prewarmForScreen(bar.screen)
                 onClicked: QuickSettings.toggleForScreen(bar.screen)
                 onRightClicked: QuickSettings.toggleForScreen(bar.screen)
