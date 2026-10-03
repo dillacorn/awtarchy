@@ -614,6 +614,14 @@ grep -Fq ' xdg-utils ' "$RUNTIME" \
   || fail 'xdg-utils is no longer part of the managed package catalog'
 grep -Fq ' git fd ripgrep ' "$RUNTIME" \
   || fail 'fd/ripgrep are not managed for Yazi recursive search'
+grep -Fq 'pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"' "$RUNTIME" \
+  || fail 'fresh install does not guarantee the required fd dependency'
+grep -Fq 'function ensure_yazi_fd_dependency_for_target()' "$RUNTIME" \
+  || fail 'updater has no target-aware fd dependency gate'
+grep -Fq 'run_update_root /usr/bin/pacman -S --needed --noconfirm fd' "$RUNTIME" \
+  || fail 'updater does not install missing fd before managed Yazi config is applied'
+grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
+  || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'
 grep -Fq ' udisks2 ' "$RUNTIME" \
   || fail 'udisks2 is not managed for Yazi mount actions'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \

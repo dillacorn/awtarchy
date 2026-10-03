@@ -2518,6 +2518,7 @@ prepare_base_install() {
 
   retry_command pacman -S --needed --noconfirm git ipcalc dos2unix reflector || exit 1
   pacman_install_one playerctl || die "Failed to install required media-control dependency: playerctl"
+  pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"
   pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
 
   if [[ ! -d "$REPO_DIR" ]]; then
@@ -8699,6 +8700,28 @@ EOF_V380_DRAG_LICENSE
   log "Applied v3.8.0 Yazi outbound-drag post-release repair to generated target."
 }
 
+target_requires_yazi_fd() {
+  local target_home="$1"
+  local init_file="${target_home}/.config/yazi/init.lua"
+
+  [[ -f "$init_file" && ! -L "$init_file" ]] || return 1
+  grep -Fq 'ya.emit("search", { via = "fd" })' "$init_file"
+}
+
+ensure_yazi_fd_dependency_for_target() {
+  local target_home="$1"
+
+  target_requires_yazi_fd "$target_home" || return 0
+  /usr/bin/pacman -Qq fd >/dev/null 2>&1 && return 0
+
+  log "Installing required Yazi filename-search dependency: fd"
+  run_update_root /usr/bin/pacman -S --needed --noconfirm fd \
+    || die "Could not install required Yazi filename-search dependency: fd"
+  record_managed_packages fd
+  /usr/bin/pacman -Qq fd >/dev/null 2>&1 \
+    || die "fd installation completed without a detectable fd package."
+}
+
 target_requires_yazi_ripdrag() {
   local target_home="$1"
   local plugin="${target_home}/.config/yazi/plugins/drag.yazi/main.lua"
@@ -9554,6 +9577,7 @@ main() {
   fi
 
   log "Update approved. Preparing required dependencies..."
+  ensure_yazi_fd_dependency_for_target "$target_home"
   ensure_yazi_ripdrag_dependency_for_target "$target_home"
 
   log "Checking Awtarchy system integration..."
