@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 IFS=$'\n\t'
+# shellcheck disable=SC2016
+trap 'printf "FAIL: updater migration test aborted at line %s\\n" "$LINENO" >&2' ERR
+
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 STABLE_LAUNCHER="${ROOT}/local/bin/awtarchy"
