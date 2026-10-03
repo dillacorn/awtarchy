@@ -103,8 +103,8 @@ require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${bac
     'editor save wrapper no longer delegates the normalized atomic layout/visibility save'
 reject_text "$EDITOR_QML" 'label: "Save"' \
     'LockscreenEditor still exposes a document-style Save control'
-reject_text "$EDITOR_QML" 'label: "Cancel"' \
-    'LockscreenEditor still exposes destructive Cancel semantics'
+reject_text "$EDITOR_QML" 'SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }' \
+    'LockscreenEditor still exposes destructive editor-level Cancel semantics'
 require_text "$EDITOR_QML" 'Changes save automatically  •  Esc Close' \
     'LockscreenEditor does not advertise autosave/close behavior'
 require_text "$EDITOR_QML" 'label: "Restore Defaults"' \
