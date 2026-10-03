@@ -620,6 +620,7 @@ grep -Fq 'function ensure_yazi_fd_dependency_for_target()' "$RUNTIME" \
   || fail 'updater has no target-aware fd dependency gate'
 grep -Fq 'run_update_root /usr/bin/pacman -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
+# shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'
 grep -Fq ' udisks2 ' "$RUNTIME" \
