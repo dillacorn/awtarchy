@@ -8709,16 +8709,26 @@ target_requires_yazi_fd() {
 }
 
 ensure_yazi_fd_dependency_for_target() {
-  local target_home="$1"
+  local target_home="$1" pacman_bin="/usr/bin/pacman"
 
   target_requires_yazi_fd "$target_home" || return 0
-  /usr/bin/pacman -Qq fd >/dev/null 2>&1 && return 0
+
+  if [[ -n ${AWTARCHY_TEST_PACMAN_BIN:-}
+    && ${AWTARCHY_TEST_TARGET_HOME:-} == /tmp/*
+    && -n ${AWTARCHY_TEST_ARCHIVE:-} ]];
+  then
+    pacman_bin="$AWTARCHY_TEST_PACMAN_BIN"
+  fi
+  [[ -x "$pacman_bin" ]] \
+    || die "fd is required by the target Yazi configuration, but pacman is unavailable."
+
+  "$pacman_bin" -Qq fd >/dev/null 2>&1 && return 0
 
   log "Installing required Yazi filename-search dependency: fd"
-  run_update_root /usr/bin/pacman -S --needed --noconfirm fd \
+  run_update_root "$pacman_bin" -S --needed --noconfirm fd \
     || die "Could not install required Yazi filename-search dependency: fd"
   record_managed_packages fd
-  /usr/bin/pacman -Qq fd >/dev/null 2>&1 \
+  "$pacman_bin" -Qq fd >/dev/null 2>&1 \
     || die "fd installation completed without a detectable fd package."
 }
 

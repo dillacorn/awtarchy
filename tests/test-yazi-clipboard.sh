@@ -618,8 +618,12 @@ grep -Fq 'pacman_install_one fd || die "Failed to install required Yazi filename
   || fail 'fresh install does not guarantee the required fd dependency'
 grep -Fq 'ensure_yazi_fd_dependency_for_target() {' "$RUNTIME" \
   || fail 'updater has no target-aware fd dependency gate'
-grep -Fq 'run_update_root /usr/bin/pacman -S --needed --noconfirm fd' "$RUNTIME" \
+grep -Fq 'pacman_bin="/usr/bin/pacman"' "$RUNTIME" \
+  || fail 'updater does not keep the production fd package path pinned to /usr/bin/pacman'
+grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
+grep -Fq 'AWTARCHY_TEST_PACMAN_BIN' "$RUNTIME" \
+  || fail 'updater fd dependency gate is not testable through the guarded integration override'
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'

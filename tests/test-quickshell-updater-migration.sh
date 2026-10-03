@@ -823,6 +823,7 @@ update_env=(
   "AWTARCHY_TEST_CURL_LOG=${TMP}/curl.log"
   "AWTARCHY_TEST_PACKAGE_STATE=$package_state"
   "AWTARCHY_MANAGED_PACKAGES_FILE=$managed_packages"
+  "AWTARCHY_TEST_PACMAN_BIN=${fakebin}/pacman"
   "AWTARCHY_TEST_PACMAN_LOG=${TMP}/pacman.log"
   "AWTARCHY_TEST_HYPRCTL_LOG=${TMP}/hyprctl.log"
   "AWTARCHY_TEST_PKILL_LOG=${TMP}/pkill.log"
@@ -908,6 +909,10 @@ assert_file "${polkit_test_root}/usr/local/lib/systemd/user/awtarchy-polkit-agen
 grep -Fq 'Installed root-owned Awtarchy terminal PolicyKit authentication runtime.' \
   "${TMP}/update.out" \
   || fail "updater did not stage the PolicyKit runtime through the privileged install path"
+grep -Fxq fd "$package_state" \
+  || fail "Git-testing update did not install the required Yazi fd dependency"
+grep -Fq -- '-S --needed --noconfirm fd' "${TMP}/pacman.log" \
+  || fail "Git-testing update did not use the package transaction for missing fd"
 
 grep -Fq -- \
   '-Rns --noconfirm waybar-git fuzzel wlogout mako wofi network-manager-applet blueman' \
