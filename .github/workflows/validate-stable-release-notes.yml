@@ -86,7 +86,7 @@ jobs:
           ## Validation
 
           - PR #254 passed all 25 triggered checks on exact head `26416724f3a5ee26940e00dc64b52035b2c0e117`, including the full **Validate Awtarchy** and **Validate Quickshell Lockscreen Interactive Effects** workflows.
-          - All 15 post-merge `main` push workflows passed on exact release target `c5e522dbed4744521d3711270b6748501cd1ab51`.
+          - Post-merge `main` push validation passed on exact release target `c5e522dbed4744521d3711270b6748501cd1ab51`, including the full **Validate Awtarchy** workflow.
           - The maintainer runtime-tested the autosave branch and confirmed the lockscreen configuration persisted correctly before approving merge and the v3.8.5 release.
           EOF
 
