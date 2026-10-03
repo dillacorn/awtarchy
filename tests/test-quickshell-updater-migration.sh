@@ -1461,7 +1461,7 @@ assert_absent \
 
 printf 'Quickshell updater migration tests passed.\n'
 \n\t'
-trap 'rc=$?; printf "FAIL: updater migration test aborted at line %s (rc=%s)\\n" "$LINENO" "$rc" >&2; exit "$rc"' ERR
+trap 'rc=$?; printf "FAIL: updater migration test aborted at line %s (rc=%s)\\n" "$LINENO" "$rc" >&2' ERR
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 STABLE_LAUNCHER="${ROOT}/local/bin/awtarchy"
