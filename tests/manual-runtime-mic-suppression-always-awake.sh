@@ -271,7 +271,10 @@ run_test() {
     'At the RNNoise prompt type: yes' \
     'It MUST say: Please answer y or n.' \
     'Then type only: y'
-  "$AWT" git update --branch "$BRANCH" --commit "$HEAD"
+  if ! "$AWT" git update --branch "$BRANCH" --commit "$HEAD"; then
+    fail 'Exact Git-testing update failed; stopping before any follow-up assertions'
+    return 1
+  fi
 
   yn 'Did invalid input re-prompt, y enable RNNoise, and the audio-app restart warning appear?' ||
     { fail 'Updater strict y/n or warning failed'; return 1; }
@@ -329,7 +332,10 @@ run_test() {
   audio_healthy
 
   banner '8. HEALTHY SETUP UPDATE SKIP'
-  "$AWT" git update --branch "$BRANCH" --commit "$HEAD"
+  if ! "$AWT" git update --branch "$BRANCH" --commit "$HEAD"; then
+    fail 'Healthy-setup verification update failed; stopping and recovering'
+    return 1
+  fi
   yn 'Did the updater report RNNoise already configured and skip its setup question?' ||
     { fail 'Healthy setup skip failed'; return 1; }
 
