@@ -21,6 +21,13 @@ fail() {
   exit 1
 }
 
+grep -Fq -- '    --retry 3' "$LAUNCHER" \
+  || fail 'updater API fetches do not retry transient failures enough'
+grep -Fq -- '    --retry-all-errors' "$LAUNCHER" \
+  || fail 'updater API retries do not include timeout/network errors'
+grep -Fq -- '      CURL_ARGS+=(--silent --max-time 20)' "$LAUNCHER" \
+  || fail 'updater API timeout is still too short for transient GitHub stalls'
+
 assert_arg_sequence() {
   local file="$1"
   shift
