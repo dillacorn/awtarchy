@@ -110,6 +110,7 @@ INSTALL_FLATPAK=1
 INSTALL_GPU=1
 INSTALL_LY=0
 ENABLE_KEYRING_PAM=0
+ENABLE_MIC_SUPPRESSION=0
 OVERWRITE_BASHRC=0
 OVERWRITE_BASH_PROFILE=0
 
@@ -2215,6 +2216,7 @@ print_install_review() {
   local gpu_enabled="no"
   local ly_enabled="no"
   local pam_enabled="no"
+  local mic_suppression_enabled="no"
   local reboot_label="yes"
 
   (( DRY_RUN == 1 )) && mode_label="DRY-RUN"
@@ -2222,6 +2224,7 @@ print_install_review() {
   [[ "$INSTALL_GPU" == 1 ]] && gpu_enabled="yes"
   [[ "$INSTALL_LY" == 1 ]] && ly_enabled="yes"
   [[ "$ENABLE_KEYRING_PAM" == 1 ]] && pam_enabled="yes"
+  [[ "$ENABLE_MIC_SUPPRESSION" == 1 ]] && mic_suppression_enabled="yes (mono)"
   (( NO_REBOOT == 1 || DRY_RUN == 1 )) && reboot_label="no"
 
   clear_screen
@@ -2238,6 +2241,7 @@ print_install_review() {
   printf 'GPU dependencies: %s\n' "$gpu_enabled"
   printf 'Ly tty2: %s\n' "$ly_enabled"
   printf 'PAM keyring: %s\n' "$pam_enabled"
+  printf 'Microphone noise suppression: %s\n' "$mic_suppression_enabled"
   printf 'Reboot at end: %s\n' "$reboot_label"
 
   printf '\n%s\n' "${COLOR_CYAN}Planned stages${COLOR_RESET}"
@@ -2252,6 +2256,7 @@ print_install_review() {
   printf '  - Install/update Micro themes\n'
   if (( ENABLE_KEYRING_PAM == 1 )); then printf '  - Enable GNOME Keyring PAM integration\n'; else printf '  - Skip GNOME Keyring PAM integration\n'; fi
   if (( INSTALL_LY == 1 )); then printf '  - Enable Ly on tty2 for next boot only\n'; else printf '  - Skip Ly\n'; fi
+  if (( ENABLE_MIC_SUPPRESSION == 1 )); then printf '  - Configure optional RNNoise microphone suppression (mono)\n'; else printf '  - Skip microphone noise suppression\n'; fi
   printf '  - Copy awtarchy-managed config files into %s/.config\n' "$HOME_DIR"
   printf '  - Apply Awtarchy desktop defaults\n'
   printf '  - Repair ownership and permissions\n'
@@ -2315,6 +2320,7 @@ Before any changes are made, you will choose:
   - Arch repo packages
   - additional AUR packages (required feature dependencies are always installed)
   - Flatpak apps
+  - optional RNNoise microphone suppression
   - shell-file overwrite behavior
 
 After that, Awtarchy shows a summary. In dry-run mode it prints the plan and exits.
@@ -2351,8 +2357,9 @@ In normal install mode it will overwrite awtarchy-managed config files under:
           "GPU dependencies"
           "Ly TTY login manager"
           "GNOME Keyring PAM integration"
+          "RNNoise microphone suppression (mono, optional)"
         )
-        values=("$INSTALL_ARCH" "$INSTALL_AUR" "$INSTALL_FLATPAK" "$INSTALL_GPU" "$INSTALL_LY" "$ENABLE_KEYRING_PAM")
+        values=("$INSTALL_ARCH" "$INSTALL_AUR" "$INSTALL_FLATPAK" "$INSTALL_GPU" "$INSTALL_LY" "$ENABLE_KEYRING_PAM" "$ENABLE_MIC_SUPPRESSION")
         if [[ "$IS_VM" == true ]]; then
           values[3]=0
           # shellcheck disable=SC2034
@@ -2366,6 +2373,7 @@ In normal install mode it will overwrite awtarchy-managed config files under:
           INSTALL_GPU="${values[3]}"
           INSTALL_LY="${values[4]}"
           ENABLE_KEYRING_PAM="${values[5]}"
+          ENABLE_MIC_SUPPRESSION="${values[6]}"
           step=3
         else
           rc=$?
@@ -4025,6 +4033,79 @@ remove_legacy_shell_files_stage() {
   done
 }
 
+ask_optional_yes_no() {
+  local prompt="$1" ans=""
+  is_interactive || return 1
+  while true; do
+    printf '%s [y/N] ' "$prompt" >/dev/tty
+    IFS= read -r ans </dev/tty || return 1
+    case "$ans" in
+      y|Y|yes|YES) return 0 ;;
+      ""|n|N|no|NO) return 1 ;;
+      *) printf '%s\n' 'Please answer y or n.' >/dev/tty ;;
+    esac
+  done
+}
+
+mic_suppression_helper_path() {
+  local home="$1"
+  printf '%s\n' "${home}/.config/hypr/scripts/mic_noise_suppression.sh"
+}
+
+run_mic_suppression_for_target() {
+  local home="$1"
+  shift
+  local helper uid runtime_dir=""
+  helper="$(mic_suppression_helper_path "$home")"
+  [[ -x "$helper" && ! -L "$helper" ]] || {
+    warn "Microphone suppression helper is unavailable: ${helper}"
+    return 1
+  }
+
+  if [[ "${EUID}" -eq 0 ]]; then
+    uid="$(id -u "$TARGET_USER" 2>/dev/null || true)"
+    [[ "$uid" =~ ^[0-9]+$ ]] && runtime_dir="/run/user/${uid}"
+    if [[ -n "$runtime_dir" && -d "$runtime_dir" ]]; then
+      run_as_target env \
+        "HOME=${home}" \
+        "XDG_RUNTIME_DIR=${runtime_dir}" \
+        "DBUS_SESSION_BUS_ADDRESS=unix:path=${runtime_dir}/bus" \
+        "$helper" "$@"
+    else
+      run_as_target env "HOME=${home}" "$helper" "$@"
+    fi
+  else
+    HOME="$home" "$helper" "$@"
+  fi
+}
+
+configure_installer_mic_suppression_stage() {
+  (( ENABLE_MIC_SUPPRESSION == 1 )) || return 0
+  log "Configuring optional RNNoise microphone suppression (mono)..."
+  pacman_install_one noise-suppression-for-voice \
+    || die "Failed to install noise-suppression-for-voice."
+  run_mic_suppression_for_target "$HOME_DIR" mono \
+    || die "Could not configure RNNoise microphone suppression."
+}
+
+maybe_offer_mic_suppression_update() {
+  local helper
+  helper="$(mic_suppression_helper_path "$HOME_DIR")"
+  [[ -x "$helper" && ! -L "$helper" ]] || return 0
+
+  if run_mic_suppression_for_target "$HOME_DIR" is-configured >/dev/null 2>&1; then
+    log "Microphone noise suppression is already configured; skipping the optional setup prompt."
+    return 0
+  fi
+
+  printf '%s\n' 'Optional microphone noise suppression is not currently configured.'
+  printf '%s\n' 'RNNoise creates a virtual "Noise Canceling source" at 48 kHz; mono is recommended for normal microphones.'
+  printf '%s\n' 'Applying it restarts PipeWire/WirePlumber, so active games, VOIP apps, browsers, OBS/recording software, and other audio clients may need restarting.'
+  if ask_optional_yes_no "Enable RNNoise microphone suppression now?"; then
+    run_mic_suppression_for_target "$HOME_DIR" mono \
+      || warn "RNNoise setup did not complete. Existing audio configuration was otherwise left intact."
+  fi
+}
 run_install() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -4076,6 +4157,7 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  configure_installer_mic_suppression_stage
   install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
   remove_legacy_shell_files_stage
   install_awtarchy_command_stage
@@ -9690,6 +9772,7 @@ main() {
   # Do not mutate hardware/package state until the user accepts the live config.
   log "Reconciling hardware and managed packages..."
   hardware_reconcile
+  maybe_offer_mic_suppression_update
 
   log "Cleaning retired managed shell state..."
   if ! remove_quickshell_update_legacy_files; then
