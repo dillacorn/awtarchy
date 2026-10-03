@@ -896,9 +896,13 @@ grep -Fq 'Reconstructing previous generated baseline from release: v2.0.0-1' \
   || fail "updater did not reconstruct the previous baseline from config-version"
 assert_absent "$home/.local/state/awtarchy/git-testing"
 
-env "${update_env[@]}" "$installed_launcher" git update \
-  --branch "$TEST_BRANCH" --commit "$TEST_COMMIT" \
-  >"${TMP}/update.out" 2>&1
+if ! env "${update_env[@]}" "$installed_launcher" git update \
+    --branch "$TEST_BRANCH" --commit "$TEST_COMMIT" \
+    >"${TMP}/update.out" 2>&1;
+then
+  cat "${TMP}/update.out" >&2
+  fail "Git-testing update failed before integration assertions"
+fi
 
 polkit_test_root="${home}.polkit-root"
 assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/agent.py"
