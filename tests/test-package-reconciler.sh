@@ -125,6 +125,8 @@ printf '%s\n' "$output" | grep -Fq 'System type: laptop' \
   || fail "review did not reuse saved laptop state"
 printf '%s\n' "$output" | grep -Fq 'cliphist' \
   || fail "review did not identify missing cliphist"
+printf '%s\n' "$output" | grep -Fxq '  - fd' \
+  || fail "review did not identify fd as a required Yazi filename-search dependency"
 printf '%s\n' "$output" | grep -Fq 'waybar' \
   || fail "review did not identify managed retired waybar"
 printf '%s\n' "$output" | grep -Fq 'mako' \

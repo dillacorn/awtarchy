@@ -218,6 +218,14 @@ grep -Fq '{ on = "n", desc = "Name search" }' "$YAZI_INIT" \
   || fail 'Yazi recursive search chooser label is too verbose or changed'
 grep -Fq '{ on = "c", desc = "Content search" }' "$YAZI_INIT" \
   || fail 'Yazi content search chooser label is too verbose or changed'
+grep -Fq 'function AwtarchyYaziApplyFolderSort()' "$YAZI_INIT" \
+  || fail 'Yazi File Explorer-like folder sort helper is missing'
+grep -Fq 'cwd == home .. "/Downloads"' "$YAZI_INIT" \
+  || fail 'Yazi Downloads-specific sort rule is missing'
+grep -Fq 'ya.emit("sort", { "mtime", reverse = true, dir_first = true })' "$YAZI_INIT" \
+  || fail 'Yazi Downloads does not default to newest modified files first'
+grep -Fq 'ya.emit("sort", { "natural", reverse = false, dir_first = true })' "$YAZI_INIT" \
+  || fail 'Yazi ordinary folders do not return to natural folders-first sorting'
 grep -Fq 'function AwtarchyYaziToggleBookmarks()' "$YAZI_INIT" \
   || fail 'Yazi one-key bookmarks toggle helper is missing'
 grep -Fq 'function AwtarchyYaziToggleRecents()' "$YAZI_INIT" \
@@ -533,9 +541,9 @@ with open(sys.argv[2], "rb") as handle:
 if config.get("mgr", {}).get("linemode") != "size_and_mtime":
     raise SystemExit(1)
 
-if config.get("mgr", {}).get("sort_by") != "mtime":
+if config.get("mgr", {}).get("sort_by") != "natural":
     raise SystemExit(1)
-if config.get("mgr", {}).get("sort_reverse") is not True:
+if config.get("mgr", {}).get("sort_reverse") is not False:
     raise SystemExit(1)
 if config.get("mgr", {}).get("sort_dir_first") is not True:
     raise SystemExit(1)

@@ -1516,7 +1516,20 @@ local function AwtarchyYaziBreadcrumbSegments(path)
     return segments
 end
 
+local function AwtarchyYaziApplyFolderSort()
+    local cwd = tostring(cx.active.current.cwd)
+    local home = os.getenv("HOME")
+
+    if home and cwd == home .. "/Downloads" then
+        ya.emit("sort", { "mtime", reverse = true, dir_first = true })
+    else
+        ya.emit("sort", { "natural", reverse = false, dir_first = true })
+    end
+end
+
 ps.sub("cd", function()
+    AwtarchyYaziApplyFolderSort()
+
     if not AwtarchyYaziBreadcrumbTarget then
         return
     end
