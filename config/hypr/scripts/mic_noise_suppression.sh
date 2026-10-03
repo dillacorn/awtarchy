@@ -93,11 +93,11 @@ config_owned() {
 
 config_compatible() {
     [[ -f "$CONFIG_FILE" && ! -L "$CONFIG_FILE" ]] || return 1
-    grep -Fq 'name = libpipewire-module-filter-chain' "$CONFIG_FILE" \
-        && grep -Fq 'node.name = "rnnoise_source"' "$CONFIG_FILE" \
-        && grep -Fq 'capture.rnnoise_source' "$CONFIG_FILE" \
+    grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*libpipewire-module-filter-chain([[:space:]]|$)' "$CONFIG_FILE" \
+        && grep -Eq '^[[:space:]]*node\.name[[:space:]]*=[[:space:]]*"rnnoise_source"[[:space:]]*$' "$CONFIG_FILE" \
+        && grep -Eq '^[[:space:]]*node\.name[[:space:]]*=[[:space:]]*"capture\.rnnoise_source"[[:space:]]*$' "$CONFIG_FILE" \
         && grep -Fq '/usr/lib/ladspa/librnnoise_ladspa.so' "$CONFIG_FILE" \
-        && grep -Eq 'label = noise_suppressor_(mono|stereo)' "$CONFIG_FILE"
+        && grep -Eq '^[[:space:]]*label[[:space:]]*=[[:space:]]*noise_suppressor_(mono|stereo)[[:space:]]*$' "$CONFIG_FILE"
 }
 
 config_kind() {
@@ -151,8 +151,9 @@ physical_default_source() {
             printf '%s\n' "$source"
             return 0
         fi
-        source="$(pactl list short sources 2>/dev/null | awk '$2 != "rnnoise_source" && $2 !~ /\.monitor$/ { print $2; exit }' || true)"
-        [[ -n "$source" ]] && printf '%s\n' "$source"
+        # If rnnoise_source is already the default, there is no safe generic
+        # way to infer which of several physical inputs the user intended.
+        # Preserve PipeWire/WirePlumber auto-connect instead of guessing.
     fi
 }
 
@@ -329,7 +330,13 @@ disable_suppression() {
 }
 
 configured_healthy() {
-    package_installed && [[ -f "$(plugin_path)" ]] && config_compatible
+    package_installed \
+        && [[ -f "$(plugin_path)" ]] \
+        && config_compatible \
+        || return 1
+    if audio_session_available; then
+        rnnoise_source_present
+    fi
 }
 
 status() {
