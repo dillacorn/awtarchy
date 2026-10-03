@@ -898,7 +898,7 @@ PanelWindow {
 
             BarControl {
                 label: SystemState.idleBroken ? "" : (SystemState.idleInhibited ? "" : "")
-                normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"
+                normalBackground: "transparent"
                 tooltip: SystemState.idleMode === "always-awake"
                     ? "Always Awake: activated\nAll idle actions are blocked\nClick to deactivate"
                     : (SystemState.idleInhibited
@@ -1153,7 +1153,7 @@ PanelWindow {
             BarControl {
                 vertical: true; fixedWidth: bar.barSize
                 label: SystemState.idleBroken ? "" : (SystemState.idleInhibited ? "" : "")
-                normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"
+                normalBackground: "transparent"
                 foreground: SystemState.idleBroken ? Theme.urgent : Theme.foreground
                 tooltip: SystemState.idleMode === "always-awake"
                     ? "Always Awake: activated\nAll idle actions are blocked\nClick to deactivate"
