@@ -20,11 +20,13 @@ package_state="$TMP/packages"
 managed_packages="$TMP/managed-packages"
 plugin="$TMP/plugin/librnnoise_ladspa.so"
 source_state="$TMP/source-state"
+default_source_state="$TMP/default-source-state"
 service_log="$TMP/systemctl.log"
 mkdir -p "$home" "$fakebin" "$(dirname "$plugin")"
 : >"$package_state"
 : >"$managed_packages"
 : >"$source_state"
+printf '%s\n' alsa_input.test_mono >"$default_source_state"
 : >"$service_log"
 
 cat >"$fakebin/sudo" <<'EOF'
@@ -85,9 +87,20 @@ cat >"$fakebin/pactl" <<'EOF'
 #!/usr/bin/env bash
 set -Eeuo pipefail
 state="${AWTARCHY_MIC_TEST_SOURCE_STATE:?}"
+default_state="${AWTARCHY_MIC_TEST_DEFAULT_SOURCE_STATE:?}"
 case "${1:-}" in
   get-default-source)
-    if grep -Fxq rnnoise_source "$state"; then printf '%s\n' rnnoise_source; else printf '%s\n' alsa_input.test_mono; fi
+    cat "$default_state"
+    ;;
+  set-default-source)
+    source="${2:-}"
+    [[ -n "$source" ]] || exit 2
+    if [[ "$source" == rnnoise_source ]]; then
+      grep -Fxq rnnoise_source "$state" || exit 3
+    elif [[ "$source" != alsa_input.test_mono ]]; then
+      exit 4
+    fi
+    printf '%s\n' "$source" >"$default_state"
     ;;
   list)
     [[ ${2:-} == short && ${3:-} == sources ]] || exit 2
@@ -113,6 +126,7 @@ export AWTARCHY_MIC_TEST_PACMAN_BIN="$fakebin/pacman"
 export AWTARCHY_MIC_TEST_PLUGIN_PATH="$plugin"
 export AWTARCHY_MIC_TEST_PACKAGE_STATE="$package_state"
 export AWTARCHY_MIC_TEST_SOURCE_STATE="$source_state"
+export AWTARCHY_MIC_TEST_DEFAULT_SOURCE_STATE="$default_source_state"
 export AWTARCHY_MIC_TEST_SERVICE_LOG="$service_log"
 export AWTARCHY_MANAGED_PACKAGES_FILE="$managed_packages"
 
@@ -132,6 +146,11 @@ grep -Fq '# Managed by Awtarchy: microphone-noise-suppression' "$cfg" || fail "m
 grep -Fq 'label = noise_suppressor_mono' "$cfg" || fail "fresh setup is not mono"
 ! grep -Fq 'target.object' "$cfg" || fail "fresh setup hard-coded a physical microphone instead of using WirePlumber routing"
 grep -Fxq rnnoise_source "$source_state" || fail "restart did not expose rnnoise_source"
+grep -Fxq rnnoise_source "$default_source_state" || fail "fresh enable did not select rnnoise_source as the default microphone"
+previous_default="$home/.local/state/awtarchy/mic-suppression/previous-default-source"
+assert_file "$previous_default"
+grep -Fxq alsa_input.test_mono "$previous_default" || fail "fresh enable did not remember the previous default microphone"
+grep -Fq 'Default microphone: Noise Canceling source' <<<"$mono_output" || fail "fresh enable did not report selecting the RNNoise default microphone"
 grep -Fq 'restart pipewire.service wireplumber.service pipewire-pulse.service' "$service_log" || fail "audio stack was not restarted"
 grep -Fq 'Active games, VOIP apps' <<<"$mono_output" || fail "restart warning does not identify active microphone/audio applications"
 grep -Fq 'Restart microphone-using applications' <<<"$mono_output" || fail "post-change application restart warning missing"
@@ -139,14 +158,19 @@ grep -Fq 'Restart microphone-using applications' <<<"$mono_output" || fail "post
 run_helper "$home" stereo >/dev/null 2>&1 || fail "stereo switch failed"
 grep -Fq 'label = noise_suppressor_stereo' "$cfg" || fail "stereo mode was not written"
 ! grep -Fq 'target.object' "$cfg" || fail "stereo switch unexpectedly pinned a physical microphone"
+grep -Fxq rnnoise_source "$default_source_state" || fail "stereo switch lost the RNNoise default microphone"
+grep -Fxq alsa_input.test_mono "$previous_default" || fail "stereo switch overwrote the remembered physical default"
 
 run_helper "$home" disable >/dev/null 2>&1 || fail "disable failed"
 assert_absent "$cfg"
 grep -Fxq noise-suppression-for-voice "$package_state" || fail "disable incorrectly uninstalled the package"
 [[ ! -s "$source_state" ]] || fail "rnnoise_source survived disable/restart"
+grep -Fxq alsa_input.test_mono "$default_source_state" || fail "disable did not restore the previous default microphone"
+assert_absent "$previous_default"
 
 run_helper "$home" mono >/dev/null 2>&1 || fail "re-enable after disable failed"
 grep -Fq 'label = noise_suppressor_mono' "$cfg" || fail "re-enabled config is not mono"
+grep -Fxq rnnoise_source "$default_source_state" || fail "re-enable did not select rnnoise_source as default"
 
 # Adopt a known-good pre-existing upstream-style config without destroying unrelated WirePlumber state.
 home2="$test_root/home-existing"
@@ -182,7 +206,13 @@ context.modules = [
 EOF
 printf 'user bluetooth config\n' >"$wp2"
 printf '%s\n' rnnoise_source >"$source_state"
+printf '%s\n' alsa_input.test_mono >"$default_source_state"
 run_helper "$home2" is-configured || fail "known-good pre-existing RNNoise config was not recognized"
+run_helper "$home2" ensure-default >/dev/null 2>&1 || fail "healthy existing RNNoise config did not migrate to the RNNoise default source"
+grep -Fxq rnnoise_source "$default_source_state" || fail "healthy existing RNNoise config did not become the default microphone"
+previous_default2="$home2/.local/state/awtarchy/mic-suppression/previous-default-source"
+assert_file "$previous_default2"
+grep -Fxq alsa_input.test_mono "$previous_default2" || fail "migration did not preserve the previous default microphone"
 run_helper "$home2" stereo >/dev/null 2>&1 || fail "adopting existing config for stereo failed"
 backup2="$home2/.local/state/awtarchy/mic-suppression/pre-awtarchy-99-input-denoising.conf"
 assert_file "$backup2"
@@ -194,6 +224,8 @@ grep -Fxq 'user bluetooth config' "$wp2" || fail "unrelated WirePlumber config w
 run_helper "$home2" disable >/dev/null 2>&1 || fail "disable after adoption failed"
 assert_absent "$cfg2"
 assert_file "$backup2"
+grep -Fxq alsa_input.test_mono "$default_source_state" || fail "disable after adoption did not restore the previous default microphone"
+assert_absent "$previous_default2"
 grep -Fxq 'user bluetooth config' "$wp2" || fail "disable modified unrelated WirePlumber config"
 
 # Refuse an unrelated config occupying the managed filename.
@@ -209,10 +241,11 @@ grep -Fq 'RNNoise microphone suppression (mono, optional)' "$RUNTIME" || fail "i
 grep -Fq 'configure_installer_mic_suppression_stage' "$RUNTIME" || fail "installer does not apply selected RNNoise setup"
 grep -Fq 'maybe_offer_mic_suppression_update' "$RUNTIME" || fail "updater has no optional RNNoise setup path"
 grep -Fq 'is-configured >/dev/null 2>&1' "$RUNTIME" || fail "updater does not skip the setup prompt for an existing healthy RNNoise graph"
+grep -Fq 'ensure-default' "$RUNTIME" || fail "updater does not migrate a healthy RNNoise setup to the RNNoise default microphone"
 grep -Fq 'active games, VOIP apps, browsers, OBS/recording software' "$RUNTIME" || fail "updater warning does not explain application restarts"
 grep -Fq 'mic-suppression)' "$LAUNCHER" || fail "awtarchy command does not expose mic-suppression"
 grep -Fq 'Enable / switch to Mono (recommended)' "$LAUNCHER" || fail "maintenance UI does not expose mono mode"
 grep -Fq 'Enable / switch to Stereo' "$LAUNCHER" || fail "maintenance UI does not expose stereo mode"
 grep -Fq 'Disable suppression' "$LAUNCHER" || fail "maintenance UI does not expose disable"
 
-printf '%s\n' 'PASS: RNNoise install/adopt/mono/stereo/disable/re-enable lifecycle is guarded and testable.'
+printf '%s\n' 'PASS: RNNoise install/adopt/default-source/mono/stereo/disable/re-enable lifecycle is guarded and testable.'
