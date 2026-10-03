@@ -104,20 +104,18 @@ jobs:
             exit 1
           }
 
-          if gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            printf 'v3.8.5 release already exists\n' >&2
-            exit 1
-          fi
-          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" >/dev/null 2>&1; then
-            printf 'v3.8.5 tag already exists\n' >&2
-            exit 1
-          fi
+          if ! gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" >/dev/null 2>&1; then
+              printf 'v3.8.5 tag exists without the expected release\n' >&2
+              exit 1
+            fi
 
-          gh release create v3.8.5 \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$TARGET_SHA" \
-            --title "$RELEASE_TITLE" \
-            --notes-file "$notes"
+            gh release create v3.8.5 \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$TARGET_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes-file "$notes"
+          fi
 
           gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json body --jq .body >"$published"
 
@@ -137,3 +135,5 @@ jobs:
           tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" --jq .object.sha)"
           [[ "$tag_type" == "commit" ]]
           [[ "$tag_sha" == "$TARGET_SHA" ]]
+
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/release/v3.8.5-bridge"
