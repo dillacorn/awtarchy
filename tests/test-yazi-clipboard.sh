@@ -625,6 +625,8 @@ grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
 grep -Fq 'AWTARCHY_TEST_PACMAN_BIN' "$RUNTIME" \
   || fail 'updater fd dependency gate is not testable through the guarded integration override'
+grep -Fq '${AWTARCHY_MANAGED_PACKAGES_FILE} == /tmp/*' "$RUNTIME" \
+  || fail 'managed-package ownership test override is not restricted to temporary paths'
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'

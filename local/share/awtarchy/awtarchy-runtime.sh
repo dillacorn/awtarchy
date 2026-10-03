@@ -6273,6 +6273,14 @@ vendor_present() {
 }
 
 managed_packages_file() {
+  if [[ -n ${AWTARCHY_MANAGED_PACKAGES_FILE:-}
+    && ${AWTARCHY_MANAGED_PACKAGES_FILE} == /tmp/*
+    && ${AWTARCHY_TEST_TARGET_HOME:-} == /tmp/*
+    && -n ${AWTARCHY_TEST_ARCHIVE:-} ]];
+  then
+    printf '%s\n' "$AWTARCHY_MANAGED_PACKAGES_FILE"
+    return 0
+  fi
   printf '%s\n' '/var/lib/awtarchy/managed-packages'
 }
 
