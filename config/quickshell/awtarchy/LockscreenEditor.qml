@@ -721,7 +721,7 @@ Singleton {
         draftSavedProfiles = next;
         selectedSavedConfigurationId = id;
         cancelSavedConfigurationNameDialog();
-        statusMessage = "Configuration saved";
+        statusMessage = "Configuration added";
         queueAutoSave();
     }
 
