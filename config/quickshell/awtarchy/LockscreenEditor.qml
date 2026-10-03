@@ -164,6 +164,9 @@ Singleton {
     property string selectedElement: "logo"
     property string statusMessage: ""
     property string saveErrorMessage: ""
+    property bool autoSaveDirty: false
+    property bool autoSaveSyncing: false
+    readonly property int autoSaveDelayMs: 300
     property bool elementPaletteOpen: false
     property bool backgroundPaletteOpen: false
     property bool contrastRefreshPending: false
@@ -171,6 +174,34 @@ Singleton {
     property real heldScaleBoost: 1.0
     property bool showEditorGrid: false
     property real settingsBarOffsetY: 0
+
+    onDraftLayoutChanged: queueAutoSave()
+    onDraftCustomImagesChanged: queueAutoSave()
+    onDraftTimezoneClocksChanged: queueAutoSave()
+    onDraftCustomTextsChanged: queueAutoSave()
+    onDraftVisualizerChanged: queueAutoSave()
+    onDraftBackgroundOpacityChanged: queueAutoSave()
+    onDraftLastBackgroundOpacityChanged: queueAutoSave()
+    onDraftEntryTransitionChanged: queueAutoSave()
+    onDraftEntryTransitionDurationChanged: queueAutoSave()
+    onDraftLogoSpawnAnimationChanged: queueAutoSave()
+    onDraftPasswordFeedbackModeChanged: queueAutoSave()
+    onDraftPasswordMaskCharacterChanged: queueAutoSave()
+    onDraftClockFormatChanged: queueAutoSave()
+    onDraftVisibilityChanged: queueAutoSave()
+    onDraftBackgroundModeChanged: queueAutoSave()
+    onDraftBackgroundColorChanged: queueAutoSave()
+    onDraftWallpaperPathChanged: queueAutoSave()
+    onDraftWallpaperFitChanged: queueAutoSave()
+    onDraftWallpaperFocalXChanged: queueAutoSave()
+    onDraftWallpaperFocalYChanged: queueAutoSave()
+    onDraftOverlayModeChanged: queueAutoSave()
+    onDraftOverlayStrengthChanged: queueAutoSave()
+    onDraftWallpaperBlurChanged: queueAutoSave()
+    onDraftBlurStyleChanged: queueAutoSave()
+    onDraftWeatherUnitsChanged: queueAutoSave()
+    onDraftMonitorProfilesChanged: queueAutoSave()
+    onDraftLastEditedProfileChanged: queueAutoSave()
 
     readonly property real flickThreshold: 0.80
     readonly property real flickVelocityCap: 2.50
@@ -690,7 +721,8 @@ Singleton {
         draftSavedProfiles = next;
         selectedSavedConfigurationId = id;
         cancelSavedConfigurationNameDialog();
-        statusMessage = "Saved configuration added. Ctrl+S to persist.";
+        statusMessage = "Configuration saved";
+        queueAutoSave();
     }
 
     function openRenameSavedConfigurationDialog() {
@@ -721,7 +753,8 @@ Singleton {
         next[index].name = name;
         draftSavedProfiles = next;
         cancelSavedConfigurationNameDialog();
-        statusMessage = "Configuration renamed. Ctrl+S to persist.";
+        statusMessage = "Configuration renamed";
+        queueAutoSave();
     }
 
     function confirmSavedConfigurationNameDialog() {
@@ -801,7 +834,8 @@ Singleton {
         next[index].profile = profile;
         draftSavedProfiles = next;
         cancelSavedConfigurationConfirm();
-        statusMessage = "Saved configuration overwritten. Ctrl+S to persist.";
+        statusMessage = "Configuration overwritten";
+        queueAutoSave();
     }
 
     function confirmSavedConfigurationConfirmDialog() {
@@ -848,7 +882,8 @@ Singleton {
         next.splice(index, 1);
         next.splice(target, 0, entry);
         draftSavedProfiles = next;
-        statusMessage = "Saved configuration order changed. Ctrl+S to persist.";
+        statusMessage = "Configuration order updated";
+        queueAutoSave();
     }
 
     function applySavedConfigurationToMonitor(id, name) {
@@ -2606,20 +2641,45 @@ Singleton {
     function resumeAfterWallpaperPicker() { if (!open || !pickerSuspended) return; pickerSuspended = false; editorWindow.visible = true; editorEntranceOpacity = 1; FlyoutManager.claimOverlay("lockscreen-editor"); scheduleContrastRefresh(); Qt.callLater(() => editorFocus.forceActiveFocus()); }
 
     function close() {
+        if (editingActive)
+            save();
         elementOpacityBeforeOpaque = ({});
         lockCaptureSuppressed = false; lockCaptureRestoreEditor = false;
         heldSettle.stop(); heldReleaseClear.stop(); heldScaleAnimation.stop(); editorEntranceFade.stop(); heldElement = ""; heldScaleBoost = 1.0; inertiaOwner = ""; historyTransactionActive = false; historyTransactionSnapshot = null; clearGuides(); activeDrawer = ""; elementPaletteOpen = false; backgroundPaletteOpen = false; pickerSuspended = false; editingActive = false; previewCaptureDelay.stop();
         const capturedPreview = previewCaptureDirectory; previewCaptureDirectory = ""; previewCapturePendingDirectory = ""; editorEntranceOpacity = 1; FlyoutManager.releaseOverlay("lockscreen-editor"); editorWindow.visible = false; cleanupPreviewCaptureDirectory(capturedPreview);
     }
 
-    function save() {
-        if (savedConfigurationModalOpen || saveProcess.running || contrastPersistProcess.running
-                || savedProfilesPersistProcess.running)
+    function queueAutoSave() {
+        if (!editingActive || profileLoadActive || autoSaveSyncing)
             return;
+        autoSaveDirty = true;
+        autoSaveTimer.restart();
+    }
+
+    function flushAutoSave() {
+        if (!autoSaveDirty)
+            return;
+        if (historyTransactionActive) {
+            autoSaveTimer.restart();
+            return;
+        }
+        save();
+    }
+
+    function save() {
+        autoSaveDirty = true;
+        autoSaveTimer.stop();
+        if (saveProcess.running || contrastPersistProcess.running || savedProfilesPersistProcess.running) {
+            autoSaveTimer.restart();
+            return;
+        }
         if (historyTransactionActive)
             commitHistoryTransaction();
+        autoSaveSyncing = true;
         stashHistoryForActiveProfile();
         flushActiveProfile();
+        autoSaveSyncing = false;
+        autoSaveDirty = false;
         saveErrorMessage = "";
         statusMessage = "Saving…";
         saveProcess.exec(["bash", editorSaveBackend, "--profiles",
@@ -2628,6 +2688,8 @@ Singleton {
     }
 
     function elementLabel(name) { if (name === "logo") return "Logo"; if (name === "time") return "Time"; if (name === "date") return "Date"; if (name === "username") return "Username"; if (name === "weather") return "Weather"; if (name === "password") return "Password"; if (name === "visualizer") return "Visualizer"; if (isCustomImage(name)) return "Media " + (customImageIndex(name) + 1); if(isTimezoneClock(name)) return "Timezone " + (timezoneClockIndex(name)+1); if(isCustomText(name)) return "Custom Text " + (customTextIndex(name)+1); return name; }
+
+    Timer { id: autoSaveTimer; interval: root.autoSaveDelayMs; repeat: false; onTriggered: root.flushAutoSave() }
 
     Process {
         id: saveProcess
@@ -3151,9 +3213,7 @@ Singleton {
                         SettingsButton { label: "Weather"; active: root.activeDrawer === "weather"; textSize: 9; onClicked: root.toggleDrawer("weather") }
                         Item { Layout.fillWidth: true }
                         Text { visible: root.statusMessage.length > 0; text: root.statusMessage.length > 0 ? root.statusMessage : "Password cannot be hidden."; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 9; elide: Text.ElideRight; Layout.maximumWidth: 260 }
-                        Text { text: "Ctrl+S Save  •  Esc Cancel"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
-                        SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }
-                        SettingsButton { label: "Save"; active: true; textSize: 9; available: !saveProcess.running && !contrastPersistProcess.running; onClicked: root.save() }
+                        Text { text: "Changes save automatically  •  Esc Close"; color: Theme.muted; font.family: Theme.fontFamily; font.pixelSize: 8 }
                     }
 
                     RowLayout {
