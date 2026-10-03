@@ -533,6 +533,13 @@ with open(sys.argv[2], "rb") as handle:
 if config.get("mgr", {}).get("linemode") != "size_and_mtime":
     raise SystemExit(1)
 
+if config.get("mgr", {}).get("sort_by") != "mtime":
+    raise SystemExit(1)
+if config.get("mgr", {}).get("sort_reverse") is not True:
+    raise SystemExit(1)
+if config.get("mgr", {}).get("sort_dir_first") is not True:
+    raise SystemExit(1)
+
 if config.get("mgr", {}).get("mouse_events") != ["click", "scroll", "drag", "move"]:
     raise SystemExit(1)
 
