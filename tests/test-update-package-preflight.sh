@@ -95,6 +95,7 @@ cat >"$tmp/installed" <<'PKGS'
 quickshell
 wl-clipboard
 cliphist
+fd
 upower
 playerctl
 hyprland-qt-support
