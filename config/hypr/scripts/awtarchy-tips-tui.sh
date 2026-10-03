@@ -570,8 +570,8 @@ The full editor supports:
   - Image, GIF, and MP4 backgrounds/custom media
   - Visualizer controls and reusable saved configurations
 
-  Ctrl+S                       Save without closing
-  Esc                          Cancel / close
+  Changes save automatically as you edit.
+  Esc                          Close the editor
   Enter                        Confirm configuration dialogs
 TEXT
             ;;
