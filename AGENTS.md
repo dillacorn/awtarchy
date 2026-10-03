@@ -347,6 +347,7 @@ For Quickshell, bar, launcher, flyout, and quick-settings changes:
 - prefer one existing source of state over duplicated QML/shell state;
 - keep the Caps Lock bar indicator conditional and immediately before the idle inhibitor, with no visible slot while off and normal foreground styling while on;
 - keep keyboard lock state shared across per-output bars and event-driven; do not replace the Caps Lock event path with timer polling;
+- Keep Always Awake session-only unless the user explicitly clicks its visible lock control. Show that control only while Always Awake is active; unlocked uses normal foreground styling, locked uses the urgent/red theme color. Persist the locked state under Awtarchy state, restore Always Awake after a new session when locked, and clear persistence when the user unlocks it or disables Always Awake.
 - do not assume visual correctness from static code inspection alone.
 
 `FlyoutManager.qml` intentionally coordinates flyout focus/handoffs to avoid focus gaps and cursor/window focus side effects. Treat lifecycle changes there as behavioral changes and validate them with the focused flyout tests.
@@ -370,6 +371,7 @@ Use existing tests as regression guards and add focused coverage when a bug can 
 - Preserve laptop/desktop, GPU, filesystem, optional-package, and user-choice behavior unless the requested task changes it.
 - Feature dependencies declared in `REQUIRED_AUR_PACKAGES` are not optional picker choices. Fresh installs, package reconciliation, stable updates, and Git-testing updates must ensure those dependencies before applying managed configuration that requires them; keep optional/default AUR choices separate so users can still deselect non-required applications.
 - Installation assumptions must remain compatible with a fresh vanilla Arch base.
+- RNNoise microphone suppression is optional and defaults off. Manage only `~/.config/pipewire/pipewire.conf.d/99-input-denoising.conf`; never overwrite unrelated PipeWire/WirePlumber config. Use the official `noise-suppression-for-voice` package and 48 kHz filter-chain form, default to mono, expose explicit mono/stereo/disable/restart controls, leave capture routing device-agnostic unless adopting an existing compatible explicit target, restart the active user PipeWire/WirePlumber stack after changes, validate the virtual `rnnoise_source`, and warn that active games/VOIP/browsers/recording applications may need restarting. Updates must skip the setup prompt when a healthy existing compatible RNNoise setup is already active.
 
 ## Git workflow
 

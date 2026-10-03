@@ -140,23 +140,6 @@ preserve_unmanaged_config() {
     fi
 }
 
-physical_default_source() {
-    local source=""
-    if have pactl; then
-        source="$(pactl get-default-source 2>/dev/null || true)"
-        case "$source" in
-            ""|rnnoise_source|*.monitor) source="" ;;
-        esac
-        if [[ -n "$source" ]]; then
-            printf '%s\n' "$source"
-            return 0
-        fi
-        # If rnnoise_source is already the default, there is no safe generic
-        # way to infer which of several physical inputs the user intended.
-        # Preserve PipeWire/WirePlumber auto-connect instead of guessing.
-    fi
-}
-
 pipewire_escape() {
     printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
 }
@@ -286,14 +269,11 @@ enable_mode() {
     elif [[ "$kind" == owned ]]; then
         existing_target="$(config_target 2>/dev/null || true)"
         target="$existing_target"
-        [[ -n "$target" ]] || target="$(physical_default_source || true)"
-    else
-        target="$(physical_default_source || true)"
     fi
     if [[ -n "$target" ]]; then
         log "Using physical capture target: ${target}"
     else
-        log "No unambiguous physical default source was detected; leaving capture auto-connect to WirePlumber."
+        log "Leaving capture device selection to PipeWire/WirePlumber automatic routing."
     fi
     rendered="$(render_config "$mode" "$target")"
     atomic_write_config "$rendered"
