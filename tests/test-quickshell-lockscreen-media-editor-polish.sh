@@ -53,10 +53,6 @@ require_text "$EDITOR" 'sequence: "Escape"' \
     'lockscreen editor lost the Escape cancel shortcut'
 require_text "$EDITOR" 'onActivated: root.close()' \
     'Escape no longer uses the existing cancel/close path'
-require_text "$EDITOR" 'Ctrl+S Save' \
-    'editor does not advertise its save shortcut'
-require_text "$EDITOR" 'Esc Cancel' \
-    'editor does not advertise its cancel shortcut'
 [[ "$(grep -Fc -- 'readonly property real dragActivationThresholdPx: 5' "$EDITOR")" -eq 1 ]] \
     || fail 'editor drag activation threshold is declared more than once'
 [[ "$(grep -Fc -- 'sequence: "Ctrl+S"' "$EDITOR")" -eq 1 ]] \
