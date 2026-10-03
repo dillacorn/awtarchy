@@ -180,6 +180,13 @@ for arg in "$@"; do
   esac
 done
 
+if [[ "$cmd" == /usr/bin/chown
+  && ${AWTARCHY_MANAGED_PACKAGES_FILE:-} == /tmp/*
+  && ${AWTARCHY_TEST_TARGET_HOME:-} == /tmp/* ]];
+then
+  exit 0
+fi
+
 if (( policykit_path == 1 )); then
   case "$cmd" in
     /usr/bin/install)
