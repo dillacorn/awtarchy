@@ -620,6 +620,7 @@ grep -Fq 'ensure_yazi_fd_dependency_for_target() {' "$RUNTIME" \
   || fail 'updater has no target-aware fd dependency gate'
 grep -Fq 'pacman_bin="/usr/bin/pacman"' "$RUNTIME" \
   || fail 'updater does not keep the production fd package path pinned to /usr/bin/pacman'
+# shellcheck disable=SC2016
 grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
 grep -Fq 'AWTARCHY_TEST_PACMAN_BIN' "$RUNTIME" \
