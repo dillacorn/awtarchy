@@ -194,13 +194,15 @@ curl_args() {
     -fL
     --show-error
     --connect-timeout 5
-    --retry 1
+    --retry 3
+    --retry-delay 1
+    --retry-all-errors
     -H "Accept: application/vnd.github+json"
     -H "User-Agent: awtarchy-command"
   )
   case "$mode" in
     api)
-      CURL_ARGS+=(--silent --max-time 10)
+      CURL_ARGS+=(--silent --max-time 20)
       ;;
     download)
       CURL_ARGS+=(
