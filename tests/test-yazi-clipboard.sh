@@ -616,7 +616,7 @@ grep -Fq ' git fd ripgrep ' "$RUNTIME" \
   || fail 'fd/ripgrep are not managed for Yazi recursive search'
 grep -Fq 'pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"' "$RUNTIME" \
   || fail 'fresh install does not guarantee the required fd dependency'
-grep -Fq 'function ensure_yazi_fd_dependency_for_target()' "$RUNTIME" \
+grep -Fq 'ensure_yazi_fd_dependency_for_target() {' "$RUNTIME" \
   || fail 'updater has no target-aware fd dependency gate'
 grep -Fq 'run_update_root /usr/bin/pacman -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
