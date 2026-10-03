@@ -157,31 +157,64 @@ Item {
                             wrapMode: Text.Wrap
                         }
 
-                        Rectangle {
+                        RowLayout {
                             Layout.fillWidth: true
-                            Layout.preferredHeight: 28
-                            color: alwaysAwakeMouse.containsMouse
-                                ? Theme.strongHover
-                                : (SystemState.idleMode === "always-awake"
-                                    ? Theme.subtleActive : Theme.subtleHover)
-                            radius: 0
+                            spacing: 5
 
-                            Text {
-                                anchors.centerIn: parent
-                                text: SystemState.idleMode === "always-awake" ? "Disable Always Awake" : "Enable Always Awake (Not Recommended)"
-                                color: SystemState.idleMode === "always-awake" ? Theme.foreground : Theme.urgent
-                                font.family: Theme.fontFamily
-                                font.pixelSize: 11
-                                font.bold: true
+                            Rectangle {
+                                Layout.fillWidth: true
+                                Layout.preferredHeight: 28
+                                color: alwaysAwakeMouse.containsMouse
+                                    ? Theme.strongHover
+                                    : (SystemState.idleMode === "always-awake"
+                                        ? Theme.subtleActive : Theme.subtleHover)
+                                radius: 0
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: SystemState.idleMode === "always-awake" ? "Disable Always Awake" : "Enable Always Awake (Not Recommended)"
+                                    color: SystemState.idleMode === "always-awake" ? Theme.foreground : Theme.urgent
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                    font.bold: true
+                                }
+
+                                MouseArea {
+                                    id: alwaysAwakeMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    acceptedButtons: Qt.LeftButton
+                                    onClicked: SystemState.setIdleMode(
+                                        SystemState.idleMode === "always-awake" ? "off" : "always-awake")
+                                }
                             }
 
-                            MouseArea {
-                                id: alwaysAwakeMouse
-                                anchors.fill: parent
-                                hoverEnabled: true
-                                acceptedButtons: Qt.LeftButton
-                                onClicked: SystemState.setIdleMode(
-                                    SystemState.idleMode === "always-awake" ? "off" : "always-awake")
+                            Rectangle {
+                                Layout.preferredWidth: visible ? 28 : 0
+                                Layout.preferredHeight: 28
+                                visible: SystemState.idleMode === "always-awake"
+                                color: alwaysAwakeLockMouse.containsMouse ? Theme.strongHover : "transparent"
+                                border.width: 1
+                                border.color: SystemState.alwaysAwakePersistent ? Theme.urgent : Theme.muted
+                                radius: 0
+
+                                Text {
+                                    anchors.centerIn: parent
+                                    text: SystemState.alwaysAwakePersistent ? "" : ""
+                                    color: SystemState.alwaysAwakePersistent ? Theme.urgent : Theme.foreground
+                                    font.family: Theme.fontFamily
+                                    font.pixelSize: 11
+                                }
+
+                                MouseArea {
+                                    id: alwaysAwakeLockMouse
+                                    anchors.fill: parent
+                                    hoverEnabled: true
+                                    cursorShape: Qt.PointingHandCursor
+                                    acceptedButtons: Qt.LeftButton
+                                    onClicked: SystemState.setAlwaysAwakePersistent(
+                                        !SystemState.alwaysAwakePersistent)
+                                }
                             }
                         }
                     }
