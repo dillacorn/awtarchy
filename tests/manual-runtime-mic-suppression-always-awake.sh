@@ -300,6 +300,8 @@ run_test() {
   rnnoise_present
   physical_source_present
   audio_healthy
+  [[ "$(pactl get-default-source)" == rnnoise_source ]] ||
+    { fail 'Fresh RNNoise enable did not select rnnoise_source as the default microphone'; return 1; }
 
   banner '3. REAL MONO MIC'
   "$BRANCH_CLI" mic-suppression status
@@ -330,20 +332,35 @@ run_test() {
   ! rnnoise_present
   physical_source_present
   audio_healthy
+  if [[ -n "$DEFAULT_SOURCE" ]] &&
+     pactl list short sources | awk '{print $2}' | grep -Fxq "$DEFAULT_SOURCE"; then
+    [[ "$(pactl get-default-source)" == "$DEFAULT_SOURCE" ]] ||
+      { fail 'Disabling RNNoise did not restore the pre-test default microphone'; return 1; }
+  fi
 
   banner '7. RE-ENABLE MONO'
   "$BRANCH_CLI" mic-suppression mono
   grep -Fq 'label = noise_suppressor_mono' "$CFG"
   rnnoise_present
   audio_healthy
+  [[ "$(pactl get-default-source)" == rnnoise_source ]] ||
+    { fail 'Re-enabling RNNoise did not select rnnoise_source as default'; return 1; }
 
   banner '8. HEALTHY SETUP UPDATE SKIP'
+  if [[ -n "$DEFAULT_SOURCE" && "$DEFAULT_SOURCE" != rnnoise_source ]] &&
+     pactl list short sources | awk '{print $2}' | grep -Fxq "$DEFAULT_SOURCE"; then
+    pactl set-default-source "$DEFAULT_SOURCE"
+    [[ "$(pactl get-default-source)" == "$DEFAULT_SOURCE" ]] ||
+      { fail 'Could not stage the previous physical default for migration testing'; return 1; }
+  fi
   if ! AWTARCHY_SKIP_UPDATE_CHECK=1 "$BRANCH_CLI" git update --branch "$BRANCH" --commit "$HEAD"; then
     fail 'Healthy-setup verification update failed; stopping and recovering'
     return 1
   fi
   yn 'Did the updater report RNNoise already configured and skip its setup question?' ||
     { fail 'Healthy setup skip failed'; return 1; }
+  [[ "$(pactl get-default-source)" == rnnoise_source ]] ||
+    { fail 'Healthy RNNoise updater migration did not repair the default microphone'; return 1; }
 
   banner '9. ALWAYS AWAKE UI'
   pause_here 'Turn Always Awake OFF. Confirm there is no lock icon.'
@@ -389,11 +406,8 @@ run_test() {
 
   snap_wp "$BACKUP/wireplumber.final"
   diff -u "$BACKUP/wireplumber.before" "$BACKUP/wireplumber.final"
-
-  if [[ -n "$DEFAULT_SOURCE" ]] &&
-     pactl list short sources | awk '{print $2}' | grep -Fxq "$DEFAULT_SOURCE"; then
-    pactl set-default-source "$DEFAULT_SOURCE"
-  fi
+  [[ "$(pactl get-default-source)" == rnnoise_source ]] ||
+    { fail 'Final RNNoise state is not the default microphone'; return 1; }
 
   show_audio
   pause_here 'Restart the mic app one final time and test Noise Canceling source with the real mono microphone.'
@@ -402,7 +416,7 @@ run_test() {
 
   restore_idle
   banner 'COMPLETE'
-  printf 'Tested: %s@%s\nFinal RNNoise mode: mono\nEvidence/recovery: %s\n' \
+  printf 'Tested: %s@%s\nFinal RNNoise mode: mono\nFinal default microphone: rnnoise_source\nEvidence/recovery: %s\n' \
     "$BRANCH" "$HEAD" "$BACKUP"
 }
 
