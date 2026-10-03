@@ -932,7 +932,8 @@ Singleton {
             loadAutoAccentsForActiveProfile();
             restoreHistoryForActiveProfile();
         }
-        statusMessage = "Applied saved configuration to " + targetName + ". Ctrl+S to persist.";
+        statusMessage = "Applied saved configuration to " + targetName;
+        queueAutoSave();
     }
 
     function applySavedConfigurationToAllOthers(id) {
@@ -967,8 +968,10 @@ Singleton {
         profileUndoStacks = undo;
         profileRedoStacks = redo;
         statusMessage = applied > 0
-            ? "Applied saved configuration to all other displays. Ctrl+S to persist."
+            ? "Applied saved configuration to all other displays."
             : "No other displays connected";
+        if (applied > 0)
+            queueAutoSave();
     }
 
 
@@ -997,7 +1000,8 @@ Singleton {
         delete redo["monitor:" + targetName];
         profileUndoStacks = undo;
         profileRedoStacks = redo;
-        statusMessage = "Copied configuration to " + targetName + ". Ctrl+S to persist.";
+        statusMessage = "Copied configuration to " + targetName;
+        queueAutoSave();
     }
 
     function copyConfigurationToAllOthers() {
@@ -1028,8 +1032,10 @@ Singleton {
         profileUndoStacks = undo;
         profileRedoStacks = redo;
         statusMessage = copied > 0
-            ? "Copied configuration to all other displays. Ctrl+S to persist."
+            ? "Copied configuration to all other displays."
             : "No other displays connected";
+        if (copied > 0)
+            queueAutoSave();
     }
 
     function switchActiveMonitor(name) {
@@ -2116,7 +2122,7 @@ Singleton {
         const value = String(line || "").trim();
         if (!value.startsWith("/") || value.indexOf("://") >= 0) { statusMessage = "Awtwall returned an invalid local wallpaper"; return; }
         recordUndoBeforeChange(); draftWallpaperPath = value; draftBackgroundMode = "wallpaper";
-        statusMessage = "Wallpaper selected. Save to apply."; scheduleContrastRefresh();
+        statusMessage = "Wallpaper selected"; scheduleContrastRefresh();
     }
 
     function acceptCustomImageSelection(line) {
@@ -2252,9 +2258,9 @@ Singleton {
     function elementPoint(name) { if (name === "visualizer") return draftVisualizer; if (isCustomImage(name)) return draftCustomImages[customImageIndex(name)]; if(isTimezoneClock(name)) return draftTimezoneClocks[timezoneClockIndex(name)]; if(isCustomText(name)) return draftCustomTexts[customTextIndex(name)]; return draftLayout[name] || defaultLayout()[name] || null; }
 
     function nextDynamicId(prefix, values) { const stem=prefix+Date.now().toString(36); let n=0,candidate=stem; while(values.some(item=>String(item.id||"")===candidate)){n++;candidate=stem+"_"+n;} return candidate; }
-    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",show_label: true,x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; timezoneSearchQuery=""; customTimezoneEditorOpen=false; customTimezoneError=""; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added. Save to apply."; }
+    function addTimezoneClock() { if(draftTimezoneClocks.length>=timezoneClockMaximum){statusMessage="Timezone clock limit reached";return;} recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); const id=nextDynamicId("timezone-",next); next.push(({id:id,timezone:"UTC",format:"24h",show_label: true,x:0.5,y:0.60,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true})); draftTimezoneClocks=next; selectedElement="timezone:"+id; selectedElements=[selectedElement]; activeDrawer="element"; timezoneSearchQuery=""; customTimezoneEditorOpen=false; customTimezoneError=""; refreshPreviewTimezoneValues(); statusMessage="Timezone clock added"; }
     function removeTimezoneClock(name) { const i=timezoneClockIndex(name); if(i<0)return; recordUndoBeforeChange(); const next=cloneTimezoneClocks(draftTimezoneClocks); next.splice(i,1); draftTimezoneClocks=next; selectedElement="logo";selectedElements=["logo"];refreshPreviewTimezoneValues();statusMessage="Timezone clock removed."; }
-    function addCustomText() { if(draftCustomTexts.length>=customTextMaximum){statusMessage="Custom text limit reached";return;} recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);const id=nextDynamicId("text-",next);next.push(({id:id,text:"Custom Text",variants:[],randomize:false,alignment:"center",x:0.5,y:0.55,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true}));draftCustomTexts=next;selectedElement="text:"+id;selectedElements=[selectedElement];activeDrawer="element";statusMessage="Custom text added. Save to apply."; }
+    function addCustomText() { if(draftCustomTexts.length>=customTextMaximum){statusMessage="Custom text limit reached";return;} recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);const id=nextDynamicId("text-",next);next.push(({id:id,text:"Custom Text",variants:[],randomize:false,alignment:"center",x:0.5,y:0.55,scale:1,stretch_x:1,stretch_y:1,opacity:100,rotation:0,color:"auto",visible:true}));draftCustomTexts=next;selectedElement="text:"+id;selectedElements=[selectedElement];activeDrawer="element";statusMessage="Custom text added"; }
     function removeCustomText(name) { const i=customTextIndex(name);if(i<0)return;recordUndoBeforeChange();const next=cloneCustomTexts(draftCustomTexts);next.splice(i,1);draftCustomTexts=next;selectedElement="logo";selectedElements=["logo"];statusMessage="Custom text removed."; }
     function timezoneSelectorModel(zone) {
         const current = String(zone || "UTC");
@@ -2505,9 +2511,9 @@ Singleton {
         if (draftCustomImages.length >= customImageMaximum) { statusMessage = "Custom media limit reached (" + customImageMaximum + ")"; return; }
         recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); const id = nextCustomImageId();
         next.push(({ id: id, path: value, x: 0.5, y: 0.5, scale: 1.0, stretch_x: 1.0, stretch_y: 1.0, opacity: 100, rotation: 0, spawn_animation: "none", spawn_timing: "during-logo", visible: true }));
-        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Media added. Save to apply.";
+        draftCustomImages = next; selectedElement = id; selectedElements = [id]; activeDrawer = "element"; statusMessage = "Media added";
     }
-    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Media removed. Save to apply."; }
+    function removeCustomImage(name) { const index = customImageIndex(name); if (index < 0) return; recordUndoBeforeChange(); const next = cloneCustomImages(draftCustomImages); next.splice(index, 1); draftCustomImages = next; selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); statusMessage = "Media removed"; }
 
     function setDraftEntryTransition(value) {
         const key = String(value || ""); if (["fade", "pixel", "edges", "wipe"].indexOf(key) < 0) return;
@@ -2524,7 +2530,7 @@ Singleton {
         draftEntryTransition = "fade"; draftEntryTransitionDuration = 1800; draftLogoSpawnAnimation = "split"; draftPasswordFeedbackMode = "squares"; draftPasswordMaskCharacter = "•"; draftClockFormat = "24h";
         draftVisibility = defaultVisibility(); draftBackgroundMode = "black"; draftBackgroundColor = "#000000"; draftWallpaperPath = "";
         draftWallpaperFit = "cover"; draftWallpaperFocalX = 0.5; draftWallpaperFocalY = 0.5; draftOverlayMode = "none"; draftOverlayStrength = 0; draftWallpaperBlur = 10; draftBlurStyle = "pixelated"; draftWallpaperBlurExplicit = false;
-        draftWeatherUnits = "auto"; draftAutoAccents = defaultAutoAccents(); selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "Defaults loaded. Save to apply."; scheduleContrastRefresh();
+        draftWeatherUnits = "auto"; draftAutoAccents = defaultAutoAccents(); selectedElement = "logo"; selectedElements = ["logo"]; clearGuides(); elementPaletteOpen = false; backgroundPaletteOpen = false; statusMessage = "Defaults restored"; scheduleContrastRefresh();
     }
 
     function loadPersistedDraft() {
