@@ -39,3 +39,101 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  publish-v3-8-5:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'release: publish v3.8.5 Quickshell Lockscreen' &&
+      github.head_ref == 'release/v3.8.5-bridge'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Validate and publish v3.8.5
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SHA: c5e522dbed4744521d3711270b6748501cd1ab51
+          RELEASE_TITLE: Awtarchy v3.8.5 Quickshell Lockscreen
+        run: |
+          set -euo pipefail
+
+          notes="$RUNNER_TEMP/v3.8.5-release.md"
+          previous="$RUNNER_TEMP/v3.8.4-release.md"
+          published="$RUNNER_TEMP/v3.8.5-published.md"
+
+          cat >"$notes" <<'EOF'
+          # Awtarchy v3.8.5 Quickshell Lockscreen
+
+          Awtarchy v3.8.5 makes the Quickshell lockscreen configurator persist changes automatically, so closing the editor no longer discards completed configuration work.
+
+          ## Install and update
+
+          - New installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - Existing Awtarchy users: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md) or run `awtarchy update`.
+
+          ## Lockscreen editor
+
+          - Configuration changes now save automatically through the existing atomic per-display profile path; the editor no longer requires a Save button or Ctrl+S.
+          - Closing the editor flushes the latest draft before the window disappears, so quick edit-and-close interactions still persist while the background save completes.
+          - Creating, renaming, reordering, overwriting, copying, or applying named configurations now persists without a second manual save.
+          - Restore Defaults persists automatically, and Esc now closes the editor instead of implying that the current session will be discarded.
+          - Removing the far-right Save/Cancel controls also prevents persistence controls from disappearing off-screen on narrower displays.
+
+          ## Validation
+
+          - PR #254 passed all 25 triggered checks on exact head `26416724f3a5ee26940e00dc64b52035b2c0e117`, including the full **Validate Awtarchy** and **Validate Quickshell Lockscreen Interactive Effects** workflows.
+          - All 15 post-merge `main` push workflows passed on exact release target `c5e522dbed4744521d3711270b6748501cd1ab51`.
+          - The maintainer runtime-tested the autosave branch and confirmed the lockscreen configuration persisted correctly before approving merge and the v3.8.5 release.
+          EOF
+
+          gh release view v3.8.4 --repo "$GITHUB_REPOSITORY" --json body --jq .body >"$previous"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.8.5 \
+            --title "$RELEASE_TITLE" \
+            --notes "$notes" \
+            --previous "$previous"
+
+          remote_main="$(git ls-remote origin refs/heads/main | cut -f1)"
+          [[ "$remote_main" == "$TARGET_SHA" ]] || {
+            printf 'main moved: expected %s, got %s\n' "$TARGET_SHA" "$remote_main" >&2
+            exit 1
+          }
+
+          if gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'v3.8.5 release already exists\n' >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" >/dev/null 2>&1; then
+            printf 'v3.8.5 tag already exists\n' >&2
+            exit 1
+          fi
+
+          gh release create v3.8.5 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$TARGET_SHA" \
+            --title "$RELEASE_TITLE" \
+            --notes-file "$notes"
+
+          gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json body --jq .body >"$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v3.8.5 \
+            --title "$RELEASE_TITLE" \
+            --notes "$published" \
+            --previous "$previous"
+
+          [[ "$(gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json name --jq .name)" == "$RELEASE_TITLE" ]]
+          [[ "$(gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)" == "v3.8.5" ]]
+          [[ "$(gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq .targetCommitish)" == "$TARGET_SHA" ]]
+          [[ "$(gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)" == "false" ]]
+          [[ "$(gh release view v3.8.5 --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)" == "false" ]]
+
+          tag_type="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" --jq .object.type)"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v3.8.5" --jq .object.sha)"
+          [[ "$tag_type" == "commit" ]]
+          [[ "$tag_sha" == "$TARGET_SHA" ]]
