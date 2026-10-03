@@ -19,6 +19,11 @@ require_file_text() {
     grep -Fq -- "$needle" "$file" || fail "$message"
 }
 
+require_file_absent() {
+    local file="$1" needle="$2" message="$3"
+    ! grep -Fq -- "$needle" "$file" || fail "$message"
+}
+
 # The normal eye click remains the fast Keep Awake action. Hovering the eye
 # exposes the stronger mode, but it must be explicit about the safety tradeoff.
 require_file_text "$TOOLTIP" 'readonly property bool idleControl:' \
@@ -61,6 +66,8 @@ require_file_text "$TOOLTIP" 'acceptedButtons: Qt.NoButton' \
     'idle hover surface does not preserve non-button hover tracking'
 require_file_text "$BAR" 'onRightClicked: SystemState.toggleIdle()' \
     'horizontal idle eye no longer keeps right-click as normal Keep Awake'
+require_file_absent "$BAR" 'normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"' \
+    'Always Awake leaves a persistent active background behind the bar eye'
 
 # On a top bar, Keep Awake stays nearest the bar and the stronger Always Awake
 # action moves below it. Bottom, left, and right bars keep the existing ordering.
