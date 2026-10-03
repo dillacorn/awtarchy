@@ -93,7 +93,7 @@ config_owned() {
 
 config_compatible() {
     [[ -f "$CONFIG_FILE" && ! -L "$CONFIG_FILE" ]] || return 1
-    grep -Eq '^[[:space:]]*name[[:space:]]*=[[:space:]]*libpipewire-module-filter-chain([[:space:]]|$)' "$CONFIG_FILE" \
+    grep -Eq '^[[:space:]]*\{?[[:space:]]*name[[:space:]]*=[[:space:]]*libpipewire-module-filter-chain([[:space:]]|$)' "$CONFIG_FILE" \
         && grep -Eq '^[[:space:]]*node\.name[[:space:]]*=[[:space:]]*"rnnoise_source"[[:space:]]*$' "$CONFIG_FILE" \
         && grep -Eq '^[[:space:]]*node\.name[[:space:]]*=[[:space:]]*"capture\.rnnoise_source"[[:space:]]*$' "$CONFIG_FILE" \
         && grep -Fq '/usr/lib/ladspa/librnnoise_ladspa.so' "$CONFIG_FILE" \
