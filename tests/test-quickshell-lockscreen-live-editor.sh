@@ -145,7 +145,7 @@ require_text "$SCENE" 'Qt.formatTime(now, root.clockFormat === "12h" ? "h:mm AP"
 reject_text "$SCENE" 'Qt.formatTime(now, Locale.ShortFormat)' \
     'lockscreen still delegates directly to a locale format that may contain seconds'
 
-# Editor draft drives the preview immediately and persists only on Save. The
+# Editor draft drives the preview immediately and persists automatically. The
 # rendered lockscreen elements themselves are the visual examples; selection
 # frames track their actual dimensions instead of generic text-labelled handles.
 require_text "$EDITOR" 'property var draftVisibility' \
@@ -192,6 +192,26 @@ require_text "$EDITOR" 'editorSaveBackend: configHome + "/hypr/scripts/quickshel
     'editor does not route atomic presentation saves through the dedicated wrapper'
 require_text "$EDITOR" 'saveProcess.exec(["bash", editorSaveBackend,' \
     'editor Save path does not invoke the dedicated presentation wrapper'
+require_text "$EDITOR" 'property bool autoSaveDirty: false' \
+    'editor has no queued autosave state'
+require_text "$EDITOR" 'readonly property int autoSaveDelayMs: 300' \
+    'editor autosave is not debounced'
+require_text "$EDITOR" 'function queueAutoSave() {' \
+    'editor has no autosave scheduling path'
+require_text "$EDITOR" 'function flushAutoSave() {' \
+    'editor has no autosave flush path'
+require_text "$EDITOR" 'Timer { id: autoSaveTimer; interval: root.autoSaveDelayMs; repeat: false; onTriggered: root.flushAutoSave() }' \
+    'editor autosave timer is not wired to the atomic save path'
+require_text "$EDITOR" 'onDraftLayoutChanged: queueAutoSave()' \
+    'layout edits do not schedule persistence'
+require_text "$EDITOR" 'onDraftMonitorProfilesChanged: queueAutoSave()' \
+    'per-display profile edits do not schedule persistence'
+require_text "$EDITOR" 'Changes save automatically  •  Esc Close' \
+    'editor still presents document-style save/cancel guidance'
+reject_text "$EDITOR" 'SettingsButton { label: "Save"; active: true' \
+    'editor still requires a visible Save button'
+reject_text "$EDITOR" 'SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }' \
+    'editor still presents close as destructive Cancel'
 reject_text "$EDITOR" 'visible: enabledElement' \
     'disabled element handles disappear and cannot be re-enabled from the live editor'
 
