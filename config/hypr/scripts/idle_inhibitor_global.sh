@@ -13,6 +13,10 @@ RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/${uid}}"
 PID_FILE="${RUNTIME_DIR}/awtarchy-global-idle-inhibitor.pid"
 MODE_FILE="${RUNTIME_DIR}/awtarchy-global-idle-inhibitor.mode"
 CONTROL_LOCK="${RUNTIME_DIR}/awtarchy-global-idle-inhibitor.lock"
+STATE_HOME="${XDG_STATE_HOME:-${HOME}/.local/state}"
+PERSISTENT_DIR="${AWTARCHY_IDLE_STATE_DIR:-${STATE_HOME}/awtarchy}"
+ALWAYS_AWAKE_LOCK_FILE="${PERSISTENT_DIR}/always-awake.locked"
+SYSTEMD_INHIBIT_BIN="${AWTARCHY_IDLE_SYSTEMD_INHIBIT_BIN:-systemd-inhibit}"
 
 mkdir -p "$RUNTIME_DIR"
 
@@ -21,6 +25,37 @@ lock_control() {
         exec 9>"$CONTROL_LOCK"
         flock -x 9
     fi
+}
+
+
+persistent_always_awake_locked() {
+    [[ -r "$ALWAYS_AWAKE_LOCK_FILE" ]]         && grep -Fxq locked "$ALWAYS_AWAKE_LOCK_FILE"
+}
+
+lock_persistent_always_awake() {
+    local tmp
+    [[ "$(current_mode)" == always-awake ]] || {
+        printf '%s\n' 'Always Awake must be enabled before it can be locked persistently.' >&2
+        return 1
+    }
+    mkdir -p -- "$PERSISTENT_DIR"
+    tmp="${ALWAYS_AWAKE_LOCK_FILE}.tmp.$"
+    printf '%s\n' locked >"$tmp"
+    chmod 0600 "$tmp"
+    mv -f -- "$tmp" "$ALWAYS_AWAKE_LOCK_FILE"
+}
+
+clear_persistent_always_awake() {
+    rm -f -- "$ALWAYS_AWAKE_LOCK_FILE"
+}
+
+restore_persistent_always_awake() {
+    persistent_always_awake_locked || return 0
+    [[ "$(current_mode)" == always-awake ]] && return 0
+
+    lock_control
+    persistent_always_awake_locked || return 0
+    start_inhibitor always-awake
 }
 
 read_pid_file() {
@@ -34,8 +69,12 @@ valid_pid() {
 }
 
 inhibitor_lines() {
-    command -v systemd-inhibit >/dev/null 2>&1 || return 0
-    systemd-inhibit --list --no-pager 2>/dev/null |
+    if [[ "$SYSTEMD_INHIBIT_BIN" == */* ]]; then
+        [[ -x "$SYSTEMD_INHIBIT_BIN" ]] || return 0
+    else
+        command -v "$SYSTEMD_INHIBIT_BIN" >/dev/null 2>&1 || return 0
+    fi
+    "$SYSTEMD_INHIBIT_BIN" --list --no-pager 2>/dev/null |
         awk -v why="$WHY" '
             index($0, why) && $0 ~ /(^|[[:space:]])idle([[:space:]]|$)/ && $NF == "block" { print }
         '
@@ -165,10 +204,17 @@ start_inhibitor() {
             ;;
     esac
 
-    command -v systemd-inhibit >/dev/null 2>&1 || {
+    if [[ "$SYSTEMD_INHIBIT_BIN" == */* ]]; then
+        [[ -x "$SYSTEMD_INHIBIT_BIN" ]] || {
+            printf '%s\n' 'systemd-inhibit not found' >&2
+            return 1
+        }
+    elif ! command -v "$SYSTEMD_INHIBIT_BIN" >/dev/null 2>&1; then
         printf '%s\n' 'systemd-inhibit not found' >&2
         return 1
-    }
+    fi
+
+    [[ "$requested_mode" == always-awake ]] || clear_persistent_always_awake
 
     if is_active; then
         write_mode "$requested_mode"
@@ -178,7 +224,7 @@ start_inhibitor() {
     stop_managed_processes
 
     # shellcheck disable=SC2016
-    setsid systemd-inhibit \
+    setsid "$SYSTEMD_INHIBIT_BIN" \
         --what=idle \
         --who="$WHO" \
         --why="$WHY" \
@@ -206,6 +252,7 @@ start_inhibitor() {
 }
 
 stop_inhibitor() {
+    clear_persistent_always_awake
     stop_managed_processes
     for _ in {1..20}; do
         if ! real_inhibitor_active; then
@@ -235,17 +282,21 @@ set_mode() {
 }
 
 print_status() {
-    local mode
+    local mode persistent=false
+    restore_persistent_always_awake || true
     mode="$(current_mode)"
+    if [[ "$mode" == always-awake ]] && persistent_always_awake_locked; then
+        persistent=true
+    fi
 
     if [[ "$mode" == always-awake ]]; then
-        printf '{"text":"","mode":"always-awake","tooltip":"Always Awake: activated\\nAll idle actions, including the 4-hour display safeguard, are blocked\\nClick the bar eye to deactivate","class":["activated","always-awake"]}\n'
+        printf '{"text":"","mode":"always-awake","persistent":%s,"tooltip":"Always Awake: activated\\nAll idle actions, including the 4-hour display safeguard, are blocked\\nClick the bar eye to deactivate","class":["activated","always-awake"]}\n' "$persistent"
     elif [[ "$mode" == keep-awake ]]; then
-        printf '{"text":"","mode":"keep-awake","tooltip":"Keep Awake: activated\\nSleep is blocked; after 4 hours idle Awtarchy may lock and turn displays off\\nClick to deactivate","class":["activated","keep-awake"]}\n'
+        printf '{"text":"","mode":"keep-awake","persistent":false,"tooltip":"Keep Awake: activated\\nSleep is blocked; after 4 hours idle Awtarchy may lock and turn displays off\\nClick to deactivate","class":["activated","keep-awake"]}\n'
     elif managed_process_active; then
-        printf '{"text":"","mode":"off","tooltip":"Idle inhibitor: broken state\\nProcess exists without a real idle lock","class":["error"]}\n'
+        printf '{"text":"","mode":"off","persistent":false,"tooltip":"Idle inhibitor: broken state\\nProcess exists without a real idle lock","class":["error"]}\n'
     else
-        printf '{"text":"","mode":"off","tooltip":"Idle inhibitor: deactivated\\nClick to activate Keep Awake","class":["deactivated"]}\n'
+        printf '{"text":"","mode":"off","persistent":false,"tooltip":"Idle inhibitor: deactivated\\nClick to activate Keep Awake","class":["deactivated"]}\n'
     fi
 }
 
@@ -267,13 +318,27 @@ case "${1:-status}" in
         set_mode "${2:-}"
         ;;
     mode)
+        restore_persistent_always_awake || true
         current_mode
         ;;
     is-active)
+        restore_persistent_always_awake || true
         is_active
         ;;
     is-always-awake)
+        restore_persistent_always_awake || true
         [[ "$(current_mode)" == always-awake ]]
+        ;;
+    lock-always-awake)
+        lock_control
+        lock_persistent_always_awake
+        ;;
+    unlock-always-awake)
+        lock_control
+        clear_persistent_always_awake
+        ;;
+    is-persistent)
+        persistent_always_awake_locked
         ;;
     diagnose)
         printf 'mode=%s\n' "$(current_mode)"

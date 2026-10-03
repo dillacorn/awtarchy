@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 IFS=$'\n\t'
+# shellcheck disable=SC2016
+trap 'printf "FAIL: updater migration test aborted at line %s\\n" "$LINENO" >&2' ERR
+
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 STABLE_LAUNCHER="${ROOT}/local/bin/awtarchy"
@@ -395,6 +398,53 @@ expected="https://github.com/dillacorn/awtarchy/archive/${AWTARCHY_TEST_COMMIT:?
 [[ $speed_time == 30 ]] || exit 46
 cp -- "${AWTARCHY_TEST_ARCHIVE:?}" "$out"
 EOF
+
+cat >"${fakebin}/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ ${1:-} == ls-remote ]]; then
+  shift
+  while (( $# > 0 )); do
+    case "$1" in
+      --exit-code|--heads)
+        shift
+        ;;
+      -*)
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  remote="${1:-}"
+  ref="${2:-}"
+  [[ $remote == 'https://github.com/dillacorn/awtarchy.git' ]] || exit 2
+
+  case "$ref" in
+    refs/heads/main)
+      printf '%s\trefs/heads/main\n' "${AWTARCHY_TEST_MAIN_COMMIT:?}"
+      exit 0
+      ;;
+    refs/heads/quickshell-conversion-testing)
+      printf '%s\trefs/heads/quickshell-conversion-testing\n'         "${AWTARCHY_TEST_BRANCH_HEAD:-${AWTARCHY_TEST_COMMIT:?}}"
+      exit 0
+      ;;
+    'refs/heads/*')
+      printf '%s\trefs/heads/main\n' "${AWTARCHY_TEST_MAIN_COMMIT:?}"
+      printf '%s\trefs/heads/quickshell-conversion-testing\n'         "${AWTARCHY_TEST_BRANCH_HEAD:-${AWTARCHY_TEST_COMMIT:?}}"
+      exit 0
+      ;;
+  esac
+
+  exit 2
+fi
+
+/usr/bin/git "$@"
+EOF
+chmod 0755 "${fakebin}/git"
 
 cat >"${fakebin}/pacman" <<'EOF'
 #!/usr/bin/env bash
@@ -1048,6 +1098,7 @@ env \
   "AWTARCHY_TEST_CURL_LOG=${TMP}/beta-to-release-curl.log" \
   "AWTARCHY_TEST_PACKAGE_STATE=$beta_packages" \
   "AWTARCHY_MANAGED_PACKAGES_FILE=$beta_managed" \
+  "AWTARCHY_TEST_PACMAN_BIN=${fakebin}/pacman" \
   "AWTARCHY_TEST_PACMAN_LOG=${TMP}/beta-to-release-pacman.log" \
   "AWTARCHY_TEST_HYPRCTL_LOG=${TMP}/beta-to-release-hyprctl.log" \
   "AWTARCHY_TEST_PKILL_LOG=${TMP}/beta-to-release-pkill.log" \
@@ -1297,6 +1348,7 @@ failure_env=(
   "AWTARCHY_TEST_CURL_LOG=${TMP}/failure-curl.log"
   "AWTARCHY_TEST_PACKAGE_STATE=$failure_packages"
   "AWTARCHY_MANAGED_PACKAGES_FILE=$failure_managed"
+  "AWTARCHY_TEST_PACMAN_BIN=${fakebin}/pacman"
   "AWTARCHY_TEST_PACMAN_LOG=${TMP}/failure-pacman.log"
   "AWTARCHY_TEST_HYPRCTL_LOG=${TMP}/failure-hyprctl.log"
   "AWTARCHY_TEST_PKILL_LOG=${TMP}/failure-pkill.log"
@@ -1389,6 +1441,7 @@ production_env=(
   "AWTARCHY_TEST_CURL_LOG=${TMP}/production-curl.log"
   "AWTARCHY_TEST_PACKAGE_STATE=$production_packages"
   "AWTARCHY_MANAGED_PACKAGES_FILE=$production_managed"
+  "AWTARCHY_TEST_PACMAN_BIN=${fakebin}/pacman"
   "AWTARCHY_TEST_PACMAN_LOG=${TMP}/production-pacman.log"
   "AWTARCHY_TEST_HYPRCTL_LOG=${TMP}/production-hyprctl.log"
   "AWTARCHY_TEST_PKILL_LOG=${TMP}/production-pkill.log"

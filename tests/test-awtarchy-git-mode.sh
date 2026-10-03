@@ -21,6 +21,13 @@ fail() {
   exit 1
 }
 
+grep -Fq -- '    --retry 3' "$LAUNCHER" \
+  || fail 'updater API fetches do not retry transient failures enough'
+grep -Fq -- '    --retry-all-errors' "$LAUNCHER" \
+  || fail 'updater API retries do not include timeout/network errors'
+grep -Fq -- '      CURL_ARGS+=(--silent --max-time 20)' "$LAUNCHER" \
+  || fail 'updater API timeout is still too short for transient GitHub stalls'
+
 assert_arg_sequence() {
   local file="$1"
   shift
@@ -34,6 +41,7 @@ fakebin="${TMPD}/bin"
 home="${TMPD}/home"
 runtime_log="${TMPD}/runtime.args"
 curl_log="${TMPD}/curl.log"
+git_log="${TMPD}/git.log"
 mkdir -p -- \
   "$fakebin" \
   "$home/.local/bin" \
@@ -163,6 +171,53 @@ esac
 EOF_CURL
 chmod 0755 "${fakebin}/curl"
 
+cat >"${fakebin}/git" <<'EOF_GIT'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ ${1:-} == ls-remote ]]; then
+  printf '%s\n' "$*" >>"${AWTARCHY_TEST_GIT_LOG:?}"
+  shift
+  while (( $# > 0 )); do
+    case "$1" in
+      --exit-code|--heads)
+        shift
+        ;;
+      -*)
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  remote="${1:-}"
+  ref="${2:-}"
+  [[ $remote == 'https://github.com/dillacorn/awtarchy.git' ]] || exit 2
+
+  case "$ref" in
+    refs/heads/main)
+      printf '%s\trefs/heads/main\n' "${AWTARCHY_TEST_MAIN_COMMIT:?}"
+      ;;
+    "refs/heads/${AWTARCHY_TEST_BRANCH:?}")
+      printf '%s\trefs/heads/%s\n'         "${AWTARCHY_TEST_BRANCH_HEAD:?}" "${AWTARCHY_TEST_BRANCH:?}"
+      ;;
+    'refs/heads/*')
+      printf '%s\trefs/heads/main\n' "${AWTARCHY_TEST_MAIN_COMMIT:?}"
+      printf '%s\trefs/heads/%s\n'         "${AWTARCHY_TEST_BRANCH_HEAD:?}" "${AWTARCHY_TEST_BRANCH:?}"
+      ;;
+    *)
+      exit 2
+      ;;
+  esac
+  exit 0
+fi
+
+/usr/bin/git "$@"
+EOF_GIT
+chmod 0755 "${fakebin}/git"
+
 common_env=(
   "HOME=$home"
   "USER=$(id -un)"
@@ -171,6 +226,7 @@ common_env=(
   "AWTARCHY_SKIP_UPDATE_CHECK=1"
   "AWTARCHY_TEST_RUNTIME_LOG=$runtime_log"
   "AWTARCHY_TEST_CURL_LOG=$curl_log"
+  "AWTARCHY_TEST_GIT_LOG=$git_log"
   "AWTARCHY_TEST_BRANCH=$BRANCH"
   "AWTARCHY_TEST_BRANCH_ENCODED=$BRANCH_ENCODED"
   "AWTARCHY_TEST_BRANCH_HEAD=$BRANCH_HEAD"
@@ -180,6 +236,7 @@ common_env=(
 )
 
 : >"$curl_log"
+: >"$git_log"
 env "${common_env[@]}" \
   "$home/.local/bin/awtarchy" git review --branch "$BRANCH"
 assert_arg_sequence "$runtime_log" \
@@ -188,10 +245,8 @@ assert_arg_sequence "$runtime_log" \
   --review-only \
   --testing-branch "$BRANCH" \
   --testing-commit "$BRANCH_HEAD"
-grep -Fxq \
-  "https://api.github.com/repos/dillacorn/awtarchy/branches/${BRANCH_ENCODED}" \
-  "$curl_log" \
-  || fail "git review did not resolve the selected remote branch"
+grep -Fq -- "refs/heads/${BRANCH}" "$git_log" \
+  || fail "git review did not resolve the selected remote branch through git ls-remote"
 
 : >"$runtime_log"
 : >"$curl_log"
@@ -306,6 +361,7 @@ tested_at=2000-01-01T00:00:00Z
 EOF_STATE
 : >"$runtime_log"
 : >"$curl_log"
+: >"$git_log"
 set +e
 env "${common_env[@]}" AWTARCHY_SKIP_UPDATE_CHECK=0 \
   "$home/.local/bin/awtarchy" update \
@@ -316,10 +372,12 @@ set -e
   || fail "stable update entered a pre-Quickshell release from active git-testing state"
 [[ ! -s $runtime_log ]] \
   || fail "pre-Quickshell stable return reached the updater runtime"
+! grep -Fq -- 'refs/heads/main' "$git_log" \
+  || fail "git-testing guard ran only after resolving the updater branch from main"
 ! grep -Fxq \
   'https://api.github.com/repos/dillacorn/awtarchy/commits/main' \
   "$curl_log" \
-  || fail "git-testing guard ran only after refreshing the updater from main"
+  || fail "git-testing guard fell back to the main API before blocking the incompatible release"
 grep -Fqi 'predates the Quickshell migration' "${TMPD}/pre-release-return.out" \
   || fail "pre-Quickshell stable return did not explain the compatibility block"
 

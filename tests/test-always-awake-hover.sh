@@ -5,6 +5,8 @@ IFS=$'\n\t'
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TOOLTIP="$ROOT/config/quickshell/awtarchy/BarTooltip.qml"
 BAR="$ROOT/config/quickshell/awtarchy/Bar.qml"
+SYSTEM_STATE="$ROOT/config/quickshell/awtarchy/SystemState.qml"
+INHIBITOR="$ROOT/config/hypr/scripts/idle_inhibitor_global.sh"
 MANAGED_HISTORY="$ROOT/local/share/awtarchy/quickshell-managed-history.sha256"
 
 fail() {
@@ -15,6 +17,11 @@ fail() {
 require_file_text() {
     local file="$1" needle="$2" message="$3"
     grep -Fq -- "$needle" "$file" || fail "$message"
+}
+
+require_file_absent() {
+    local file="$1" needle="$2" message="$3"
+    ! grep -Fq -- "$needle" "$file" || fail "$message"
 }
 
 # The normal eye click remains the fast Keep Awake action. Hovering the eye
@@ -33,12 +40,34 @@ require_file_text "$TOOLTIP" 'SystemState.setIdleMode(' \
     'idle-eye hover card cannot select the shared Always Awake mode'
 require_file_text "$TOOLTIP" 'SystemState.idleMode === "always-awake" ? "off" : "always-awake"' \
     'idle-eye hover card does not toggle the explicit Always Awake mode'
+require_file_text "$TOOLTIP" 'text: SystemState.alwaysAwakePersistent ? "" : ""' \
+    'Always Awake does not expose locked/unlocked persistence icons'
+require_file_text "$TOOLTIP" 'color: SystemState.alwaysAwakePersistent ? Theme.urgent : Theme.foreground' \
+    'persistent Always Awake lock is not visually red while the unlocked icon uses normal foreground'
+require_file_text "$TOOLTIP" 'visible: SystemState.idleMode === "always-awake"' \
+    'Always Awake persistence lock is visible outside Always Awake mode'
+require_file_text "$TOOLTIP" 'SystemState.setAlwaysAwakePersistent(' \
+    'Always Awake lock button does not toggle shared persistence state'
+require_file_text "$SYSTEM_STATE" 'property bool alwaysAwakePersistent: false' \
+    'SystemState does not track persistent Always Awake'
+require_file_text "$SYSTEM_STATE" 'function setAlwaysAwakePersistent(locked)' \
+    'SystemState cannot toggle persistent Always Awake'
+require_file_text "$INHIBITOR" 'ALWAYS_AWAKE_LOCK_FILE=' \
+    'idle inhibitor has no persistent Always Awake state file'
+require_file_text "$INHIBITOR" 'restore_persistent_always_awake' \
+    'idle inhibitor cannot restore persistent Always Awake after restart'
+require_file_text "$INHIBITOR" 'lock-always-awake)' \
+    'idle inhibitor lacks the persistence lock action'
+require_file_text "$INHIBITOR" 'unlock-always-awake)' \
+    'idle inhibitor lacks the persistence unlock action'
 require_file_text "$TOOLTIP" 'width: root.idleControl ? popup.width : 0' \
     'idle-eye hover card is not pointer-interactive while normal tooltips remain click-through'
 require_file_text "$TOOLTIP" 'acceptedButtons: Qt.NoButton' \
     'idle hover surface does not preserve non-button hover tracking'
 require_file_text "$BAR" 'onRightClicked: SystemState.toggleIdle()' \
     'horizontal idle eye no longer keeps right-click as normal Keep Awake'
+require_file_absent "$BAR" 'normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"' \
+    'Always Awake leaves a persistent active background behind the bar eye'
 
 # On a top bar, Keep Awake stays nearest the bar and the stronger Always Awake
 # action moves below it. Bottom, left, and right bars keep the existing ordering.

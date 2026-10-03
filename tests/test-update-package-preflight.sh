@@ -13,6 +13,41 @@ fail() {
 bash -n "$LAUNCHER"
 bash -n "$RECONCILER"
 
+RUNTIME="${ROOT}/local/share/awtarchy/awtarchy-runtime.sh"
+bash -n "$RUNTIME"
+
+for helper in ask_optional_yes_no ask_yes_no; do
+    helper_block="$(python3 - "$RUNTIME" "$helper" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+name = sys.argv[2]
+start_marker = f"{name}() {{\n"
+start = text.find(start_marker)
+if start < 0:
+    raise SystemExit(1)
+end = text.find("\n}\n", start)
+if end < 0:
+    raise SystemExit(1)
+print(text[start:end + 2])
+PY
+)" || fail "could not locate ${helper}"
+
+    grep -Fq -- "printf '%s [y/n] ' \"\$prompt\"" <<<"$helper_block" \
+        || fail "${helper} does not advertise strict y/n input"
+    grep -Fq -- 'y|Y) return 0 ;;' <<<"$helper_block" \
+        || fail "${helper} does not accept y"
+    grep -Fq -- 'n|N) return 1 ;;' <<<"$helper_block" \
+        || fail "${helper} does not accept n"
+    grep -Fq -- "*) printf '%s\\n' 'Please answer y or n.' >/dev/tty ;;" <<<"$helper_block" \
+        || fail "${helper} does not re-prompt invalid input"
+    if grep -Fq -- 'y|Y|yes|YES' <<<"$helper_block" \
+        || grep -Fq -- '""|n|N|no|NO' <<<"$helper_block"; then
+        fail "${helper} still accepts non-single-letter confirmation input"
+    fi
+done
+
 grep -Fq -- '--needs-action' "$RECONCILER" \
     || fail 'package reconciler does not expose the non-mutating --needs-action status mode'
 if grep -Fq -- 'offer_package_reconciliation_before_update' "$LAUNCHER"; then
@@ -95,6 +130,7 @@ cat >"$tmp/installed" <<'PKGS'
 quickshell
 wl-clipboard
 cliphist
+fd
 upower
 playerctl
 hyprland-qt-support

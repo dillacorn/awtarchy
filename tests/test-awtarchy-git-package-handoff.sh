@@ -122,6 +122,42 @@ exit 22
 EOF_CURL
 chmod 0755 "$fakebin/curl"
 
+cat >"$fakebin/git" <<'EOF_GIT'
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+if [[ ${1:-} == ls-remote ]]; then
+  shift
+  while (( $# > 0 )); do
+    case "$1" in
+      --exit-code|--heads)
+        shift
+        ;;
+      -*)
+        shift
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
+
+  remote="${1:-}"
+  ref="${2:-}"
+  [[ $remote == 'https://github.com/dillacorn/awtarchy.git' ]] || exit 2
+
+  if [[ $ref == refs/heads/main ]]; then
+    printf '%s\trefs/heads/main\n' "${AWTARCHY_TEST_MAIN_REV:?}"
+    exit 0
+  fi
+
+  exit 2
+fi
+
+/usr/bin/git "$@"
+EOF_GIT
+chmod 0755 "$fakebin/git"
+
 : >"$curl_log"
 output="$(
   env \

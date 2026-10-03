@@ -20,6 +20,7 @@ Singleton {
     property var otherTemps: []
     property bool idleInhibited: false
     property string idleMode: "off"
+    property bool alwaysAwakePersistent: false
     property bool idleBroken: false
     property bool idleReconcilePending: false
     property var coreUsage: ({})
@@ -108,10 +109,12 @@ Singleton {
                     const active = classes.indexOf("activated") >= 0;
                     root.idleMode = root.normalizeIdleMode(status.mode || (active ? "keep-awake" : "off"));
                     root.idleInhibited = root.idleMode !== "off";
+                    root.alwaysAwakePersistent = root.idleMode === "always-awake" && status.persistent === true;
                     root.idleBroken = classes.indexOf("error") >= 0;
                 } catch (error) {
                     root.idleMode = "off";
                     root.idleInhibited = false;
+                    root.alwaysAwakePersistent = false;
                     root.idleBroken = false;
                 }
             }
@@ -391,9 +394,20 @@ Singleton {
         const requested = root.normalizeIdleMode(mode);
         root.idleMode = requested;
         root.idleInhibited = requested !== "off";
+        root.alwaysAwakePersistent = false;
         root.idleBroken = false;
         root.idleReconcilePending = true;
         idleToggleProcess.exec([idleScript, "set-mode", requested]);
+    }
+
+    function setAlwaysAwakePersistent(locked) {
+        if (idleToggleProcess.running || root.idleMode !== "always-awake")
+            return;
+        root.alwaysAwakePersistent = Boolean(locked);
+        root.idleBroken = false;
+        root.idleReconcilePending = true;
+        idleToggleProcess.exec([idleScript,
+            root.alwaysAwakePersistent ? "lock-always-awake" : "unlock-always-awake"]);
     }
 
     function toggleIdle() {
@@ -401,6 +415,7 @@ Singleton {
             return;
         root.idleInhibited = !root.idleInhibited;
         root.idleMode = root.idleInhibited ? "keep-awake" : "off";
+        root.alwaysAwakePersistent = false;
         root.idleBroken = false;
         root.idleReconcilePending = true;
         idleToggleProcess.exec([idleScript, "toggle"]);

@@ -139,8 +139,8 @@ reject_file_text "$INHIBITOR" 'Use Quick Settings' \
 
 require_file_text "$BAR" 'SystemState.idleMode === "always-awake"' \
     'bar idle indicator does not distinguish Always Awake mode'
-count="$(grep -Fc -- 'normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"' "$BAR" || true)"
-[[ "$count" == 2 ]] || fail "Always Awake background must exist on both bar orientations (expected 2, found $count)"
+reject_file_text "$BAR" 'normalBackground: SystemState.idleMode === "always-awake" ? Theme.subtleActive : "transparent"' \
+    'Always Awake must not leave a persistent active background behind the bar eye'
 
 MANAGED_HISTORY="$ROOT/local/share/awtarchy/quickshell-managed-history.sha256"
 for managed_file in "$BAR" "$QUICK_SETTINGS" "$SYSTEM_STATE"; do

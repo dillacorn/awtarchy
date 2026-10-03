@@ -194,13 +194,15 @@ curl_args() {
     -fL
     --show-error
     --connect-timeout 5
-    --retry 1
+    --retry 3
+    --retry-delay 1
+    --retry-all-errors
     -H "Accept: application/vnd.github+json"
     -H "User-Agent: awtarchy-command"
   )
   case "$mode" in
     api)
-      CURL_ARGS+=(--silent --max-time 10)
+      CURL_ARGS+=(--silent --max-time 20)
       ;;
     download)
       CURL_ARGS+=(
@@ -421,6 +423,14 @@ self_update_safely() {
 }
 
 updater_branch_head() {
+  local revision=""
+
+  revision="$(remote_branch_head_via_git "$UPDATER_BRANCH" 2>/dev/null || true)"
+  if [[ $revision =~ ^[0-9a-f]{40}$ ]]; then
+    printf '%s\n' "$revision"
+    return 0
+  fi
+
   have curl || return 1
   have python3 || return 1
   curl_args api
@@ -461,7 +471,46 @@ github_api() {
   curl "${CURL_ARGS[@]}" "$url"
 }
 
+github_git_remote() {
+  printf 'https://github.com/%s/%s.git\n' "$REPO_OWNER" "$REPO_NAME"
+}
+
+remote_branch_head_via_git() {
+  local branch="$1" remote="" output="" revision=""
+  have git || return 1
+  remote="$(github_git_remote)"
+
+  output="$(git ls-remote --exit-code --heads "$remote" "refs/heads/$branch" 2>/dev/null)" \
+    || return 1
+  revision="$(awk 'NR == 1 { print tolower($1); exit }' <<<"$output")"
+  [[ $revision =~ ^[0-9a-f]{40}$ ]] || return 1
+  printf '%s\n' "$revision"
+}
+
+remote_branches_via_git() {
+  local remote="" output=""
+  have git || return 1
+  remote="$(github_git_remote)"
+  output="$(git ls-remote --heads "$remote" 'refs/heads/*' 2>/dev/null)" \
+    || return 1
+  [[ -n $output ]] || return 1
+
+  awk '
+    $1 ~ /^[0-9a-fA-F]{40}$/ && $2 ~ /^refs\/heads\// {
+      sub(/^refs\/heads\//, "", $2)
+      if ($2 != "") print $2
+    }
+  ' <<<"$output" | LC_ALL=C sort -u
+}
+
 remote_git_branches() {
+  local git_branches=""
+  git_branches="$(remote_branches_via_git 2>/dev/null || true)"
+  if [[ -n $git_branches ]]; then
+    printf '%s\n' "$git_branches"
+    return 0
+  fi
+
   have python3 || return 1
 
   local page=1 json="" parsed=""
@@ -509,7 +558,13 @@ PY
 }
 
 remote_git_branch_head() {
-  local branch="$1" encoded="" json=""
+  local branch="$1" encoded="" json="" revision=""
+  revision="$(remote_branch_head_via_git "$branch" 2>/dev/null || true)"
+  if [[ $revision =~ ^[0-9a-f]{40}$ ]]; then
+    printf '%s\n' "$revision"
+    return 0
+  fi
+
   have python3 || return 1
   encoded="$(urlencode_ref "$branch")" || return 1
   json="$(github_api \
@@ -1327,6 +1382,40 @@ git_menu() {
   run_git_operation "$action" "$branch" "$revision"
 }
 
+run_mic_suppression() {
+  local helper="${TARGET_HOME}/.config/hypr/scripts/mic_noise_suppression.sh"
+  [[ -x "$helper" && ! -L "$helper" && -O "$helper" ]] \
+    || die "Microphone suppression helper is unavailable. Update Awtarchy managed configs first."
+  HOME="$TARGET_HOME" "$helper" "$@"
+}
+
+mic_suppression_menu() {
+  local helper="${TARGET_HOME}/.config/hypr/scripts/mic_noise_suppression.sh"
+  local choice rc=0
+  [[ -x "$helper" && ! -L "$helper" && -O "$helper" ]] \
+    || die "Microphone suppression helper is unavailable. Update Awtarchy managed configs first."
+
+  while true; do
+    choice="$(single_select_menu "Microphone Noise Suppression" 0 \
+      "Status" \
+      "Enable / switch to Mono (recommended)" \
+      "Enable / switch to Stereo" \
+      "Disable suppression" \
+      "Restart PipeWire / WirePlumber" \
+      "Back")" || return 0
+    clear_screen
+    case "$choice" in
+      0) run_mic_suppression status || rc=$? ;;
+      1) run_mic_suppression mono || rc=$? ;;
+      2) run_mic_suppression stereo || rc=$? ;;
+      3) run_mic_suppression disable || rc=$? ;;
+      4) run_mic_suppression restart || rc=$? ;;
+      *) return 0 ;;
+    esac
+    pause_menu
+    (( rc == 0 )) || return "$rc"
+  done
+}
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
@@ -1339,6 +1428,7 @@ maintenance_menu() {
       "Reconcile packages (install current / remove replaced)" \
       "NVIDIA driver recovery / rollback" \
       "Review config changes without applying" \
+      "Microphone noise suppression" \
       "Clean Awtarchy backup files" \
       "Version information" \
       "Exit")" || exit 0
@@ -1399,11 +1489,15 @@ maintenance_menu() {
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
       6)
+        mic_suppression_menu || rc=$?
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      7)
         run_runtime clean-backups || rc=$?
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
-      7)
+      8)
         clear_screen
         print_version_status >/dev/tty
         pause_menu
@@ -1421,6 +1515,7 @@ Usage:
   awtarchy update [--tag <tag>] [update options]
   awtarchy reset [--tag <tag>] [update options]
   awtarchy packages [--review]
+  awtarchy mic-suppression [status|enable [mono|stereo]|mono|stereo|disable|restart]
   awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
   awtarchy review [--tag <tag>]
   awtarchy report
@@ -1509,6 +1604,18 @@ main() {
       ensure_latest_updater "$@"
       shift
       run_package_reconciler "$@"
+      ;;
+    mic-suppression)
+      shift
+      if (( $# == 0 )) && [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]]; then
+        mic_suppression_menu
+      else
+        if (( $# == 0 )); then
+          run_mic_suppression status
+        else
+          run_mic_suppression "$@"
+        fi
+      fi
       ;;
     nvidia-rollback)
       ensure_latest_updater "$@"
