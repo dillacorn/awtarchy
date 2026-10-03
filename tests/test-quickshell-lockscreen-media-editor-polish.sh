@@ -61,8 +61,12 @@ require_text "$EDITOR" 'Esc Cancel' \
     || fail 'editor drag activation threshold is declared more than once'
 [[ "$(grep -Fc -- 'sequence: "Ctrl+S"' "$EDITOR")" -eq 1 ]] \
     || fail 'editor Ctrl+S save shortcut is declared more than once'
-[[ "$(grep -Fc -- 'Ctrl+S Save  •  Esc Cancel' "$EDITOR")" -eq 1 ]] \
-    || fail 'editor shortcut hint is rendered more than once'
+[[ "$(grep -Fc -- 'Changes save automatically  •  Esc Close' "$EDITOR")" -eq 1 ]] \
+    || fail 'editor autosave/close hint is not rendered exactly once'
+reject_text "$EDITOR" 'SettingsButton { label: "Save"; active: true' \
+    'editor still exposes a required Save button'
+reject_text "$EDITOR" 'SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }' \
+    'editor still exposes destructive Cancel semantics'
 require_text "$EDITOR" 'return "Media " + (customImageIndex(name) + 1)' \
     'custom media elements still use Image as their visible editor label'
 require_text "$EDITOR" 'Media spawn animation updated. Use Play Spawn to preview.' \
