@@ -101,10 +101,12 @@ require_text "$EDITOR_SAVE" 'backend_args=("${@:1:19}")' \
 # shellcheck disable=SC2016
 require_text "$EDITOR_SAVE" 'bash "$STATE_BACKEND" save-lockscreen-editor "${backend_args[@]}"' \
     'editor save wrapper no longer delegates the normalized atomic layout/visibility save'
-require_text "$EDITOR_QML" 'label: "Save"' \
-    'LockscreenEditor has no Save control'
-require_text "$EDITOR_QML" 'label: "Cancel"' \
-    'LockscreenEditor has no Cancel control'
+reject_text "$EDITOR_QML" 'label: "Save"' \
+    'LockscreenEditor still exposes a document-style Save control'
+reject_text "$EDITOR_QML" 'SettingsButton { label: "Cancel"; textSize: 9; onClicked: root.close() }' \
+    'LockscreenEditor still exposes destructive editor-level Cancel semantics'
+require_text "$EDITOR_QML" 'Changes save automatically  •  Esc Close' \
+    'LockscreenEditor does not advertise autosave/close behavior'
 require_text "$EDITOR_QML" 'label: "Restore Defaults"' \
     'LockscreenEditor has no Restore Defaults control'
 for forbidden in WlSessionLock LockAuth auth.submit sessionLock unlockRequested; do

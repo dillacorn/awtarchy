@@ -135,7 +135,13 @@ require_text "$BAR" 'function lockscreenSavedProfiles()' 'BarState has no saved-
 require_text "$BAR" 'LockscreenPresentationState.cloneProfile(raw.profile)' 'BarState saved profiles do not use the shared profile resolver'
 require_text "$EDITOR" 'property var draftSavedProfiles: []' 'editor has no saved-profile session draft'
 require_text "$EDITOR" 'BarState.lockscreenSavedProfiles()' 'editor does not load persisted saved profiles'
-require_text "$EDITOR" 'JSON.stringify(draftSavedProfiles)' 'Ctrl+S does not include saved profiles in the atomic transaction'
+require_text "$EDITOR" 'JSON.stringify(draftSavedProfiles)' 'atomic editor persistence does not include saved profiles'
+[[ "$(grep -Fc -- 'queueAutoSave();' "$EDITOR" || true)" -ge 4 ]] \
+    || fail 'named configuration create/rename/overwrite/reorder actions do not schedule persistence'
+require_text "$EDITOR" 'statusMessage = "Configuration added"' \
+    'creating a named configuration still presents it as an unsaved draft'
+reject_text "$EDITOR" 'Ctrl+S to persist.' \
+    'saved-configuration actions still require a second manual save'
 require_text "$STATE" 'save-lockscreen-saved-profiles)' 'state backend has no saved-profile-only atomic command'
 require_text "$EDITOR_SAVE" '--saved-profiles' 'editor save backend has no saved-profile-only mode'
 require_text "$EDITOR" '"bash", editorSaveBackend, "--saved-profiles", JSON.stringify(next)' 'confirmed deletion does not persist the saved-profile library immediately'
