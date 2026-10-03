@@ -4094,6 +4094,7 @@ maybe_offer_mic_suppression_update() {
   [[ -x "$helper" && ! -L "$helper" ]] || return 0
 
   if run_mic_suppression_for_target "$HOME_DIR" is-configured >/dev/null 2>&1; then
+    run_mic_suppression_for_target "$HOME_DIR" ensure-default       || warn "RNNoise is configured, but Awtarchy could not select Noise Canceling source as the default microphone."
     log "Microphone noise suppression is already configured; skipping the optional setup prompt."
     return 0
   fi
