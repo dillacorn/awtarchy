@@ -12,6 +12,7 @@ CONFIG_DIR="${HOME_DIR}/.config/pipewire/pipewire.conf.d"
 CONFIG_FILE="${CONFIG_DIR}/99-input-denoising.conf"
 STATE_DIR="${HOME_DIR}/.local/state/awtarchy/mic-suppression"
 ORIGINAL_BACKUP="${STATE_DIR}/pre-awtarchy-99-input-denoising.conf"
+PREVIOUS_DEFAULT_SOURCE="${STATE_DIR}/previous-default-source"
 OWNERSHIP_MARKER="# Managed by Awtarchy: microphone-noise-suppression"
 SYSTEM_PLUGIN="/usr/lib/ladspa/librnnoise_ladspa.so"
 PACKAGE="noise-suppression-for-voice"
@@ -239,6 +240,80 @@ rnnoise_source_present() {
     pactl list short sources 2>/dev/null | awk '$2 == "rnnoise_source" { found=1 } END { exit !found }'
 }
 
+source_present() {
+    local source="${1:-}"
+    [[ -n "$source" ]] || return 1
+    have pactl || return 1
+    pactl list short sources 2>/dev/null |
+        awk -v wanted="$source" '$2 == wanted { found=1 } END { exit !found }'
+}
+
+current_default_source() {
+    have pactl || return 1
+    pactl get-default-source 2>/dev/null | head -n1
+}
+
+remember_previous_default_source() {
+    local current="" tmp=""
+    [[ ! -e "$PREVIOUS_DEFAULT_SOURCE" && ! -L "$PREVIOUS_DEFAULT_SOURCE" ]] || return 0
+    audio_session_available || return 0
+    current="$(current_default_source 2>/dev/null || true)"
+    [[ -n "$current" && "$current" != rnnoise_source ]] || return 0
+
+    mkdir -p -- "$STATE_DIR"
+    [[ ! -L "$STATE_DIR" ]] || die "Refusing to write through symlinked microphone suppression state directory: ${STATE_DIR}"
+    tmp="$(mktemp "${STATE_DIR}/.previous-default-source.XXXXXX")"
+    printf '%s\n' "$current" >"$tmp"
+    chmod 0600 "$tmp"
+    mv -Tf -- "$tmp" "$PREVIOUS_DEFAULT_SOURCE"
+}
+
+select_rnnoise_default_source() {
+    local current=""
+    audio_session_available || return 0
+    rnnoise_source_present || die "Cannot select rnnoise_source as default because it is not present."
+    current="$(current_default_source 2>/dev/null || true)"
+    if [[ "$current" == rnnoise_source ]]; then
+        return 0
+    fi
+
+    have pactl || die "pactl is unavailable; cannot select rnnoise_source as the default microphone."
+    pactl set-default-source rnnoise_source ||
+        die "Could not select rnnoise_source as the default microphone."
+    [[ "$(current_default_source 2>/dev/null || true)" == rnnoise_source ]] ||
+        die "PipeWire did not retain rnnoise_source as the default microphone."
+    log "Default microphone: Noise Canceling source"
+}
+
+restore_previous_default_source() {
+    local previous=""
+    [[ -r "$PREVIOUS_DEFAULT_SOURCE" && ! -L "$PREVIOUS_DEFAULT_SOURCE" ]] || return 0
+    previous="$(tr -d '\r\n' <"$PREVIOUS_DEFAULT_SOURCE")"
+    [[ -n "$previous" ]] || {
+        rm -f -- "$PREVIOUS_DEFAULT_SOURCE"
+        return 0
+    }
+
+    if audio_session_available && source_present "$previous"; then
+        have pactl || die "pactl is unavailable; cannot restore the previous default microphone."
+        pactl set-default-source "$previous" ||
+            die "Could not restore the previous default microphone: ${previous}"
+        [[ "$(current_default_source 2>/dev/null || true)" == "$previous" ]] ||
+            die "PipeWire did not retain the restored default microphone: ${previous}"
+        log "Restored default microphone: ${previous}"
+    elif audio_session_available; then
+        warn "Previous default microphone is no longer available: ${previous}. Leaving PipeWire/WirePlumber automatic selection in place."
+    fi
+
+    rm -f -- "$PREVIOUS_DEFAULT_SOURCE"
+}
+
+ensure_default_source() {
+    configured_healthy || die "RNNoise must be configured and healthy before selecting it as the default microphone."
+    remember_previous_default_source
+    select_rnnoise_default_source
+}
+
 validate_enabled() {
     local mode="$1"
     package_installed || die "${PACKAGE} is not installed."
@@ -275,10 +350,12 @@ enable_mode() {
     else
         log "Leaving capture device selection to PipeWire/WirePlumber automatic routing."
     fi
+    remember_previous_default_source
     rendered="$(render_config "$mode" "$target")"
     atomic_write_config "$rendered"
     restart_audio
     validate_enabled "$mode"
+    select_rnnoise_default_source
     log "Microphone noise suppression: enabled (${mode})"
     log "Input device: Noise Canceling source"
     [[ "$mode" == stereo ]] && warn "Stereo RNNoise is intended only for a true stereo microphone and roughly doubles processing."
@@ -290,6 +367,7 @@ disable_suppression() {
     kind="$(config_kind)"
     case "$kind" in
         absent)
+            restore_previous_default_source
             log "Microphone noise suppression is already disabled."
             return 0
             ;;
@@ -304,6 +382,7 @@ disable_suppression() {
     rm -f -- "$CONFIG_FILE"
     restart_audio
     validate_disabled
+    restore_previous_default_source
     log "Microphone noise suppression: disabled"
     log "The ${PACKAGE} package was left installed."
     warn "Restart microphone-using applications if they kept an old PipeWire stream open."
@@ -320,10 +399,11 @@ configured_healthy() {
 }
 
 status() {
-    local kind mode="off" target="" package_state="missing" plugin_state="missing" source_state="inactive"
+    local kind mode="off" target="" default_source="unavailable" package_state="missing" plugin_state="missing" source_state="inactive"
     kind="$(config_kind)"
     mode="$(config_mode 2>/dev/null || printf off)"
     target="$(config_target 2>/dev/null || true)"
+    default_source="$(current_default_source 2>/dev/null || printf unavailable)"
     package_installed && package_state=installed
     [[ -f "$(plugin_path)" ]] && plugin_state=present
     rnnoise_source_present && source_state=present
@@ -333,6 +413,7 @@ status() {
     printf '  Package: %s\n' "$package_state"
     printf '  Plugin: %s\n' "$plugin_state"
     printf '  Capture target: %s\n' "${target:-WirePlumber automatic/default}"
+    printf '  Default source: %s\n' "$default_source"
     printf '  Virtual source: %s\n' "$source_state"
     if audio_session_available; then
         printf '  Audio services: active\n'
@@ -349,6 +430,7 @@ Usage:
   awtarchy mic-suppression mono
   awtarchy mic-suppression stereo
   awtarchy mic-suppression disable
+  awtarchy mic-suppression ensure-default
   awtarchy mic-suppression restart
 
 Mono is recommended for normal microphones. Stereo should be used only for a
@@ -364,6 +446,7 @@ case "${1:-status}" in
     mono) enable_mode mono ;;
     stereo) enable_mode stereo ;;
     disable) disable_suppression ;;
+    ensure-default) ensure_default_source ;;
     restart) restart_audio; status ;;
     help|-h|--help) usage ;;
     *) usage >&2; exit 2 ;;
