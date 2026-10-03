@@ -4037,11 +4037,11 @@ ask_optional_yes_no() {
   local prompt="$1" ans=""
   is_interactive || return 1
   while true; do
-    printf '%s [y/N] ' "$prompt" >/dev/tty
+    printf '%s [y/n] ' "$prompt" >/dev/tty
     IFS= read -r ans </dev/tty || return 1
     case "$ans" in
-      y|Y|yes|YES) return 0 ;;
-      ""|n|N|no|NO) return 1 ;;
+      y|Y) return 0 ;;
+      n|N) return 1 ;;
       *) printf '%s\n' 'Please answer y or n.' >/dev/tty ;;
     esac
   done
@@ -5926,11 +5926,12 @@ ask_yes_no() {
   (( ASSUME_YES == 1 )) && return 0
   is_interactive || return 1
   while true; do
-    printf '%s [y/N] ' "$prompt" >/dev/tty
+    printf '%s [y/n] ' "$prompt" >/dev/tty
     IFS= read -r ans </dev/tty || return 1
     case "$ans" in
-      y|Y|yes|YES) return 0 ;;
-      ""|n|N|no|NO) return 1 ;;
+      y|Y) return 0 ;;
+      n|N) return 1 ;;
+      *) printf '%s\n' 'Please answer y or n.' >/dev/tty ;;
     esac
   done
 }
