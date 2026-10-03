@@ -191,6 +191,18 @@ prepare() {
   mkdir -p -- "$BACKUP"
   chmod 0700 "$BACKUP"
 
+  curl --retry 5 --retry-all-errors --retry-delay 1 --max-time 120 -fsSL \
+    -o "$BRANCH_CLI" \
+    "https://raw.githubusercontent.com/dillacorn/awtarchy/$HEAD/local/bin/awtarchy"
+  chmod 0700 "$BRANCH_CLI"
+  bash -n "$BRANCH_CLI"
+  grep -Fq -- '    --retry 3' "$BRANCH_CLI" ||
+    { fail 'Staged branch launcher does not contain the updater retry fix'; return 1; }
+  grep -Fq -- '    --retry-all-errors' "$BRANCH_CLI" ||
+    { fail 'Staged branch launcher does not retry timeout/network errors'; return 1; }
+  grep -Fq -- '      CURL_ARGS+=(--silent --max-time 20)' "$BRANCH_CLI" ||
+    { fail 'Staged branch launcher does not contain the longer API timeout'; return 1; }
+
   [[ ! -L "$CFG" ]] || { fail "$CFG is a symlink"; return 1; }
   if [[ -e "$CFG" ]]; then
     [[ -f "$CFG" ]] || { fail "$CFG is not a regular file"; return 1; }
@@ -271,7 +283,7 @@ run_test() {
     'At the RNNoise prompt type: yes' \
     'It MUST say: Please answer y or n.' \
     'Then type only: y'
-  if ! "$AWT" git update --branch "$BRANCH" --commit "$HEAD"; then
+  if ! AWTARCHY_SKIP_UPDATE_CHECK=1 "$BRANCH_CLI" git update --branch "$BRANCH" --commit "$HEAD"; then
     fail 'Exact Git-testing update failed; stopping before any follow-up assertions'
     return 1
   fi
@@ -288,12 +300,6 @@ run_test() {
   rnnoise_present
   physical_source_present
   audio_healthy
-
-  curl --retry 3 --retry-all-errors -fsSL \
-    -o "$BRANCH_CLI" \
-    "https://raw.githubusercontent.com/dillacorn/awtarchy/$HEAD/local/bin/awtarchy"
-  chmod 0700 "$BRANCH_CLI"
-  bash -n "$BRANCH_CLI"
 
   banner '3. REAL MONO MIC'
   "$BRANCH_CLI" mic-suppression status
@@ -332,7 +338,7 @@ run_test() {
   audio_healthy
 
   banner '8. HEALTHY SETUP UPDATE SKIP'
-  if ! "$AWT" git update --branch "$BRANCH" --commit "$HEAD"; then
+  if ! AWTARCHY_SKIP_UPDATE_CHECK=1 "$BRANCH_CLI" git update --branch "$BRANCH" --commit "$HEAD"; then
     fail 'Healthy-setup verification update failed; stopping and recovering'
     return 1
   fi
