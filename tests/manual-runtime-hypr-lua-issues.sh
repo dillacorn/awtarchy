@@ -80,6 +80,8 @@ run_checks() {
     else
         fail "#258" "vibrance Lua runtime path or installed helper contract failed"
     fi
+    say "MANUAL #258 YES/NO: toggle Vibrance off and back on (or on and back off) and confirm the screen changes immediately and the original state is restored."
+    say
 
     local use_active preserve
     use_active="$(bool_option 'dwindle.use_active_for_splits' || true)"
@@ -95,6 +97,8 @@ run_checks() {
     else
         fail "#259" "workspace-mix Lua option write/readback validation failed"
     fi
+    say "MANUAL #259 YES/NO: perform one real workspace mix and restore; confirm the windows return correctly and temporary Dwindle behavior is restored."
+    say
 
     local before factor rigid after_factor after_rigid rigid_action
     before="$("$ZOOM" status:json 2>/dev/null || true)"
@@ -118,6 +122,8 @@ run_checks() {
     else
         fail "#260" "could not read current zoom factor/rigid state"
     fi
+    say "MANUAL #260 YES/NO: test normal zoom +/-, fast zoom ++/--, reset, rigid toggle/on/off, and status readback; confirm each behaves normally."
+    say
 
     if file_has "$SUNSHINE" "hl.dsp.window.move({ workspace = \$(lua_quote \"\$TARGET_WS\"), follow = false, window = \$(lua_quote \"\$waddr\") })" \
         && file_has "$SUNSHINE" "hl.dsp.focus({ workspace = \$(lua_quote \"\$TARGET_WS\") })" \
@@ -141,6 +147,8 @@ run_checks() {
     else
         fail "#262" "resize Lua submap contract/runtime constructor validation failed"
     fi
+    say "MANUAL #262 YES/NO: with more than one tiled window, enter resize mode, resize, reset/exit it, and confirm changing workspace auto-exits resize mode."
+    say
 
     if hyprctl eval 'assert(type(hl.monitor) == "function", "hl.monitor is unavailable")' >/dev/null 2>&1; then
         pass "#263" "the current Hyprland Lua runtime exposes hl.monitor without changing monitor state"
@@ -151,13 +159,13 @@ run_checks() {
     say
 
     if (( failures == 0 )); then
-        say "AUTOMATED SUMMARY: PASS (#258, #259, #260, #261 command path, #262, #263 command path)"
-        say "MANUAL SUMMARY: #261 and #263 still require the two real-world confirmations printed above."
+        say "AUTOMATED SUMMARY: PASS (#258-#263 implementation/API checks)"
+        say "MANUAL SUMMARY: #258-#263 still require the issue-specific real-desktop YES/NO confirmations printed above before closure."
         return 0
     fi
 
     say "AUTOMATED SUMMARY: FAIL ($failures issue check(s) failed)"
-    say "MANUAL SUMMARY: #261 and #263 still require the two real-world confirmations printed above."
+    say "MANUAL SUMMARY: #258-#263 still require the issue-specific real-desktop YES/NO confirmations printed above before closure."
     return 1
 }
 
