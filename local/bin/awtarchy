@@ -1416,6 +1416,88 @@ mic_suppression_menu() {
     (( rc == 0 )) || return "$rc"
   done
 }
+SUNSHINE_USER_SERVICE="app-dev.lizardbyte.app.Sunshine.service"
+
+sunshine_autostart_state() {
+  have systemctl || {
+    printf '%s\n' unavailable
+    return 0
+  }
+
+  if ! systemctl --user cat "$SUNSHINE_USER_SERVICE" >/dev/null 2>&1; then
+    printf '%s\n' unavailable
+    return 0
+  fi
+
+  local state=""
+  state="$(systemctl --user is-enabled "$SUNSHINE_USER_SERVICE" 2>/dev/null || true)"
+  case "$state" in
+    enabled|enabled-runtime)
+      printf '%s\n' enabled
+      ;;
+    disabled|disabled-runtime|indirect|static|generated|transient|"")
+      printf '%s\n' disabled
+      ;;
+    *)
+      printf '%s\n' "$state"
+      ;;
+  esac
+}
+
+run_sunshine_autostart() {
+  local action="${1:-status}" state=""
+
+  have systemctl || die "systemctl is required to manage Sunshine autostart."
+  if ! systemctl --user cat "$SUNSHINE_USER_SERVICE" >/dev/null 2>&1; then
+    die "Sunshine user service is unavailable. Install the official Sunshine package first."
+  fi
+
+  case "$action" in
+    status)
+      state="$(sunshine_autostart_state)"
+      printf 'Sunshine autostart: %s\n' "$state"
+      ;;
+    enable)
+      systemctl --user daemon-reload
+      systemctl --user enable "$SUNSHINE_USER_SERVICE"
+      printf '%s\n' "Sunshine autostart enabled for future desktop logins."
+      printf '%s\n' "Sunshine was not started."
+      ;;
+    disable)
+      systemctl --user disable "$SUNSHINE_USER_SERVICE"
+      printf '%s\n' "Sunshine autostart disabled for future desktop logins."
+      printf '%s\n' "A currently running Sunshine process was not stopped."
+      ;;
+    *)
+      die "Unknown Sunshine autostart action: ${action}. Use status, enable, or disable."
+      ;;
+  esac
+}
+
+sunshine_autostart_menu() {
+  local choice="" state="" rc=0
+
+  while true; do
+    state="$(sunshine_autostart_state)"
+    choice="$(single_select_menu       "Sunshine Autostart
+
+Current: ${state}
+
+This only controls automatic startup on future desktop logins.
+It does not start or stop Sunshine now."       0       "Enable Sunshine autostart"       "Disable Sunshine autostart"       "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0) run_sunshine_autostart enable || rc=$? ;;
+      1) run_sunshine_autostart disable || rc=$? ;;
+      *) return 0 ;;
+    esac
+    pause_menu
+    (( rc == 0 )) || return "$rc"
+  done
+}
+
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
@@ -1429,6 +1511,7 @@ maintenance_menu() {
       "NVIDIA driver recovery / rollback" \
       "Review config changes without applying" \
       "Microphone noise suppression" \
+      "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
       "Exit")" || exit 0
@@ -1493,11 +1576,15 @@ maintenance_menu() {
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
       7)
+        sunshine_autostart_menu || rc=$?
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      8)
         run_runtime clean-backups || rc=$?
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
-      8)
+      9)
         clear_screen
         print_version_status >/dev/tty
         pause_menu
@@ -1516,6 +1603,7 @@ Usage:
   awtarchy reset [--tag <tag>] [update options]
   awtarchy packages [--review]
   awtarchy mic-suppression [status|enable [mono|stereo]|mono|stereo|disable|restart]
+  awtarchy sunshine-autostart [status|enable|disable]
   awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
   awtarchy review [--tag <tag>]
   awtarchy report
@@ -1615,6 +1703,16 @@ main() {
         else
           run_mic_suppression "$@"
         fi
+      fi
+      ;;
+    sunshine-autostart)
+      shift
+      if (( $# == 0 )); then
+        run_sunshine_autostart status
+      elif (( $# == 1 )); then
+        run_sunshine_autostart "$1"
+      else
+        die "sunshine-autostart accepts only status, enable, or disable."
       fi
       ;;
     nvidia-rollback)
