@@ -1539,3 +1539,6 @@ a7459618f3099b69d0d6c5a99f1a94e296246438290373dd9cd86541413bb507	.config/quicksh
 
 # Always Awake bar eye keeps its normal background transparent.
 2c62e320223b46a59361c66e460593b68d207b1361a96db2f2cf3aaf38c045ff	.config/quickshell/awtarchy/Bar.qml
+
+# 2026-10-04 Hyprland Lua runtime cleanup and Sunshine screencopy permission.
+afce729bd189974b2a45aca1d2347ec177c2c4821be8c2478ba25d1775987207	.config/hypr/hyprland.lua
