@@ -129,9 +129,9 @@ set_window_floating() {
   local addr="$1" enabled="$2" action
   [[ -n "$addr" ]] || return 1
   if [[ "$enabled" == "true" || "$enabled" == "1" ]]; then
-    action="set"
+    action="enable"
   else
-    action="unset"
+    action="disable"
   fi
   hypr_dispatch "hl.dsp.window.float({ action = $(lua_quote "$action"), window = $(lua_quote "address:$addr") })" >/dev/null
 }
@@ -140,9 +140,9 @@ set_window_pseudo() {
   local addr="$1" enabled="$2" action
   [[ -n "$addr" ]] || return 1
   if [[ "$enabled" == "true" || "$enabled" == "1" ]]; then
-    action="set"
+    action="enable"
   else
-    action="unset"
+    action="disable"
   fi
   hypr_dispatch "hl.dsp.window.pseudo({ action = $(lua_quote "$action"), window = $(lua_quote "address:$addr") })" >/dev/null
 }
