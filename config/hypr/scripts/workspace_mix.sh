@@ -160,7 +160,8 @@ resize_window_exact() {
 get_option_int() {
   local option="$1"
   hyprctl -j getoption "$option" 2>/dev/null | jq -r '
-    if has("int") then .int
+    if has("bool") then (if .bool then 1 else 0 end)
+    elif has("int") then .int
     elif has("value") then .value
     else empty
     end
@@ -168,8 +169,27 @@ get_option_int() {
 }
 
 set_option_int() {
-  local option="$1" value="$2"
-  hyprctl keyword "$option" "$value" >/dev/null
+  local option="$1" value="$2" key lua_value
+
+  case "$option" in
+    dwindle.use_active_for_splits) key="use_active_for_splits" ;;
+    dwindle.preserve_split) key="preserve_split" ;;
+    *)
+      err "unsupported runtime option: $option"
+      return 1
+      ;;
+  esac
+
+  case "$value" in
+    1|true) lua_value="true" ;;
+    0|false) lua_value="false" ;;
+    *)
+      err "invalid boolean value for $option: $value"
+      return 1
+      ;;
+  esac
+
+  hyprctl eval "hl.config({ dwindle = { ${key} = ${lua_value} } })" >/dev/null
 }
 
 prepare_dwindle_restore() {
