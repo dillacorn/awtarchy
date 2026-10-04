@@ -5,9 +5,9 @@
 # Moves Steam Big Picture to workspace 1 on Sunshine connect.
 # Works with native Steam or Flatpak Steam. Hyprland + jq required.
 # 
-# REQUIREMENT
-# add to your "Do Command" in sunshine web-ui: (without the #)
-# /usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"
+# Awtarchy automatically adds this helper to Sunshine's global preparation
+# commands during install/update when Sunshine is detected.
+# Sunshine service/autostart state is intentionally left unchanged.
 
 set -euo pipefail
 
