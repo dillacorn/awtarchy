@@ -2,7 +2,7 @@ name: Validate Awtarchy
 
 on:
   push:
-    branches: [main, post-v3.1.5-input-brightness-fix-testing]
+    branches: [main, post-v3.1.5-input-brightness-fix-testing, fix/hyprland-lua-runtime-cleanup]
   pull_request:
   workflow_dispatch:
 
