@@ -1416,62 +1416,38 @@ mic_suppression_menu() {
     (( rc == 0 )) || return "$rc"
   done
 }
-SUNSHINE_USER_SERVICE="app-dev.lizardbyte.app.Sunshine.service"
+sunshine_autostart_helper() {
+  printf '%s\n' "${TARGET_HOME}/.config/hypr/scripts/sunshine_autostart.sh"
+}
 
 sunshine_autostart_state() {
-  have systemctl || {
-    printf '%s\n' unavailable
-    return 0
-  }
+  local helper="" output=""
+  helper="$(sunshine_autostart_helper)"
 
-  if ! systemctl --user cat "$SUNSHINE_USER_SERVICE" >/dev/null 2>&1; then
+  if [[ ! -f "$helper" || -L "$helper" || ! -O "$helper" ]]; then
     printf '%s\n' unavailable
     return 0
   fi
 
-  local state=""
-  state="$(systemctl --user is-enabled "$SUNSHINE_USER_SERVICE" 2>/dev/null || true)"
-  case "$state" in
-    enabled|enabled-runtime)
-      printf '%s\n' enabled
-      ;;
-    disabled|disabled-runtime|indirect|static|generated|transient|"")
-      printf '%s\n' disabled
+  output="$(HOME="$TARGET_HOME" bash "$helper" status 2>/dev/null || true)"
+  case "$output" in
+    "Sunshine autostart: "*)
+      printf '%s\n' "${output#Sunshine autostart: }"
       ;;
     *)
-      printf '%s\n' "$state"
+      printf '%s\n' unavailable
       ;;
   esac
 }
 
 run_sunshine_autostart() {
-  local action="${1:-status}" state=""
+  local helper="" action="${1:-status}"
+  helper="$(sunshine_autostart_helper)"
 
-  have systemctl || die "systemctl is required to manage Sunshine autostart."
-  if ! systemctl --user cat "$SUNSHINE_USER_SERVICE" >/dev/null 2>&1; then
-    die "Sunshine user service is unavailable. Install the official Sunshine package first."
-  fi
+  [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] \
+    || die "Sunshine autostart helper is unavailable. Update Awtarchy managed configs first."
 
-  case "$action" in
-    status)
-      state="$(sunshine_autostart_state)"
-      printf 'Sunshine autostart: %s\n' "$state"
-      ;;
-    enable)
-      systemctl --user daemon-reload
-      systemctl --user enable "$SUNSHINE_USER_SERVICE"
-      printf '%s\n' "Sunshine autostart enabled for future desktop logins."
-      printf '%s\n' "Sunshine was not started."
-      ;;
-    disable)
-      systemctl --user disable "$SUNSHINE_USER_SERVICE"
-      printf '%s\n' "Sunshine autostart disabled for future desktop logins."
-      printf '%s\n' "A currently running Sunshine process was not stopped."
-      ;;
-    *)
-      die "Unknown Sunshine autostart action: ${action}. Use status, enable, or disable."
-      ;;
-  esac
+  HOME="$TARGET_HOME" bash "$helper" "$action"
 }
 
 sunshine_autostart_menu() {
@@ -1479,12 +1455,17 @@ sunshine_autostart_menu() {
 
   while true; do
     state="$(sunshine_autostart_state)"
-    choice="$(single_select_menu       "Sunshine Autostart
+    choice="$(single_select_menu \
+      "Sunshine Autostart
 
 Current: ${state}
 
 This only controls automatic startup on future desktop logins.
-It does not start or stop Sunshine now."       0       "Enable Sunshine autostart"       "Disable Sunshine autostart"       "Back")" || return 0
+It does not start or stop Sunshine now." \
+      0 \
+      "Enable Sunshine autostart" \
+      "Disable Sunshine autostart" \
+      "Back")" || return 0
 
     clear_screen
     rc=0
