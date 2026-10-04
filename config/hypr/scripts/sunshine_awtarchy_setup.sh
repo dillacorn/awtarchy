@@ -9,6 +9,8 @@
 
 set -euo pipefail
 
+# The literal $HOME must expand later in Sunshine's shell, not while this file is parsed.
+# shellcheck disable=SC2016
 HOOK='/usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"'
 
 log() {
