@@ -44,6 +44,10 @@ reject_text "$WORKSPACE_MIX" 'hyprctl keyword' '#259 workspace mix still uses hy
 require_text "$WORKSPACE_MIX" "hyprctl eval \"hl.config({ dwindle = { \${key} = \${lua_value} } })\"" '#259 workspace mix does not use Lua runtime config'
 require_text "$WORKSPACE_MIX" 'dwindle.use_active_for_splits) key="use_active_for_splits"' '#259 use_active_for_splits mapping is missing'
 require_text "$WORKSPACE_MIX" 'dwindle.preserve_split) key="preserve_split"' '#259 preserve_split mapping is missing'
+require_text "$WORKSPACE_MIX" 'action="enable"' '#259 workspace mix does not explicitly enable saved float/pseudo state'
+require_text "$WORKSPACE_MIX" 'action="disable"' '#259 workspace mix does not explicitly disable saved float/pseudo state'
+reject_text "$WORKSPACE_MIX" 'action="set"' '#259 workspace mix still uses non-idempotent set action for toggle-style dispatchers'
+reject_text "$WORKSPACE_MIX" 'action="unset"' '#259 workspace mix still uses non-idempotent unset action for toggle-style dispatchers'
 
 # #260: zoom setters must use hl.config() through eval, retaining key detection.
 reject_text "$ZOOM" ' keyword ' '#260 zoom helper still uses a keyword setter'
@@ -219,6 +223,9 @@ for expected in \
 done
 if grep -Fq '|keyword|' "$MIX_LOG"; then
     fail '#259 dynamic workspace-mix test observed a legacy keyword call'
+fi
+if grep -Eq 'hl\.dsp\.window\.(float|pseudo)\(\{ action = '\''(set|unset)'\''' "$MIX_LOG"; then
+    fail '#259 dynamic workspace-mix test observed non-idempotent set/unset state actions'
 fi
 
 # Exercise #261 against fake Steam/Hyprland so exact-window command generation is tested.
