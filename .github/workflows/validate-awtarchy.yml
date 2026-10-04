@@ -43,6 +43,7 @@ jobs:
           bash -n config/hypr/scripts/hyprsunset_ctl.sh
           bash -n config/hypr/scripts/gif_capture.sh
           bash -n config/hypr/scripts/sunshine-moonlight-fix.sh
+          bash -n config/hypr/scripts/sunshine_awtarchy_setup.sh
           bash -n config/hypr/scripts/vibrance_shader.sh
           bash -n config/hypr/scripts/workspace_mix.sh
           bash -n config/hypr/scripts/zoom.sh
@@ -126,6 +127,7 @@ jobs:
           bash -n tests/test-ddc-brightness-watcher.sh
           bash -n tests/test-hybrid-brightness.sh
           bash -n tests/test-hypr-lua-runtime-migration.sh
+          bash -n tests/test-sunshine-awtarchy-hook.sh
           bash -n tests/manual-runtime-hypr-lua-issues.sh
           bash -n tests/test-hardware-reconcile-sudo.sh
           bash -n tests/test-hypridle-restart.sh
@@ -190,6 +192,7 @@ jobs:
             config/hypr/scripts/hyprsunset_ctl.sh \
             config/hypr/scripts/gif_capture.sh \
             config/hypr/scripts/sunshine-moonlight-fix.sh \
+            config/hypr/scripts/sunshine_awtarchy_setup.sh \
             config/hypr/scripts/vibrance_shader.sh \
             config/hypr/scripts/workspace_mix.sh \
             config/hypr/scripts/zoom.sh \
@@ -263,6 +266,7 @@ jobs:
             tests/test-ddc-brightness-watcher.sh \
             tests/test-hybrid-brightness.sh \
             tests/test-hypr-lua-runtime-migration.sh \
+            tests/test-sunshine-awtarchy-hook.sh \
             tests/manual-runtime-hypr-lua-issues.sh \
             tests/test-hardware-reconcile-sudo.sh \
             tests/test-hypridle-restart.sh \
@@ -374,6 +378,7 @@ jobs:
           python3 tests/test-keyring-pam-cleanup.py
           bash tests/test-lua-validation.sh
           bash tests/test-hypr-lua-runtime-migration.sh
+          bash tests/test-sunshine-awtarchy-hook.sh
           bash tests/test-mdns-stack.sh
           bash tests/test-playerctl-dependency.sh
           bash tests/test-power-profile-helper-update.sh
