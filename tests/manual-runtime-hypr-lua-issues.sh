@@ -87,6 +87,10 @@ run_checks() {
     use_active="$(bool_option 'dwindle.use_active_for_splits' || true)"
     preserve="$(bool_option 'dwindle.preserve_split' || true)"
     if file_has "$WORKSPACE_MIX" 'hyprctl eval "hl.config({ dwindle' \
+        && file_has "$WORKSPACE_MIX" 'action="enable"' \
+        && file_has "$WORKSPACE_MIX" 'action="disable"' \
+        && file_lacks "$WORKSPACE_MIX" 'action="set"' \
+        && file_lacks "$WORKSPACE_MIX" 'action="unset"' \
         && file_lacks "$WORKSPACE_MIX" 'hyprctl keyword' \
         && [[ "$use_active" == "true" || "$use_active" == "false" ]] \
         && [[ "$preserve" == "true" || "$preserve" == "false" ]] \
