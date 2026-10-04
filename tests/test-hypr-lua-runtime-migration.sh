@@ -7,6 +7,7 @@ VIBRANCE="$ROOT/config/hypr/scripts/vibrance_shader.sh"
 WORKSPACE_MIX="$ROOT/config/hypr/scripts/workspace_mix.sh"
 ZOOM="$ROOT/config/hypr/scripts/zoom.sh"
 SUNSHINE="$ROOT/config/hypr/scripts/sunshine-moonlight-fix.sh"
+HYPRLAND_CONFIG="$ROOT/config/hypr/hyprland.lua"
 RESIZE="$ROOT/config/hypr/scripts/toggle_resize_if_ok.sh"
 STEAM_NOTES="$ROOT/extra_notes/Steam_Launch_Options_Wayland_Hyprland.md"
 TMP="$(mktemp -d)"
@@ -61,6 +62,7 @@ reject_text "$SUNSHINE" 'dispatch movetoworkspacesilent' '#261 Sunshine helper s
 reject_text "$SUNSHINE" 'dispatch workspace' '#261 Sunshine helper still uses workspace text dispatcher'
 require_text "$SUNSHINE" "hl.dsp.window.move({ workspace = \$(lua_quote \"\$TARGET_WS\"), follow = false, window = \$(lua_quote \"\$waddr\") })" '#261 exact-window Lua move is missing'
 require_text "$SUNSHINE" "hl.dsp.focus({ workspace = \$(lua_quote \"\$TARGET_WS\") })" '#261 Lua workspace focus is missing'
+require_text "$HYPRLAND_CONFIG" 'hl.permission("/usr/bin/sunshine", "screencopy", "allow")' '#261 Sunshine screencopy permission is missing, so Hyprland would prompt on stream start'
 
 # #262: resize submap must use the same Lua-native submap path as current Awtarchy.
 reject_text "$RESIZE" 'hyprctl dispatch submap ' '#262 resize helper still uses text submap dispatch'
