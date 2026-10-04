@@ -101,7 +101,7 @@ notify_waybar() {
 }
 
 reset_mode() {
-  hyprctl dispatch submap reset >/dev/null 2>&1 || true
+  hyprctl dispatch 'hl.dsp.submap("reset")' >/dev/null 2>&1 || true
 
   if pid="$(read_pid_record "$WATCH_PID_FILE")"; then
     kill "$pid" >/dev/null 2>&1 || true
@@ -145,7 +145,7 @@ count="$(hyprctl -j clients | jq --argjson ws "$ws_id" '[.[] | select(.workspace
 [[ "${count:-0}" -le 1 ]] && exit 0
 
 # Enter resize submap
-hyprctl dispatch submap resize >/dev/null 2>&1 || true
+hyprctl dispatch 'hl.dsp.submap("resize")' >/dev/null 2>&1 || true
 
 # Record current workspace
 write_state_file "$ws_id" || {
