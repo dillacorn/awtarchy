@@ -11,6 +11,8 @@ VIBRANCE="$CONFIG_HOME/hypr/scripts/vibrance_shader.sh"
 WORKSPACE_MIX="$CONFIG_HOME/hypr/scripts/workspace_mix.sh"
 ZOOM="$CONFIG_HOME/hypr/scripts/zoom.sh"
 SUNSHINE="$CONFIG_HOME/hypr/scripts/sunshine-moonlight-fix.sh"
+SUNSHINE_SETUP="$CONFIG_HOME/hypr/scripts/sunshine_awtarchy_setup.sh"
+SUNSHINE_CONFIG="$CONFIG_HOME/sunshine/sunshine.conf"
 RESIZE="$CONFIG_HOME/hypr/scripts/toggle_resize_if_ok.sh"
 
 failures=0
@@ -129,15 +131,39 @@ run_checks() {
     say "MANUAL #260 YES/NO: test normal zoom +/-, fast zoom ++/--, reset, rigid toggle/on/off, and status readback; confirm each behaves normally."
     say
 
+    sunshine_config_ok=1
+    if command -v sunshine >/dev/null 2>&1; then
+        if [[ ! -f "$SUNSHINE_SETUP" || ! -f "$SUNSHINE_CONFIG" ]] \
+            || ! python3 - "$SUNSHINE_CONFIG" <<'PY' >/dev/null 2>&1
+import json
+from pathlib import Path
+import re
+import sys
+
+hook = '/usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"'
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+matches = re.findall(r"^[ \\t]*global_prep_cmd[ \\t]*=[ \\t]*(.+)$", text, flags=re.MULTILINE)
+if len(matches) != 1:
+    raise SystemExit(1)
+commands = json.loads(matches[0])
+if sum(1 for item in commands if isinstance(item, dict) and item.get("do") == hook) != 1:
+    raise SystemExit(1)
+PY
+        then
+            sunshine_config_ok=0
+        fi
+    fi
+
     if file_has "$SUNSHINE" "hl.dsp.window.move({ workspace = \$(lua_quote \"\$TARGET_WS\"), follow = false, window = \$(lua_quote \"\$waddr\") })" \
         && file_has "$SUNSHINE" "hl.dsp.focus({ workspace = \$(lua_quote \"\$TARGET_WS\") })" \
         && file_lacks "$SUNSHINE" 'dispatch movetoworkspacesilent' \
         && file_lacks "$SUNSHINE" 'dispatch focuswindow' \
+        && (( sunshine_config_ok == 1 )) \
         && hyprctl eval 'local _ = hl.dsp.window.move({ workspace = "1", follow = false, window = "address:0x0" })' >/dev/null 2>&1 \
         && hyprctl eval 'local _ = hl.dsp.focus({ workspace = "1" })' >/dev/null 2>&1; then
-        pass "#261" "Sunshine helper uses exact-window Lua dispatchers and Hyprland accepts their constructors"
+        pass "#261" "Sunshine helper uses exact-window Lua dispatchers; installed Sunshine also has the Awtarchy connect hook configured"
     else
-        fail "#261" "Sunshine Lua dispatcher contract/runtime constructor validation failed"
+        fail "#261" "Sunshine Lua dispatcher or automatic hook configuration validation failed"
     fi
     say "MANUAL #261 YES: before closure, run one real Sunshine/Moonlight connection and confirm Steam Big Picture moves to workspace 1 without an unintended workspace flicker."
     say
