@@ -27,9 +27,13 @@ fi
 fakebin="${TMP}/fakebin"
 mkdir -p -- "$fakebin"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"${fakebin}/sunshine"
+# The fake script expands its own arguments and log path when executed.
+# shellcheck disable=SC2016
 printf '%s\n' '#!/usr/bin/env bash' 'printf "%s\\n" "$*" >>"${SYSTEMCTL_LOG:?}"' 'exit 99' >"${fakebin}/systemctl"
 chmod 0755 "$fakebin/sunshine" "$fakebin/systemctl"
 
+# Match the literal command persisted for Sunshine; $HOME expands when Sunshine runs it.
+# shellcheck disable=SC2016
 hook='/usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"'
 
 run_helper() {
