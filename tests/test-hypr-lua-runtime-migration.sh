@@ -36,32 +36,32 @@ done
 # #258: vibrance is Lua-only and live changes use hl.config() through eval.
 reject_text "$VIBRANCE" 'hyprland.conf' '#258 vibrance helper still references legacy hyprland.conf'
 reject_text "$VIBRANCE" 'hyprctl keyword' '#258 vibrance helper still uses hyprctl keyword'
-require_text "$VIBRANCE" 'hyprctl eval "hl.config({ decoration = { screen_shader = $(lua_quote "$SHADER") } })"' '#258 live vibrance enable is not Lua-native'
-require_text "$VIBRANCE" 'hyprctl eval "hl.config({ decoration = { screen_shader = '\''\'' } })"' '#258 live vibrance disable is not Lua-native'
+require_text "$VIBRANCE" "hyprctl eval \"hl.config({ decoration = { screen_shader = \$(lua_quote \"\$SHADER\") } })\"" '#258 live vibrance enable is not Lua-native'
+require_text "$VIBRANCE" "screen_shader = ''" '#258 live vibrance disable is not Lua-native'
 
 # #259: temporary dwindle changes and restoration must use Lua runtime config.
 reject_text "$WORKSPACE_MIX" 'hyprctl keyword' '#259 workspace mix still uses hyprctl keyword'
-require_text "$WORKSPACE_MIX" 'hyprctl eval "hl.config({ dwindle = { ${key} = ${lua_value} } })"' '#259 workspace mix does not use Lua runtime config'
+require_text "$WORKSPACE_MIX" "hyprctl eval \"hl.config({ dwindle = { \${key} = \${lua_value} } })\"" '#259 workspace mix does not use Lua runtime config'
 require_text "$WORKSPACE_MIX" 'dwindle.use_active_for_splits) key="use_active_for_splits"' '#259 use_active_for_splits mapping is missing'
 require_text "$WORKSPACE_MIX" 'dwindle.preserve_split) key="preserve_split"' '#259 preserve_split mapping is missing'
 
 # #260: zoom setters must use hl.config() through eval, retaining key detection.
 reject_text "$ZOOM" ' keyword ' '#260 zoom helper still uses a keyword setter'
-require_text "$ZOOM" 'expr="hl.config({ cursor = { zoom_factor = ${value} } })"' '#260 cursor zoom factor Lua setter is missing'
-require_text "$ZOOM" 'expr="hl.config({ cursor = { zoom_rigid = ${value} } })"' '#260 cursor zoom rigid Lua setter is missing'
-require_text "$ZOOM" '"$HC" -q eval "$expr"' '#260 zoom helper does not execute Lua runtime config'
+require_text "$ZOOM" "expr=\"hl.config({ cursor = { zoom_factor = \${value} } })\"" '#260 cursor zoom factor Lua setter is missing'
+require_text "$ZOOM" "expr=\"hl.config({ cursor = { zoom_rigid = \${value} } })\"" '#260 cursor zoom rigid Lua setter is missing'
+require_text "$ZOOM" "\"\$HC\" -q eval \"\$expr\"" '#260 zoom helper does not execute Lua runtime config'
 
 # #261: Sunshine must target the exact window and use Lua-native dispatchers.
 reject_text "$SUNSHINE" 'dispatch focuswindow' '#261 Sunshine helper still uses focuswindow text dispatcher'
 reject_text "$SUNSHINE" 'dispatch movetoworkspacesilent' '#261 Sunshine helper still uses movetoworkspacesilent text dispatcher'
 reject_text "$SUNSHINE" 'dispatch workspace' '#261 Sunshine helper still uses workspace text dispatcher'
-require_text "$SUNSHINE" 'hl.dsp.window.move({ workspace = $(lua_quote "$TARGET_WS"), follow = false, window = $(lua_quote "$waddr") })' '#261 exact-window Lua move is missing'
-require_text "$SUNSHINE" 'hl.dsp.focus({ workspace = $(lua_quote "$TARGET_WS") })' '#261 Lua workspace focus is missing'
+require_text "$SUNSHINE" "hl.dsp.window.move({ workspace = \$(lua_quote \"\$TARGET_WS\"), follow = false, window = \$(lua_quote \"\$waddr\") })" '#261 exact-window Lua move is missing'
+require_text "$SUNSHINE" "hl.dsp.focus({ workspace = \$(lua_quote \"\$TARGET_WS\") })" '#261 Lua workspace focus is missing'
 
 # #262: resize submap must use the same Lua-native submap path as current Awtarchy.
 reject_text "$RESIZE" 'hyprctl dispatch submap ' '#262 resize helper still uses text submap dispatch'
-require_text "$RESIZE" 'hyprctl dispatch '\''hl.dsp.submap("resize")'\''' '#262 resize-entry Lua dispatcher is missing'
-require_text "$RESIZE" 'hyprctl dispatch '\''hl.dsp.submap("reset")'\''' '#262 resize-reset Lua dispatcher is missing'
+require_text "$RESIZE" 'hl.dsp.submap("resize")' '#262 resize-entry Lua dispatcher is missing'
+require_text "$RESIZE" 'hl.dsp.submap("reset")' '#262 resize-reset Lua dispatcher is missing'
 
 # #263: docs must use the Lua monitor API.
 reject_text "$STEAM_NOTES" 'hyprctl keyword monitor' '#263 Steam notes still document legacy monitor keyword syntax'
