@@ -1517,8 +1517,8 @@ end
 -- ───────────────────────────────────────────────────────────────────────────────
 
 -- Sunshine / Moonlight Fix
--- Configure in Sunshine Web-UI → “Do Command” (on connect):
---   /usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"
+-- Awtarchy configures the connect hook automatically when Sunshine is installed.
+-- Sunshine service/autostart state is not changed.
 -- READ SCRIPT:        cat ~/.config/hypr/scripts/sunshine-moonlight-fix.sh
 
 -- ───────────────────────────────────────────────────────────────────────────────
