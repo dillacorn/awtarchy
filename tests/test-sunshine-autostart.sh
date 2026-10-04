@@ -30,42 +30,44 @@ log="${TMP}/systemctl.log"
 mkdir -p -- "$fakebin" "$home"
 printf '%s\n' disabled >"$state"
 
-# The fake systemctl script must keep its variables literal until the fake is executed.
-# shellcheck disable=SC2016
-printf '%s\n' \
-  '#!/usr/bin/env bash' \
-  'set -euo pipefail' \
-  'printf '''%s\\n''' "$*" >>"${SYSTEMCTL_LOG:?}"' \
-  '[[ "${1:-}" == "--user" ]] || exit 97' \
-  'shift' \
-  'action="${1:-}"' \
-  'shift || true' \
-  'case "$action" in' \
-  '  cat)' \
-  '    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]' \
-  '    ;;' \
-  '  is-enabled)' \
-  '    current="$(cat "${SUNSHINE_STATE:?}")"' \
-  '    printf '''%s\\n''' "$current"' \
-  '    [[ "$current" == enabled ]]' \
-  '    ;;' \
-  '  daemon-reload)' \
-  '    ;;' \
-  '  enable)' \
-  '    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]' \
-  '    printf '''%s\\n''' enabled >"${SUNSHINE_STATE:?}"' \
-  '    ;;' \
-  '  disable)' \
-  '    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]' \
-  '    printf '''%s\\n''' disabled >"${SUNSHINE_STATE:?}"' \
-  '    ;;' \
-  '  start|stop|restart|try-restart)' \
-  '    exit 98' \
-  '    ;;' \
-  '  *)' \
-  '    exit 96' \
-  '    ;;' \
-  'esac' >"${fakebin}/systemctl"
+cat >"${fakebin}/systemctl" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >>"${SYSTEMCTL_LOG:?}"
+
+[[ "${1:-}" == "--user" ]] || exit 97
+shift
+action="${1:-}"
+shift || true
+
+case "$action" in
+  cat)
+    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]
+    ;;
+  is-enabled)
+    current="$(cat "${SUNSHINE_STATE:?}")"
+    printf '%s\n' "$current"
+    [[ "$current" == enabled ]]
+    ;;
+  daemon-reload)
+    ;;
+  enable)
+    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]
+    printf '%s\n' enabled >"${SUNSHINE_STATE:?}"
+    ;;
+  disable)
+    [[ "${1:-}" == "app-dev.lizardbyte.app.Sunshine.service" ]]
+    printf '%s\n' disabled >"${SUNSHINE_STATE:?}"
+    ;;
+  start|stop|restart|try-restart)
+    exit 98
+    ;;
+  *)
+    exit 96
+    ;;
+esac
+SH
 chmod 0755 "${fakebin}/systemctl"
 
 run_helper() {
