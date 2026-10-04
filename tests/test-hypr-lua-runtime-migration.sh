@@ -224,6 +224,10 @@ done
 if grep -Fq '|keyword|' "$MIX_LOG"; then
     fail '#259 dynamic workspace-mix test observed a legacy keyword call'
 fi
+grep -Fq "hl.dsp.window.float({ action = 'disable', window = 'address:0xabc' })" "$MIX_LOG" \
+    || fail '#259 restore did not explicitly disable floating on an originally tiled window'
+grep -Fq "hl.dsp.window.pseudo({ action = 'disable', window = 'address:0xabc' })" "$MIX_LOG" \
+    || fail '#259 restore did not explicitly disable pseudo on an originally non-pseudo tiled window'
 if grep -Eq 'hl\.dsp\.window\.(float|pseudo)\(\{ action = '\''(set|unset)'\''' "$MIX_LOG"; then
     fail '#259 dynamic workspace-mix test observed non-idempotent set/unset state actions'
 fi
