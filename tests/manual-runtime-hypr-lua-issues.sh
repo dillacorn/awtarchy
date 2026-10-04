@@ -114,7 +114,7 @@ run_checks() {
         after="$("$ZOOM" status:json 2>/dev/null || true)"
         after_factor="$(jq -r '.zoom_factor // empty' <<<"$after" 2>/dev/null || true)"
         after_rigid="$(jq -r '.zoom_rigid // empty' <<<"$after" 2>/dev/null || true)"
-        if file_has "$ZOOM" '"$HC" -q eval "$expr"' \
+        if file_has "$ZOOM" "\"\$HC\" -q eval \"\$expr\"" \
             && file_lacks "$ZOOM" ' -q keyword ' \
             && awk -v a="$factor" -v b="$after_factor" 'BEGIN { d=a-b; if (d<0) d=-d; exit !(d < 0.0001) }' \
             && [[ "$after_rigid" == "$rigid" ]]; then
@@ -126,8 +126,8 @@ run_checks() {
         fail "#260" "could not read current zoom factor/rigid state"
     fi
 
-    if file_has "$SUNSHINE" 'hl.dsp.window.move({ workspace = $(lua_quote "$TARGET_WS"), follow = false, window = $(lua_quote "$waddr") })' \
-        && file_has "$SUNSHINE" 'hl.dsp.focus({ workspace = $(lua_quote "$TARGET_WS") })' \
+    if file_has "$SUNSHINE" "hl.dsp.window.move({ workspace = \$(lua_quote \"\$TARGET_WS\"), follow = false, window = \$(lua_quote \"\$waddr\") })" \
+        && file_has "$SUNSHINE" "hl.dsp.focus({ workspace = \$(lua_quote \"\$TARGET_WS\") })" \
         && file_lacks "$SUNSHINE" 'dispatch movetoworkspacesilent' \
         && file_lacks "$SUNSHINE" 'dispatch focuswindow' \
         && hyprctl eval 'local _ = hl.dsp.window.move({ workspace = "1", follow = false, window = "address:0x0" })' >/dev/null 2>&1 \
@@ -139,8 +139,8 @@ run_checks() {
     say "MANUAL #261 YES: before closure, run one real Sunshine/Moonlight connection and confirm Steam Big Picture moves to workspace 1 without an unintended workspace flicker."
     say
 
-    if file_has "$RESIZE" 'hyprctl dispatch '\''hl.dsp.submap("resize")'\''' \
-        && file_has "$RESIZE" 'hyprctl dispatch '\''hl.dsp.submap("reset")'\''' \
+    if file_has "$RESIZE" 'hl.dsp.submap("resize")' \
+        && file_has "$RESIZE" 'hl.dsp.submap("reset")' \
         && file_lacks "$RESIZE" 'hyprctl dispatch submap ' \
         && hyprctl eval 'local _ = hl.dsp.submap("resize")' >/dev/null 2>&1 \
         && hyprctl eval 'local _ = hl.dsp.submap("reset")' >/dev/null 2>&1; then
