@@ -82,6 +82,7 @@ hl.config({
 hl.permission("/usr/bin/grim", "screencopy", "allow")
 hl.permission("/usr/bin/wf-recorder", "screencopy", "allow")
 hl.permission("/usr/bin/hyprpicker", "screencopy", "allow")
+hl.permission("/usr/bin/sunshine", "screencopy", "allow")
 hl.permission("/usr/(lib|libexec|lib64)/xdg-desktop-portal-hyprland", "screencopy", "allow")
 
 -- plugin (hyprpm)
