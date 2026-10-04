@@ -3,23 +3,11 @@ set -euo pipefail
 
 # vibrance_shader.sh
 # - Edits ~/.config/hypr/shaders/vibrance (#define VIBRANCE X)
-# - Supports native Hyprland Lua: hl.config({ decoration = { screen_shader = "..." } })
-# - Still supports old hyprland.conf screen_shader lines as fallback.
+# - Persists state in the Awtarchy Hyprland Lua config.
+# - Applies live state through hyprctl eval / hl.config().
 
-HYPR_LUA="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
-HYPR_CONF="${HYPRLAND_CONF:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.conf}"
+CONF="${HYPRLAND_LUA:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/hyprland.lua}"
 SHADER="${VIBRANCE_SHADER_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/shaders/vibrance}"
-
-if [[ -f "$HYPR_LUA" ]]; then
-  CONF="$HYPR_LUA"
-  CONF_MODE="lua"
-elif [[ -f "$HYPR_CONF" ]]; then
-  CONF="$HYPR_CONF"
-  CONF_MODE="conf"
-else
-  CONF="$HYPR_LUA"
-  CONF_MODE="lua"
-fi
 
 LEVELS=(0.00 0.15 0.25 0.35 0.45 0.55 0.65 0.75 0.85 0.95)
 
@@ -205,126 +193,12 @@ path.write_text("".join(out))
 PY_LUA_SET
 }
 
-conf_vibrance_is_active() {
-  awk '
-    function strip_cr(s){ sub(/\r$/, "", s); return s }
-    function ltrim(s){ sub(/^[ \t]+/, "", s); return s }
-    {
-      line=strip_cr($0)
-      t=ltrim(line)
-      if (t ~ /^#/) next
-      if (t !~ /^screen_shader[ \t]*=/) next
-      sub(/^screen_shader[ \t]*=/, "", t)
-      sub(/#.*/, "", t)
-      gsub(/[ \t]/, "", t)
-      if (t ~ /\/shaders\/vibrance$/) { found=1; exit }
-    }
-    END{ exit !found }
-  ' "$CONF"
-}
-
-set_conf_vibrance_state() {
-  local enable="$1"
-  local tmp default_path
-  tmp="$(mktemp)"
-  default_path="${HOME}/.config/hypr/shaders/vibrance"
-
-  awk -v enable="$enable" -v default_path="$default_path" '
-    function strip_cr(s){ sub(/\r$/, "", s); return s }
-    function ltrim(s){ sub(/^[ \t]+/, "", s); return s }
-    function indent_of(s){ match(s,/^[ \t]*/); return substr(s,RSTART,RLENGTH) }
-
-    function is_shader_line(line, t){
-      t=line; t=strip_cr(t); t=ltrim(t)
-      return (t ~ /^#?[ \t]*screen_shader[ \t]*=/) ? 1 : 0
-    }
-
-    function shader_is_active(line, t){
-      t=line; t=strip_cr(t); t=ltrim(t)
-      return (t ~ /^screen_shader[ \t]*=/) ? 1 : 0
-    }
-
-    function shader_path_norm(line, t){
-      t=line; t=strip_cr(t); t=ltrim(t)
-      sub(/^#[ \t]*/, "", t)
-      if (t !~ /^screen_shader[ \t]*=/) return ""
-      sub(/^screen_shader[ \t]*=/, "", t)
-      sub(/#.*/, "", t)
-      gsub(/[ \t]/, "", t)
-      return t
-    }
-
-    function is_vibrance(line, p){
-      p=shader_path_norm(line)
-      return (p ~ /\/shaders\/vibrance$/) ? 1 : 0
-    }
-
-    BEGIN{ vib_found=0; first_vib_done=0; indent_guess="" }
-
-    {
-      line=strip_cr($0)
-      if (indent_guess=="" && line ~ /^[ \t]*#?[ \t]*screen_shader[ \t]*=/) indent_guess=indent_of(line)
-
-      if (is_shader_line(line)) {
-        if (is_vibrance(line)) {
-          vib_found=1
-          ind=indent_of(line)
-          rest=substr(line, length(ind)+1)
-          if (enable=="1") {
-            if (!first_vib_done) {
-              sub(/^#[ \t]*/, "", rest)
-              print ind rest
-              first_vib_done=1
-            } else {
-              if (rest !~ /^#/) rest="#" rest
-              sub(/^##+/, "#", rest)
-              print ind rest
-            }
-            next
-          } else {
-            if (rest !~ /^#/) rest="#" rest
-            sub(/^##+/, "#", rest)
-            print ind rest
-            next
-          }
-        } else if (enable=="1" && shader_is_active(line)) {
-          ind=indent_of(line)
-          rest=substr(line, length(ind)+1)
-          if (rest !~ /^#/) rest="#" rest
-          sub(/^##+/, "#", rest)
-          print ind rest
-          next
-        }
-      }
-
-      print line
-    }
-
-    END{
-      if (enable=="1" && vib_found==0) {
-        ind = (indent_guess!="") ? indent_guess : "    "
-        print ind "screen_shader = " default_path
-      }
-    }
-  ' "$CONF" >"$tmp"
-
-  mv -f "$tmp" "$CONF"
-}
-
 vibrance_is_active() {
-  if [[ "$CONF_MODE" == "lua" ]]; then
-    lua_vibrance_is_active
-  else
-    conf_vibrance_is_active
-  fi
+  lua_vibrance_is_active
 }
 
 set_vibrance_state() {
-  if [[ "$CONF_MODE" == "lua" ]]; then
-    set_lua_vibrance_state "$1"
-  else
-    set_conf_vibrance_state "$1"
-  fi
+  set_lua_vibrance_state "$1"
 }
 
 reload_hypr() {
@@ -332,14 +206,21 @@ reload_hypr() {
   hyprctl reload >/dev/null 2>&1 || true
 }
 
+lua_quote() {
+  local s="${1:-}"
+  s=${s//\\/\\\\}
+  s=${s//\'/\\\'}
+  printf "'%s'" "$s"
+}
+
 apply_live_vibrance_state() {
   local enable="$1"
   command -v hyprctl >/dev/null 2>&1 || return 0
 
   if [[ "$enable" == "1" ]]; then
-    hyprctl keyword decoration:screen_shader "$SHADER" >/dev/null 2>&1
+    hyprctl eval "hl.config({ decoration = { screen_shader = $(lua_quote "$SHADER") } })" >/dev/null 2>&1
   else
-    hyprctl keyword decoration:screen_shader "" >/dev/null 2>&1
+    hyprctl eval "hl.config({ decoration = { screen_shader = '' } })" >/dev/null 2>&1
   fi
 }
 
