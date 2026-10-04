@@ -100,9 +100,23 @@ OBS_VKCAPTURE=1 gamemoderun %command%
 ## 🎮 Game Streaming
 
 ### Sunshine (server)
-```bash
-aur-scan install sunshine-bin
+
+Use LizardByte's official Arch repository rather than the unsupported AUR package:
+
+```conf
+[lizardbyte]
+SigLevel = Optional
+Server = https://github.com/LizardByte/pacman-repo/releases/latest/download
 ```
+
+Then install Sunshine:
+
+```bash
+sudo pacman -Syu
+sudo pacman -S lizardbyte/sunshine
+```
+
+When Sunshine is installed, Awtarchy automatically adds its Moonlight/Steam connect helper to Sunshine's global preparation commands during Awtarchy install/update. Awtarchy does not enable or start Sunshine automatically.
 
 ### Moonlight (client)
 ```bash

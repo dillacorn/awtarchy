@@ -77,9 +77,34 @@ get_factor() {
   "$HC" getoption "$KEY_FACTOR" -j | "$JQ" -r '.float // .int // 1'
 }
 
+set_runtime_config() {
+  local key="$1" value="$2" expr
+
+  case "$key" in
+    cursor:zoom_factor|cursor.zoom_factor)
+      expr="hl.config({ cursor = { zoom_factor = ${value} } })"
+      ;;
+    cursor:zoom_rigid|cursor.zoom_rigid)
+      expr="hl.config({ cursor = { zoom_rigid = ${value} } })"
+      ;;
+    misc:cursor_zoom_factor|misc.cursor_zoom_factor)
+      expr="hl.config({ misc = { cursor_zoom_factor = ${value} } })"
+      ;;
+    misc:cursor_zoom_rigid|misc.cursor_zoom_rigid)
+      expr="hl.config({ misc = { cursor_zoom_rigid = ${value} } })"
+      ;;
+    *)
+      printf 'Unsupported Hyprland zoom option: %s\n' "$key" >&2
+      return 1
+      ;;
+  esac
+
+  "$HC" -q eval "$expr"
+}
+
 set_factor() {
   local v="$1"
-  "$HC" -q keyword "$KEY_FACTOR" "$v" || true
+  set_runtime_config "$KEY_FACTOR" "$v" >/dev/null || true
 }
 
 get_rigid() {
@@ -93,12 +118,12 @@ get_rigid() {
 
 set_rigid_to() {
   local key="$1" target="$2" state
-  "$HC" -q keyword "$key" "$target" || true
-  sleep 0.02; state="$(get_rigid)"; [ "$state" = "$target" ] && return 0
-  "$HC" -q keyword "$key" "$([ "$target" = "true" ] && echo 1 || echo 0)" || true
-  sleep 0.02; state="$(get_rigid)"; [ "$state" = "$target" ] && return 0
-  "$HC" -q keyword "$key" "$([ "$target" = "true" ] && echo on || echo off)" || true
-  sleep 0.02; state="$(get_rigid)"; [ "$state" = "$target" ]
+
+  [[ "$target" == "true" || "$target" == "false" ]] || return 1
+  set_runtime_config "$key" "$target" >/dev/null || return 1
+  sleep 0.02
+  state="$(get_rigid)"
+  [ "$state" = "$target" ]
 }
 
 is_percent() { case "$1" in *%) return 0;; *) return 1;; esac; }

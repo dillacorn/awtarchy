@@ -82,6 +82,7 @@ hl.config({
 hl.permission("/usr/bin/grim", "screencopy", "allow")
 hl.permission("/usr/bin/wf-recorder", "screencopy", "allow")
 hl.permission("/usr/bin/hyprpicker", "screencopy", "allow")
+hl.permission("/usr/bin/sunshine", "screencopy", "allow")
 hl.permission("/usr/(lib|libexec|lib64)/xdg-desktop-portal-hyprland", "screencopy", "allow")
 
 -- plugin (hyprpm)
@@ -1517,8 +1518,8 @@ end
 -- ───────────────────────────────────────────────────────────────────────────────
 
 -- Sunshine / Moonlight Fix
--- Configure in Sunshine Web-UI → “Do Command” (on connect):
---   /usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"
+-- Awtarchy configures the connect hook automatically when Sunshine is installed.
+-- Sunshine service/autostart state is not changed.
 -- READ SCRIPT:        cat ~/.config/hypr/scripts/sunshine-moonlight-fix.sh
 
 -- ───────────────────────────────────────────────────────────────────────────────

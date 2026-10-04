@@ -723,6 +723,9 @@ Sunshine / Moonlight
 Awtarchy includes:
   ~/.config/hypr/scripts/sunshine-moonlight-fix.sh
 
+When Sunshine is installed, Awtarchy adds this helper to Sunshine's global preparation commands during install/update.
+Awtarchy does not enable or start Sunshine automatically.
+
 The helper handles display/session adjustments around Sunshine streaming. See the matching Extra Note for troubleshooting.
 TEXT
             ;;

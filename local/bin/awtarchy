@@ -1416,6 +1416,69 @@ mic_suppression_menu() {
     (( rc == 0 )) || return "$rc"
   done
 }
+sunshine_autostart_helper() {
+  printf '%s\n' "${TARGET_HOME}/.config/hypr/scripts/sunshine_autostart.sh"
+}
+
+sunshine_autostart_state() {
+  local helper="" output=""
+  helper="$(sunshine_autostart_helper)"
+
+  if [[ ! -f "$helper" || -L "$helper" || ! -O "$helper" ]]; then
+    printf '%s\n' unavailable
+    return 0
+  fi
+
+  output="$(HOME="$TARGET_HOME" bash "$helper" status 2>/dev/null || true)"
+  case "$output" in
+    "Sunshine autostart: "*)
+      printf '%s\n' "${output#Sunshine autostart: }"
+      ;;
+    *)
+      printf '%s\n' unavailable
+      ;;
+  esac
+}
+
+run_sunshine_autostart() {
+  local helper="" action="${1:-status}"
+  helper="$(sunshine_autostart_helper)"
+
+  [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] \
+    || die "Sunshine autostart helper is unavailable. Update Awtarchy managed configs first."
+
+  HOME="$TARGET_HOME" bash "$helper" "$action"
+}
+
+sunshine_autostart_menu() {
+  local choice="" state="" rc=0
+
+  while true; do
+    state="$(sunshine_autostart_state)"
+    choice="$(single_select_menu \
+      "Sunshine Autostart
+
+Current: ${state}
+
+This only controls automatic startup on future desktop logins.
+It does not start or stop Sunshine now." \
+      0 \
+      "Enable Sunshine autostart" \
+      "Disable Sunshine autostart" \
+      "Back")" || return 0
+
+    clear_screen
+    rc=0
+    case "$choice" in
+      0) run_sunshine_autostart enable || rc=$? ;;
+      1) run_sunshine_autostart disable || rc=$? ;;
+      *) return 0 ;;
+    esac
+    pause_menu
+    (( rc == 0 )) || return "$rc"
+  done
+}
+
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
@@ -1429,6 +1492,7 @@ maintenance_menu() {
       "NVIDIA driver recovery / rollback" \
       "Review config changes without applying" \
       "Microphone noise suppression" \
+      "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
       "Exit")" || exit 0
@@ -1493,11 +1557,15 @@ maintenance_menu() {
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
       7)
+        sunshine_autostart_menu || rc=$?
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
+      8)
         run_runtime clean-backups || rc=$?
         pause_menu
         [[ -z ${rc:-} ]] || return "$rc"
         ;;
-      8)
+      9)
         clear_screen
         print_version_status >/dev/tty
         pause_menu
@@ -1516,6 +1584,7 @@ Usage:
   awtarchy reset [--tag <tag>] [update options]
   awtarchy packages [--review]
   awtarchy mic-suppression [status|enable [mono|stereo]|mono|stereo|disable|restart]
+  awtarchy sunshine-autostart [status|enable|disable]
   awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
   awtarchy review [--tag <tag>]
   awtarchy report
@@ -1615,6 +1684,16 @@ main() {
         else
           run_mic_suppression "$@"
         fi
+      fi
+      ;;
+    sunshine-autostart)
+      shift
+      if (( $# == 0 )); then
+        run_sunshine_autostart status
+      elif (( $# == 1 )); then
+        run_sunshine_autostart "$1"
+      else
+        die "sunshine-autostart accepts only status, enable, or disable."
       fi
       ;;
     nvidia-rollback)

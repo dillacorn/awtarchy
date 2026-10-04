@@ -5,9 +5,9 @@
 # Moves Steam Big Picture to workspace 1 on Sunshine connect.
 # Works with native Steam or Flatpak Steam. Hyprland + jq required.
 # 
-# REQUIREMENT
-# add to your "Do Command" in sunshine web-ui: (without the #)
-# /usr/bin/env bash -lc "$HOME/.config/hypr/scripts/sunshine-moonlight-fix.sh"
+# Awtarchy automatically adds this helper to Sunshine's global preparation
+# commands during install/update when Sunshine is detected.
+# Sunshine service/autostart state is intentionally left unchanged.
 
 set -euo pipefail
 
@@ -55,6 +55,13 @@ addr_wrap() {
   esac
 }
 
+lua_quote() {
+  local s="${1:-}"
+  s=${s//\\/\\\\}
+  s=${s//\'/\\\'}
+  printf "'%s'" "$s"
+}
+
 # Return ADDR for Big Picture, empty if not found
 find_bp_addr() {
   hyprctl clients -j 2>/dev/null \
@@ -73,12 +80,10 @@ while :; do
   if [[ -n "${addr:-}" ]]; then
     waddr="$(addr_wrap "$addr")"
     log "Found Big Picture ($waddr). Moving to workspace ${TARGET_WS}…"
-    hyprctl dispatch focuswindow "$waddr" >/dev/null
+    # Move the exact Big Picture window without following it, then focus the target workspace.
+    hyprctl dispatch "hl.dsp.window.move({ workspace = $(lua_quote "$TARGET_WS"), follow = false, window = $(lua_quote "$waddr") })" >/dev/null
     sleep 0.1
-    # Use silent move to avoid workspace jump flicker, then explicitly switch.
-    hyprctl dispatch movetoworkspacesilent "$TARGET_WS" >/dev/null
-    sleep 0.1
-    hyprctl dispatch workspace "$TARGET_WS" >/dev/null
+    hyprctl dispatch "hl.dsp.focus({ workspace = $(lua_quote "$TARGET_WS") })" >/dev/null
     log "Done."
     exit 0
   fi

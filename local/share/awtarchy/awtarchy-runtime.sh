@@ -2510,6 +2510,21 @@ In normal install mode it will overwrite awtarchy-managed config files under:
 # ──────────────────────────────────────────────────────────────────────────────
 # Install stages
 # ──────────────────────────────────────────────────────────────────────────────
+configure_sunshine_awtarchy_hook_stage() {
+  local helper="${HOME_DIR}/.config/hypr/scripts/sunshine_awtarchy_setup.sh"
+
+  [[ -f "$helper" && ! -L "$helper" ]] || return 0
+
+  log "Checking Sunshine integration..."
+  if ! run_as_target env \
+      "HOME=${HOME_DIR}" \
+      "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+      bash "$helper";
+  then
+    warn "Could not configure the optional Awtarchy Sunshine connect hook; Sunshine service state was not changed."
+  fi
+}
+
 prepare_base_install() {
   local required_space_mb=1024 available_space_mb
   available_space_mb="$(df --output=avail / | tail -1)"
@@ -4160,6 +4175,7 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  configure_sunshine_awtarchy_hook_stage
   configure_installer_mic_suppression_stage
   install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
   remove_legacy_shell_files_stage
@@ -9777,6 +9793,7 @@ main() {
   log "Reconciling hardware and managed packages..."
   hardware_reconcile
   maybe_offer_mic_suppression_update
+  configure_sunshine_awtarchy_hook_stage
 
   log "Cleaning retired managed shell state..."
   if ! remove_quickshell_update_legacy_files; then

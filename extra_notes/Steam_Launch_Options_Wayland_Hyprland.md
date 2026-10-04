@@ -4,19 +4,19 @@ Notes From Repo: https://github.com/dillacorn/awtarchy
 
 ### These are unique launch options depending on the game and use case for [hyprland](https://github.com/hyprwm/Hyprland)
 
-```hyprctl keyword monitor "<name>,<resolution>@<refresh_rate>,<position>,<scale>"```
+```hyprctl eval 'hl.monitor({ output = "<name>", mode = "<resolution>@<refresh_rate>", position = "<position>", scale = <scale> })'```
 
 ## Counter-Strike 2 ~ 1352x1080 4:3 stretched 240hz
-```hyprctl keyword monitor "DP-2,1352x1080@240,0x0,1"; gamemoderun %command% -novid +fps_max 0; hyprctl keyword monitor "DP-2,1920x1080@240,0x0,1"```
+```hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1352x1080@240", position = "0x0", scale = 1 })'; gamemoderun %command% -novid +fps_max 0; hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1920x1080@240", position = "0x0", scale = 1 })'```
 
 ## The Finals ~ 1352x1080 4:3 stretched 240hz
-```hyprctl keyword monitor "DP-2,1352x1080@240,0x0,1"; gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl keyword monitor "DP-2,1920x1080@240,0x0,1"```
+```hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1352x1080@240", position = "0x0", scale = 1 })'; gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1920x1080@240", position = "0x0", scale = 1 })'```
 
 ## The Finals ~ 1680x1050 16:10 stretched 240hz
-```hyprctl keyword monitor "DP-2,1680x1050@240,0x0,1"; gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl keyword monitor "DP-2,1920x1080@240,0x0,1"```
+```hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1680x1050@240", position = "0x0", scale = 1 })'; gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl eval 'hl.monitor({ output = "DP-2", mode = "1920x1080@240", position = "0x0", scale = 1 })'```
 
 ### personal settings example (Zowie 400hz) + added OBS_VKCAPTURE=1 for better video capture performance OBS plugin.
-```hyprctl keyword monitor "DP-1,1352x1080@400,0x0,1"; PROTON_ENABLE_WAYLAND=1 OBS_VKCAPTURE=1 gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl keyword monitor "DP-1,1920x1080@400,0x0,1"```
+```hyprctl eval 'hl.monitor({ output = "DP-1", mode = "1352x1080@400", position = "0x0", scale = 1 })'; PROTON_ENABLE_WAYLAND=1 OBS_VKCAPTURE=1 gamemoderun %command% -novid +fps_max 0 -high -dx12; hyprctl eval 'hl.monitor({ output = "DP-1", mode = "1920x1080@400", position = "0x0", scale = 1 })'```
 
 ### Using gamescope? - checkout [smtty!](https://github.com/dillacorn/smtty)
 
