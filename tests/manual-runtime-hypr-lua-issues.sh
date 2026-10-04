@@ -175,15 +175,18 @@ run_checks() {
 
     if (( failures == 0 )); then
         say "AUTOMATED SUMMARY: PASS (#258, #259, #260, #261 command path, #262, #263 command path)"
-    else
-        say "AUTOMATED SUMMARY: FAIL ($failures issue check(s) failed)"
+        say "MANUAL SUMMARY: #261 and #263 still require the two real-world confirmations printed above."
+        return 0
     fi
+
+    say "AUTOMATED SUMMARY: FAIL ($failures issue check(s) failed)"
     say "MANUAL SUMMARY: #261 and #263 still require the two real-world confirmations printed above."
+    return 1
 }
 
 run_checks 2>&1 | tee "$LOG_FILE"
 status=${PIPESTATUS[0]}
 say "Saved log: $LOG_FILE" | tee -a "$LOG_FILE"
-if (( status != 0 || failures != 0 )); then
-    exit 1
+if (( status != 0 )); then
+    exit "$status"
 fi
