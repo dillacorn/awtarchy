@@ -2,7 +2,7 @@ name: Validate Awtarchy
 
 on:
   push:
-    branches: [main, post-v3.1.5-input-brightness-fix-testing]
+    branches: [main, post-v3.1.5-input-brightness-fix-testing, fix/hyprland-lua-runtime-cleanup]
   pull_request:
   workflow_dispatch:
 
@@ -44,6 +44,7 @@ jobs:
           bash -n config/hypr/scripts/gif_capture.sh
           bash -n config/hypr/scripts/sunshine-moonlight-fix.sh
           bash -n config/hypr/scripts/sunshine_awtarchy_setup.sh
+          bash -n config/hypr/scripts/sunshine_autostart.sh
           bash -n config/hypr/scripts/vibrance_shader.sh
           bash -n config/hypr/scripts/workspace_mix.sh
           bash -n config/hypr/scripts/zoom.sh
@@ -194,6 +195,7 @@ jobs:
             config/hypr/scripts/gif_capture.sh \
             config/hypr/scripts/sunshine-moonlight-fix.sh \
             config/hypr/scripts/sunshine_awtarchy_setup.sh \
+            config/hypr/scripts/sunshine_autostart.sh \
             config/hypr/scripts/vibrance_shader.sh \
             config/hypr/scripts/workspace_mix.sh \
             config/hypr/scripts/zoom.sh \
