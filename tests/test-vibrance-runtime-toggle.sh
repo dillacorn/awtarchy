@@ -54,8 +54,8 @@ run_toggle
 
 grep -Fq -- "-- hl.config({ decoration = { screen_shader = \"$SHADER\" } })" "$LUA" \
     || fail 'toggle off did not persist the disabled vibrance config state'
-grep -Fq -- 'argc=3|keyword|decoration:screen_shader|' "$LOG" \
-    || fail 'toggle off did not explicitly clear the live Hyprland screen shader'
+grep -Fq -- "argc=2|eval|hl.config({ decoration = { screen_shader = '' } })" "$LOG" \
+    || fail 'toggle off did not explicitly clear the live Hyprland screen shader through Lua eval'
 
 : >"$LOG"
 run_toggle
@@ -65,7 +65,11 @@ grep -Fq -- "hl.config({ decoration = { screen_shader = \"$SHADER\" } })" "$LUA"
 if grep -Fq -- "-- hl.config({ decoration = { screen_shader = \"$SHADER\" } })" "$LUA"; then
     fail 'toggle on left the vibrance config commented out'
 fi
-grep -Fq -- "argc=3|keyword|decoration:screen_shader|$SHADER" "$LOG" \
-    || fail 'toggle on did not explicitly apply the live vibrance shader path'
+grep -Fq -- "argc=2|eval|hl.config({ decoration = { screen_shader = '$SHADER' } })" "$LOG" \
+    || fail 'toggle on did not explicitly apply the live vibrance shader path through Lua eval'
 
-printf '%s\n' 'PASS: vibrance toggle persists config state and explicitly updates the live Hyprland screen shader.'
+if grep -Fq '|keyword|' "$LOG"; then
+    fail 'vibrance toggle emitted a legacy keyword call'
+fi
+
+printf '%s\n' 'PASS: vibrance toggle persists config state and explicitly updates the live Hyprland screen shader through Lua eval.'
