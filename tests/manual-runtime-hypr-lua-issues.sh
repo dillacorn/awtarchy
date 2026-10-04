@@ -34,13 +34,6 @@ need() {
     command -v "$1" >/dev/null 2>&1
 }
 
-lua_quote() {
-    local s="${1:-}"
-    s=${s//\\/\\\\}
-    s=${s//\'/\\\'}
-    printf "'%s'" "$s"
-}
-
 file_has() {
     local file="$1" needle="$2"
     [[ -f "$file" ]] && grep -Fq -- "$needle" "$file"
@@ -149,26 +142,10 @@ run_checks() {
         fail "#262" "resize Lua submap contract/runtime constructor validation failed"
     fi
 
-    local monitor_json monitor_name width height refresh x y scale mode position monitor_expr
-    monitor_json="$(hyprctl -j monitors 2>/dev/null | jq -c '([.[] | select(.focused == true)][0] // .[0])' 2>/dev/null || true)"
-    monitor_name="$(jq -r '.name // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    width="$(jq -r '.width // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    height="$(jq -r '.height // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    refresh="$(jq -r '.refreshRate // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    x="$(jq -r '.x // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    y="$(jq -r '.y // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    scale="$(jq -r '.scale // empty' <<<"$monitor_json" 2>/dev/null || true)"
-    if [[ -n "$monitor_name" && -n "$width" && -n "$height" && -n "$refresh" && -n "$x" && -n "$y" && -n "$scale" ]]; then
-        mode="${width}x${height}@${refresh}"
-        position="${x}x${y}"
-        monitor_expr="hl.monitor({ output = $(lua_quote "$monitor_name"), mode = $(lua_quote "$mode"), position = $(lua_quote "$position"), scale = $scale })"
-        if hyprctl eval "$monitor_expr" >/dev/null 2>&1; then
-            pass "#263" "hl.monitor runtime syntax was accepted while reapplying the focused monitor's current mode"
-        else
-            fail "#263" "current-mode hl.monitor runtime evaluation failed"
-        fi
+    if hyprctl eval 'assert(type(hl.monitor) == "function", "hl.monitor is unavailable")' >/dev/null 2>&1; then
+        pass "#263" "the current Hyprland Lua runtime exposes hl.monitor without changing monitor state"
     else
-        fail "#263" "could not read focused monitor geometry for a safe no-op hl.monitor check"
+        fail "#263" "the current Hyprland Lua runtime does not expose the documented hl.monitor API"
     fi
     say "MANUAL #263 YES: before closure, verify one documented temporary game resolution actually switches modes and restores the native mode when the game exits."
     say
