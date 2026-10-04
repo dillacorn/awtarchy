@@ -39,3 +39,84 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+  publish-v3-8-9:
+    needs: release-notes-contract
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'TEMP: Publish Awtarchy v3.8.9' &&
+      github.event.pull_request.head.ref == 'chore/release-v3.8.9-bridge'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_VERSION: v3.8.9
+      RELEASE_TITLE: Awtarchy v3.8.9 Runtime Fixes
+      RELEASE_TARGET: bce758d19d1cf477407ae15ea8cab2f56fbf44c4
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Validate, publish, and verify v3.8.9
+        run: |
+          set -euo pipefail
+          proposed="$RUNNER_TEMP/proposed-v3.8.9.md"
+          previous="$RUNNER_TEMP/previous-stable.md"
+          published="$RUNNER_TEMP/published-v3.8.9.md"
+
+          cp .github/release-v3.8.9.md "$proposed"
+          gh release view v3.8.8 --repo "$GITHUB_REPOSITORY" --json body --jq '.body' > "$previous"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_VERSION" \
+            --title "$RELEASE_TITLE" \
+            --notes "$proposed" \
+            --previous "$previous"
+
+          if gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'ERROR: release %s already exists.\n' "$RELEASE_VERSION" >&2
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_VERSION" >/dev/null 2>&1; then
+            printf 'ERROR: tag %s already exists.\n' "$RELEASE_VERSION" >&2
+            exit 1
+          fi
+
+          gh release create "$RELEASE_VERSION" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_TARGET" \
+            --title "$RELEASE_TITLE" \
+            --notes-file "$proposed"
+
+          gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json body --jq '.body' > "$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_VERSION" \
+            --title "$RELEASE_TITLE" \
+            --notes "$published" \
+            --previous "$previous"
+
+          python3 - "$proposed" "$published" <<'PY'
+          from pathlib import Path
+          import sys
+
+          proposed = Path(sys.argv[1]).read_text(encoding="utf-8").rstrip("\n")
+          published = Path(sys.argv[2]).read_text(encoding="utf-8").rstrip("\n")
+          if proposed != published:
+              raise SystemExit("published release body does not match proposed release body")
+          PY
+
+          test "$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json name --jq '.name')" = "$RELEASE_TITLE"
+          test "$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" = "false"
+          test "$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')" = "false"
+          test "$(gh release view "$RELEASE_VERSION" --repo "$GITHUB_REPOSITORY" --json targetCommitish --jq '.targetCommitish')" = "$RELEASE_TARGET"
+
+          tag_sha=""
+          for _ in 1 2 3 4 5; do
+            tag_sha="$(git ls-remote --tags origin "refs/tags/$RELEASE_VERSION" | awk '{print $1}')"
+            [[ -n "$tag_sha" ]] && break
+            sleep 1
+          done
+          test "$tag_sha" = "$RELEASE_TARGET"
+
+          gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/chore/release-v3.8.9-bridge"
