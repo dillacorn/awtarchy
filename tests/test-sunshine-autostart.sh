@@ -30,6 +30,8 @@ log="${TMP}/systemctl.log"
 mkdir -p -- "$fakebin" "$home"
 printf '%s\n' disabled >"$state"
 
+# The fake systemctl script must keep its variables literal until the fake is executed.
+# shellcheck disable=SC2016
 printf '%s\n' \
   '#!/usr/bin/env bash' \
   'set -euo pipefail' \
