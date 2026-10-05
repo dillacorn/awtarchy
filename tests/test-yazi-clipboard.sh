@@ -638,6 +638,7 @@ grep -Fq '${AWTARCHY_MANAGED_PACKAGES_FILE} == /tmp/*' "$RUNTIME" \
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'
+# shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_7zip_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce 7zip before applying managed Yazi archive config'
 grep -Eq '^[[:space:]]+7zip[[:space:]]*$' "$RECONCILER" \
