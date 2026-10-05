@@ -56,7 +56,7 @@ for pkg in virt-manager qemu qemu-hw-usb-host virt-viewer vde2 libguestfs swtpm;
         || fail "${pkg} is not linked to the virt-manager package bundle"
 done
 
-for pkg in base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust firefox snapshot zathura zathura-pdf-mupdf speedcrunch pcmanfm-qt xarchiver wireguard-tools cmatrix asciiquarium figlet espeak-ng; do
+for pkg in base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust firefox snapshot zathura zathura-pdf-mupdf speedcrunch pcmanfm-qt xarchiver 7zip wireguard-tools cmatrix asciiquarium figlet espeak-ng; do
     contains_token "$pkg" "$arch_catalog" \
         || fail "expected default-selected Arch package is missing: ${pkg}"
 done

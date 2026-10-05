@@ -2542,6 +2542,7 @@ prepare_base_install() {
   retry_command pacman -S --needed --noconfirm git ipcalc dos2unix reflector || exit 1
   pacman_install_one playerctl || die "Failed to install required media-control dependency: playerctl"
   pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"
+  pacman_install_one 7zip || die "Failed to install required Yazi archive dependency: 7zip"
   pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
 
   if [[ ! -d "$REPO_DIR" ]]; then
@@ -8842,6 +8843,39 @@ ensure_yazi_fd_dependency_for_target() {
     || die "fd installation completed without a detectable fd package."
 }
 
+target_requires_yazi_7zip() {
+  local target_home="$1"
+  local init_file="${target_home}/.config/yazi/init.lua"
+
+  [[ -f "$init_file" && ! -L "$init_file" ]] || return 1
+  grep -Fq 'local function AwtarchyYaziRun7z' "$init_file" \
+    && grep -Fq 'function AwtarchyYaziCompressSelection()' "$init_file"
+}
+
+ensure_yazi_7zip_dependency_for_target() {
+  local target_home="$1" pacman_bin="/usr/bin/pacman"
+
+  target_requires_yazi_7zip "$target_home" || return 0
+
+  if [[ -n ${AWTARCHY_TEST_PACMAN_BIN:-}
+    && ${AWTARCHY_TEST_TARGET_HOME:-} == /tmp/*
+    && -n ${AWTARCHY_TEST_ARCHIVE:-} ]];
+  then
+    pacman_bin="$AWTARCHY_TEST_PACMAN_BIN"
+  fi
+  [[ -x "$pacman_bin" ]] \
+    || die "7zip is required by the target Yazi archive configuration, but pacman is unavailable."
+
+  "$pacman_bin" -Qq 7zip >/dev/null 2>&1 && return 0
+
+  log "Installing required Yazi archive dependency: 7zip"
+  run_update_root "$pacman_bin" -S --needed --noconfirm 7zip \
+    || die "Could not install required Yazi archive dependency: 7zip"
+  record_managed_packages 7zip
+  "$pacman_bin" -Qq 7zip >/dev/null 2>&1 \
+    || die "7zip installation completed without a detectable 7zip package."
+}
+
 target_requires_yazi_ripdrag() {
   local target_home="$1"
   local plugin="${target_home}/.config/yazi/plugins/drag.yazi/main.lua"
@@ -9698,6 +9732,7 @@ main() {
 
   log "Update approved. Preparing required dependencies..."
   ensure_yazi_fd_dependency_for_target "$target_home"
+  ensure_yazi_7zip_dependency_for_target "$target_home"
   ensure_yazi_ripdrag_dependency_for_target "$target_home"
 
   log "Checking Awtarchy system integration..."

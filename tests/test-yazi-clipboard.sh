@@ -616,6 +616,8 @@ grep -Fq ' git fd ripgrep ' "$RUNTIME" \
   || fail 'fd/ripgrep are not managed for Yazi recursive search'
 grep -Fq 'pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"' "$RUNTIME" \
   || fail 'fresh install does not guarantee the required fd dependency'
+grep -Fq 'pacman_install_one 7zip || die "Failed to install required Yazi archive dependency: 7zip"' "$RUNTIME" \
+  || fail 'fresh install does not guarantee the required 7zip dependency'
 grep -Fq 'ensure_yazi_fd_dependency_for_target() {' "$RUNTIME" \
   || fail 'updater has no target-aware fd dependency gate'
 grep -Fq 'pacman_bin="/usr/bin/pacman"' "$RUNTIME" \
@@ -624,13 +626,22 @@ grep -Fq 'pacman_bin="/usr/bin/pacman"' "$RUNTIME" \
 grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
 grep -Fq 'AWTARCHY_TEST_PACMAN_BIN' "$RUNTIME" \
-  || fail 'updater fd dependency gate is not testable through the guarded integration override'
+  || fail 'updater dependency gates are not testable through the guarded integration override'
+grep -Fq 'ensure_yazi_7zip_dependency_for_target() {' "$RUNTIME" \
+  || fail 'updater has no target-aware 7zip dependency gate'
+# shellcheck disable=SC2016
+grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm 7zip' "$RUNTIME" \
+  || fail 'updater does not install missing 7zip before managed Yazi archive config is applied'
 # shellcheck disable=SC2016
 grep -Fq '${AWTARCHY_MANAGED_PACKAGES_FILE} == /tmp/*' "$RUNTIME" \
   || fail 'managed-package ownership test override is not restricted to temporary paths'
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce fd before applying managed Yazi config'
+grep -Fq 'ensure_yazi_7zip_dependency_for_target "$target_home"' "$RUNTIME" \
+  || fail 'stable/Git updater does not enforce 7zip before applying managed Yazi archive config'
+grep -Eq '^[[:space:]]+7zip[[:space:]]*$' "$RECONCILER" \
+  || fail 'package reconciler does not treat 7zip as a required Yazi feature dependency'
 grep -Fq ' udisks2 ' "$RUNTIME" \
   || fail 'udisks2 is not managed for Yazi mount actions'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \

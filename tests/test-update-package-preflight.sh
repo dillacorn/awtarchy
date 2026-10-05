@@ -131,6 +131,7 @@ quickshell
 wl-clipboard
 cliphist
 fd
+7zip
 upower
 playerctl
 hyprland-qt-support

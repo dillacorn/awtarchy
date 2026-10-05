@@ -974,6 +974,10 @@ grep -Fxq fd "$package_state" \
   || fail "Git-testing update did not install the required Yazi fd dependency"
 grep -Fq -- '-S --needed --noconfirm fd' "${TMP}/pacman.log" \
   || fail "Git-testing update did not use the package transaction for missing fd"
+grep -Fxq 7zip "$package_state" \
+  || fail "Git-testing update did not install the required Yazi archive dependency"
+grep -Fq -- '-S --needed --noconfirm 7zip' "${TMP}/pacman.log" \
+  || fail "Git-testing update did not use the package transaction for missing 7zip"
 
 grep -Fq -- \
   '-Rns --noconfirm waybar-git fuzzel wlogout mako wofi network-manager-applet blueman' \

@@ -37,6 +37,7 @@ declare -a REQUIRED_ARCH=(
   wl-clipboard
   cliphist
   fd
+  7zip
   upower
   playerctl
   hyprland-qt-support
