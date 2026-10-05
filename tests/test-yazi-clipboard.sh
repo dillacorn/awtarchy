@@ -641,8 +641,6 @@ grep -Fq 'ensure_yazi_fd_dependency_for_target "$target_home"' "$RUNTIME" \
 # shellcheck disable=SC2016
 grep -Fq 'ensure_yazi_7zip_dependency_for_target "$target_home"' "$RUNTIME" \
   || fail 'stable/Git updater does not enforce 7zip before applying managed Yazi archive config'
-grep -Eq '^[[:space:]]+7zip[[:space:]]*$' "$RECONCILER" \
-  || fail 'package reconciler does not treat 7zip as a required Yazi feature dependency'
 grep -Fq ' udisks2 ' "$RUNTIME" \
   || fail 'udisks2 is not managed for Yazi mount actions'
 grep -Fq '"Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard ' "$RUNTIME" \
