@@ -829,10 +829,16 @@ grep -Fq 'copy with Ctrl+Shift+C' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not document Alacritty copy behavior'
 grep -Fq 'press Enter or Esc to return to Yazi' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not document both return keys'
-grep -Fq 'read -rsn1 key' "$YAZI_INIT" \
-  || fail 'Yazi selectable text mode does not read a single Enter/Esc key'
+grep -Fq 'awtarchy_stty=$(stty -g) || exit 1' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not preserve terminal state before single-key reading'
+grep -Fq 'stty -echo -icanon min 1 time 0' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not enter POSIX-compatible single-byte input mode'
+grep -Fq 'key=$(dd bs=1 count=1 2>/dev/null)' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not read one byte through POSIX sh'
 grep -Fq 'printf '\''\\033'\''' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not recognize Escape'
+grep -Fq 'trap '\''stty "$awtarchy_stty"'\'' EXIT HUP INT TERM' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not restore terminal state on interruption'
 grep -Fq 'block = true' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
 grep -Fq 'ya.emit("shell", { run = command, block = true })' "$YAZI_INIT" \
