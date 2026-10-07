@@ -840,7 +840,7 @@ grep -Fq 'key=$(dd bs=1 count=1 2>/dev/null)' "$YAZI_INIT" \
 grep -Fq 'printf '\''\\033'\''' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not recognize Escape'
 # shellcheck disable=SC2016
-grep -Fq 'trap '\''stty "$awtarchy_stty"'\'' EXIT HUP INT TERM' "$YAZI_INIT" \
+grep -Fq 'trap '\''stty \"$awtarchy_stty\"'\'' EXIT HUP INT TERM' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not restore terminal state on interruption'
 grep -Fq 'block = true' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
