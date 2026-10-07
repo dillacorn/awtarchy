@@ -706,10 +706,16 @@ function AwtarchyYaziSelectPreviewText()
     local command = "clear; " ..
         "cat -- " .. path .. "; " ..
         "printf '\n\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter or Esc to return to Yazi...'; " ..
-        "while IFS= read -rsn1 key; do " ..
+        "awtarchy_stty=$(stty -g) || exit 1; " ..
+        "trap 'stty \"$awtarchy_stty\"' EXIT HUP INT TERM; " ..
+        "stty -echo -icanon min 1 time 0; " ..
+        "while :; do " ..
+        "key=$(dd bs=1 count=1 2>/dev/null); " ..
         "[ -z \"$key\" ] && break; " ..
         "[ \"$key\" = \"$(printf '\\033')\" ] && break; " ..
-        "done"
+        "done; " ..
+        "stty \"$awtarchy_stty\"; " ..
+        "trap - EXIT HUP INT TERM"
 
     ya.emit("shell", { run = command, block = true })
 end
