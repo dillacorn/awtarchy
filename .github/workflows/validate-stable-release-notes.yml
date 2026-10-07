@@ -39,3 +39,108 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+
+  publish-v3-9-0:
+    needs: release-notes-contract
+    if: >-
+      ${{ github.event_name == 'pull_request' &&
+          github.event.pull_request.title == 'Release Awtarchy v3.9.0 Yazi' &&
+          github.head_ref == 'release-bridge/v3.9.0-yazi' &&
+          github.base_ref == 'main' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+
+      - name: Validate, publish, and verify v3.9.0
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          repo="$GITHUB_REPOSITORY"
+          version='v3.9.0'
+          title='Awtarchy v3.9.0 Yazi'
+          target='1b998a7d1e8a3329f8672672799c803b8f7e97e3'
+          bridge_branch='release-bridge/v3.9.0-yazi'
+          notes='.github/release-v3.9.0-yazi.md'
+          proposed="$RUNNER_TEMP/proposed-release.md"
+          previous="$RUNNER_TEMP/previous-stable-release.md"
+          published="$RUNNER_TEMP/published-release.md"
+          metadata="$RUNNER_TEMP/published-release.json"
+
+          main_sha="$(gh api "repos/$repo/commits/main" --jq .sha)"
+          [[ "$main_sha" == "$target" ]] || {
+            printf 'main moved before release: expected %s, got %s\n' "$target" "$main_sha" >&2
+            exit 1
+          }
+
+          latest_stable="$(gh release list --repo "$repo" --exclude-drafts --exclude-pre-releases --limit 1 --json tagName --jq '.[0].tagName')"
+          [[ "$latest_stable" == 'v3.8.9' ]] || {
+            printf 'latest stable release changed before publication: %s\n' "$latest_stable" >&2
+            exit 1
+          }
+
+          if gh release view "$version" --repo "$repo" >/dev/null 2>&1; then
+            printf 'release %s already exists; refusing to recreate it\n' "$version" >&2
+            exit 1
+          fi
+          if gh api "repos/$repo/git/ref/tags/$version" >/dev/null 2>&1; then
+            printf 'tag %s already exists; refusing to move or recreate it\n' "$version" >&2
+            exit 1
+          fi
+
+          cp -- "$notes" "$proposed"
+          gh release view "$latest_stable" --repo "$repo" --json body --jq .body >"$previous"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" \
+            --title "$title" \
+            --notes "$proposed" \
+            --previous "$previous"
+
+          gh release create "$version" \
+            --repo "$repo" \
+            --target "$target" \
+            --title "$title" \
+            --notes-file "$proposed"
+
+          gh release view "$version" \
+            --repo "$repo" \
+            --json body,name,isDraft,isPrerelease,tagName,targetCommitish,url >"$metadata"
+          jq -rj .body "$metadata" >"$published"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" \
+            --title "$title" \
+            --notes "$published" \
+            --previous "$previous"
+
+          cmp -s "$proposed" "$published"
+          [[ "$(jq -r .name "$metadata")" == "$title" ]]
+          [[ "$(jq -r .tagName "$metadata")" == "$version" ]]
+          [[ "$(jq -r .isDraft "$metadata")" == 'false' ]]
+          [[ "$(jq -r .isPrerelease "$metadata")" == 'false' ]]
+          [[ "$(jq -r .targetCommitish "$metadata")" == "$target" ]]
+
+          tag_type="$(gh api "repos/$repo/git/ref/tags/$version" --jq .object.type)"
+          tag_sha="$(gh api "repos/$repo/git/ref/tags/$version" --jq .object.sha)"
+          if [[ "$tag_type" == tag ]]; then
+            tag_sha="$(gh api "repos/$repo/git/tags/$tag_sha" --jq .object.sha)"
+          fi
+          [[ "$tag_sha" == "$target" ]] || {
+            printf 'release tag points to %s instead of %s\n' "$tag_sha" "$target" >&2
+            exit 1
+          }
+
+          gh pr close "$PR_NUMBER" \
+            --repo "$repo" \
+            --comment 'v3.9.0 published and verified; closing the one-use release bridge.'
+          gh api --method DELETE "repos/$repo/git/refs/heads/release-bridge%2Fv3.9.0-yazi"
