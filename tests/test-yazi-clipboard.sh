@@ -92,6 +92,8 @@ expected = {
     ("<C-7>",): "tab_switch 6",
     ("<C-8>",): "tab_switch 7",
     ("<C-9>",): "tab_switch 8",
+    ("<C-a>",): "toggle_all",
+    ("i",): "spot",
     ("<Space>",): "toggle",
     ("<C-Space>",): "toggle",
     ("<S-Up>",): 'lua "AwtarchyYaziShiftArrow(-1)"',
@@ -125,6 +127,18 @@ if (
 ):
     raise SystemExit(1)
 
+if by_keys.get(("<C-a>",), {}).get("desc") != "Select all / invert selection":
+    raise SystemExit(1)
+if by_keys.get(("i",), {}).get("desc") != "Toggle file information":
+    raise SystemExit(1)
+spot = config.get("spot", {}).get("prepend_keymap", [])
+if not any(
+    isinstance(binding, dict)
+    and binding.get("on") == ["i"]
+    and binding.get("run") == "close"
+    for binding in spot
+):
+    raise SystemExit(1)
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
 if by_keys.get(("b",), {}).get("desc") != "Toggle bookmarks":
@@ -255,8 +269,8 @@ grep -Fq 'ya.emit("cd", { Url(collection_dir()), raw = true })' "$YAZI_BOOKMARKS
   || fail 'Yazi g b does not enter the real bookmark folder'
 grep -Fq 'function AwtarchyYaziOpenHoveredTab()' "$YAZI_INIT" \
   || fail 'Yazi keyboard open-folder-in-new-tab helper is missing'
-grep -Fq '{ label = "Open in new tab", shortcut = "t n", action = "open_new_tab" }' "$YAZI_INIT" \
-  || fail 'Yazi directory context menu lacks keyboard parity for new-tab opening'
+grep -Fq '{ label = "Open in new tab", action = "open_new_tab" }' "$YAZI_INIT" \
+  || fail 'Yazi directory context menu lacks new-tab opening'
 grep -Fq 'function AwtarchyYaziTogglePreview()' "$YAZI_INIT" \
   || fail 'Yazi preview pane toggle is missing'
 grep -Fq 'function AwtarchyYaziTogglePreviewMax()' "$YAZI_INIT" \
@@ -323,6 +337,16 @@ grep -Fq 'function AwtarchyYaziCloseTab()' "$YAZI_INIT" \
   || fail 'Yazi tab-close helper is missing'
 grep -Fq 'if #cx.tabs > 1 then' "$YAZI_INIT" \
   || fail 'Yazi Ctrl+W does not distinguish tab close from last-tab quit'
+grep -Fq 'function Tabs:drag(event)' "$YAZI_INIT" \
+  || fail 'Yazi tab bar does not accept native mouse drag events'
+grep -Fq 'function AwtarchyYaziMoveActiveTabTo(target)' "$YAZI_INIT" \
+  || fail 'Yazi tab drag reorder helper is missing'
+grep -Fq 'for _ = 1, math.abs(target - current) do' "$YAZI_INIT" \
+  || fail 'Yazi tab drag does not shift across intervening tabs'
+grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
+  || fail 'Yazi tab drag does not use native tab_swap'
+grep -Fq 'ya.emit("tab_rename", { interactive = true })' "$YAZI_INIT" \
+  || fail 'Yazi right-click tab rename does not use native interactive tab_rename'
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
 grep -Fq 'Yes: Y / Enter / Space' "$YAZI_INIT" \
@@ -343,12 +367,23 @@ grep -Fq 'local action = self:actions()[row]' "$YAZI_INIT" \
   || fail 'Yazi custom context menu does not map rows directly to actions'
 grep -Fq 'self:run(action.action)' "$YAZI_INIT" \
   || fail 'Yazi custom context menu does not directly dispatch clicked actions'
-grep -Fq 'function AwtarchyYaziContextMenu:footer()' "$YAZI_INIT" \
-  || fail 'Yazi custom context menu does not keep the proven footer layout'
+if grep -Fq 'function AwtarchyYaziContextMenu:footer()' "$YAZI_INIT"; then
+  fail 'Yazi custom context menu still renders the clipping-prone shortcut footer'
+fi
 grep -Fq 'local width = math.min(56, area.w)' "$YAZI_INIT" \
   || fail 'Yazi custom context menu does not keep the proven stable width'
-grep -Fq 'local height = math.min(#actions + 4, area.h)' "$YAZI_INIT" \
-  || fail 'Yazi custom context menu does not keep the proven action-plus-footer height'
+grep -Fq 'local height = math.min(#actions + 2, area.h)' "$YAZI_INIT" \
+  || fail 'Yazi custom context menu does not size only for actions and its border'
+python3 - "$YAZI_INIT" <<'PY_CONTEXT_ACTIONS' || fail 'Yazi context menu still renders redundant shortcut metadata'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text()
+start = text.index("function AwtarchyYaziContextMenu:redraw()")
+end = text.index("function AwtarchyYaziContextMenu:run(action)", start)
+if "action.shortcut" in text[start:end]:
+    raise SystemExit(1)
+PY_CONTEXT_ACTIONS
 grep -Fq ':title(ui.Line(self:title()):align(ui.Align.CENTER))' "$YAZI_INIT" \
   || fail 'Yazi custom context menu does not keep the proven centered title'
 grep -Fq 'function AwtarchyYaziContextMenu:move(event)' "$YAZI_INIT" \
@@ -367,12 +402,24 @@ fi
 if grep -Fq 'AwtarchyYaziPluginArgs("show", values)' "$YAZI_INIT"; then
   fail 'Yazi custom context menu must not depend on the async Which chooser'
 fi
-grep -Fq 'shortcut = "c z"' "$YAZI_INIT" \
-  || fail 'Yazi ZIP context action does not expose the c z chord'
-grep -Fq 'shortcut = "d d"' "$YAZI_INIT" \
-  || fail 'Yazi Trash context action does not expose the d d chord'
-grep -Fq '{ label = "Rename", shortcut = "R", action = "rename" }' "$YAZI_INIT" \
-  || fail 'Yazi item context menu lacks Shift+R Rename shortcut hint'
+grep -Fq 'on = ["c", "z"]' "$KEYMAP" \
+  || fail 'Yazi Help no longer exposes the c z ZIP binding'
+grep -Fq 'on = ["d", "d"]' "$KEYMAP" \
+  || fail 'Yazi Help no longer exposes the d d trash binding'
+grep -Fq '{ label = "Rename", action = "rename" }' "$YAZI_INIT" \
+  || fail 'Yazi item context menu lacks Rename'
+grep -Fq '{ label = "Open PCManFM-Qt here", action = "file_manager_here" }' "$YAZI_INIT" \
+  || fail 'Yazi context menu lacks Open PCManFM-Qt here'
+grep -Fq '{ label = "Help", action = "help" }' "$YAZI_INIT" \
+  || fail 'Yazi context menu lacks Help'
+grep -Fq 'ya.emit("shell", { "pcmanfm-qt .", orphan = true })' "$YAZI_INIT" \
+  || fail 'Yazi PCManFM-Qt context action does not open the current directory'
+grep -Fq 'ya.emit("help", {})' "$YAZI_INIT" \
+  || fail 'Yazi context Help action does not open native Help'
+grep -Fq 'function Root:scroll(event, step)' "$YAZI_INIT" \
+  || fail 'Yazi lacks layer-aware mouse-wheel routing'
+grep -Fq 'ya.emit("help:arrow", { step })' "$YAZI_INIT" \
+  || fail 'Yazi mouse wheel does not scroll native Help'
 grep -Fq 'label = "Bookmark / unbookmark"' "$YAZI_INIT" \
   || fail 'Yazi folder context actions do not expose bookmark toggle behavior'
 grep -Fq 'ya.emit("create", { dir = true })' "$YAZI_INIT" \
@@ -478,7 +525,7 @@ grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
 if grep -Fq 'wgdotw.exe' "$YAZI_INIT" || grep -Fq 'Command("ripdrag")' "$YAZI_INIT"; then
   fail 'Awtarchy Yazi internal drag directly depends on an external outbound-drag helper'
 fi
-grep -Fq '{ label = "Drag out...", shortcut = "d g", action = "drag_out" }' "$YAZI_INIT" \
+grep -Fq '{ label = "Drag out...", action = "drag_out" }' "$YAZI_INIT" \
   || fail 'Yazi context menu does not expose outbound drag'
 grep -Fq 'ya.emit("plugin", { "drag" })' "$YAZI_INIT" \
   || fail 'Yazi context-menu outbound drag does not dispatch the managed drag plugin'
@@ -780,6 +827,21 @@ grep -Fq 'AwtarchyYaziTextSelectButton = {' "$YAZI_INIT" \
   || fail 'Yazi maximized text preview lacks a clickable Select text control'
 grep -Fq 'copy with Ctrl+Shift+C' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not document Alacritty copy behavior'
+grep -Fq 'press Enter or Esc to return to Yazi' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not document both return keys'
+# shellcheck disable=SC2016
+grep -Fq 'awtarchy_stty=$(stty -g) || exit 1' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not preserve terminal state before single-key reading'
+grep -Fq 'stty -echo -icanon min 1 time 0' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not enter POSIX-compatible single-byte input mode'
+# shellcheck disable=SC2016
+grep -Fq 'key=$(dd bs=1 count=1 2>/dev/null)' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not read one byte through POSIX sh'
+grep -Fq 'printf '\''\\033'\''' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not recognize Escape'
+# shellcheck disable=SC2016
+grep -Fq 'trap '\''stty \"$awtarchy_stty\"'\'' EXIT HUP INT TERM' "$YAZI_INIT" \
+  || fail 'Yazi selectable text mode does not restore terminal state on interruption'
 grep -Fq 'block = true' "$YAZI_INIT" \
   || fail 'Yazi selectable text mode does not suspend Yazi for terminal selection'
 grep -Fq 'ya.emit("shell", { run = command, block = true })' "$YAZI_INIT" \
@@ -892,4 +954,4 @@ if not build < mark < apply_plan < notice:
     raise SystemExit(1)
 PY_YAZI_UPDATE_NOTICE
 
-printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports mouse context menus with keyboard hints plus smart directory entry, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, shows highlighted modified time with a persistent 24h/12h toggle in Help, preserves clipboard behavior, delegates text opening to the desktop default application, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
+printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports tab drag/reorder and right-click rename, keeps context menus action-only with Help and PCManFM-Qt-here actions, supports Help wheel scrolling and Enter/Esc text-view return, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, preserves clipboard/default-editor behavior, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'

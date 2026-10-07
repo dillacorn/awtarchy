@@ -339,6 +339,78 @@ function AwtarchyYaziCloseTab()
     end
 end
 
+local AwtarchyYaziTabDrag = nil
+
+local function AwtarchyYaziTabIndexAtX(tabs, x)
+    for i = #cx.tabs, 1, -1 do
+        local offset = tabs._offsets[i]
+        if offset and x >= offset then
+            return i
+        end
+    end
+    return nil
+end
+
+local function AwtarchyYaziMoveActiveTabTo(target)
+    local current = cx.tabs.idx
+    if not current or not target or current == target then
+        return
+    end
+
+    local step = target > current and 1 or -1
+    for _ = 1, math.abs(target - current) do
+        ya.emit("tab_swap", { step })
+    end
+end
+
+function Tabs:click(event, up)
+    local index = AwtarchyYaziTabIndexAtX(self, event.x)
+    if not index then
+        AwtarchyYaziTabDrag = nil
+        return
+    end
+
+    if event.is_right then
+        if up then
+            return
+        end
+        AwtarchyYaziTabDrag = nil
+        ya.emit("tab_switch", { index - 1 })
+        ya.emit("tab_rename", { interactive = true })
+        return
+    elseif not event.is_left then
+        return
+    end
+
+    if not up then
+        AwtarchyYaziTabDrag = {
+            source = index,
+            target = index,
+            moved = false,
+        }
+        ya.emit("tab_switch", { index - 1 })
+        return
+    end
+
+    local drag = AwtarchyYaziTabDrag
+    AwtarchyYaziTabDrag = nil
+    if drag and drag.moved then
+        AwtarchyYaziMoveActiveTabTo(AwtarchyYaziTabIndexAtX(self, event.x) or drag.target)
+    end
+end
+
+function Tabs:drag(event)
+    if not AwtarchyYaziTabDrag then
+        return
+    end
+
+    local target = AwtarchyYaziTabIndexAtX(self, event.x)
+    if target then
+        AwtarchyYaziTabDrag.target = target
+        AwtarchyYaziTabDrag.moved = true
+    end
+end
+
 AwtarchyYaziDeleteMenu = {
     _id = "awtarchy-yazi-delete-menu",
     _visible = false,
@@ -633,8 +705,17 @@ function AwtarchyYaziSelectPreviewText()
     local path = AwtarchyYaziShellQuote(tostring(hovered.url))
     local command = "clear; " ..
         "cat -- " .. path .. "; " ..
-        "printf '\\n\\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter to return to Yazi...'; " ..
-        "read -r _"
+        "printf '\n\nSelect text with the mouse, copy with Ctrl+Shift+C, then press Enter or Esc to return to Yazi...'; " ..
+        "awtarchy_stty=$(stty -g) || exit 1; " ..
+        "trap 'stty \"$awtarchy_stty\"' EXIT HUP INT TERM; " ..
+        "stty -echo -icanon min 1 time 0; " ..
+        "while :; do " ..
+        "key=$(dd bs=1 count=1 2>/dev/null); " ..
+        "[ -z \"$key\" ] && break; " ..
+        "[ \"$key\" = \"$(printf '\\033')\" ] && break; " ..
+        "done; " ..
+        "stty \"$awtarchy_stty\"; " ..
+        "trap - EXIT HUP INT TERM"
 
     ya.emit("shell", { run = command, block = true })
 end
@@ -1056,22 +1137,22 @@ function AwtarchyYaziExtractZipFolder()
 end
 
 local AwtarchyYaziFileActions = {
-    { label = "Open", shortcut = "Enter", action = "smart_open" },
-    { label = "Open with...", shortcut = "O", action = "open_with" },
-    { label = "Bookmark / unbookmark", shortcut = "B", action = "bookmark_hovered" },
-    { label = "Rename", shortcut = "R", action = "rename" },
-    { label = "Drag out...", shortcut = "d g", action = "drag_out" },
-    { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
-    { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
-    { label = "Copy path", shortcut = "c c", action = "copy_path" },
-    { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
-    { label = "Details", shortcut = "Tab", action = "details" },
-    { label = "Trash", shortcut = "d d", action = "trash" },
+    { label = "Open", action = "smart_open" },
+    { label = "Open with...", action = "open_with" },
+    { label = "Bookmark / unbookmark", action = "bookmark_hovered" },
+    { label = "Rename", action = "rename" },
+    { label = "Drag out...", action = "drag_out" },
+    { label = "Copy", action = "copy" },
+    { label = "Cut", action = "cut" },
+    { label = "Copy path", action = "copy_path" },
+    { label = "Compress to ZIP...", action = "compress_zip" },
+    { label = "Details", action = "details" },
+    { label = "Trash", action = "trash" },
 }
 
 local AwtarchyYaziDropActions = {
-    { label = "Copy to folder", shortcut = "copy", action = "drop_copy" },
-    { label = "Move to folder", shortcut = "move", action = "drop_move" },
+    { label = "Copy to folder", action = "drop_copy" },
+    { label = "Move to folder", action = "drop_move" },
 }
 
 local AwtarchyYaziDragState = nil
@@ -1134,12 +1215,22 @@ local function AwtarchyYaziDropInto(op, target, sources)
 end
 
 local AwtarchyYaziFolderActions = {
-    { label = "New file", shortcut = "a", action = "new_file" },
-    { label = "New folder", shortcut = "a /", action = "new_folder" },
-    { label = "Paste", shortcut = "Ctrl+V / p", action = "paste" },
-    { label = "Terminal here", shortcut = "t e", action = "terminal" },
-    { label = "Bookmark / unbookmark folder", shortcut = "B", action = "bookmark_current" },
+    { label = "New file", action = "new_file" },
+    { label = "New folder", action = "new_folder" },
+    { label = "Paste", action = "paste" },
+    { label = "Terminal here", action = "terminal" },
+    { label = "Bookmark / unbookmark folder", action = "bookmark_current" },
 }
+
+local function AwtarchyYaziContextActions(actions)
+    local result = {}
+    for _, action in ipairs(actions) do
+        result[#result + 1] = action
+    end
+    result[#result + 1] = { label = "Open PCManFM-Qt here", action = "file_manager_here" }
+    result[#result + 1] = { label = "Help", action = "help" }
+    return result
+end
 
 AwtarchyYaziContextMenu = {
     _id = "awtarchy-yazi-context-menu",
@@ -1198,40 +1289,39 @@ end
 
 function AwtarchyYaziContextMenu:actions()
     if self._kind == "background" then
-        return AwtarchyYaziFolderActions
+        return AwtarchyYaziContextActions(AwtarchyYaziFolderActions)
     elseif self._kind == "drop" then
         return AwtarchyYaziDropActions
     end
 
     local hovered = cx.active.current.hovered
     if self._selection_count > 1 then
-        return {
+        return AwtarchyYaziContextActions {
             {
                 label = "Rename " .. tostring(self._selection_count) .. " items...",
-                shortcut = "R",
                 action = "bulk_rename",
             },
-            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
-            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
-            { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
-            { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
-            { label = "Trash " .. tostring(self._selection_count) .. " items", shortcut = "d d", action = "trash" },
+            { label = "Drag out...", action = "drag_out" },
+            { label = "Copy", action = "copy" },
+            { label = "Cut", action = "cut" },
+            { label = "Compress to ZIP...", action = "compress_zip" },
+            { label = "Trash " .. tostring(self._selection_count) .. " items", action = "trash" },
         }
     end
 
     if hovered and hovered.cha.is_dir then
-        return {
-            { label = "Enter folder", shortcut = "Enter / l", action = "smart_open" },
-            { label = "Open in new tab", shortcut = "t n", action = "open_new_tab" },
-            { label = "Bookmark / unbookmark", shortcut = "B", action = "bookmark_hovered" },
-            { label = "Rename", shortcut = "R", action = "rename" },
-            { label = "Drag out...", shortcut = "d g", action = "drag_out" },
-            { label = "Copy", shortcut = "Ctrl+C / y", action = "copy" },
-            { label = "Cut", shortcut = "Ctrl+X / Y", action = "cut" },
-            { label = "Copy path", shortcut = "c c", action = "copy_path" },
-            { label = "Compress to ZIP...", shortcut = "c z", action = "compress_zip" },
-            { label = "Details", shortcut = "Tab", action = "details" },
-            { label = "Trash", shortcut = "d d", action = "trash" },
+        return AwtarchyYaziContextActions {
+            { label = "Enter folder", action = "smart_open" },
+            { label = "Open in new tab", action = "open_new_tab" },
+            { label = "Bookmark / unbookmark", action = "bookmark_hovered" },
+            { label = "Rename", action = "rename" },
+            { label = "Drag out...", action = "drag_out" },
+            { label = "Copy", action = "copy" },
+            { label = "Cut", action = "cut" },
+            { label = "Copy path", action = "copy_path" },
+            { label = "Compress to ZIP...", action = "compress_zip" },
+            { label = "Details", action = "details" },
+            { label = "Trash", action = "trash" },
         }
     end
 
@@ -1241,43 +1331,11 @@ function AwtarchyYaziContextMenu:actions()
     end
 
     if hovered and hovered.name:lower():sub(-4) == ".zip" then
-        actions[#actions + 1] = { label = "Extract here", shortcut = "e h", action = "extract_here" }
-        actions[#actions + 1] = { label = "Extract to folder", shortcut = "e f", action = "extract_folder" }
+        actions[#actions + 1] = { label = "Extract here", action = "extract_here" }
+        actions[#actions + 1] = { label = "Extract to folder", action = "extract_folder" }
     end
 
-    return actions
-end
-
-function AwtarchyYaziContextMenu:footer()
-    if self._kind == "background" then
-        return {
-            "Keys: a create | Ctrl+V/p paste | t e terminal | B bookmark",
-            "Navigate: b bookmarks | r recents | g b/g r explicit go",
-        }
-    elseif self._kind == "drop" then
-        return {
-            "Release chose this folder as the destination",
-            "Choose Copy or Move; click elsewhere to cancel",
-        }
-    elseif self._selection_count > 1 then
-        return {
-            "Keys: R bulk rename | d g drag out | Ctrl+C/X copy/cut",
-            "More: c z ZIP | d d trash | Shift+D permanent delete",
-        }
-    end
-
-    local hovered = cx.active.current.hovered
-    if hovered and hovered.cha.is_dir then
-        return {
-            "Keys: Enter open | t n new tab | B bookmark | R rename",
-            "More: Ctrl+C/X copy/cut | c c path | Tab info | c z ZIP | d d trash",
-        }
-    end
-
-    return {
-        "Keys: Enter open | d g drag out | R rename | Ctrl+C/X copy/cut",
-        "More: c z ZIP | c c path | Tab info | d d trash | e h/e f extract ZIP",
-    }
+    return AwtarchyYaziContextActions(actions)
 end
 
 function AwtarchyYaziContextMenu:new(area)
@@ -1290,9 +1348,9 @@ function AwtarchyYaziContextMenu:new(area)
 
     local actions = self:actions()
     local width = math.min(56, area.w)
-    local height = math.min(#actions + 4, area.h)
+    local height = math.min(#actions + 2, area.h)
 
-    if width < 28 or height < #actions + 4 then
+    if width < 28 or height < #actions + 2 then
         self._area = ui.Rect {}
         self._list_area = ui.Rect {}
         return self
@@ -1310,12 +1368,6 @@ function AwtarchyYaziContextMenu:new(area)
         w = width - 2,
         h = #actions,
     }
-    self._footer_area = ui.Rect {
-        x = x + 1,
-        y = y + 1 + #actions,
-        w = width - 2,
-        h = 2,
-    }
 
     return self
 end
@@ -1330,22 +1382,14 @@ function AwtarchyYaziContextMenu:redraw()
     end
 
     local rows = {}
-    local content_width = self._list_area.w
     for i, action in ipairs(self:actions()) do
-        local gap = math.max(1, content_width - #action.label - #action.shortcut - 2)
-        local row = ui.Line {
-            ui.Span(" " .. action.label):style(th.help.action),
-            ui.Span(string.rep(" ", gap)),
-            ui.Span(action.shortcut):style(th.help.chord),
-            ui.Span(" "),
-        }
+        local row = ui.Line(" " .. action.label .. " "):style(th.help.action)
         if i == self._hovered_row then
             row:style(th.help.hovered)
         end
         rows[#rows + 1] = row
     end
 
-    local footer = self:footer()
     return {
         ui.Clear(self._area),
         ui.Border(ui.Edge.ALL)
@@ -1354,10 +1398,6 @@ function AwtarchyYaziContextMenu:redraw()
             :style(th.help.border)
             :title(ui.Line(self:title()):align(ui.Align.CENTER)),
         ui.List(rows):area(self._list_area),
-        ui.Text({
-            ui.Line(" " .. footer[1]),
-            ui.Line(" " .. footer[2]),
-        }):area(self._footer_area),
     }
 end
 
@@ -1418,6 +1458,10 @@ function AwtarchyYaziContextMenu:run(action)
         end
     elseif action == "terminal" then
         ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+    elseif action == "file_manager_here" then
+        ya.emit("shell", { "pcmanfm-qt .", orphan = true })
+    elseif action == "help" then
+        ya.emit("help", {})
     elseif action == "drop_copy" then
         AwtarchyYaziDropInto("copy", drop_target, drop_sources)
     elseif action == "drop_move" then
@@ -1461,12 +1505,21 @@ end
 Modal:children_add(AwtarchyYaziContextMenu, 20)
 
 local AwtarchyYaziDefaultRootMove = Root.move
+local AwtarchyYaziDefaultRootScroll = Root.scroll
 
 function Root:move(event)
     if AwtarchyYaziContextMenu._visible then
         return AwtarchyYaziContextMenu:move(event)
     end
     return AwtarchyYaziDefaultRootMove(self, event)
+end
+
+function Root:scroll(event, step)
+    if tostring(cx.layer) == "help" then
+        ya.emit("help:arrow", { step })
+        return
+    end
+    return AwtarchyYaziDefaultRootScroll(self, event, step)
 end
 
 local AwtarchyYaziDefaultHeaderCwd = Header.cwd
