@@ -145,7 +145,6 @@ function Linemode:size_and_mtime()
     return string.format("%9s  %8s", size_text, date_text)
 end
 
-
 local function AwtarchyYaziPluginHex(value)
     return (value:gsub(".", function(char)
         return string.format("%02x", string.byte(char))
@@ -254,6 +253,12 @@ function AwtarchyYaziSmartEnter()
         AwtarchyYaziDeleteMenu:submit()
         return
     end
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible
+        and AwtarchyYaziContextMenu._kind == "drop"
+    then
+        AwtarchyYaziContextMenu:choose()
+        return
+    end
 
     local hovered = cx.active.current.hovered
     if AwtarchyYaziNavigateCollection(hovered, false) then
@@ -288,14 +293,133 @@ function AwtarchyYaziLeft()
     end
 end
 
-AwtarchyYaziShiftRangeActive = false
+-- Shift+Up/Down previews a contiguous range without selecting anything.
+-- Space commits it through Yazi's native visual-selection engine; Esc cancels.
+-- Shift+Up/Down is a reversible preview; only Space commits selection.
+-- Use the documented tab index and ipairs(fs::Files), not an undocumented
+-- tab id or guessed indices into Yazi's file-list userdata.
+local AwtarchyYaziRangePreview = nil
+
+local function AwtarchyYaziRangeValid()
+    local range = AwtarchyYaziRangePreview
+    if not range then return false end
+
+    local folder = cx.active.current
+    return cx.active.mode.is_normal
+        and range.tab == cx.tabs.idx
+        and range.cwd == tostring(folder.cwd)
+        and range.count == #folder.files
+end
+
+local function AwtarchyYaziRangeDiscard()
+    if not AwtarchyYaziRangePreview then return false end
+    AwtarchyYaziRangePreview = nil
+    ui.render()
+    return true
+end
+
+-- Yazi's file list is a Lua userdata supporting ipairs. Materialize the
+-- ordered URLs once per Shift keypress so all indices are Lua 1-based.
+local function AwtarchyYaziRangeFiles(folder)
+    local files = {}
+    for _, file in ipairs(folder.files) do
+        files[#files + 1] = tostring(file.url)
+    end
+    return files
+end
+
+local function AwtarchyYaziRangeFind(files, url)
+    for i, path in ipairs(files) do
+        if path == url then return i end
+    end
+    return nil
+end
+
+local function AwtarchyYaziRangeRebuild(range, files)
+    range.paths = {}
+    for i = math.min(range.anchor, range.last), math.max(range.anchor, range.last) do
+        range.paths[files[i]] = true
+    end
+end
 
 function AwtarchyYaziShiftArrow(step)
-    if cx.active.mode.is_normal then
-        ya.emit("visual_mode", {})
+    if not cx.active.mode.is_normal then
+        ya.emit("arrow", { step })
+        return
     end
-    AwtarchyYaziShiftRangeActive = true
+
+    local folder = cx.active.current
+    local hovered = folder.hovered
+    if not hovered or #folder.files == 0 then
+        AwtarchyYaziRangeDiscard()
+        return
+    end
+
+    local files = AwtarchyYaziRangeFiles(folder)
+    local hovered_url = tostring(hovered.url)
+    local current = AwtarchyYaziRangeFind(files, hovered_url)
+    if not current then
+        AwtarchyYaziRangeDiscard()
+        return
+    end
+
+    local range = AwtarchyYaziRangePreview
+    if not AwtarchyYaziRangeValid() or not range or range.last_url ~= hovered_url
+        or files[range.anchor] ~= range.anchor_url
+        or files[range.last] ~= range.last_url
+    then
+        range = {
+            tab = cx.tabs.idx,
+            cwd = tostring(folder.cwd),
+            count = #files,
+            anchor = current,
+            anchor_url = hovered_url,
+            last = current,
+            last_url = hovered_url,
+        }
+        AwtarchyYaziRangePreview = range
+    end
+
+    local target = math.max(1, math.min(#files, current + step))
+    if target == current then
+        if not range.paths then
+            AwtarchyYaziRangeRebuild(range, files)
+            ui.render()
+        end
+        return
+    end
+
+    range.last = target
+    range.last_url = files[target]
+    AwtarchyYaziRangeRebuild(range, files)
     ya.emit("arrow", { step })
+    ui.render()
+end
+
+function AwtarchyYaziSpace()
+    if AwtarchyYaziRangeValid() then
+        local range = AwtarchyYaziRangePreview
+        local hovered = cx.active.current.hovered
+        local files = AwtarchyYaziRangeFiles(cx.active.current)
+        if hovered and tostring(hovered.url) == range.last_url
+            and files[range.anchor] == range.anchor_url
+            and files[range.last] == range.last_url
+        then
+            -- Preview never changed the selected set. Commit with Yazi's
+            -- own visual mode only when Space is actually pressed.
+            AwtarchyYaziRangePreview = nil
+            ya.emit("reveal", { Url(range.anchor_url) })
+            ya.emit("visual_mode", {})
+            ya.emit("arrow", { range.last - range.anchor })
+            ya.emit("escape", { visual = true })
+            ya.emit("reveal", { Url(range.last_url) })
+            ui.render()
+            return
+        end
+    end
+
+    AwtarchyYaziRangeDiscard()
+    ya.emit("toggle", {})
 end
 
 function AwtarchyYaziArrow(step)
@@ -303,13 +427,28 @@ function AwtarchyYaziArrow(step)
         AwtarchyYaziDeleteMenu:move(step)
         return
     end
-
-    if AwtarchyYaziShiftRangeActive and not cx.active.mode.is_normal then
-        ya.emit("escape", { visual = true })
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible
+        and AwtarchyYaziContextMenu._kind == "drop"
+    then
+        AwtarchyYaziContextMenu:move_keyboard(step)
+        return
     end
-    AwtarchyYaziShiftRangeActive = false
+
+    AwtarchyYaziRangeDiscard()
     local direction = step < 0 and "prev" or "next"
     ya.emit("arrow", { direction })
+end
+
+local AwtarchyYaziDefaultEntityStyle = Entity.style
+function Entity:style()
+    local style = AwtarchyYaziDefaultEntityStyle(self)
+    local range = AwtarchyYaziRangePreview
+    if self._file.in_current and range and AwtarchyYaziRangeValid()
+        and range.paths and range.paths[tostring(self._file.url)]
+    then
+        return style:patch(ui.Style():reverse():underline())
+    end
+    return style
 end
 
 function AwtarchyYaziConfirmQuit(no_cwd_file)
@@ -351,8 +490,26 @@ local function AwtarchyYaziTabIndexAtX(tabs, x)
     return nil
 end
 
-local function AwtarchyYaziMoveActiveTabTo(target)
-    local current = cx.tabs.idx
+local function AwtarchyYaziFinishTabDrag()
+    local drag = AwtarchyYaziTabDrag
+    AwtarchyYaziTabDrag = nil
+    if drag and drag.moved then
+        ui.render()
+    end
+end
+
+local AwtarchyYaziDefaultTabsStyle = Tabs.style
+
+function Tabs:style()
+    local styles = AwtarchyYaziDefaultTabsStyle(self)
+    if AwtarchyYaziTabDrag and AwtarchyYaziTabDrag.moved then
+        -- A single terminal row cannot lift a tab physically; emphasize the dragged block.
+        styles.active = styles.active:patch(ui.Style():bold():underline():reverse())
+    end
+    return styles
+end
+
+local function AwtarchyYaziMoveActiveTabTo(current, target)
     if not current or not target or current == target then
         return
     end
@@ -366,7 +523,7 @@ end
 function Tabs:click(event, up)
     local index = AwtarchyYaziTabIndexAtX(self, event.x)
     if not index then
-        AwtarchyYaziTabDrag = nil
+        AwtarchyYaziFinishTabDrag()
         return
     end
 
@@ -374,7 +531,7 @@ function Tabs:click(event, up)
         if up then
             return
         end
-        AwtarchyYaziTabDrag = nil
+        AwtarchyYaziFinishTabDrag()
         ya.emit("tab_switch", { index - 1 })
         ya.emit("tab_rename", { interactive = true })
         return
@@ -384,30 +541,73 @@ function Tabs:click(event, up)
 
     if not up then
         AwtarchyYaziTabDrag = {
-            source = index,
             target = index,
+            last_x = event.x,
             moved = false,
         }
         ya.emit("tab_switch", { index - 1 })
         return
     end
 
-    local drag = AwtarchyYaziTabDrag
-    AwtarchyYaziTabDrag = nil
-    if drag and drag.moved then
-        AwtarchyYaziMoveActiveTabTo(AwtarchyYaziTabIndexAtX(self, event.x) or drag.target)
+    AwtarchyYaziFinishTabDrag()
+end
+
+local function AwtarchyYaziTabMidpoint(tabs, index)
+    local first = tabs._offsets[index]
+    if not first then return nil end
+    local next_offset = tabs._offsets[index + 1]
+    -- The last tab ends at its rendered label, not at the terminal edge.
+    -- Using the whole remaining tab-bar width makes the rightmost slot
+    -- unreachable when there is unused space to the right of the tabs.
+    local last = next_offset
+    if not last then
+        local max = math.floor(tabs:inner_width() / #cx.tabs)
+        local name = ui.truncate(
+            string.format(" %d %s ", index, cx.tabs[index].name),
+            { max = max }
+        )
+        last = first + ui.width(name)
     end
+    return math.floor((first + last) / 2)
 end
 
 function Tabs:drag(event)
-    if not AwtarchyYaziTabDrag then
+    local drag = AwtarchyYaziTabDrag
+    if not drag or not event.x then return end
+
+    if not drag.moved then
+        drag.moved = true
+        ui.render()
+    end
+
+    -- Swap only after crossing the adjacent tab's midpoint, rather than
+    -- reacting to its moving edge. Require mouse travel after a swap too,
+    -- preventing a reflow at a stationary cursor from ping-ponging tabs.
+    if drag.last_swap_x and math.abs(event.x - drag.last_swap_x) < 3 then
         return
     end
 
-    local target = AwtarchyYaziTabIndexAtX(self, event.x)
-    if target then
-        AwtarchyYaziTabDrag.target = target
-        AwtarchyYaziTabDrag.moved = true
+    local target = drag.target
+    local margin = 1
+    if event.x > (drag.last_x or event.x) then
+        while target < #cx.tabs do
+            local midpoint = AwtarchyYaziTabMidpoint(self, target + 1)
+            if not midpoint or event.x < midpoint + margin then break end
+            target = target + 1
+        end
+    elseif event.x < (drag.last_x or event.x) then
+        while target > 1 do
+            local midpoint = AwtarchyYaziTabMidpoint(self, target - 1)
+            if not midpoint or event.x > midpoint - margin then break end
+            target = target - 1
+        end
+    end
+
+    drag.last_x = event.x
+    if target ~= drag.target then
+        AwtarchyYaziMoveActiveTabTo(drag.target, target)
+        drag.target = target
+        drag.last_swap_x = event.x
     end
 end
 
@@ -659,11 +859,10 @@ local AwtarchyYaziTextNames = {
     [".editorconfig"] = true,
 }
 
-local function AwtarchyYaziHoveredTextFile()
-    local hovered = cx.active.current.hovered
-    if not hovered or hovered.cha.is_dir then return nil end
+local function AwtarchyYaziTextFile(file)
+    if not file or file.cha.is_dir then return nil end
 
-    local mime = hovered:mime() or ""
+    local mime = file:mime() or ""
     if mime:match("^text/")
         or mime == "application/json"
         or mime == "application/xml"
@@ -671,15 +870,19 @@ local function AwtarchyYaziHoveredTextFile()
         or mime == "application/x-javascript"
         or mime == "application/x-shellscript"
     then
-        return hovered
+        return file
     end
 
-    local name = tostring(hovered.url.name or ""):lower()
-    if AwtarchyYaziTextNames[name] then return hovered end
+    local name = tostring(file.url.name or ""):lower()
+    if AwtarchyYaziTextNames[name] then return file end
 
     local ext = name:match("%.([^%.]+)$")
-    if ext and AwtarchyYaziTextExtensions[ext] then return hovered end
+    if ext and AwtarchyYaziTextExtensions[ext] then return file end
     return nil
+end
+
+local function AwtarchyYaziHoveredTextFile()
+    return AwtarchyYaziTextFile(cx.active.current.hovered)
 end
 
 local function AwtarchyYaziPreviewTextSelectable()
@@ -688,6 +891,43 @@ end
 
 local function AwtarchyYaziShellQuote(value)
     return "'" .. tostring(value):gsub("'", "'\\''") .. "'"
+end
+
+-- Export the snapped preview item as a Wayland file URI, or its text
+-- contents as plain text. This intentionally does not change Yazi's own
+-- selected/yanked state. wl-copy is already an Awtarchy requirement.
+local function AwtarchyYaziPreviewClipboard(path, as_text)
+    ya.async(function()
+        local command, argv
+        if as_text then
+            command = 'test -f "$1" && [ "$(wc -c < "$1")" -le 8388608 ] && wl-copy -t text/plain < "$1"'
+            argv = { "-c", command, "awtarchy-yazi-preview", path }
+        else
+            local encoded = path:gsub("[^A-Za-z0-9%-%._~/]", function(byte)
+                return string.format("%%%02X", byte:byte())
+            end)
+            command = 'test -e "$1" && printf "%s\\r\\n" "$2" | wl-copy -t text/uri-list'
+            argv = { "-c", command, "awtarchy-yazi-preview", path, "file://" .. encoded }
+        end
+
+        local result, err = Command("sh"):arg(argv):output()
+        if err or not result or not result.status.success then
+            ya.notify {
+                title = "Preview clipboard",
+                content = "Could not copy preview item. Check file access and wl-copy.",
+                timeout = 5,
+                level = "error",
+            }
+            return
+        end
+
+        ya.notify {
+            title = "Preview clipboard",
+            content = as_text and "Copied preview text contents"
+                or "Copied preview item as a Wayland file URI",
+            timeout = 2,
+        }
+    end)
 end
 
 function AwtarchyYaziSelectPreviewText()
@@ -720,9 +960,18 @@ function AwtarchyYaziSelectPreviewText()
     ya.emit("shell", { run = command, block = true })
 end
 
+-- Shared gesture state must be in scope for Esc as well as pane mouse events.
+local AwtarchyYaziDragState = nil
+local AwtarchyYaziDragPending = nil
+local AwtarchyYaziPendingClick = nil
+
 function AwtarchyYaziEscape()
-    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
-        AwtarchyYaziContextMenu:hide()
+    -- Keyboard cancellation must erase the ghost and never start a file task.
+    if AwtarchyYaziDragState or AwtarchyYaziDragPending then
+        AwtarchyYaziDragState = nil
+        AwtarchyYaziDragPending = nil
+        AwtarchyYaziPendingClick = nil
+        ui.render()
         return
     end
 
@@ -730,6 +979,15 @@ function AwtarchyYaziEscape()
         AwtarchyYaziDeleteMenu:hide()
         return
     end
+
+    -- Close Copy/Move (or other context) actions without changing selection.
+    if AwtarchyYaziContextMenu and AwtarchyYaziContextMenu._visible then
+        AwtarchyYaziContextMenu:hide()
+        return
+    end
+
+    -- Esc discards a Shift+arrow preview. Native selected files stay selected.
+    if AwtarchyYaziRangeDiscard() then return end
 
     if AwtarchyYaziPreviewMaximized then
         AwtarchyYaziPreviewMaximized = false
@@ -811,10 +1069,19 @@ function Preview:new(area, tab)
     local me = AwtarchyYaziDefaultPreviewNew(self, preview_area, tab)
     if reserve_control_row then
         local preview_button_width = math.min(10, area.w)
+        -- The current pane disappears in maximized preview, so show t e
+        -- at the left of the preview's existing footer only in that mode.
+        local terminal_button_width = AwtarchyYaziPreviewMaximized and area.w >= 20 and 10 or 0
+        if terminal_button_width > 0 then
+            me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new(ui.Rect {
+                x = area.x, y = area.y + area.h - 1,
+                w = terminal_button_width, h = 1,
+            })
+        end
         me._awtarchy_text_select_button = AwtarchyYaziTextSelectButton:new(ui.Rect {
-            x = area.x,
+            x = area.x + terminal_button_width,
             y = area.y + area.h - 1,
-            w = math.min(19, math.max(0, area.w - preview_button_width)),
+            w = math.min(19, math.max(0, area.w - preview_button_width - terminal_button_width)),
             h = 1,
         })
         me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {
@@ -835,6 +1102,9 @@ function Preview:reflow()
     if self._awtarchy_preview_button then
         components[#components + 1] = self._awtarchy_preview_button
     end
+    if self._awtarchy_terminal_button then
+        components[#components + 1] = self._awtarchy_terminal_button
+    end
     return components
 end
 
@@ -846,7 +1116,71 @@ function Preview:redraw()
     if self._awtarchy_preview_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_button))
     end
+    if self._awtarchy_terminal_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_terminal_button))
+    end
     return elements
+end
+
+-- Preview right-click never calls Entity:click, which would mutate selection
+-- and reveal a potentially different manager item. The menu snapshots a path.
+local AwtarchyYaziDefaultPreviewClick = Preview.click
+function Preview:click(event, up)
+    if event.is_left and AwtarchyYaziContextMenu._visible then
+        -- Mouse1 on preview outside menu dismisses without navigation.
+        if not up then AwtarchyYaziContextMenu:hide() end
+        return
+    end
+    if not event.is_right then
+        return AwtarchyYaziDefaultPreviewClick(self, event, up)
+    end
+    if up then return end
+
+    AwtarchyYaziRangeDiscard()
+    local hovered = cx.active.current.hovered
+    if not hovered then return end
+
+    local target = hovered
+    if hovered.cha.is_dir and self._folder
+        and tostring(self._folder.cwd) == tostring(hovered.url)
+    then
+        local row = event.y - self._area.y + 1
+        if row >= 1 and self._folder.window[row] then
+            target = self._folder.window[row]
+        end
+    end
+
+    AwtarchyYaziContextMenu:show_preview(target, event.x, event.y)
+end
+
+
+-- The [t e] terminal button launches in the active Yazi directory.
+function AwtarchyYaziTerminalHere()
+    ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+end
+
+AwtarchyYaziTerminalButton = { _id = "awtarchy-yazi-terminal-button" }
+
+function AwtarchyYaziTerminalButton:new(area)
+    return setmetatable({ _area = area }, { __index = self })
+end
+
+function AwtarchyYaziTerminalButton:reflow()
+    return { self }
+end
+
+function AwtarchyYaziTerminalButton:redraw()
+    return {
+        ui.Text(ui.Line("  [t e] "):style(ui.Style():reverse()))
+            :area(self._area)
+            :align(ui.Align.CENTER),
+    }
+end
+
+function AwtarchyYaziTerminalButton:click(event, up)
+    if not up and event.is_left then
+        AwtarchyYaziTerminalHere()
+    end
 end
 
 AwtarchyYaziPreviewToggleButton = { _id = "awtarchy-yazi-preview-toggle-button" }
@@ -878,6 +1212,15 @@ end
 
 local AwtarchyYaziDefaultCurrentNew = Current.new
 local AwtarchyYaziDefaultCurrentRedraw = Current.redraw
+local AwtarchyYaziDefaultParentRedraw = Parent.redraw
+-- Defined below, after the mouse drag state. Keep native pane rendering.
+local AwtarchyYaziDragGhostRedraw = function() return {}, {} end
+
+function Parent:redraw()
+    local cleanup, ghost = AwtarchyYaziDragGhostRedraw(self._area, "parent")
+    local elements = ya.list_merge(cleanup, AwtarchyYaziDefaultParentRedraw(self) or {})
+    return ya.list_merge(elements, ghost)
+end
 
 function Current:new(area, tab)
     local reserve_control_row = area.w >= 3 and area.h >= 2
@@ -894,6 +1237,12 @@ function Current:new(area, tab)
             w = preview_toggle_width,
             h = 1,
         })
+        if area.w >= 20 then
+            me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new(ui.Rect {
+                x = area.x, y = area.y + area.h - 1,
+                w = 10, h = 1,
+            })
+        end
     end
     return me
 end
@@ -903,15 +1252,26 @@ function Current:reflow()
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
     end
+    if self._awtarchy_terminal_button then
+        components[#components + 1] = self._awtarchy_terminal_button
+    end
     return components
 end
 
 function Current:redraw()
-    local elements = AwtarchyYaziDefaultCurrentRedraw(self) or {}
+    -- Drop a preview whenever tab, directory, sort order, or mode changed.
+    if AwtarchyYaziRangePreview and not AwtarchyYaziRangeValid() then
+        AwtarchyYaziRangePreview = nil
+    end
+    local cleanup, ghost = AwtarchyYaziDragGhostRedraw(self._area, "current")
+    local elements = ya.list_merge(cleanup, AwtarchyYaziDefaultCurrentRedraw(self) or {})
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
     end
-    return elements
+    if self._awtarchy_terminal_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_terminal_button))
+    end
+    return ya.list_merge(elements, ghost)
 end
 
 local function AwtarchyYaziArchiveSnapshot()
@@ -1150,12 +1510,45 @@ local AwtarchyYaziFileActions = {
     { label = "Trash", action = "trash" },
 }
 
-local AwtarchyYaziDropActions = {
-    { label = "Copy to folder", action = "drop_copy" },
-    { label = "Move to folder", action = "drop_move" },
-}
+-- Terminal-native ghost, clipped to the pane under the pointer.
+-- Clear its previous rectangle *before* native rows redraw so a ghost
+-- never remains painted on the list after release, Esc, or leaving the pane.
+local AwtarchyYaziDragGhostPrevious = {}
+AwtarchyYaziDragGhostRedraw = function(area, pane)
+    local cleanup = {}
+    local previous = AwtarchyYaziDragGhostPrevious[pane]
+    if previous then cleanup[1] = ui.Clear(previous) end
+    AwtarchyYaziDragGhostPrevious[pane] = nil
 
-local AwtarchyYaziDragState = nil
+    local drag = AwtarchyYaziDragState
+    if not drag or not drag.x or not drag.y or area.w < 8 or area.h < 2
+        or drag.x < area.x or drag.x >= area.x + area.w
+        or drag.y < area.y or drag.y >= area.y + area.h
+    then
+        return cleanup, {}
+    end
+
+    local count = #drag.sources
+    if count == 0 then return cleanup, {} end
+
+    local label = count == 1
+        and (" " .. tostring(drag.sources[1].name or "item") .. " ")
+        or string.format(" %d items ", count)
+    local line = ui.truncate(ui.printable(label), { max = math.min(36, area.w) })
+    local width = ui.width(line)
+    if width < 1 then return cleanup, {} end
+
+    local x = math.max(area.x, math.min(drag.x + 2, area.x + area.w - width))
+    local y = drag.y + 1 < area.y + area.h and drag.y + 1 or drag.y - 1
+    y = math.max(area.y, math.min(y, area.y + area.h - 1))
+    local rect = ui.Rect { x = x, y = y, w = width, h = 1 }
+    AwtarchyYaziDragGhostPrevious[pane] = rect
+
+    return cleanup, {
+        ui.Text(ui.Line(line):style(ui.Style():fg("gray"):bg("darkgray")))
+            :area(rect),
+    }
+end
 
 local function AwtarchyYaziDragSources(file)
     local sources = {}
@@ -1182,7 +1575,12 @@ end
 local function AwtarchyYaziCanDropInto(target, sources)
     local target_url = Url(target)
     for _, source in ipairs(sources) do
-        if source.is_dir and target_url:starts_with(Url(source.path)) then
+        local source_url = Url(source.path)
+        -- Moving or copying an item into its existing folder is a no-op
+        -- (or a same-path collision); do not offer it as a drop destination.
+        if AwtarchyYaziNormalizeFsPath(target_url) == AwtarchyYaziNormalizeFsPath(source_url.parent)
+            or (source.is_dir and target_url:starts_with(source_url))
+        then
             return false
         end
     end
@@ -1214,6 +1612,12 @@ local function AwtarchyYaziDropInto(op, target, sources)
     }
 end
 
+function AwtarchyYaziDragOut()
+    -- Outbound drag stays explicit and handled by Awtarchy's vendored
+    -- drag.yazi/ripdrag workflow, not by the internal folder-drop gesture.
+    ya.emit("plugin", { "drag" })
+end
+
 local AwtarchyYaziFolderActions = {
     { label = "New file", action = "new_file" },
     { label = "New folder", action = "new_folder" },
@@ -1227,6 +1631,7 @@ local function AwtarchyYaziContextActions(actions)
     for _, action in ipairs(actions) do
         result[#result + 1] = action
     end
+    result[#result + 1] = { label = "Copy current directory path", action = "copy_dirpath" }
     result[#result + 1] = { label = "Open PCManFM-Qt here", action = "file_manager_here" }
     result[#result + 1] = { label = "Help", action = "help" }
     return result
@@ -1244,14 +1649,26 @@ AwtarchyYaziContextMenu = {
     _selection_count = 0,
     _drop_target = nil,
     _drop_sources = nil,
+    _preview_target = nil,
+    _preview_is_text = false,
+    _preview_is_dir = false,
+    _preview_details = nil,
 }
 
 function AwtarchyYaziContextMenu:show(kind, x, y, selection_count)
+    if kind ~= "preview" then
+        self._preview_target = nil
+        self._preview_is_text = false
+        self._preview_is_dir = false
+        self._preview_details = nil
+    end
     self._kind = kind
     self._x = x
     self._y = y
     self._selection_count = selection_count or 0
-    self._hovered_row = nil
+    -- Copy is highlighted by default, but no action executes until a click,
+    -- Enter, or the explicit copy/move mnemonic.
+    self._hovered_row = kind == "drop" and 1 or nil
     self._visible = true
     ui.render()
 end
@@ -1260,6 +1677,31 @@ function AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
     self._drop_target = tostring(target)
     self._drop_sources = sources
     self:show("drop", x, y, #sources)
+end
+
+function AwtarchyYaziContextMenu:show_preview(file, x, y)
+    if not file or not file.url or AwtarchyYaziIsCollectionItemUrl(file.url)
+        or AwtarchyYaziCollectionKind(file.url)
+    then
+        return
+    end
+
+    local path = tostring(file.url)
+    -- This menu operates only on real filesystem paths, never virtual URLs.
+    if path == "" or path:find("://", 1, true) then return end
+    self._preview_target = path
+    self._preview_is_dir = file.cha.is_dir
+    self._preview_is_text = AwtarchyYaziTextFile(file) ~= nil
+    local modified = math.floor(file.cha.mtime or 0)
+    local size = file:size()
+    self._preview_details = table.concat({
+        "Name: " .. tostring(file.url.name or ""),
+        "Type: " .. (file.cha.is_dir and "Folder" or "File"),
+        "Path: " .. path,
+        "Size: " .. (size and ya.readable_size(size) or "Unknown"),
+        "Modified: " .. (modified > 0 and os.date("%Y-%m-%d %H:%M", modified) or "Unknown"),
+    }, "\n")
+    self:show("preview", x, y, 0)
 end
 
 function AwtarchyYaziContextMenu:hide()
@@ -1271,15 +1713,20 @@ function AwtarchyYaziContextMenu:hide()
     self._hovered_row = nil
     self._drop_target = nil
     self._drop_sources = nil
+    self._preview_target = nil
+    self._preview_is_text = false
+    self._preview_is_dir = false
+    self._preview_details = nil
     ui.render()
 end
 
 function AwtarchyYaziContextMenu:title()
-    if self._kind == "background" then
+    if self._kind == "preview" then
+        return " Preview actions "
+    elseif self._kind == "background" then
         return " Folder actions "
     elseif self._kind == "drop" then
-        local target = self._drop_target and Url(self._drop_target) or nil
-        return " Drop into " .. tostring(target and target.name or "folder") .. " "
+        return " Copy / move "
     elseif self._selection_count > 1 then
         return " " .. tostring(self._selection_count) .. " selected "
     end
@@ -1288,10 +1735,34 @@ function AwtarchyYaziContextMenu:title()
 end
 
 function AwtarchyYaziContextMenu:actions()
-    if self._kind == "background" then
+    if self._kind == "preview" then
+        local actions = {}
+        if self._preview_is_text then
+            actions[#actions + 1] = { label = "Open in Micro", action = "preview_micro" }
+            actions[#actions + 1] = { label = "Copy text contents", action = "preview_copy_text" }
+        end
+        actions[#actions + 1] = {
+            label = self._preview_is_dir and "Copy folder to clipboard"
+                or "Copy file to clipboard",
+            action = "preview_copy_file",
+        }
+        actions[#actions + 1] = { label = "Copy path", action = "preview_copy_path" }
+        actions[#actions + 1] = { label = "Open containing folder in PCManFM-Qt", action = "preview_explorer" }
+        if self._preview_is_dir then
+            actions[#actions + 1] = { label = "Open terminal here", action = "preview_terminal" }
+        end
+        actions[#actions + 1] = { label = "Details", action = "preview_details" }
+        return actions
+    elseif self._kind == "background" then
         return AwtarchyYaziContextActions(AwtarchyYaziFolderActions)
     elseif self._kind == "drop" then
-        return AwtarchyYaziDropActions
+        local url = self._drop_target and Url(self._drop_target) or nil
+        local folder = url and tostring(url.name or url) or "folder"
+        local label = ui.truncate(ui.printable(folder), { max = 30 })
+        return {
+            { label = "Copy to " .. label, action = "drop_copy" },
+            { label = "Move to " .. label, action = "drop_move" },
+        }
     end
 
     local hovered = cx.active.current.hovered
@@ -1313,7 +1784,10 @@ function AwtarchyYaziContextMenu:actions()
         return AwtarchyYaziContextActions {
             { label = "Enter folder", action = "smart_open" },
             { label = "Open in new tab", action = "open_new_tab" },
-            { label = "Bookmark / unbookmark", action = "bookmark_hovered" },
+            {
+                label = "Bookmark / unbookmark",
+                action = "bookmark_hovered",
+            },
             { label = "Rename", action = "rename" },
             { label = "Drag out...", action = "drag_out" },
             { label = "Copy", action = "copy" },
@@ -1405,13 +1879,62 @@ function AwtarchyYaziContextMenu:run(action)
     local count = self._selection_count > 0 and self._selection_count or 1
     local drop_target = self._drop_target
     local drop_sources = self._drop_sources
+    local preview_target = self._preview_target
+    local preview_is_text = self._preview_is_text
+    local preview_details = self._preview_details
+    local preview_is_dir = self._preview_is_dir
     self._visible = false
     self._hovered_row = nil
     self._drop_target = nil
     self._drop_sources = nil
+    self._preview_target = nil
+    self._preview_is_text = false
+    self._preview_is_dir = false
+    self._preview_details = nil
     ui.render()
 
-    if action == "smart_open" then
+    if action == "preview_terminal" and preview_target and preview_is_dir then
+        -- Open Awtarchy's selected terminal in the snapshotted folder.
+        ya.emit("shell", {
+            run = "cd " .. AwtarchyYaziShellQuote(preview_target) ..
+                ' && "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
+            orphan = true,
+        })
+    elseif action == "preview_copy_file" and preview_target then
+        AwtarchyYaziPreviewClipboard(preview_target, false)
+    elseif action == "preview_copy_text" and preview_target and preview_is_text then
+        AwtarchyYaziPreviewClipboard(preview_target, true)
+    elseif action == "preview_details" and preview_target and preview_details then
+        ya.notify {
+            title = "Preview item details",
+            content = preview_details,
+            timeout = 12,
+        }
+    elseif action == "preview_copy_path" and preview_target then
+        ya.async(function()
+            ya.clipboard(preview_target)
+            ya.notify {
+                title = "Clipboard",
+                content = "Copied preview item path",
+                timeout = 2,
+            }
+        end)
+    elseif action == "preview_micro" and preview_target and preview_is_text then
+        ya.emit("shell", {
+            run = "micro " .. AwtarchyYaziShellQuote(preview_target),
+            block = true,
+        })
+    elseif action == "preview_explorer" and preview_target then
+        -- pcmanfm-qt has no documented --select switch. Open the exact
+        -- containing directory (or the target directory) without claiming
+        -- to select the item in PCManFM-Qt.
+        local directory = preview_is_dir and preview_target
+            or tostring(Url(preview_target).parent)
+        ya.emit("shell", {
+            run = "pcmanfm-qt " .. AwtarchyYaziShellQuote(directory),
+            orphan = true,
+        })
+    elseif action == "smart_open" then
         AwtarchyYaziSmartEnter()
     elseif action == "open_new_tab" then
         AwtarchyYaziOpenHoveredTab()
@@ -1421,12 +1944,26 @@ function AwtarchyYaziContextMenu:run(action)
         ya.emit("rename", { hovered = true })
     elseif action == "bulk_rename" then
         ya.emit("rename", {})
+    elseif action == "drag_out" then
+        AwtarchyYaziDragOut()
     elseif action == "bookmark_hovered" then
-        AwtarchyYaziBookmarkHovered()
+        local hovered = cx.active.current.hovered
+        if hovered then
+            AwtarchyYaziBookmarkTarget(tostring(hovered.url), hovered.cha.is_dir)
+        end
     elseif action == "bookmark_current" then
         AwtarchyYaziBookmarkTarget(tostring(cx.active.current.cwd), true)
-    elseif action == "drag_out" then
-        ya.emit("plugin", { "drag" })
+    elseif action == "copy_dirpath" then
+        -- Snapshot the exact current directory, not selected files' parents.
+        local cwd = tostring(cx.active.current.cwd)
+        ya.async(function()
+            ya.clipboard(cwd)
+            ya.notify {
+                title = "Clipboard",
+                content = "Copied current directory path",
+                timeout = 2,
+            }
+        end)
     elseif action == "copy" then
         ya.emit("yank", {})
         ya.notify { title = "Yazi", content = "Copied " .. tostring(count) .. " item(s)", timeout = 2 }
@@ -1457,7 +1994,7 @@ function AwtarchyYaziContextMenu:run(action)
             ya.notify { title = "Yazi", content = "Pasting " .. tostring(yanked) .. " item(s)...", timeout = 2 }
         end
     elseif action == "terminal" then
-        ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+        AwtarchyYaziTerminalHere()
     elseif action == "file_manager_here" then
         ya.emit("shell", { "pcmanfm-qt .", orphan = true })
     elseif action == "help" then
@@ -1467,6 +2004,53 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "drop_move" then
         AwtarchyYaziDropInto("move", drop_target, drop_sources)
     end
+end
+
+function AwtarchyYaziContextMenu:move_keyboard(step)
+    if not self._visible or self._kind ~= "drop" then return end
+    local total = #self:actions()
+    self._hovered_row = ((self._hovered_row or 1) - 1 + step) % total + 1
+    ui.render()
+end
+
+function AwtarchyYaziContextMenu:choose()
+    if not self._visible or self._kind ~= "drop" then return end
+    local actions = self:actions()
+    local selected = actions[self._hovered_row or 1]
+    if selected then self:run(selected.action) end
+end
+
+function AwtarchyYaziDropToParent()
+    local target = cx.active.current.cwd.parent
+    if not target then return end
+
+    local sources = {}
+    if #cx.active.selected > 0 then
+        for _, file in pairs(cx.active.selected) do
+            sources[#sources + 1] = {
+                path = tostring(file.path),
+                name = file.name,
+                is_dir = file.cha.is_dir,
+            }
+        end
+    elseif cx.active.current.hovered then
+        sources = AwtarchyYaziDragSources(cx.active.current.hovered)
+    end
+
+    if #sources == 0 or not AwtarchyYaziCanDropInto(tostring(target), sources) then
+        ya.notify {
+            title = "Yazi",
+            content = "No files can be sent to the parent folder from here.",
+            level = "warn",
+            timeout = 3,
+        }
+        return
+    end
+
+    local area = AwtarchyYaziContextMenu._screen
+    local x = area and area.x + math.floor(area.w / 2) or 0
+    local y = area and area.y + math.floor(area.h / 2) or 0
+    AwtarchyYaziContextMenu:show_drop(target, sources, x, y)
 end
 
 function AwtarchyYaziContextMenu:move(event)
@@ -1508,6 +2092,16 @@ local AwtarchyYaziDefaultRootMove = Root.move
 local AwtarchyYaziDefaultRootScroll = Root.scroll
 
 function Root:move(event)
+    -- Ordinary mouse movement follows release; in-progress Mouse1 holds use
+    -- drag events. Clear a released ghost even if it ended outside Current.
+    if AwtarchyYaziDragState then
+        AwtarchyYaziDragState = nil
+        AwtarchyYaziDragPending = nil
+        ui.render()
+    end
+    if AwtarchyYaziTabDrag then
+        AwtarchyYaziFinishTabDrag()
+    end
     if AwtarchyYaziContextMenu._visible then
         return AwtarchyYaziContextMenu:move(event)
     end
@@ -1736,10 +2330,46 @@ function Header:click(event, up)
     end
 end
 
-local AwtarchyYaziPendingClick = nil
 local AwtarchyYaziDefaultCurrentDrag = Current.drag
+local AwtarchyYaziDefaultParentClick = Parent.click
+
+local function AwtarchyYaziParentDropTarget(parent, event)
+    -- The left pane lists the parent directory. Releasing over a file
+    -- targets its containing parent directory, never the file itself.
+    -- A folder row remains an explicit folder destination.
+    local row = event.y - parent._area.y + 1
+    local folder = parent._folder
+    local file = folder and folder.window[row] or nil
+    if file then
+        if AwtarchyYaziIsCollectionItemUrl(file.url) then return nil end
+        return file.cha.is_dir and file.url or file.url.parent
+    end
+    return cx.active.current.cwd.parent
+end
+
+function Parent:click(event, up)
+    if up and event.is_left and AwtarchyYaziDragState then
+        local drag = AwtarchyYaziDragState
+        AwtarchyYaziDragState = nil
+        AwtarchyYaziDragPending = nil
+        AwtarchyYaziPendingClick = nil
+
+        local target = AwtarchyYaziParentDropTarget(self, event)
+        if target and AwtarchyYaziCanDropInto(tostring(target), drag.sources) then
+            AwtarchyYaziContextMenu:show_drop(target, drag.sources, event.x, event.y)
+        else
+            ui.render()
+        end
+        return
+    end
+
+    return AwtarchyYaziDefaultParentClick(self, event, up)
+end
 
 function Current:click(event, up)
+    if not up and (event.is_left or event.is_right) then
+        AwtarchyYaziRangeDiscard()
+    end
     local row = event.y - self._area.y + 1
     local file = self._folder.window[row]
 
@@ -1748,12 +2378,16 @@ function Current:click(event, up)
     end
 
     if not up and event.is_right then
+        AwtarchyYaziDragPending = nil
         AwtarchyYaziPendingClick = nil
         AwtarchyYaziContextMenu:show("background", event.x, event.y)
     elseif event.is_left then
+        AwtarchyYaziDragPending = nil
         AwtarchyYaziPendingClick = nil
         if up then
+            local was_dragging = AwtarchyYaziDragState ~= nil
             AwtarchyYaziDragState = nil
+            if was_dragging then ui.render() end
         else
             AwtarchyYaziContextMenu:hide()
         end
@@ -1763,19 +2397,21 @@ end
 function Current:drag(event)
     AwtarchyYaziPendingClick = nil
 
-    if not AwtarchyYaziDragState then
-        local source = self._folder.hovered
-        if source then
-            local sources = AwtarchyYaziDragSources(source)
-            if #sources > 0 then
-                if not source:is_selected() then
-                    ya.emit("toggle_all", { state = "off" })
-                    ya.emit("reveal", { source.url })
-                end
+    -- Use the file(s) captured at Mouse1 down, never the hovered destination.
+    -- Mouse gestures have coordinates; OSC 72 offers do not trigger this UI.
+    if event.x and event.y then
+        if not AwtarchyYaziDragState and AwtarchyYaziDragPending then
+            AwtarchyYaziContextMenu:hide()
+            AwtarchyYaziDragState = { sources = AwtarchyYaziDragPending.sources }
+            AwtarchyYaziDragPending = nil
+        end
 
-                AwtarchyYaziContextMenu:hide()
-                AwtarchyYaziDragState = { sources = sources }
-            end
+        if AwtarchyYaziDragState
+            and (AwtarchyYaziDragState.x ~= event.x or AwtarchyYaziDragState.y ~= event.y)
+        then
+            AwtarchyYaziDragState.x = event.x
+            AwtarchyYaziDragState.y = event.y
+            ui.render()
         end
     end
 
@@ -1783,7 +2419,9 @@ function Current:drag(event)
 end
 
 function Entity:click(event, up)
+    if not up then AwtarchyYaziRangeDiscard() end
     if up then
+        AwtarchyYaziDragPending = nil
         if event.is_left and AwtarchyYaziDragState then
             local drag = AwtarchyYaziDragState
             AwtarchyYaziDragState = nil
@@ -1798,6 +2436,9 @@ function Entity:click(event, up)
                     event.x,
                     event.y
                 )
+            else
+                -- Invalid release cancels; clear the ghost without a file operation.
+                ui.render()
             end
             return
         end
@@ -1823,6 +2464,7 @@ function Entity:click(event, up)
     end
 
     if event.is_middle then
+        AwtarchyYaziDragPending = nil
         AwtarchyYaziPendingClick = nil
         AwtarchyYaziContextMenu:hide()
         if AwtarchyYaziNavigateCollection(self._file, true) then
@@ -1838,6 +2480,7 @@ function Entity:click(event, up)
     local selected_count = #cx.active.selected
 
     if event.is_right then
+        AwtarchyYaziDragPending = nil
         AwtarchyYaziPendingClick = nil
         if not was_selected then
             ya.emit("toggle_all", { state = "off" })
@@ -1847,11 +2490,14 @@ function Entity:click(event, up)
         end
 
         ya.emit("reveal", { self._file.url })
-        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count, self._file)
+        AwtarchyYaziContextMenu:show("item", event.x, event.y, selected_count)
         return
     end
 
     AwtarchyYaziContextMenu:hide()
+    -- An unselected file drags alone; a selected item drags the selected group.
+    -- No Space press is needed for a single file. Nothing moves until menu choice.
+    AwtarchyYaziDragPending = { sources = AwtarchyYaziDragSources(self._file) }
     AwtarchyYaziPendingClick = {
         path = tostring(self._file.url),
         was_hovered = was_hovered,
