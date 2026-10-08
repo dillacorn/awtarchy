@@ -426,3 +426,89 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+
+  publish-v3-9-1-yazi-one-use:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
+      github.repository == 'dillacorn/awtarchy' &&
+      github.event.pull_request.title == 'Release bridge v3.9.1 Yazi one-use' &&
+      github.event.pull_request.head.ref == 'chore/release-v3.9.1-yazi-bridge-20261008' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Publish and verify Awtarchy v3.9.1 Yazi
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          repo="dillacorn/awtarchy"
+          target="8c765fc8102268b9398d655fbe874812c1e70c3f"
+          tag="v3.9.1"
+          helper="chore/release-v3.9.1-yazi-bridge-20261008"
+          test "$GITHUB_EVENT_NAME" = "pull_request"
+          test "$GITHUB_REPOSITORY" = "$repo"
+          test "$(jq -r '.action' "$GITHUB_EVENT_PATH")" = "opened"
+          test "$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")" = "Release bridge v3.9.1 Yazi one-use"
+          test "$(jq -r '.pull_request.head.ref' "$GITHUB_EVENT_PATH")" = "$helper"
+          test "$(jq -r '.pull_request.head.repo.full_name' "$GITHUB_EVENT_PATH")" = "$repo"
+          test "$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")" = "main"
+          test "$(gh api "repos/$repo/branches/main" --jq '.commit.sha')" = "$target"
+
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            echo "Refusing to replace existing release $tag" >&2
+            exit 1
+          fi
+          if gh api "repos/$repo/git/ref/tags/$tag" --silent >/dev/null 2>&1; then
+            echo "Refusing to move existing tag $tag" >&2
+            exit 1
+          fi
+
+          notes="$(mktemp)"
+          trap 'rm -f "$notes"' EXIT
+          cat >"$notes" <<'RELEASE_NOTES'
+          # Awtarchy v3.9.1 Yazi
+
+          This Yazi update brings improved mouse-driven file management and preview-pane actions to Awtarchy while keeping Linux/Wayland integration native.
+
+          ## Install and update
+
+          - New installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - Existing users: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md) or run awtarchy update.
+
+          ## Yazi improvements
+
+          - Drag tabs to reorder them live, including the rightmost position.
+          - Shift+Up/Down previews an inclusive file selection; Space confirms and Esc cancels without disturbing earlier selections.
+          - Drag files or selected groups into valid folders in the current or parent pane and choose Copy or Move. d p opens the same choice for the parent folder.
+          - Right-click preview actions support **Open in Micro** for text files, **Copy text contents**, **Copy file/folder to clipboard**, **Copy path**, **Open containing folder in PCManFM-Qt**, and **Details**. Clicking the preview outside a menu dismisses it.
+          - Folder previews add **Open terminal here**, using the selected Awtarchy terminal and the folder that was right-clicked.
+          - A persistent ** [t e]** button opens a terminal in Yazi's current directory, including while preview is maximized.
+          - Rename prompts gain Ctrl+A text selection and Ctrl+C copy; ordinary directory context menus can copy the current directory path.
+
+          ## Platform behavior and validation
+
+          - Linux integrations retain ripdrag, the Awtarchy-selected terminal, wl-copy, PCManFM-Qt, XDG state paths, native archive handling, and existing shortcuts.
+          - The complete Awtarchy feature-branch validation suite passed for PR #268, including Yazi Lua/TOML tests and the platform integration checks.
+          - Windows WGDot tests informed the shared interaction design; the Linux-specific functionality remains subject to runtime verification on Awtarchy.
+          RELEASE_NOTES
+
+          gh release create "$tag" --repo "$repo" --target "$target" \
+            --title "Awtarchy v3.9.1 Yazi" --notes-file "$notes" --latest
+
+          gh release view "$tag" --repo "$repo" \
+            --json tagName,name,isDraft,isPrerelease,body,targetCommitish,publishedAt \
+            | jq -e --rawfile expected "$notes" --arg sha "$target" --arg tag "$tag" '
+              .tagName == $tag and .name == "Awtarchy v3.9.1 Yazi"
+              and .isDraft == false and .isPrerelease == false
+              and .targetCommitish == $sha and .publishedAt != null
+              and (.body | sub("\n+$"; "")) == ($expected | sub("\n+$"; ""))'
+          test "$(gh api "repos/$repo/git/ref/tags/$tag" --jq '.object.sha')" = "$target"
+          echo "Verified Awtarchy stable release $tag at $target"
+          gh api -X DELETE "repos/$repo/git/refs/heads/$helper"
+          echo "Deleted temporary release bridge branch without merging"
