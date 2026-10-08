@@ -905,13 +905,18 @@ if "x = area.x + area.w - preview_toggle_width" not in current_block:
     raise SystemExit(1)
 if "w = preview_toggle_width" not in current_block:
     raise SystemExit(1)
+if "me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new" not in current_block:
+    raise SystemExit("Current pane lacks bottom-left t e terminal button")
 
 preview_start = init.index("function Preview:new(area, tab)")
 preview_end = init.index("function Preview:reflow()", preview_start)
 preview_block = init[preview_start:preview_end]
 for required in (
     "local preview_button_width = math.min(10, area.w)",
-    "w = math.min(19, math.max(0, area.w - preview_button_width))",
+    "w = math.min(19, math.max(0, area.w - preview_button_width - terminal_button_width))",
+    "x = area.x + terminal_button_width",
+    "local terminal_button_width = AwtarchyYaziPreviewMaximized and area.w >= 20 and 10 or 0",
+    "me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new",
     "x = area.x + area.w - preview_button_width",
     "w = preview_button_width",
 ):
@@ -1015,6 +1020,19 @@ needles = [
     "self._preview_target = path",
     "self._preview_details = table.concat",
     "local preview_is_dir = self._preview_is_dir",
+    "function AwtarchyYaziTerminalHere()",
+    "AwtarchyYaziTerminalButton =",
+    "function AwtarchyYaziTerminalButton:click(event, up)",
+    'ui.Line("  [t e] ")',
+    "AwtarchyYaziTerminalHere()",
+    'me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new',
+    'ui.redraw(self._awtarchy_terminal_button)',
+    'components[#components + 1] = self._awtarchy_terminal_button',
+    'if self._preview_is_dir then',
+    '{ label = "Open terminal here", action = "preview_terminal" }',
+    'action == "preview_terminal" and preview_target and preview_is_dir',
+    'cd " .. AwtarchyYaziShellQuote(preview_target)',
+    '&& "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
     "function AwtarchyYaziDragOut()",
     'ya.emit("plugin", { "drag" })',
     'run = "micro " .. AwtarchyYaziShellQuote(preview_target)',
@@ -1026,6 +1044,18 @@ needles = [
 for needle in needles:
     if needle not in init:
         raise SystemExit(f"missing parity contract: {needle}")
+
+
+if init.count('me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new') != 2:
+    raise SystemExit("terminal button must exist in both normal and maximized footers")
+if init.count('ui.redraw(self._awtarchy_terminal_button)') != 2:
+    raise SystemExit("normal and maximized preview must render terminal button")
+if init.count('components[#components + 1] = self._awtarchy_terminal_button') != 2:
+    raise SystemExit("both terminal buttons must support mouse child routing")
+if init.count('label = "Open terminal here", action = "preview_terminal"') != 1:
+    raise SystemExit("preview folder terminal action is missing or duplicated")
+if 'elseif action == "terminal" then\n        AwtarchyYaziTerminalHere()' not in init:
+    raise SystemExit("normal terminal action no longer reuses t e shortcut helper")
 
 for forbidden in ("powershell.exe", "wgdotw.exe", "explorer.exe", "LOCALAPPDATA",
                   "System.Windows.Forms", "AwtarchyYaziPowerShellQuote", "function Root:click("):
