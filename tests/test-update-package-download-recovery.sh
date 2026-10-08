@@ -15,7 +15,9 @@ fail() {
 bash -n "$RUNTIME"
 
 # Load the real production helper, but never run pacman or sudo on the host.
-source <(sed -n '/^update_pacman_install_with_404_recovery() {/,/^}$/p' "$RUNTIME")
+sed -n '/^update_pacman_install_with_404_recovery() {/,/^}$/p' "$RUNTIME" >"$TMP/helper.sh"
+# shellcheck source=/dev/null
+source "$TMP/helper.sh"
 declare -F update_pacman_install_with_404_recovery >/dev/null \
   || fail "update pacman 404 recovery helper not found"
 
@@ -123,10 +125,7 @@ check_case retry-fails root 1 \
 
 # A second stale-mirror error during the same update must not cause another
 # unattended full-system upgrade.
-check_case already-tried root 1 \
-  $'-S --needed --noconfirm 7zip\n' /usr/bin/pacman 7zip
-# The check_case reset is deliberate: this test represents a previous attempt.
-# Re-run explicitly with the global recovery guard set.
+SCENARIO=already-tried
 AWTARCHY_PACMAN_404_RECOVERY_ATTEMPTED=1
 : >"${TMP}/calls"
 rm -f -- "${TMP}/installs"
