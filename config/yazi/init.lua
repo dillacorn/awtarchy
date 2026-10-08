@@ -1069,10 +1069,19 @@ function Preview:new(area, tab)
     local me = AwtarchyYaziDefaultPreviewNew(self, preview_area, tab)
     if reserve_control_row then
         local preview_button_width = math.min(10, area.w)
+        -- The current pane disappears in maximized preview, so show t e
+        -- at the left of the preview's existing footer only in that mode.
+        local terminal_button_width = AwtarchyYaziPreviewMaximized and area.w >= 20 and 10 or 0
+        if terminal_button_width > 0 then
+            me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new(ui.Rect {
+                x = area.x, y = area.y + area.h - 1,
+                w = terminal_button_width, h = 1,
+            })
+        end
         me._awtarchy_text_select_button = AwtarchyYaziTextSelectButton:new(ui.Rect {
-            x = area.x,
+            x = area.x + terminal_button_width,
             y = area.y + area.h - 1,
-            w = math.min(19, math.max(0, area.w - preview_button_width)),
+            w = math.min(19, math.max(0, area.w - preview_button_width - terminal_button_width)),
             h = 1,
         })
         me._awtarchy_preview_button = AwtarchyYaziPreviewButton:new(ui.Rect {
@@ -1093,6 +1102,9 @@ function Preview:reflow()
     if self._awtarchy_preview_button then
         components[#components + 1] = self._awtarchy_preview_button
     end
+    if self._awtarchy_terminal_button then
+        components[#components + 1] = self._awtarchy_terminal_button
+    end
     return components
 end
 
@@ -1103,6 +1115,9 @@ function Preview:redraw()
     end
     if self._awtarchy_preview_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_button))
+    end
+    if self._awtarchy_terminal_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_terminal_button))
     end
     return elements
 end
@@ -1136,6 +1151,36 @@ function Preview:click(event, up)
     end
 
     AwtarchyYaziContextMenu:show_preview(target, event.x, event.y)
+end
+
+
+-- The [t e] terminal button launches in the active Yazi directory.
+function AwtarchyYaziTerminalHere()
+    ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+end
+
+AwtarchyYaziTerminalButton = { _id = "awtarchy-yazi-terminal-button" }
+
+function AwtarchyYaziTerminalButton:new(area)
+    return setmetatable({ _area = area }, { __index = self })
+end
+
+function AwtarchyYaziTerminalButton:reflow()
+    return { self }
+end
+
+function AwtarchyYaziTerminalButton:redraw()
+    return {
+        ui.Text(ui.Line("  [t e] "):style(ui.Style():reverse()))
+            :area(self._area)
+            :align(ui.Align.CENTER),
+    }
+end
+
+function AwtarchyYaziTerminalButton:click(event, up)
+    if not up and event.is_left then
+        AwtarchyYaziTerminalHere()
+    end
 end
 
 AwtarchyYaziPreviewToggleButton = { _id = "awtarchy-yazi-preview-toggle-button" }
@@ -1192,6 +1237,12 @@ function Current:new(area, tab)
             w = preview_toggle_width,
             h = 1,
         })
+        if area.w >= 20 then
+            me._awtarchy_terminal_button = AwtarchyYaziTerminalButton:new(ui.Rect {
+                x = area.x, y = area.y + area.h - 1,
+                w = 10, h = 1,
+            })
+        end
     end
     return me
 end
@@ -1200,6 +1251,9 @@ function Current:reflow()
     local components = { self }
     if self._awtarchy_preview_toggle_button then
         components[#components + 1] = self._awtarchy_preview_toggle_button
+    end
+    if self._awtarchy_terminal_button then
+        components[#components + 1] = self._awtarchy_terminal_button
     end
     return components
 end
@@ -1213,6 +1267,9 @@ function Current:redraw()
     local elements = ya.list_merge(cleanup, AwtarchyYaziDefaultCurrentRedraw(self) or {})
     if self._awtarchy_preview_toggle_button then
         elements = ya.list_merge(elements, ui.redraw(self._awtarchy_preview_toggle_button))
+    end
+    if self._awtarchy_terminal_button then
+        elements = ya.list_merge(elements, ui.redraw(self._awtarchy_terminal_button))
     end
     return ya.list_merge(elements, ghost)
 end
@@ -1691,6 +1748,9 @@ function AwtarchyYaziContextMenu:actions()
         }
         actions[#actions + 1] = { label = "Copy path", action = "preview_copy_path" }
         actions[#actions + 1] = { label = "Open containing folder in PCManFM-Qt", action = "preview_explorer" }
+        if self._preview_is_dir then
+            actions[#actions + 1] = { label = "Open terminal here", action = "preview_terminal" }
+        end
         actions[#actions + 1] = { label = "Details", action = "preview_details" }
         return actions
     elseif self._kind == "background" then
@@ -1833,7 +1893,14 @@ function AwtarchyYaziContextMenu:run(action)
     self._preview_details = nil
     ui.render()
 
-    if action == "preview_copy_file" and preview_target then
+    if action == "preview_terminal" and preview_target and preview_is_dir then
+        -- Open Awtarchy's selected terminal in the snapshotted folder.
+        ya.emit("shell", {
+            run = "cd " .. AwtarchyYaziShellQuote(preview_target) ..
+                ' && "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
+            orphan = true,
+        })
+    elseif action == "preview_copy_file" and preview_target then
         AwtarchyYaziPreviewClipboard(preview_target, false)
     elseif action == "preview_copy_text" and preview_target and preview_is_text then
         AwtarchyYaziPreviewClipboard(preview_target, true)
@@ -1927,7 +1994,7 @@ function AwtarchyYaziContextMenu:run(action)
             ya.notify { title = "Yazi", content = "Pasting " .. tostring(yanked) .. " item(s)...", timeout = 2 }
         end
     elseif action == "terminal" then
-        ya.emit("shell", { '"$HOME/.config/hypr/scripts/default_terminal.sh" -- bash', orphan = true })
+        AwtarchyYaziTerminalHere()
     elseif action == "file_manager_here" then
         ya.emit("shell", { "pcmanfm-qt .", orphan = true })
     elseif action == "help" then
