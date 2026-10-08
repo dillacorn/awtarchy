@@ -5404,6 +5404,7 @@ HARDWARE_FILE=""
 ACTIVE_THEME_FILE=""
 GIT_TESTING_FILE=""
 AUDIT_LOG=""
+AWTARCHY_PACMAN_404_RECOVERY_ATTEMPTED=0
 UPDATE_MODE=""
 CONFLICT_POLICY="keep-local"
 MERGE_CONFLICT_RESOLUTION=""
@@ -8819,6 +8820,59 @@ target_requires_yazi_fd() {
   grep -Fq 'ya.emit("search", { via = "fd" })' "$init_file"
 }
 
+# A stale pacman sync database can point to archives already removed from
+# rolling-repository mirrors. Recover only after a confirmed HTTP 404; a full
+# -Syyu prevents the partial-upgrade hazard of refreshing sync databases alone.
+# "quickshell" retains its existing sudo/test wrapper; "root" takes a pacman
+# executable (also used by the isolated updater tests).
+update_pacman_install_with_404_recovery() {
+  local mode="$1" output_file
+  local -a pacman_command=()
+  case "$mode" in
+    root)
+      [[ $# -ge 3 ]] || return 2
+      pacman_command=(run_update_root "$2")
+      shift 2
+      ;;
+    quickshell)
+      [[ $# -ge 2 ]] || return 2
+      pacman_command=(run_quickshell_update_pacman)
+      shift
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+
+  output_file="$(mktemp)" || return 1
+  if "${pacman_command[@]}" -S --needed --noconfirm "$@" 2>&1 | tee "$output_file"; then
+    rm -f -- "$output_file"
+    return 0
+  fi
+
+  if ! grep -Fq 'The requested URL returned error: 404' "$output_file"; then
+    rm -f -- "$output_file"
+    return 1
+  fi
+  rm -f -- "$output_file"
+
+  if (( AWTARCHY_PACMAN_404_RECOVERY_ATTEMPTED )); then
+    warn "Package download returned HTTP 404 after recovery was already attempted; not repeating the system upgrade."
+    return 1
+  fi
+  AWTARCHY_PACMAN_404_RECOVERY_ATTEMPTED=1
+
+  warn "Package mirror returned HTTP 404. Refreshing pacman databases and performing a full system upgrade to repair stale package references."
+  warn "A reboot may be necessary if the kernel or graphics drivers are upgraded."
+  if ! "${pacman_command[@]}" -Syyu --noconfirm; then
+    warn "Automatic pacman recovery failed; required packages and managed configuration updates were not completed."
+    return 1
+  fi
+
+  log "Retrying required package installation after pacman recovery..."
+  "${pacman_command[@]}" -S --needed --noconfirm "$@"
+}
+
 ensure_yazi_fd_dependency_for_target() {
   local target_home="$1" pacman_bin="/usr/bin/pacman"
 
@@ -8836,7 +8890,7 @@ ensure_yazi_fd_dependency_for_target() {
   "$pacman_bin" -Qq fd >/dev/null 2>&1 && return 0
 
   log "Installing required Yazi filename-search dependency: fd"
-  run_update_root "$pacman_bin" -S --needed --noconfirm fd \
+  update_pacman_install_with_404_recovery root "$pacman_bin" fd \
     || die "Could not install required Yazi filename-search dependency: fd"
   record_managed_packages fd
   "$pacman_bin" -Qq fd >/dev/null 2>&1 \
@@ -8869,7 +8923,7 @@ ensure_yazi_7zip_dependency_for_target() {
   "$pacman_bin" -Qq 7zip >/dev/null 2>&1 && return 0
 
   log "Installing required Yazi archive dependency: 7zip"
-  run_update_root "$pacman_bin" -S --needed --noconfirm 7zip \
+  update_pacman_install_with_404_recovery root "$pacman_bin" 7zip \
     || die "Could not install required Yazi archive dependency: 7zip"
   record_managed_packages 7zip
   "$pacman_bin" -Qq 7zip >/dev/null 2>&1 \
@@ -8900,7 +8954,7 @@ ensure_yazi_ripdrag_dependency_for_target() {
     || die "sudo authentication failed while preparing the required ripdrag dependency."
   start_update_aur_sudo_keepalive
 
-  run_update_root /usr/bin/pacman -S --needed --noconfirm base-devel git gnupg rust gtk4 \
+  update_pacman_install_with_404_recovery root /usr/bin/pacman base-devel git gnupg rust gtk4 \
     || die "Could not install the Arch build/runtime prerequisites required by ripdrag."
 
   ensure_update_aur_scanner \
@@ -9111,7 +9165,7 @@ ensure_quickshell_update_prerequisites() {
   (( ${#missing[@]} )) || return 0
 
   log "Installing required Quickshell migration packages: ${missing[*]}"
-  run_quickshell_update_pacman -S --needed --noconfirm "${missing[@]}" \
+  update_pacman_install_with_404_recovery quickshell "${missing[@]}" \
     || die "Could not install the Quickshell migration packages; no managed configs were changed"
 
   for pkg in "${missing[@]}"; do
