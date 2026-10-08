@@ -60,8 +60,8 @@ expected = {
     ("<Left>",): 'lua "AwtarchyYaziLeft()"',
     ("<Up>",): 'lua "AwtarchyYaziArrow(-1)"',
     ("<Down>",): 'lua "AwtarchyYaziArrow(1)"',
-    ("k",): "arrow prev",
-    ("j",): "arrow next",
+    ("k",): 'lua "AwtarchyYaziArrow(-1)"',
+    ("j",): 'lua "AwtarchyYaziArrow(1)"',
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
@@ -78,6 +78,7 @@ expected = {
     ("O",): 'lua "AwtarchyYaziOpen(true)"',
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
     ("d", "g"): "plugin drag",
+    ("d", "p"): 'lua "AwtarchyYaziDropToParent()"',
     ("<F2>",): "rename",
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
@@ -94,7 +95,7 @@ expected = {
     ("<C-9>",): "tab_switch 8",
     ("<C-a>",): "toggle_all",
     ("i",): "spot",
-    ("<Space>",): "toggle",
+    ("<Space>",): 'lua "AwtarchyYaziSpace()"',
     ("<C-Space>",): "toggle",
     ("<S-Up>",): 'lua "AwtarchyYaziShiftArrow(-1)"',
     ("<S-Down>",): 'lua "AwtarchyYaziShiftArrow(1)"',
@@ -325,12 +326,16 @@ grep -Fq 'AwtarchyYaziOpenFiles(false, false)' "$YAZI_INIT" \
   || fail 'Yazi smart Enter does not record and open files'
 grep -Fq 'function AwtarchyYaziShiftArrow(step)' "$YAZI_INIT" \
   || fail 'Yazi Shift+Arrow range-selection helper is missing'
-grep -Fq 'AwtarchyYaziShiftRangeActive = true' "$YAZI_INIT" \
-  || fail 'Yazi Shift+Arrow selection is not tracked separately from native visual mode'
+grep -Fq 'local AwtarchyYaziRangePreview = nil' "$YAZI_INIT" \
+  || fail 'Yazi Shift+Arrow lacks a transient preview distinct from native selection'
+grep -Fq 'function AwtarchyYaziSpace()' "$YAZI_INIT" \
+  || fail 'Yazi Space does not confirm Shift range and preserve normal toggle behavior'
+grep -Fq 'if AwtarchyYaziRangeDiscard() then return end' "$YAZI_INIT" \
+  || fail 'Yazi Esc does not cancel transient range without changing selected files'
 grep -Fq 'function AwtarchyYaziArrow(step)' "$YAZI_INIT" \
   || fail 'Yazi plain-arrow range commit helper is missing'
 grep -Fq 'ya.emit("escape", { visual = true })' "$YAZI_INIT" \
-  || fail 'Yazi plain arrow does not commit an active Shift+Arrow range'
+  || fail 'Yazi Space no longer commits the previewed Shift+Arrow range through native visual mode'
 grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation helper is missing'
 grep -Fq 'function AwtarchyYaziCloseTab()' "$YAZI_INIT" \
@@ -339,8 +344,12 @@ grep -Fq 'if #cx.tabs > 1 then' "$YAZI_INIT" \
   || fail 'Yazi Ctrl+W does not distinguish tab close from last-tab quit'
 grep -Fq 'function Tabs:drag(event)' "$YAZI_INIT" \
   || fail 'Yazi tab bar does not accept native mouse drag events'
-grep -Fq 'function AwtarchyYaziMoveActiveTabTo(target)' "$YAZI_INIT" \
-  || fail 'Yazi tab drag reorder helper is missing'
+grep -Fq 'function AwtarchyYaziMoveActiveTabTo(current, target)' "$YAZI_INIT" \
+  || fail 'Yazi live tab drag reorder helper is missing'
+grep -Fq 'function AwtarchyYaziTabMidpoint' "$YAZI_INIT" \
+  || fail 'Yazi live tab drag has no neighboring tab midpoint geometry'
+grep -Fq 'AwtarchyYaziMoveActiveTabTo(drag.target, target)' "$YAZI_INIT" \
+  || fail 'Yazi tab positions only update on Mouse1 release instead of live movement'
 grep -Fq 'for _ = 1, math.abs(target - current) do' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not shift across intervening tabs'
 grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
@@ -518,6 +527,18 @@ grep -Fq 'row:style(th.help.hovered)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not highlight the hovered action'
 grep -Fq 'AwtarchyYaziContextMenu:show_drop' "$YAZI_INIT" \
   || fail 'Yazi drag release over a directory does not open Copy/Move choices'
+grep -Fq 'function Parent:click(event, up)' "$YAZI_INIT" \
+  || fail 'Yazi has no parent-pane drop handler'
+grep -Fq 'function AwtarchyYaziParentDropTarget(parent, event)' "$YAZI_INIT" \
+  || fail 'Yazi parent-pane file rows do not target their containing directory'
+grep -Fq 'AwtarchyYaziDragGhostRedraw' "$YAZI_INIT" \
+  || fail 'Yazi file drag lacks terminal-native ghost and cleanup'
+grep -Fq 'function AwtarchyYaziDropToParent()' "$YAZI_INIT" \
+  || fail 'Yazi d p Copy/Move-to-parent action is missing'
+grep -Fq 'function AwtarchyYaziContextMenu:move_keyboard(step)' "$YAZI_INIT" \
+  || fail 'Yazi Copy/Move modal cannot navigate with Up/Down'
+grep -Fq 'function AwtarchyYaziContextMenu:choose()' "$YAZI_INIT" \
+  || fail 'Yazi Copy/Move modal cannot submit with Enter'
 grep -Fq 'AwtarchyYaziDropInto("copy"' "$YAZI_INIT" \
   || fail 'Yazi internal drag cannot copy selected items into a folder'
 grep -Fq 'AwtarchyYaziDropInto("move"' "$YAZI_INIT" \
@@ -953,5 +974,92 @@ notice = runtime.index('Yazi configuration was updated. Restart any open Yazi se
 if not build < mark < apply_plan < notice:
     raise SystemExit(1)
 PY_YAZI_UPDATE_NOTICE
+
+
+# WGDot -> Awtarchy UI migration contract: Linux semantics must stay native.
+python3 - "$YAZI_INIT" "$KEYMAP" <<'PY_PARITY' || fail 'Yazi Linux parity/mouse and preview contracts regressed'
+from pathlib import Path
+import sys
+import tomllib
+
+init = Path(sys.argv[1]).read_text()
+with open(sys.argv[2], "rb") as stream:
+    keymap = tomllib.load(stream)
+
+needles = [
+    "local AwtarchyYaziRangePreview = nil",
+    "range.tab == cx.tabs.idx",
+    "for _, file in ipairs(folder.files) do",
+    "function AwtarchyYaziShiftArrow(step)",
+    "function AwtarchyYaziSpace()",
+    "function AwtarchyYaziTabMidpoint",
+    "AwtarchyYaziMoveActiveTabTo(drag.target, target)",
+    "function Parent:redraw()",
+    "function Parent:click(event, up)",
+    "function AwtarchyYaziParentDropTarget(parent, event)",
+    "function AwtarchyYaziDropToParent()",
+    "ui.Clear(previous)",
+    "AwtarchyYaziContextMenu:show_drop",
+    'label = "Copy to " .. label',
+    'label = "Move to " .. label',
+    'label = "Copy current directory path"',
+    'ya.clipboard(cwd)',
+    "function Preview:click(event, up)",
+    'label = "Open in Micro"',
+    'label = "Copy text contents"',
+    'label = "Copy file to clipboard"',
+    'label = "Copy folder to clipboard"',
+    'label = "Details", action = "preview_details"',
+    "AwtarchyYaziPreviewClipboard(preview_target, false)",
+    "AwtarchyYaziPreviewClipboard(preview_target, true)",
+    "self._preview_target = path",
+    "self._preview_details = table.concat",
+    "local preview_is_dir = self._preview_is_dir",
+    "function AwtarchyYaziDragOut()",
+    'ya.emit("plugin", { "drag" })',
+    'run = "micro " .. AwtarchyYaziShellQuote(preview_target)',
+    'run = "pcmanfm-qt " .. AwtarchyYaziShellQuote(directory)',
+    "pcmanfm-qt .",
+    'wl-copy -t text/uri-list',
+    'wl-copy -t text/plain',
+]
+for needle in needles:
+    if needle not in init:
+        raise SystemExit(f"missing parity contract: {needle}")
+
+for forbidden in ("powershell.exe", "wgdotw.exe", "explorer.exe", "LOCALAPPDATA",
+                  "System.Windows.Forms", "AwtarchyYaziPowerShellQuote", "function Root:click("):
+    if forbidden in init:
+        raise SystemExit(f"Windows-only/unsafe reference: {forbidden}")
+
+def block(start, end):
+    return init[init.index(start):init.index(end, init.index(start))]
+
+shift = block("function AwtarchyYaziShiftArrow(step)", "function AwtarchyYaziSpace()")
+if 'ya.emit("visual_mode", {})' in shift:
+    raise SystemExit("Shift preview prematurely commits Yazi selections")
+space = block("function AwtarchyYaziSpace()", "function AwtarchyYaziArrow(step)")
+if 'ya.emit("visual_mode", {})' not in space or 'ya.emit("toggle", {})' not in space:
+    raise SystemExit("Space does not confirm range / toggle normal selection")
+preview = block("function Preview:click(event, up)", "AwtarchyYaziPreviewToggleButton")
+if "Wgdot" in preview or "Entity:new(" in preview:
+    raise SystemExit("Preview right-click changes hovered selection or uses Windows handler")
+if "if event.is_left and AwtarchyYaziContextMenu._visible then" not in preview:
+    raise SystemExit("Preview left-click does not dismiss existing modal")
+
+manager = keymap["mgr"]["prepend_keymap"]
+keys = {tuple(b["on"]): b["run"] for b in manager}
+assert keys[("<Space>",)] == 'lua "AwtarchyYaziSpace()"'
+assert keys[("d","p")] == 'lua "AwtarchyYaziDropToParent()"'
+assert keys[("d","g")] == "plugin drag"
+assert keys[("g","m")] == "plugin mounts"
+assert keys[("<C-Space>",)] == "toggle"
+for ctrl in (("<C-c>",), ("c","y")):
+    assert "wl-copy -t text/uri-list" in repr(keys[ctrl])
+input_keys = {tuple(b["on"]): b["run"] for b in keymap["input"]["prepend_keymap"]}
+assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
+assert input_keys[("<C-c>",)] == "yank"
+assert input_keys[("<Esc>",)] == "close"
+PY_PARITY
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports tab drag/reorder and right-click rename, keeps context menus action-only with Help and PCManFM-Qt-here actions, supports Help wheel scrolling and Enter/Esc text-view return, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, preserves clipboard/default-editor behavior, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
