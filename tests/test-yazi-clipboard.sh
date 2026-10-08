@@ -691,14 +691,14 @@ grep -Fq 'ensure_yazi_fd_dependency_for_target() {' "$RUNTIME" \
 grep -Fq 'pacman_bin="/usr/bin/pacman"' "$RUNTIME" \
   || fail 'updater does not keep the production fd package path pinned to /usr/bin/pacman'
 # shellcheck disable=SC2016
-grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm fd' "$RUNTIME" \
+grep -Fq 'update_pacman_install_with_404_recovery root "$pacman_bin" fd' "$RUNTIME" \
   || fail 'updater does not install missing fd before managed Yazi config is applied'
 grep -Fq 'AWTARCHY_TEST_PACMAN_BIN' "$RUNTIME" \
   || fail 'updater dependency gates are not testable through the guarded integration override'
 grep -Fq 'ensure_yazi_7zip_dependency_for_target() {' "$RUNTIME" \
   || fail 'updater has no target-aware 7zip dependency gate'
 # shellcheck disable=SC2016
-grep -Fq 'run_update_root "$pacman_bin" -S --needed --noconfirm 7zip' "$RUNTIME" \
+grep -Fq 'update_pacman_install_with_404_recovery root "$pacman_bin" 7zip' "$RUNTIME" \
   || fail 'updater does not install missing 7zip before managed Yazi archive config is applied'
 # shellcheck disable=SC2016
 grep -Fq '${AWTARCHY_MANAGED_PACKAGES_FILE} == /tmp/*' "$RUNTIME" \
