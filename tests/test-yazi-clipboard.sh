@@ -1129,8 +1129,11 @@ for ctrl in (("<C-c>",), ("c","y")):
     assert "wl-copy -t text/uri-list" in repr(keys[ctrl])
 input_keys = {tuple(b["on"]): b["run"] for b in keymap["input"]["prepend_keymap"]}
 assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
-assert input_keys[("<C-c>",)] == "yank"
-assert input_keys[("<Esc>",)] == "close"
+assert input_keys[("<C-c>",)] == ["yank","insert"]
+assert input_keys[("<Esc>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close"]
+assert input_keys[("<Enter>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close --submit"]
+assert input_keys[("<C-S-Left>",)] == ["visual","move bol"]
+assert input_keys[("<C-S-Right>",)] == ["move 1","visual","move eol"]
 PY_PARITY
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports tab drag/reorder and right-click rename, keeps context menus action-only with Help and PCManFM-Qt-here actions, supports Help wheel scrolling and Enter/Esc text-view return, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, preserves clipboard/default-editor behavior, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
