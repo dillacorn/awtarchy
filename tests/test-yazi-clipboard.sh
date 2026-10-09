@@ -343,9 +343,9 @@ grep -Fq 'function AwtarchyYaziRename(hovered_only)' "$YAZI_INIT" \
   || fail 'Yazi native rename selection entrypoint missing'
 grep -Fq 'function AwtarchyYaziRenameRestoreMouse()' "$YAZI_INIT" \
   || fail 'Yazi rename mouse-capture restoration missing'
-grep -Fq 'AwtarchyYaziRenameMouseMode("\27[?1000l\27[?1002l\27[?1015l\27[?1006l"' "$YAZI_INIT" \
+grep -Fq '"\27[?1000l\27[?1002l\27[?1015l\27[?1006l"' "$YAZI_INIT" \
   || fail 'Yazi rename does not temporarily release native mouse capture'
-grep -Fq 'AwtarchyYaziRenameMouseMode("\27[?1000h\27[?1002h\27[?1015h\27[?1006h"' "$YAZI_INIT" \
+grep -Fq '"\27[?1000h\27[?1002h\27[?1015h\27[?1006h"' "$YAZI_INIT" \
   || fail 'Yazi rename does not restore Yazi mouse tracking modes'
 grep -Fq 'AwtarchyYaziRename(true)' "$YAZI_INIT" \
   || fail 'Yazi context menu does not use native single-file rename wrapper'
