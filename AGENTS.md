@@ -12,6 +12,19 @@ Awtarchy changes quickly. Current code, tests, CI, Git state, and the exact requ
 
 If this file conflicts with the current implementation, verify the implementation and update this file as part of the relevant work when appropriate.
 
+## Merge and release authorization
+
+Apply the user's authorization to the requested operation and work, without introducing unnecessary repeat approvals.
+
+- **Implementation is not publication.** A request to investigate, fix, revise, implement, or test permits that scoped work and appropriate feature branches/pull requests; it does not by itself authorize merging to the default branch, creating a tag, or publishing a release.
+- **Act on explicit delivery instructions.** "Merge", "push/apply directly to main", and "publish/release" authorize their respective operations for the specified change. "Merge and release" authorizes both; an explicit request to make a release also authorizes the necessary merge of that release's scoped changes unless the user sets a different destination or restriction. Do not add separate approval gates for already-authorized steps.
+- **Authorization survives revisions.** An approved merge/release remains authorized while the same work is being prepared or corrected. If the user interrupts that release to request a small bug fix, "working", "looks good", "good to go", "continue", or equivalent confirmation can resume the *existing, pending* authorization when that intent is clear. Do not demand a repeated release request.
+- **Honor pauses and cancellations.** "Wait", "hold off", or similar pauses publication until the user signals resumption; cancellation or an explicit "do not release" withdraws that permission. If the requested release's scope, target, or version changes materially, seek fresh authorization before publication.
+- **Authorization is single-use, not a standing mandate.** Once the authorized merge or release is completed, its approval is consumed. A follow-up correction after publication requires new approval to merge or publish, even if it relates to the same feature. Generic praise such as "perfect" or "that works" does not authorize a *new* merge or release.
+- **Testing is not a mandatory user checkpoint.** The user may authorize a merge/release without manual runtime testing. Perform available automated checks when practical, distinguish CI/static checks from actual runtime testing, and disclose any important unverified behavior. Do not block solely for missing user testing when the user explicitly chooses to proceed; disclose substantive test failures rather than silently treating them as success.
+- **Publishing workflows are publication actions.** Do not create or trigger a one-use release bridge, automatic publisher, tag, GitHub Release, or other distribution publication without an active authorization for that particular publication. Drafting notes, choosing a candidate version, and preparing a normal feature PR do not by themselves require release approval.
+- **When no delivery approval exists, stop before delivery.** Leave implementation on the requested branch or a normal review branch/PR and report what is awaiting authorization. Preserve existing repository-specific validation, tagging, security, and release-note requirements when proceeding with an authorized operation.
+
 ## Supplemental LLM working guidance
 
 The project maintainer also publishes general evidence-first LLM working guidance at:
