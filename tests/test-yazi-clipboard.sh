@@ -171,14 +171,17 @@ expected_input = {
     ("<End>",): ["insert", "move eol"],
     ("<S-Left>",): ["visual", "move -1"],
     ("<S-Right>",): ["visual", "move 1"],
-    ("<C-S-Left>",): ["visual", "move bol"],
-    ("<C-S-Right>",): ["move 1", "visual", "move eol"],
+    ("<C-S-Left>",): ["visual", "backward lean"],
+    ("<C-S-Right>",): ["move 1", "visual", "forward lean --end-of-word"],
     ("<C-c>",): ["yank", "insert"],
     ("<C-v>",): ["paste", "insert"],
 }
 for keys, run in expected_input.items():
     if input_by_keys.get(keys) != run:
         raise SystemExit(f"Broken rename input binding {keys}: {input_by_keys.get(keys)!r}")
+for key in ("<C-S-Left>", "<C-S-Right>"):
+    assert "move bol" not in input_by_keys[(key,)]
+    assert "move eol" not in input_by_keys[(key,)]
 
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
@@ -1132,8 +1135,8 @@ assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
 assert input_keys[("<C-c>",)] == ["yank","insert"]
 assert input_keys[("<Esc>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close"]
 assert input_keys[("<Enter>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close --submit"]
-assert input_keys[("<C-S-Left>",)] == ["visual","move bol"]
-assert input_keys[("<C-S-Right>",)] == ["move 1","visual","move eol"]
+assert input_keys[("<C-S-Left>",)] == ["visual","backward lean"]
+assert input_keys[("<C-S-Right>",)] == ["move 1","visual","forward lean --end-of-word"]
 PY_PARITY
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports tab drag/reorder and right-click rename, keeps context menus action-only with Help and PCManFM-Qt-here actions, supports Help wheel scrolling and Enter/Esc text-view return, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, preserves clipboard/default-editor behavior, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
