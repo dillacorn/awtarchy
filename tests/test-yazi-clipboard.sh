@@ -68,7 +68,7 @@ expected = {
     ("b",): 'lua "AwtarchyYaziToggleBookmarks()"',
     ("B",): 'lua "AwtarchyYaziBookmarkHovered()"',
     ("r",): 'lua "AwtarchyYaziToggleRecents()"',
-    ("R",): "rename",
+    ("R",): 'lua "AwtarchyYaziRename(false)"',
     ("g", "r"): 'lua "AwtarchyYaziGoRecents()"',
     ("g", "b"): 'lua "AwtarchyYaziGoBookmarks()"',
     ("g", "m"): "plugin mounts",
@@ -79,7 +79,7 @@ expected = {
     ("<S-Enter>",): 'lua "AwtarchyYaziOpen(true)"',
     ("d", "g"): "plugin drag",
     ("d", "p"): 'lua "AwtarchyYaziDropToParent()"',
-    ("<F2>",): "rename",
+    ("<F2>",): 'lua "AwtarchyYaziRename(false)"',
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
@@ -150,6 +150,35 @@ if by_keys.get(("r",), {}).get("desc") != "Toggle recent files":
     raise SystemExit(1)
 if by_keys.get(("R",), {}).get("desc") != "Rename":
     raise SystemExit(1)
+
+# Rename input must restore mouse capture regardless of Insert/Normal mode.
+input_bindings = config.get("input", {}).get("prepend_keymap", [])
+input_by_keys = {
+    tuple(binding["on"]): binding["run"]
+    for binding in input_bindings
+    if isinstance(binding, dict) and isinstance(binding.get("on"), list)
+}
+expected_input = {
+    ("<Esc>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "close"],
+    ("<Enter>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "close --submit"],
+    ("<C-[>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "escape"],
+    ("<C-a>",): ["move eol", "visual", "move bol"],
+    ("<Left>",): ["insert", "move -1"],
+    ("<Right>",): ["insert", "move 1"],
+    ("<C-Left>",): ["insert", "backward lean"],
+    ("<C-Right>",): ["insert", "forward lean --end-of-word"],
+    ("<Home>",): ["insert", "move bol"],
+    ("<End>",): ["insert", "move eol"],
+    ("<S-Left>",): ["visual", "move -1"],
+    ("<S-Right>",): ["visual", "move 1"],
+    ("<C-S-Left>",): ["visual", "move bol"],
+    ("<C-S-Right>",): ["move 1", "visual", "move eol"],
+    ("<C-c>",): ["yank", "insert"],
+    ("<C-v>",): ["paste", "insert"],
+}
+for keys, run in expected_input.items():
+    if input_by_keys.get(keys) != run:
+        raise SystemExit(f"Broken rename input binding {keys}: {input_by_keys.get(keys)!r}")
 
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
@@ -310,6 +339,18 @@ grep -Fq 'ya.emit("tasks:show", {})' "$YAZI_INIT" \
   || fail 'Yazi active task status is not clickable'
 grep -Fq 'action = "bulk_rename"' "$YAZI_INIT" \
   || fail 'Yazi multi-selection context menu lacks bulk rename'
+grep -Fq 'function AwtarchyYaziRename(hovered_only)' "$YAZI_INIT" \
+  || fail 'Yazi native rename selection entrypoint missing'
+grep -Fq 'function AwtarchyYaziRenameRestoreMouse()' "$YAZI_INIT" \
+  || fail 'Yazi rename mouse-capture restoration missing'
+grep -Fq '"\27[?1000l\27[?1002l\27[?1015l\27[?1006l"' "$YAZI_INIT" \
+  || fail 'Yazi rename does not temporarily release native mouse capture'
+grep -Fq '"\27[?1000h\27[?1002h\27[?1015h\27[?1006h"' "$YAZI_INIT" \
+  || fail 'Yazi rename does not restore Yazi mouse tracking modes'
+grep -Fq 'AwtarchyYaziRename(true)' "$YAZI_INIT" \
+  || fail 'Yazi context menu does not use native single-file rename wrapper'
+grep -Fq 'if not hovered_only and #cx.active.selected > 0 then' "$YAZI_INIT" \
+  || fail 'Yazi bulk rename must not release terminal mouse capture'
 grep -Fq 'local function AwtarchyYaziOpenFiles(interactive, hovered_only)' "$YAZI_INIT" \
   || fail 'Yazi central file-open recorder is missing'
 grep -Fq 'if file and not file.cha.is_dir then' "$YAZI_INIT" \
@@ -1088,8 +1129,11 @@ for ctrl in (("<C-c>",), ("c","y")):
     assert "wl-copy -t text/uri-list" in repr(keys[ctrl])
 input_keys = {tuple(b["on"]): b["run"] for b in keymap["input"]["prepend_keymap"]}
 assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
-assert input_keys[("<C-c>",)] == "yank"
-assert input_keys[("<Esc>",)] == "close"
+assert input_keys[("<C-c>",)] == ["yank","insert"]
+assert input_keys[("<Esc>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close"]
+assert input_keys[("<Enter>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close --submit"]
+assert input_keys[("<C-S-Left>",)] == ["visual","move bol"]
+assert input_keys[("<C-S-Right>",)] == ["move 1","visual","move eol"]
 PY_PARITY
 
 printf '%s\n' 'PASS: Yazi preserves compact size/date rows and native create/find/navigation, supports tab drag/reorder and right-click rename, keeps context menus action-only with Help and PCManFM-Qt-here actions, supports Help wheel scrolling and Enter/Esc text-view return, provides explicit outbound drag through the managed ripdrag surface while keeping internal drag native, preserves clipboard/default-editor behavior, updates managed Yazi config without terminating running sessions, tells users to restart Yazi afterward, and migrates only the deprecated Awtarchy plugin.'
