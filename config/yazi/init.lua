@@ -784,6 +784,54 @@ function AwtarchyYaziOpenHoveredTab()
     end
 end
 
+
+-- Terminal-native text selection while Yazi's single-item Rename input is active.
+-- Yazi does not route pointer events to its input layer; releasing mouse
+-- capture lets Alacritty select text with the mouse for Ctrl+Shift+C.
+-- Native Yazi rename/collision handling and bulk rename remain unchanged.
+local AwtarchyYaziRenameMouseReleased = false
+
+local function AwtarchyYaziRenameMouseMode(sequence)
+    if not io or not io.stdout then return false end
+    local ok, wrote = pcall(function()
+        return io.stdout:write(sequence) and io.stdout:flush() ~= nil
+    end)
+    return ok and wrote == true
+end
+
+function AwtarchyYaziRenameRestoreMouse()
+    if not AwtarchyYaziRenameMouseReleased then return end
+    -- Same four modes as Yazi's terminal mouse-capture setup.
+    if AwtarchyYaziRenameMouseMode("\27[?1000h\27[?1002h\27[?1015h\27[?1006h") then
+        AwtarchyYaziRenameMouseReleased = false
+    else
+        ya.notify {
+            title = "Yazi Rename",
+            content = "Mouse reporting could not be restored. Restart Yazi if mouse clicks are unavailable.",
+            level = "error",
+            timeout = 6,
+        }
+    end
+end
+
+function AwtarchyYaziRename(hovered_only)
+    local current = cx.active and cx.active.current
+    if not current or not current.hovered then return end
+
+    -- A selected set opens Yazi's bulk-editor rename flow. Never release
+    -- terminal mouse reporting for bulk rename or a multi-file selection.
+    if not hovered_only and #cx.active.selected > 0 then
+        ya.emit("rename", {})
+        return
+    end
+
+    AwtarchyYaziRenameRestoreMouse()
+    AwtarchyYaziRenameMouseReleased = AwtarchyYaziRenameMouseMode(
+        "\27[?1000l\27[?1002l\27[?1015l\27[?1006l"
+    )
+    ya.emit("rename", hovered_only and { hovered = true } or {})
+end
+
 local AwtarchyYaziInitialRatio = nil
 local AwtarchyYaziPreviewHiddenRestore = nil
 local AwtarchyYaziPreviewMaxRestore = nil
@@ -1941,7 +1989,7 @@ function AwtarchyYaziContextMenu:run(action)
     elseif action == "open_with" then
         AwtarchyYaziOpenFiles(true, true)
     elseif action == "rename" then
-        ya.emit("rename", { hovered = true })
+        AwtarchyYaziRename(true)
     elseif action == "bulk_rename" then
         ya.emit("rename", {})
     elseif action == "drag_out" then
