@@ -429,3 +429,92 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+  publish-v3-9-3-yazi-word-selection-one-use:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
+      github.repository == 'dillacorn/awtarchy' &&
+      github.event.pull_request.title == 'Release bridge v3.9.3 Yazi word selection one-use' &&
+      github.event.pull_request.head.ref == 'chore/release-v3.9.3-yazi-word-selection-20261009' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out release validator
+        uses: actions/checkout@v4
+      - name: Validate and publish Awtarchy v3.9.3
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -Eeuo pipefail
+          repo="dillacorn/awtarchy"
+          target="c916ed7422eb3e901ee44a3e71b5e92172af3dda"
+          tag="v3.9.3"
+          helper="chore/release-v3.9.3-yazi-word-selection-20261009"
+          title="Awtarchy v3.9.3 Yazi Word Selection"
+          test "$GITHUB_EVENT_NAME" = "pull_request"
+          test "$GITHUB_REPOSITORY" = "$repo"
+          test "$(jq -r '.action' "$GITHUB_EVENT_PATH")" = "opened"
+          test "$(jq -r '.pull_request.title' "$GITHUB_EVENT_PATH")" = "Release bridge v3.9.3 Yazi word selection one-use"
+          test "$(jq -r '.pull_request.head.ref' "$GITHUB_EVENT_PATH")" = "$helper"
+          test "$(jq -r '.pull_request.head.repo.full_name' "$GITHUB_EVENT_PATH")" = "$repo"
+          test "$(jq -r '.pull_request.base.ref' "$GITHUB_EVENT_PATH")" = "main"
+          test "$(gh api "repos/$repo/branches/main" --jq '.commit.sha')" = "$target"
+          if gh release view "$tag" --repo "$repo" >/dev/null 2>&1; then
+            echo "Existing release $tag; refusing replacement" >&2
+            exit 1
+          fi
+          if gh api "repos/$repo/git/ref/tags/$tag" --silent >/dev/null 2>&1; then
+            echo "Existing tag $tag; refusing movement" >&2
+            exit 1
+          fi
+          notes="$(mktemp)"
+          previous="$(mktemp)"
+          published="$(mktemp)"
+          trap 'rm -f "$notes" "$previous" "$published"' EXIT
+          cat > "$notes" <<'RELEASE_NOTES'
+          # Awtarchy v3.9.3 Yazi Word Selection
+          
+          This maintenance release makes Ctrl+Shift+Arrow selection in Yazi Rename advance word by word, like a conventional text editor, rather than jumping across the entire filename.
+          
+          ## Install and update
+          
+          - New installation: [INSTALL.md](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md).
+          - Existing users: [UPDATING.md](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md) or run `awtarchy update`.
+          
+          ## Yazi rename improvement
+          
+          - Ctrl+Shift+Left extends the highlighted text to the previous adjacent word, using the same native word boundaries as Ctrl+Left.
+          - Ctrl+Shift+Right extends the highlighted text to the next adjacent word, using the same native word boundaries as Ctrl+Right.
+          - Repeated presses retain the text selection anchor; Shift+Arrow character selection and Ctrl+A full-filename selection remain unchanged.
+          - Clipboard paste, Alacritty mouse selection, Esc/Enter mouse restoration, and native Yazi file management remain unchanged.
+          
+          ## Validation
+          
+          - PR #273 passed all 13 Awtarchy workflows, including the full command/updater integration suite, Yazi Lua/TOML tests, release-note checks, and Linux package/security checks.
+          - The original rename-selection workflow was runtime-tested in WGDot, while this wordwise correction still requires interactive verification on Linux/Alacritty.
+          RELEASE_NOTES
+
+          gh release view v3.9.2 --repo "$repo" --json body --jq '.body' > "$previous"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes "$notes" --previous "$previous"
+
+          gh release create "$tag" --repo "$repo" --target "$target" \
+            --title "$title" --notes-file "$notes" --latest
+
+          gh release view "$tag" --repo "$repo" --json body --jq '.body' > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes "$published" --previous "$previous"
+          gh release view "$tag" --repo "$repo" \
+            --json tagName,name,isDraft,isPrerelease,targetCommitish,publishedAt \
+            | jq -e --arg tag "$tag" --arg title "$title" --arg sha "$target" \
+              '.tagName == $tag and .name == $title and .isDraft == false and .isPrerelease == false and .targetCommitish == $sha and .publishedAt != null'
+          test "$(gh api "repos/$repo/git/ref/tags/$tag" --jq '.object.sha')" = "$target"
+          test "$(gh api "repos/$repo/branches/main" --jq '.commit.sha')" = "$target"
+          echo "Verified stable Awtarchy release $tag at $target"
+          gh api -X DELETE "repos/$repo/git/refs/heads/$helper"
+          echo "Disposable helper branch deleted; it was never merged"
