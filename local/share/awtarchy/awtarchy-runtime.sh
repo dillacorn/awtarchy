@@ -3731,31 +3731,6 @@ activate_awtarchy_polkit_agent() {
   log "Awtarchy PolicyKit authentication agent is active."
 }
 
-remove_retired_alacritty_packages() {
-  local manifest tmp pkg
-  local -a installed=()
-  [[ -z "${TESTING_BRANCH:-}" ]] || return 0
-  pacman -Qq foot >/dev/null 2>&1 || { warn "Foot missing; keeping previous terminal."; return 0; }
-  for pkg in alacritty-graphics alacritty; do
-    managed_package_recorded "$pkg" || continue
-    pacman -Qq "$pkg" >/dev/null 2>&1 && installed+=("$pkg")
-  done
-  (( ${#installed[@]} )) || return 0
-  if ! run_update_root /usr/bin/pacman -Rns --noconfirm "${installed[@]}"; then
-    warn "Could not remove retired Awtarchy-owned terminal packages."
-    return 0
-  fi
-  manifest="$(managed_packages_file)"
-  [[ -r "$manifest" ]] || return 0
-  tmp="$(mktemp)"
-  grep -Ev '^(alacritty|alacritty-graphics)$' "$manifest" >"$tmp" || true
-  if ! atomic_update_root_file_from_stdin 0644 0 0 "$manifest" <"$tmp"; then
-    warn "Retired terminal package ledger could not be updated."
-  fi
-  rm -f -- "$tmp"
-  log "Removed retired Awtarchy-owned Alacritty packages."
-}
-
 remove_legacy_polkit_gnome_package() {
   local manifest tmp
   [[ -z "${TESTING_BRANCH:-}" ]] || { log "Git testing keeps polkit-gnome installed as an inactive emergency fallback."; return 0; }
@@ -7403,6 +7378,12 @@ for rel in all_paths:
     new = target / rel
     old = baseline / rel
     li, ni, oi = identity(rel, local), identity(rel, new), identity(rel, old)
+    # Alacritty is optional after the Foot transition. Do not delete an
+    # existing Alacritty configuration merely because Awtarchy no longer
+    # ships or updates it. Dropping it from the new baseline makes it
+    # user-owned for subsequent updates, even in clean/reset mode.
+    if rel.startswith(".config/alacritty/") and ni is None:
+        continue
     if ni is not None and li == ni:
         continue
     if ni is None:
@@ -9914,7 +9895,6 @@ main() {
 
   log "Saving Awtarchy update state..."
   commit_baseline "$target_home" "$source_label" "$active_theme"
-  remove_retired_alacritty_packages
   write_hardware_state
   [[ -n "$active_theme" ]] && printf '%s\n' "$active_theme" >"$ACTIVE_THEME_FILE"
   if [[ -n "$source_revision" ]]; then
