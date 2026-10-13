@@ -154,8 +154,8 @@ builtin("virt-manager", "Virtual Machine Manager", "optional", false, {
     { name = "awtarchy-screenshare-virt-manager-v1", match = { class = "^(virt-manager)$" } },
 })
 
-builtin("alacritty", "Alacritty", "optional", false, {
-    { name = "awtarchy-screenshare-alacritty-v1", match = { class = "^(Alacritty)$" } },
+builtin("foot", "Foot", "optional", false, {
+    { name = "awtarchy-screenshare-foot-v1", match = { class = "^(foot)$" } },
 })
 
 builtin("mpv", "mpv", "optional", false, {
