@@ -23,7 +23,7 @@ trap 'rm -rf -- "$TMP"' EXIT
 export XDG_CACHE_HOME="$TMP/cache"
 
 "$HELPER" record org.mozilla.firefox.desktop
-"$HELPER" record org.alacritty.Alacritty.desktop
+"$HELPER" record foot.desktop
 "$HELPER" record org.mozilla.firefox.desktop
 
 STATE="${XDG_CACHE_HOME}/awtarchy/launcher-usage.json"
@@ -31,12 +31,12 @@ STATE="${XDG_CACHE_HOME}/awtarchy/launcher-usage.json"
 jq -e '.version == 1' "$STATE" >/dev/null || fail 'launcher usage state version is invalid'
 jq -e '.launches["org.mozilla.firefox.desktop"] == 2' "$STATE" >/dev/null \
   || fail 'Firefox launch count was not incremented to 2'
-jq -e '.launches["org.alacritty.Alacritty.desktop"] == 1' "$STATE" >/dev/null \
-  || fail 'Alacritty launch count was not recorded as 1'
+jq -e '.launches["foot.desktop"] == 1' "$STATE" >/dev/null \
+  || fail 'Foot launch count was not recorded as 1'
 
-"$HELPER" record org.alacritty.Alacritty.desktop
-jq -e '.launches["org.alacritty.Alacritty.desktop"] == 2' "$STATE" >/dev/null \
-  || fail 'Alacritty launch count was not incremented to 2'
+"$HELPER" record foot.desktop
+jq -e '.launches["foot.desktop"] == 2' "$STATE" >/dev/null \
+  || fail 'Foot launch count was not incremented to 2'
 
 printf '%s\n' '{not-json' >"$STATE"
 "$HELPER" record org.keepassxc.KeePassXC.desktop
