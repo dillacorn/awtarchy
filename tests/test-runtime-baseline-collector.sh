@@ -91,7 +91,7 @@ case "$*" in
     version) printf '%s\n' 'Hyprland 0.fixture' ;;
     "monitors -j") printf '%s\n' '[{"name":"DP-1","width":1920,"height":1080,"scale":1.25,"focused":true}]' ;;
     "activeworkspace -j") printf '%s\n' '{"id":2,"name":"2","monitor":"DP-1"}' ;;
-    "clients -j") printf '%s\n' '[{"address":"0xabc","class":"Alacritty","title":"Fixture"}]' ;;
+    "clients -j") printf '%s\n' '[{"address":"0xabc","class":"foot","title":"Fixture"}]' ;;
     *) exit 1 ;;
 esac
 EOF_HYPR
@@ -172,7 +172,7 @@ grep -Fq 'Hyprland 0.fixture' "$out" || fail 'missing Hyprland version'
 grep -Fq 'quickshell fixture' "$out" || fail 'missing Quickshell version'
 grep -Fq '"name":"DP-1"' "$out" || fail 'missing monitor JSON'
 grep -Fq '"monitor":"DP-1"' "$out" || fail 'missing active workspace JSON'
-grep -Fq '"class":"Alacritty"' "$out" || fail 'missing clients JSON'
+grep -Fq '"class":"foot"' "$out" || fail 'missing clients JSON'
 grep -Fq '"position":"top"' "$out" || fail 'missing Quickshell state'
 grep -Fq 'branch=analysis/runtime-stress-optimization' "$out" || fail 'missing git-testing state'
 grep -Fq 'tag=v3.4.6' "$out" || fail 'missing config-version state'
