@@ -4,6 +4,6 @@
 [Desktop Entry]
 Type=Application
 Terminal=false
-Exec=/bin/sh -c 'command -v cava >/dev/null 2>&1 && alacritty -e cava || hyprctl notify 3 5000 "rgb(ff5555)" "cava is not installed."'
+Exec=/bin/sh -c 'command -v cava >/dev/null 2>&1 && foot cava || hyprctl notify 3 5000 "rgb(ff5555)" "cava is not installed."'
 Name=cava
 Icon=utilities-terminal
