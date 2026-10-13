@@ -28,6 +28,7 @@ reject_text() {
 
 # Stable picker identity and selection-only behavior are prerequisites for exact
 # client targeting.
+ # shellcheck disable=SC2016
 require_text "$PICKER" '--fullscreen --app-id "$PICKER_CLASS" --title "$PICKER_TITLE"' \
     'picker terminal identity is not exact and stable'
 require_text "$PICKER" '--select-only --type all' \
