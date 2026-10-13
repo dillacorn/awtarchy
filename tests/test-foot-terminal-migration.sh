@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Static integration checks for the initial Foot testing stage.
+# Static integration checks for Awtarchy's full Foot terminal transition.
 set -euo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -38,6 +38,16 @@ require "$CONFIG" 'alpha=0.85'
 require "$RUNTIME" 'remove_retired_alacritty_packages()'
 require "$RUNTIME" 'local -a required=(quickshell foot upower'
 require "$ROOT/config/hypr/scripts/awtarchy-polkit-agent/launcher.sh" 'FOOT="/usr/bin/foot"'
+
+for quicksettings in "$ROOT/config/hypr/scripts/hypr_quicksettings.sh" "$ROOT/config/hypr/scripts/hypr_quicksettings_core.sh"; do
+    require "$quicksettings" 'exec foot --app-id="$TERM_CLASS"'
+    if grep -Eiq 'alacritty|exec kitty|exec xterm' "$quicksettings"; then
+        printf 'FAIL: retired terminal launch path still exists: %s\n' "$quicksettings" >&2
+        exit 1
+    fi
+done
+require "$ROOT/config/hypr/scripts/hypr_quicksettings_core.sh" "printf -v launch_cmd 'foot --app-id wallpicker %q --resume'"
+
 
 if command -v foot >/dev/null 2>&1; then
     foot --check-config --config="$CONFIG"
