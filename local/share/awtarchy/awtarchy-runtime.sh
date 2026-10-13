@@ -6176,14 +6176,31 @@ if micro_settings.is_file():
 foot_ini = home / ".config/foot/foot.ini"
 if foot_ini.is_file():
     content = foot_ini.read_text(encoding="utf-8")
-    palette_options = {
-        "background": palette["background"].lstrip("#")[:6],
-        "foreground": palette["foreground"].lstrip("#")[:6],
-        "regular1": palette["urgent"].lstrip("#")[:6],
-        "regular2": palette["charging"].lstrip("#")[:6],
-        "regular4": palette["focus"].lstrip("#")[:6],
-        "regular5": palette["lockAccent"].lstrip("#")[:6],
-    }
+    # Match the full ANSI palette of the previously selected Alacritty theme.
+    foot_palette = home / ".config/foot/themes" / (theme_name + ".ini")
+    foot_keys = ("background", "foreground", *(f"regular{i}" for i in range(8)), *(f"bright{i}" for i in range(8)))
+    palette_options = {}
+    if foot_palette.is_file():
+        for raw in foot_palette.read_text(encoding="utf-8").splitlines():
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            entry = re.fullmatch(r"([a-z]+[0-9]?)=([0-9a-fA-F]{6})", line)
+            if not entry or entry.group(1) not in foot_keys or entry.group(1) in palette_options:
+                raise SystemExit(f"invalid staged Foot palette entry: {foot_palette}")
+            palette_options[entry.group(1)] = entry.group(2).lower()
+        if set(palette_options) != set(foot_keys):
+            raise SystemExit(f"incomplete staged Foot palette: {foot_palette}")
+    else:
+        # Custom themes without a shipped Foot palette use theme UI colors.
+        palette_options = {
+            "background": palette["background"].lstrip("#")[:6],
+            "foreground": palette["foreground"].lstrip("#")[:6],
+            "regular1": palette["urgent"].lstrip("#")[:6],
+            "regular2": palette["charging"].lstrip("#")[:6],
+            "regular4": palette["focus"].lstrip("#")[:6],
+            "regular5": palette["lockAccent"].lstrip("#")[:6],
+        }
     for key, value in palette_options.items():
         content, count = re.subn(
             rf"(?m)^({re.escape(key)}=)[0-9A-Fa-f]{{6}}$",
