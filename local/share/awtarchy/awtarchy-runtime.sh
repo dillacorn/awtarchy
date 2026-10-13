@@ -77,7 +77,6 @@ declare -a PACKAGES_AUR=(
   bibata-cursor-theme-bin
   mpvpaper
   qimgv
-  alacritty-graphics
   obs-pipewire-audio-capture-bin
 )
 
@@ -2251,7 +2250,6 @@ print_install_review() {
   printf '  - Install required AUR feature dependencies\n'
   if (( INSTALL_AUR == 1 )); then printf '  - Install selected additional AUR packages\n'; else printf '  - Skip additional AUR packages\n'; fi
   if (( INSTALL_FLATPAK == 1 )); then printf '  - Install selected Flatpak apps\n'; else printf '  - Skip Flatpak apps\n'; fi
-  printf '  - Install/update Alacritty themes\n'
   if [[ "$INSTALL_GPU" == 1 && "$IS_VM" == false ]]; then printf '  - Run GPU dependency automation\n'; else printf '  - Skip GPU dependency automation\n'; fi
   printf '  - Install/update Micro themes\n'
   if (( ENABLE_KEYRING_PAM == 1 )); then printf '  - Enable GNOME Keyring PAM integration\n'; else printf '  - Skip GNOME Keyring PAM integration\n'; fi
@@ -2759,12 +2757,6 @@ aur_selected_package_installed() {
   local pkg="$1" alt=""
 
   case "$pkg" in
-    alacritty|alacritty-graphics)
-      for alt in alacritty alacritty-graphics; do
-        pacman -Q "$alt" >/dev/null 2>&1 && return 0
-      done
-      return 1
-      ;;
     qimgv|qimgv-git)
       for alt in qimgv qimgv-git; do
         pacman -Q "$alt" >/dev/null 2>&1 && return 0
@@ -3069,18 +3061,6 @@ install_flatpak_apps_stage() {
   fi
 }
 
-install_alacritty_themes_stage() {
-  local target_dir="${HOME_DIR}/.config/alacritty"
-  run_as_target install -d -m 0755 "$target_dir"
-
-  if [[ -d "$target_dir/themes" ]]; then
-    log "Alacritty themes directory exists. Checking for updates..."
-    run_as_target bash -lc "cd '$target_dir/themes' && git fetch origin && default_branch=\$(git remote show origin | awk '/HEAD branch/ {print \$NF}') && remote_commit=\$(git rev-parse origin/\$default_branch) && local_commit=\$(git rev-parse HEAD) && if [[ \$local_commit != \$remote_commit ]]; then git reset --hard origin/\$default_branch; fi"
-  else
-    log "Cloning Alacritty themes..."
-    run_as_target git clone https://github.com/alacritty/alacritty-theme "$target_dir/themes"
-  fi
-}
 
 install_micro_themes_stage() {
   [[ -n "${TARGET_USER:-}" ]] || die "TARGET_USER unset."
@@ -3378,13 +3358,13 @@ awtarchy_polkit_verify_runtime_tree() {
   local directory="$1" actual expected
   awtarchy_polkit_verify_root_directory "$directory" || return 1
   awtarchy_polkit_verify_root_file "${directory}/agent.py" 644 || return 1
-  awtarchy_polkit_verify_root_file "${directory}/alacritty.toml" 644 || return 1
+  awtarchy_polkit_verify_root_file "${directory}/foot.ini" 644 || return 1
   awtarchy_polkit_verify_root_file "${directory}/launcher" 755 || return 1
   awtarchy_polkit_verify_root_file "${directory}/tui.py" 644 || return 1
   actual="$(awtarchy_polkit_root /usr/bin/find "$directory" -mindepth 1 -maxdepth 1 -printf '%f
 ' 2>/dev/null | LC_ALL=C sort)" || return 1
   expected=$'agent.py
-alacritty.toml
+foot.ini
 launcher
 tui.py'
   [[ "$actual" == "$expected" ]] || { warn "Unexpected files in Awtarchy PolicyKit runtime."; return 1; }
@@ -3414,7 +3394,7 @@ install_awtarchy_polkit_agent_runtime() {
   local source_dir="${repo_dir}/config/hypr/scripts/awtarchy-polkit-agent"
   local agent_source="${source_dir}/agent.py"
   local tui_source="${source_dir}/tui.py"
-  local terminal_config_source="${source_dir}/alacritty.toml"
+  local terminal_config_source="${source_dir}/foot.ini"
   local launcher_source="${source_dir}/launcher.sh"
   local service_source="${source_dir}/awtarchy-polkit-agent.service"
   local stage="" previous_runtime="" failed_runtime="" service_tmp="" previous_service=""
@@ -3436,7 +3416,7 @@ install_awtarchy_polkit_agent_runtime() {
   stage="$(awtarchy_polkit_root /usr/bin/mktemp -d "${AWTARCHY_POLKIT_RUNTIME_PARENT}/.polkit-agent.stage.XXXXXX")" || return 1
   if ! awtarchy_polkit_root /usr/bin/install -m 0644 -o root -g root -- "$agent_source" "${stage}/agent.py" \
     || ! awtarchy_polkit_root /usr/bin/install -m 0644 -o root -g root -- "$tui_source" "${stage}/tui.py" \
-    || ! awtarchy_polkit_root /usr/bin/install -m 0644 -o root -g root -- "$terminal_config_source" "${stage}/alacritty.toml" \
+    || ! awtarchy_polkit_root /usr/bin/install -m 0644 -o root -g root -- "$terminal_config_source" "${stage}/foot.ini" \
     || ! awtarchy_polkit_root /usr/bin/install -m 0755 -o root -g root -- "$launcher_source" "${stage}/launcher" \
     || ! awtarchy_polkit_root /usr/bin/chmod 0755 -- "$stage";
   then
@@ -3842,7 +3822,7 @@ copy_awtarchy_configs_stage() {
     retry_command run_as_target chmod 0644 "$dest"
   done
 
-  local -a config_dirs=(hypr quickshell alacritty foot gtk-3.0 Kvantum SpeedCrunch fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
+  local -a config_dirs=(hypr quickshell foot gtk-3.0 Kvantum SpeedCrunch fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
@@ -4163,7 +4143,6 @@ run_install() {
   fi
   install_aur_repo_apps_stage
   install_flatpak_apps_stage
-  install_alacritty_themes_stage
   if [[ "$INSTALL_GPU" == 1 && "$IS_VM" == false ]]; then
     install_gpu_dependencies_main
   else
@@ -6086,7 +6065,7 @@ allowed = {
     "NEW_ACTIVE_BORDER", "NEW_INACTIVE_BORDER",
     "QS_BACKGROUND", "QS_HOVER", "QS_FOCUS", "QS_ACTIVE",
     "QS_URGENT", "QS_CHARGING", "QS_CRITICAL", "QS_FOREGROUND",
-    "QS_DARK", "QS_MUTED", "MICRO_COLORSCHEME", "ALACRITTY_THEME",
+    "QS_DARK", "QS_MUTED", "MICRO_COLORSCHEME",
     "SPEEDCRUNCH_COLORSCHEME",
     # Read-only compatibility keys from pre-Quickshell Awtarchy themes.
     "W_BG", "W_COLOR", "W_CUSTOM_HOVER_BG", "W_FOCUS_BG",
@@ -6150,12 +6129,6 @@ if not micro:
     micro = match.group(1).strip() if match else "geany"
 micro = safe_name(micro, "Micro colorscheme")
 
-alacritty = values.get("ALACRITTY_THEME", "").strip()
-if not alacritty:
-    match = re.search(r'themes/themes/([^"\'|]+\.toml)', text)
-    alacritty = match.group(1).strip() if match else "wombat.toml"
-alacritty = safe_name(alacritty, "Alacritty theme", ".toml")
-
 speedcrunch = values.get("SPEEDCRUNCH_COLORSCHEME", "").strip()
 if not speedcrunch:
     match = re.search(r'Display\\ColorSchemeName=([^|\'"\n]+)', text)
@@ -6195,16 +6168,26 @@ if micro_settings.is_file():
     data["colorscheme"] = micro
     micro_settings.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
 
-alacritty_conf = home / ".config/alacritty/alacritty.toml"
-if alacritty_conf.is_file():
-    content = alacritty_conf.read_text(encoding="utf-8")
-    content, count = re.subn(
-        r'~/.config/alacritty/themes/themes/[^"\n]+\.toml',
-        f"~/.config/alacritty/themes/themes/{alacritty}",
-        content,
-    )
-    if count:
-        alacritty_conf.write_text(content, encoding="utf-8")
+foot_ini = home / ".config/foot/foot.ini"
+if foot_ini.is_file():
+    content = foot_ini.read_text(encoding="utf-8")
+    palette_options = {
+        "background": palette["background"].lstrip("#")[:6],
+        "foreground": palette["foreground"].lstrip("#")[:6],
+        "regular1": palette["urgent"].lstrip("#")[:6],
+        "regular2": palette["charging"].lstrip("#")[:6],
+        "regular4": palette["focus"].lstrip("#")[:6],
+        "regular5": palette["lockAccent"].lstrip("#")[:6],
+    }
+    for key, value in palette_options.items():
+        content, count = re.subn(
+            rf"(?m)^({re.escape(key)}=)[0-9A-Fa-f]{{6}}$",
+            lambda match, value=value: match.group(1) + value,
+            content,
+        )
+        if count != 1:
+            raise SystemExit(f"Foot configuration missing exact {key} palette entry")
+    foot_ini.write_text(content, encoding="utf-8")
 
 speed_ini = home / ".config/SpeedCrunch/SpeedCrunch.ini"
 if speed_ini.is_file():
@@ -9158,7 +9141,7 @@ ensure_quickshell_update_prerequisites() {
     || die "pacman is required for the Quickshell migration"
 
   local pkg
-  local -a required=(quickshell upower playerctl hyprland-qt-support polkit python-gobject) missing=()
+  local -a required=(quickshell foot upower playerctl hyprland-qt-support polkit python-gobject) missing=()
   for pkg in "${required[@]}"; do
     pacman -Q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
   done
@@ -10789,8 +10772,8 @@ troubleshoot_main() {
         printf '%s\n' "$clients_json" | jq '
           .[]
           | select(
-              ((.class // "") | test("quick|waybar|mako|wlogout|fuzzel|alacritty"; "i"))
-              or ((.initialClass // "") | test("quick|waybar|mako|wlogout|fuzzel|alacritty"; "i"))
+              ((.class // "") | test("quick|waybar|mako|wlogout|fuzzel|foot"; "i"))
+              or ((.initialClass // "") | test("quick|waybar|mako|wlogout|fuzzel|foot"; "i"))
               or ((.title // "") | test("quick settings|awtarchy"; "i"))
             )
           | {address,pid,class,initialClass,title,initialTitle}
