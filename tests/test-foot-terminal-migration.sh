@@ -64,6 +64,54 @@ done
 require "$ROOT/config/hypr/scripts/hypr_quicksettings_core.sh" "printf -v launch_cmd 'foot --app-id wallpicker %q --resume'"
 
 
+# Theme switching must update all 18 ANSI/foreground/background entries,
+# preserve the existing terminal opacity, and leave optional Alacritty alone.
+tmp="$(mktemp -d)"
+trap 'rm -rf -- "$tmp"' EXIT
+mkdir -p "$tmp/config/foot/themes" "$tmp/config/hypr/themes" "$tmp/config/alacritty" "$tmp/fakebin"
+cp -- "$CONFIG" "$tmp/config/foot/foot.ini"
+cp -- "$ROOT"/config/foot/themes/*.ini "$tmp/config/foot/themes/"
+cp -- "$ROOT"/config/hypr/themes/* "$tmp/config/hypr/themes/"
+printf '%s\n' '[window]' 'opacity = 0.85' >"$tmp/config/alacritty/alacritty.toml"
+printf '#!/usr/bin/env bash\nexit 0\n' >"$tmp/fakebin/hyprctl"
+printf '#!/usr/bin/env bash\nexit 1\n' >"$tmp/fakebin/systemctl"
+chmod 0755 "$tmp/fakebin/hyprctl" "$tmp/fakebin/systemctl"
+
+for theme in carbon_night catppuccin-frappé crimson_red electric_blue gruvbox iron_forge obsidian_night pink pipboy; do
+    palette="$tmp/config/foot/themes/${theme}.ini"
+    [[ -f "$palette" ]] || { printf 'FAIL: missing Foot palette: %s\n' "$theme" >&2; exit 1; }
+    [[ "$(grep -Ec '^(background|foreground|regular[0-7]|bright[0-7])=[0-9a-f]{6}
+    foot --check-config --config="$CONFIG"
+    printf 'PASS: Foot configuration validated with installed Foot\n'
+else
+    printf 'SKIP: Foot binary unavailable; native config validation needs the Arch test machine\n'
+fi
+
+printf 'PASS: Foot terminal migration and optional Alacritty preservation contracts\n'
+ "$palette")" -eq 18 ]] || {
+        printf 'FAIL: incomplete Foot palette: %s\n' "$theme" >&2
+        exit 1
+    }
+    XDG_CONFIG_HOME="$tmp/config" XDG_STATE_HOME="$tmp/state" \
+        PATH="$tmp/fakebin:$PATH" \
+        bash "$ROOT/config/hypr/scripts/quickshell_theme_apply.sh" "$theme"
+    while IFS= read -r entry; do
+        [[ "$entry" == \#* || -z "$entry" ]] && continue
+        grep -Fxq -- "$entry" "$tmp/config/foot/foot.ini" || {
+            printf 'FAIL: switched Foot palette did not match %s: %s\n' "$theme" "$entry" >&2
+            exit 1
+        }
+    done <"$palette"
+    grep -Fxq 'alpha=0.85' "$tmp/config/foot/foot.ini" || {
+        printf 'FAIL: Foot opacity changed while switching themes\n' >&2
+        exit 1
+    }
+done
+grep -Fxq 'opacity = 0.85' "$tmp/config/alacritty/alacritty.toml" || {
+    printf 'FAIL: Foot theme switching touched optional Alacritty settings\n' >&2
+    exit 1
+}
+
 if command -v foot >/dev/null 2>&1; then
     foot --check-config --config="$CONFIG"
     printf 'PASS: Foot configuration validated with installed Foot\n'
