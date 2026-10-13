@@ -4135,6 +4135,11 @@ run_install() {
   fi
   prepare_base_install
   install_arch_repo_apps_stage
+  if ! pacman -Qq foot >/dev/null 2>&1; then
+    log "Installing required Foot terminal..."
+    pacman_install_one foot || die "Foot is required before installing the Awtarchy desktop."
+  fi
+  pacman -Qq foot >/dev/null 2>&1 || die "Required Foot package is still missing."
   migrate_cheese_to_snapshot_stage \
     "${REPO_DIR}/local/share/awtarchy/awtarchy-package-reconcile.sh" \
     "${BASH_SOURCE[0]}"
