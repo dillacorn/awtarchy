@@ -206,23 +206,12 @@ launch_terminal() {
     exec "$self" --ui
   fi
 
-  if have_cmd kitty; then
-    exec kitty --class "$TERM_CLASS" -e "$self" --ui
-  fi
   if have_cmd foot; then
     exec foot --app-id="$TERM_CLASS" "$self" --ui
   fi
-  if have_cmd wezterm; then
-    exec wezterm start --class "$TERM_CLASS" -- "$self" --ui
-  fi
-  if have_cmd konsole; then
-    exec konsole --appname "$TERM_CLASS" -e "$self" --ui
-  fi
-  if have_cmd gnome-terminal; then
-    exec gnome-terminal --title="$TERM_CLASS" -- "$self" --ui
-  fi
 
-  exec xterm -T "$TERM_CLASS" -e "$self" --ui
+  printf '%s\n' 'Foot is required for the Awtarchy terminal interface.' >&2
+  exit 127
 }
 
 require_files() {
