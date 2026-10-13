@@ -1155,7 +1155,11 @@ assert keys[("<C-Space>",)] == "toggle"
 for ctrl in (("<C-c>",), ("c","y")):
     assert "wl-copy -t text/uri-list" in repr(keys[ctrl])
 input_keys = {tuple(b["on"]): b["run"] for b in keymap["input"]["prepend_keymap"]}
-assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
+assert keys[("<C-t>",)] == 'lua "AwtarchyYaziCreateCurrentTab()"'
+assert input_keys[("<C-a>",)] == ["insert", "move eol", "visual", "move bol"]
+assert input_keys[("<Backspace>",)] == ["backspace", "delete --insert", "insert"]
+assert input_keys[("<Delete>",)] == ["backspace --under", "delete --insert", "insert"]
+assert input_keys[("<C-z>",)] == ["escape", "undo", "insert --append"]
 assert input_keys[("<C-c>",)] == ["yank","insert"]
 assert input_keys[("<Esc>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close"]
 assert input_keys[("<Enter>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close --submit"]
