@@ -14,7 +14,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy"
 HYPR_LUA="$CONFIG_HOME/hypr/hyprland.lua"
 HYPR_CONF="$CONFIG_HOME/hypr/hyprland.conf"
 MICRO_SETTINGS="$CONFIG_HOME/micro/settings.json"
-ALACRITTY_CONF="$CONFIG_HOME/alacritty/alacritty.toml"
+FOOT_CONF="$CONFIG_HOME/foot/foot.ini"
 SPEEDCRUNCH_INI="$CONFIG_HOME/SpeedCrunch/SpeedCrunch.ini"
 
 [[ -f "$THEME" ]] || exit 1
@@ -62,7 +62,7 @@ if [[ $active_border =~ ^[[:xdigit:]]{8}$ ]]; then
 fi
 
 micro_scheme="$(theme_value MICRO_COLORSCHEME 'geany')"
-alacritty_theme="$(theme_value ALACRITTY_THEME 'wombat.toml')"
+
 speedcrunch_scheme="$(theme_value SPEEDCRUNCH_COLORSCHEME "$name")"
 
 if [[ -f "$HYPR_LUA" ]]; then
@@ -118,18 +118,30 @@ path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
 PY
 fi
 
-if [[ -n "$alacritty_theme" && -f "$ALACRITTY_CONF" ]]; then
-    python3 - "$ALACRITTY_CONF" "$alacritty_theme" <<'PY'
+if [[ -f "$FOOT_CONF" ]]; then
+    python3 - "$FOOT_CONF" "$background" "$foreground" "$urgent" "$charging" "$focus" "$lock_accent" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-target = f'~/.config/alacritty/themes/themes/{sys.argv[2]}'
-text, count = re.subn(r'~/.config/alacritty/themes/themes/[^"\n]+\.toml', target, text)
-if count:
-    path.write_text(text, encoding="utf-8")
+names = ("background", "foreground", "regular1", "regular2", "regular4", "regular5")
+colors = {}
+for name, value in zip(names, sys.argv[2:]):
+    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+        raise SystemExit(f"invalid Foot theme color for {name}")
+    colors[name] = value[1:].lower()
+
+content = path.read_text(encoding="utf-8")
+for name, value in colors.items():
+    content, count = re.subn(
+        rf"(?m)^({re.escape(name)}=)[0-9A-Fa-f]{{6}}$",
+        lambda match, color=value: match.group(1) + color,
+        content,
+    )
+    if count != 1:
+        raise SystemExit(f"missing Foot palette entry: {name}")
+path.write_text(content, encoding="utf-8")
 PY
 fi
 
