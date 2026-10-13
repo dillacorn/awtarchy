@@ -531,10 +531,10 @@ local hypr_scripts = "~/.config/hypr/scripts"
 local launch = "~/.config/hypr/scripts/launch_handler.sh"
 
 -- Core apps (define before anything that uses them)
-local terminal = "alacritty"
+local terminal = "foot"
 local web_browser = "firefox"
 local calculator = "speedcrunch"
-local yazi = "alacritty -o 'font.normal.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.italic.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold_italic.family=\"JetBrainsMono Nerd Font Mono\"' -e yazi"
+local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi""
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
