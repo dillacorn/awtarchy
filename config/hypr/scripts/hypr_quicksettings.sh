@@ -106,9 +106,6 @@ launch_terminal() {
   if have_cmd foot; then
     exec foot --app-id="$TERM_CLASS" "$self" --ui
   fi
-  if have_cmd alacritty; then
-    exec alacritty --class "$TERM_CLASS" -e "$self" --ui
-  fi
   if have_cmd wezterm; then
     exec wezterm start --class "$TERM_CLASS" -- "$self" --ui
   fi
