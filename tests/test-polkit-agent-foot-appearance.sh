@@ -12,6 +12,8 @@ trap 'rm -rf -- "$TMP"' EXIT
 grep -Fxq 'pad=22x22' "$AUTH_CONFIG"
 grep -Fxq 'font=NotoSansM Nerd Font Mono:size=12' "$AUTH_CONFIG"
 grep -Fxq 'alpha=0.85' "$AUTH_CONFIG"
+grep -Fxq '[colors-dark]' "$AUTH_CONFIG"
+grep -Fxq '[colors-dark]' "$FOOT_CONFIG"
 ! grep -Eq '(shell=|include=|import=|/home/)' "$AUTH_CONFIG"
 
 if command -v foot >/dev/null 2>&1; then
@@ -34,7 +36,7 @@ pad=17x19
 shell=/tmp/never-run-me
 [key-bindings]
 clipboard-copy=[/tmp/never-run-me]
-[colors]
+[colors-dark]
 alpha=0.73
 background=123456
 foreground=abcdef
@@ -47,10 +49,10 @@ EOF
 OPTIONS="$(/usr/bin/python3 -I "$TMP/appearance.py" "$HOME_FIXTURE/.config/foot/foot.ini" "$HOME_FIXTURE")"
 grep -Fqx 'font=Fixture Mono:size=13.5' <<<"$OPTIONS"
 grep -Fqx 'pad=17x19' <<<"$OPTIONS"
-grep -Fqx 'colors.alpha=0.73' <<<"$OPTIONS"
-grep -Fqx 'colors.background=123456' <<<"$OPTIONS"
-grep -Fqx 'colors.foreground=abcdef' <<<"$OPTIONS"
-grep -Fqx 'colors.regular1=ff0000' <<<"$OPTIONS"
+grep -Fqx 'colors-dark.alpha=0.73' <<<"$OPTIONS"
+grep -Fqx 'colors-dark.background=123456' <<<"$OPTIONS"
+grep -Fqx 'colors-dark.foreground=abcdef' <<<"$OPTIONS"
+grep -Fqx 'colors-dark.regular1=ff0000' <<<"$OPTIONS"
 if grep -Eq 'never-run-me|shell=|key-bindings|clipboard|urls=' <<<"$OPTIONS"; then
     printf '%s\n' 'FAIL: the trusted appearance parser copied executable configuration' >&2
     exit 1
