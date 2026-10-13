@@ -10,8 +10,8 @@
 # Usage:
 #   launch_handler.sh <logical-name> "<launch command>"
 # Examples:
-#   launch_handler.sh wiremix  "alacritty --class wiremix -e wiremix"
-#   launch_handler.sh maccel   "alacritty --class maccel -e maccel"
+#   launch_handler.sh wiremix  "foot --app-id wiremix wiremix"
+#   launch_handler.sh maccel   "foot --app-id maccel maccel"
 #
 # Optional overrides:
 #   APP_CLASS_OVERRIDE="ExactClass" APP_TITLE_OVERRIDE="ExactTitle" APP_PROC_OVERRIDE="binaryname" launch_handler.sh name "cmd ..."
