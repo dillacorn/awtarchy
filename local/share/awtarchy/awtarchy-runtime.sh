@@ -32,7 +32,7 @@ declare -a PKG_GROUPS=(
   "Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk libnotify nwg-look"
   "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd ttf-jetbrains-mono-nerd noto-fonts-emoji"
   "Themes:papirus-icon-theme materia-gtk-theme kvantum-theme-materia"
-  "Terminal Apps:nano micro fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
+  "Terminal Apps:foot nano micro fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
   "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils udisks2 wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
   "Multimedia:ffmpeg avahi nss-mdns mpv snapshot exiv2 zathura zathura-pdf-mupdf"
   "Development:base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust dmidecode nftables"
@@ -3842,7 +3842,7 @@ copy_awtarchy_configs_stage() {
     retry_command run_as_target chmod 0644 "$dest"
   done
 
-  local -a config_dirs=(hypr quickshell alacritty gtk-3.0 Kvantum SpeedCrunch fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
+  local -a config_dirs=(hypr quickshell alacritty foot gtk-3.0 Kvantum SpeedCrunch fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
@@ -7196,7 +7196,7 @@ validate_managed_relative_path() {
     .bashrc|.bash_profile|.Xresources|.config/mimeapps.list|.config/gamemode.ini)
       return 0
       ;;
-    .config/hypr/*|.config/quickshell/*|.config/alacritty/*|.config/gtk-3.0/*|\
+    .config/hypr/*|.config/quickshell/*|.config/alacritty/*|.config/foot/*|.config/gtk-3.0/*|\
     .config/Kvantum/*|.config/SpeedCrunch/*|.config/fastfetch/*|\
     .config/pcmanfm-qt/*|.config/yazi/*|.config/xdg-desktop-portal/*|\
     .config/qt5ct/*|.config/qt6ct/*|.config/lsfg-vk/*|.config/wiremix/*|\
@@ -7230,7 +7230,7 @@ import json, os, re, stat, sys
 home, target, baseline, manifest, out = map(Path, sys.argv[1:])
 
 CONFIG_ROOTS = {
-    "hypr", "quickshell", "alacritty", "gtk-3.0", "Kvantum",
+    "hypr", "quickshell", "alacritty", "foot", "gtk-3.0", "Kvantum",
     "SpeedCrunch", "fastfetch", "pcmanfm-qt", "yazi",
     "xdg-desktop-portal", "qt5ct", "qt6ct", "lsfg-vk", "wiremix",
     "cava", "micro", "ddcutil", "waybar", "fuzzel", "mako",
