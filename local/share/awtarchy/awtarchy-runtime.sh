@@ -9914,6 +9914,7 @@ main() {
 
   log "Saving Awtarchy update state..."
   commit_baseline "$target_home" "$source_label" "$active_theme"
+  remove_retired_alacritty_packages
   write_hardware_state
   [[ -n "$active_theme" ]] && printf '%s\n' "$active_theme" >"$ACTIVE_THEME_FILE"
   if [[ -n "$source_revision" ]]; then
