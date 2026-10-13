@@ -30,7 +30,7 @@ if command -v lua >/dev/null 2>&1; then
     HYPR_TO_CHECK="$HYPR" lua -e 'assert(loadfile(os.getenv("HYPR_TO_CHECK")))'
     printf 'PASS: Hyprland Lua syntax validated\n'
 fi
-require "$HELPER" 'for candidate in foot; do'
+require "$HELPER" 'exec foot --app-id="$window_class"'
 require "$LAUNCHER" 'command: ["foot", ...entry.command]'
 require "$CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 require "$CONFIG" 'pad=22x22'
