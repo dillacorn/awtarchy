@@ -111,15 +111,15 @@ for line in lines:
         print(f"font={value}")
     elif section == "main" and key == "pad" and pad_re.fullmatch(value):
         print(f"pad={value}")
-    elif section == "colors" and key in colors and color_re.fullmatch(value):
-        print(f"colors.{key}={value}")
-    elif section == "colors" and key == "alpha":
+    elif section == "colors-dark" and key in colors and color_re.fullmatch(value):
+        print(f"colors-dark.{key}={value}")
+    elif section == "colors-dark" and key == "alpha":
         try:
             opacity = float(value)
         except ValueError:
             continue
         if 0.0 <= opacity <= 1.0 and re.fullmatch(r"[0-9]+(?:\.[0-9]{1,3})?", value):
-            print(f"colors.alpha={value}")
+            print(f"colors-dark.alpha={value}")
 # AWTARCHY_POLKIT_APPEARANCE_PY_END
 PY
 }
