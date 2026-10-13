@@ -18,7 +18,7 @@ require() {
 
 [[ -f "$CONFIG" ]] || { printf 'FAIL: Foot profile is missing\n' >&2; exit 1; }
 require "$RUNTIME" 'Terminal Apps:foot '
-require "$RUNTIME" 'config_dirs=(hypr quickshell alacritty foot '
+require "$RUNTIME" 'config_dirs=(hypr quickshell foot '
 require "$RUNTIME" '.config/foot/*'
 require "$RUNTIME" '"alacritty", "foot",'
 require "$HYPR" 'local terminal = "foot"'
@@ -30,11 +30,14 @@ if command -v lua >/dev/null 2>&1; then
     HYPR_TO_CHECK="$HYPR" lua -e 'assert(loadfile(os.getenv("HYPR_TO_CHECK")))'
     printf 'PASS: Hyprland Lua syntax validated\n'
 fi
-require "$HELPER" 'for candidate in foot footclient kitty alacritty'
+require "$HELPER" 'for candidate in foot; do'
 require "$LAUNCHER" 'command: ["foot", ...entry.command]'
 require "$CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 require "$CONFIG" 'pad=22x22'
 require "$CONFIG" 'alpha=0.85'
+require "$RUNTIME" 'remove_retired_alacritty_packages()'
+require "$RUNTIME" 'local -a required=(quickshell foot upower'
+require "$ROOT/config/hypr/scripts/awtarchy-polkit-agent/launcher.sh" 'FOOT="/usr/bin/foot"'
 
 if command -v foot >/dev/null 2>&1; then
     foot --check-config --config="$CONFIG"
