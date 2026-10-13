@@ -83,7 +83,7 @@ expected = {
     ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
     ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
-    ("<C-t>",): "tab_create --current",
+    ("<C-t>",): 'lua "AwtarchyYaziCreateCurrentTab()"',
     ("<C-1>",): "tab_switch 0",
     ("<C-2>",): "tab_switch 1",
     ("<C-3>",): "tab_switch 2",
@@ -162,7 +162,10 @@ expected_input = {
     ("<Esc>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "close"],
     ("<Enter>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "close --submit"],
     ("<C-[>",): ['app:lua "AwtarchyYaziRenameRestoreMouse()"', "escape"],
-    ("<C-a>",): ["move eol", "visual", "move bol"],
+    ("<C-a>",): ["insert", "move eol", "visual", "move bol"],
+    ("<Backspace>",): ["backspace", "delete --insert", "insert"],
+    ("<Delete>",): ["backspace --under", "delete --insert", "insert"],
+    ("<C-z>",): ["escape", "undo", "insert --append"],
     ("<Left>",): ["insert", "move -1"],
     ("<Right>",): ["insert", "move 1"],
     ("<C-Left>",): ["insert", "backward lean"],
@@ -182,6 +185,13 @@ for keys, run in expected_input.items():
 for key in ("<C-S-Left>", "<C-S-Right>"):
     assert "move bol" not in input_by_keys[(key,)]
     assert "move eol" not in input_by_keys[(key,)]
+
+# Input Ctrl+Z must not affect manager-level file operations.
+if ("<C-z>",) in by_keys:
+    raise SystemExit("Ctrl+Z text undo unexpectedly bound in manager layer")
+for key in ("<Left>", "<Right>", "<C-Left>", "<C-Right>", "<Home>", "<End>"):
+    if input_by_keys[(key,)][0] != "insert":
+        raise SystemExit(f"Unmodified cursor movement does not cancel selection: {key}")
 
 if by_keys.get(("t", "e"), {}).get("desc") != "Open terminal here":
     raise SystemExit(1)
@@ -205,6 +215,20 @@ grep -Fq 'AwtarchyYaziConfirmQuit(true)' "$KEYMAP" \
   || fail 'Yazi Q quit-without-cwd confirmation binding is missing'
 grep -Fq 'AwtarchyYaziCloseTab()' "$KEYMAP" \
   || fail 'Yazi Ctrl+W tab-close replacement is missing'
+python3 - "$YAZI_INIT" <<'PY_TAB_NAME' || fail 'Yazi Ctrl+T tab naming helper does not preserve automatic tab names'
+import re
+import sys
+
+text = open(sys.argv[1], encoding="utf-8").read()
+match = re.search(r"(?ms)^function AwtarchyYaziCreateCurrentTab\(\).*?^end", text)
+if not match:
+    raise SystemExit("Missing current-folder tab creation helper")
+body = match.group(0)
+if 'ya.emit("tab_create", { tostring(current.cwd), raw = true })' not in body:
+    raise SystemExit("New tabs must be created from an explicit current-folder target")
+if any(forbidden in body for forbidden in ('tab_rename', 'pref.name', 'os.execute', 'Command(')):
+    raise SystemExit("Tab naming helper must not rename existing tabs or invoke a process")
+PY_TAB_NAME
 if ! grep -Fq '[confirm]' "$KEYMAP" \
   || ! grep -Fq '{ on = ["<Space>"], run = "close --submit", desc = "Confirm" }' "$KEYMAP"; then
   fail 'Yazi quit confirmation does not accept Space'
@@ -1131,7 +1155,11 @@ assert keys[("<C-Space>",)] == "toggle"
 for ctrl in (("<C-c>",), ("c","y")):
     assert "wl-copy -t text/uri-list" in repr(keys[ctrl])
 input_keys = {tuple(b["on"]): b["run"] for b in keymap["input"]["prepend_keymap"]}
-assert input_keys[("<C-a>",)] == ["move eol","visual","move bol"]
+assert keys[("<C-t>",)] == 'lua "AwtarchyYaziCreateCurrentTab()"'
+assert input_keys[("<C-a>",)] == ["insert", "move eol", "visual", "move bol"]
+assert input_keys[("<Backspace>",)] == ["backspace", "delete --insert", "insert"]
+assert input_keys[("<Delete>",)] == ["backspace --under", "delete --insert", "insert"]
+assert input_keys[("<C-z>",)] == ["escape", "undo", "insert --append"]
 assert input_keys[("<C-c>",)] == ["yank","insert"]
 assert input_keys[("<Esc>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close"]
 assert input_keys[("<Enter>",)] == ['app:lua "AwtarchyYaziRenameRestoreMouse()"',"close --submit"]
