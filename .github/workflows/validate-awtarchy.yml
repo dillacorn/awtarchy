@@ -440,3 +440,113 @@ jobs:
           bash tests/test-usb-refresh-security.sh
           bash tests/test-quickshell-resume-recovery.sh
           bash tests/test-quickshell-updater-bootstrap.sh
+
+  publish-v4-0-0:
+    name: Publish approved Awtarchy v4.0.0
+    needs: validate
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'One-use Awtarchy v4.0.0 release publication' &&
+      github.event.pull_request.head.ref == 'chore/v4.0.0-release-bridge-20261013' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.sha == '9ea76df9d2d9cdde6ab705d98c37f2a4785d61f5'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: one-use-awtarchy-v4-0-0
+      cancel-in-progress: false
+    steps:
+      - name: Checkout one-use publisher
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - name: Validate, publish and verify v4.0.0
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: dillacorn/awtarchy
+          RELEASE_TAG: v4.0.0
+          RELEASE_TITLE: Awtarchy v4.0.0 Foot & Yazi Overhaul
+          RELEASE_TARGET: 9ea76df9d2d9cdde6ab705d98c37f2a4785d61f5
+        run: |
+          set -euo pipefail
+
+          proposed="$RUNNER_TEMP/awtarchy-v4.0.0-proposed.md"
+          previous="$RUNNER_TEMP/awtarchy-v3.9.3-previous.md"
+          published="$RUNNER_TEMP/awtarchy-v4.0.0-published.md"
+
+          test "$(gh api repos/dillacorn/awtarchy/git/ref/heads/main --jq .object.sha)" = "$RELEASE_TARGET"
+          test "$(gh api repos/dillacorn/awtarchy/releases/latest --jq .tag_name)" = v3.9.3
+
+          if gh release view "$RELEASE_TAG" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "STOP: v4.0.0 release already exists"
+            exit 1
+          fi
+          if gh api repos/dillacorn/awtarchy/git/ref/tags/v4.0.0 >/dev/null 2>&1; then
+            echo "STOP: v4.0.0 tag already exists"
+            exit 1
+          fi
+
+          gh release view v3.9.3 --repo "$GH_REPO" --json body --jq .body > "$previous"
+          cp .github/release-bridge/v4.0.0.md "$proposed"
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
+            --notes "$proposed" --previous "$previous"
+
+          gh api "repos/dillacorn/awtarchy/commits/$RELEASE_TARGET/check-runs" \
+            --jq '[.check_runs[] | {name, status, conclusion}]' \
+            > "$RUNNER_TEMP/release-target-checks.json"
+          python3 - "$RUNNER_TEMP/release-target-checks.json" <<'PY'
+          import json
+          import sys
+          checks = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert len(checks) >= 12, f"expected at least 12 target checks, got {len(checks)}"
+          failed = [x for x in checks if x["status"] != "completed" or x["conclusion"] != "success"]
+          assert not failed, f"release target contains incomplete or failing checks: {failed}"
+          print(f"PASS: {len(checks)} successful release-target checks")
+          PY
+
+          gh release create "$RELEASE_TAG" \
+            --repo "$GH_REPO" --target "$RELEASE_TARGET" \
+            --title "$RELEASE_TITLE" --notes-file "$proposed" --latest
+
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" --json body --jq .body > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
+            --notes "$published" --previous "$previous"
+
+          python3 - "$proposed" "$published" <<'PY'
+          from pathlib import Path
+          import sys
+          a, b = (Path(p).read_text(encoding="utf-8").rstrip() for p in sys.argv[1:])
+          assert a == b, "published release body differs from validated proposed notes"
+          print("PASS: published release notes match the validated candidate")
+          PY
+
+          gh release view "$RELEASE_TAG" --repo "$GH_REPO" \
+            --json name,tagName,isDraft,isPrerelease,targetCommitish \
+            > "$RUNNER_TEMP/release-result.json"
+          python3 - "$RUNNER_TEMP/release-result.json" <<'PY'
+          import json
+          import sys
+          r = json.load(open(sys.argv[1], encoding="utf-8"))
+          assert r["name"] == "Awtarchy v4.0.0 Foot & Yazi Overhaul", r
+          assert r["tagName"] == "v4.0.0", r
+          assert r["targetCommitish"] == "9ea76df9d2d9cdde6ab705d98c37f2a4785d61f5", r
+          assert not r["isDraft"] and not r["isPrerelease"], r
+          print("PASS: published stable release metadata verified")
+          PY
+
+          tag_sha="$(gh api repos/dillacorn/awtarchy/git/ref/tags/v4.0.0 --jq .object.sha)"
+          tag_type="$(gh api repos/dillacorn/awtarchy/git/ref/tags/v4.0.0 --jq .object.type)"
+          if [[ "$tag_type" == tag ]]; then
+            tag_sha="$(gh api "repos/dillacorn/awtarchy/git/tags/$tag_sha" --jq .object.sha)"
+          fi
+          test "$tag_sha" = "$RELEASE_TARGET"
+
+          echo "PASS: Awtarchy v4.0.0 published on exact main SHA $RELEASE_TARGET"
+
