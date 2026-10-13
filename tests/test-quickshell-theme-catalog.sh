@@ -30,7 +30,6 @@ QS_MUTED="#888888"
 NEW_ACTIVE_BORDER="eeeeeeff"
 NEW_INACTIVE_BORDER="111111ff"
 MICRO_COLORSCHEME="zenburn"
-ALACRITTY_THEME="wombat.toml"
 SPEEDCRUNCH_COLORSCHEME="zeta_theme"
 EVIL="\$(touch ${marker})"
 EOF
@@ -53,7 +52,7 @@ jq -e '.[1].palette.background == "#111111" and .[1].palette.foreground == "#eee
     || fail "palette values were not parsed"
 jq -e '.[1].borders.active == "eeeeeeff" and .[1].borders.inactive == "111111ff"' <<<"$json" >/dev/null \
     || fail "border values were not parsed"
-jq -e '.[1].apps.micro == "zenburn" and .[1].apps.alacritty == "wombat.toml" and .[1].apps.speedcrunch == "zeta_theme"' <<<"$json" >/dev/null \
+jq -e '.[1].apps.micro == "zenburn" and .[1].apps.foot == "zeta_theme" and .[1].apps.speedcrunch == "zeta_theme"' <<<"$json" >/dev/null \
     || fail "application theme metadata was not parsed"
 [[ ! -e "$marker" ]] || fail "theme catalog executed theme-file contents"
 
