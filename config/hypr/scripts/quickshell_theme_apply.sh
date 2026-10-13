@@ -161,6 +161,16 @@ path.write_text(content, encoding="utf-8")
 PY
 fi
 
+# Recolor existing Foot windows without restarting their shell, Yazi, or
+# scrollback. The helper targets only our user's Foot-owned PTYs, never other
+# terminals or the isolated PolicyKit authentication frontend. Newly opened
+# Foot windows read the updated foot.ini normally.
+FOOT_LIVE_THEME="$CONFIG_HOME/hypr/scripts/foot_theme_live.py"
+if [[ -f "$FOOT_CONF" && -f "$FOOT_LIVE_THEME" ]]; then
+    python3 "$FOOT_LIVE_THEME" "$FOOT_CONF" || \
+        printf '%s\n' 'Foot live recoloring failed; new Foot windows still use the updated theme.' >&2
+fi
+
 if [[ -n "$speedcrunch_scheme" && -f "$SPEEDCRUNCH_INI" ]]; then
     python3 - "$SPEEDCRUNCH_INI" "$speedcrunch_scheme" <<'PY'
 from pathlib import Path
