@@ -337,6 +337,15 @@ Do not fix updater failures by indiscriminately deleting user state or replacing
 
 When recovery behavior is requested, preserve a safe rollback/fallback path where practical.
 
+## Primary terminal and optional Alacritty
+
+- Foot from the official Arch repository is the Awtarchy-managed primary terminal. Fresh installs and desktop updates must ensure `foot` is installed before activating Foot-specific config, terminal helpers, or PolicyKit.
+- Never select or install `alacritty-graphics` or `alacritty` as an Awtarchy default. Existing installations of either package remain optional and **must never be uninstalled automatically** during install, update, reset, Git testing, cleanup, or reconciliation.
+- The previously managed `~/.config/alacritty/` directory belongs to the user after the Foot migration. Keep its configuration and customizations, including the prior 0.85 terminal transparency, instead of deleting it during a managed-file source removal. Awtarchy no longer updates this config. Users may manually add their own Alacritty Hyprland shortcut.
+- The Foot `[colors] alpha=0.85` setting matches the previous Alacritty `[window] opacity=0.85`; Hyprland compositor blur is configured globally. Do not add another 0.85 per-terminal window opacity rule: this would multiply opacity.
+- Awtarchy's nine built-in themes ship complete 18-color `config/foot/themes/*.ini` palettes from the former Alacritty schemes. Both installer/updater theme rendering and user-triggered switching must apply these palettes without modifying optional Alacritty configuration. Foot does not automatically reload `foot.ini` in existing windows; reopening is needed.
+- Maintain explicit tests for Foot installation and old Alacritty package/config preservation.
+
 ## Yazi
 
 ### Rename text selection
