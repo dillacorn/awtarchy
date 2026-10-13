@@ -36,7 +36,7 @@ jobs:
       - name: Password retry contract
         run: bash tests/test-polkit-agent-password-retry.sh
       - name: Alacritty appearance contract
-        run: bash tests/test-polkit-agent-alacritty-appearance.sh
+        run: bash tests/test-polkit-agent-foot-appearance.sh
       - name: Transient window UX contract
         run: bash tests/test-polkit-agent-internal-window-ui.sh
       - name: GLib frontend socket watch contract
