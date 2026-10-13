@@ -1035,8 +1035,13 @@ grep -Fxq "https://github.com/dillacorn/awtarchy/archive/${TEST_COMMIT}.tar.gz" 
   || fail "successful migration changed the stable launcher"
 [[ $stable_runtime_hash == "$(sha256sum "$home/.local/share/awtarchy/awtarchy-runtime.sh" | awk '{print $1}')" ]] \
   || fail "successful migration changed the stable runtime"
-grep -Fq '.config/hypr/scripts/quickshell.sh start &' "$home/.config/hypr/hyprland.lua" \
-  || fail "updater did not migrate Hyprland startup to Quickshell"
+if ! grep -Fq '.config/hypr/scripts/quickshell.sh start &' "$home/.config/hypr/hyprland.lua"; then
+  printf '%s\\n' 'Hyprland upgrade diagnostics from updater:' >&2
+  grep -Ei 'hyprland|preserv|conflict|baseline|rollback|migrat' "${TMP}/update.out" >&2 || true
+  printf '%s\\n' 'Resulting Hyprland config terminal/startup lines:' >&2
+  grep -En 'quickshell|waybar|fuzzel|local terminal' "$home/.config/hypr/hyprland.lua" >&2 || true
+  fail "updater did not migrate Hyprland startup to Quickshell"
+fi
 grep -Fq 'local power_menu = "~/.config/hypr/scripts/quickshell_power_menu.sh reset"' "$home/.config/hypr/hyprland.lua" \
   || fail "updater did not migrate the power menu launcher"
 grep -Fq 'local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"' "$home/.config/hypr/hyprland.lua" \
