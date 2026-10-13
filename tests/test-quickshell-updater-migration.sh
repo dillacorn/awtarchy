@@ -964,7 +964,7 @@ fi
 polkit_test_root="${home}.polkit-root"
 assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/agent.py"
 assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/tui.py"
-assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/alacritty.toml"
+assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/foot.ini"
 assert_file "${polkit_test_root}/usr/local/libexec/awtarchy/polkit-agent/launcher"
 assert_file "${polkit_test_root}/usr/local/lib/systemd/user/awtarchy-polkit-agent.service"
 grep -Fq 'Installed root-owned Awtarchy terminal PolicyKit authentication runtime.' \
