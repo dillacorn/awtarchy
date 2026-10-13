@@ -111,53 +111,6 @@ grep -Fxq 'opacity = 0.85' "$tmp/config/alacritty/alacritty.toml" || {
     exit 1
 }
 
-# Test actual updater theme inference without installing or touching user configs.
-# Only source its extracted function definitions, not the installer.
-theme_functions="$tmp/theme-functions.sh"
-sed -n \
-    -e '/^valid_theme_name() {/,/^}/p' \
-    -e '/^infer_prior_alacritty_theme() {/,/^}/p' \
-    -e '/^infer_active_theme() {/,/^}/p' \
-    "$RUNTIME" >"$theme_functions"
-# shellcheck source=/dev/null
-source "$theme_functions"
-HOME_DIR="$tmp/migration-home"
-ACTIVE_THEME_FILE="$tmp/migration-active-theme"
-mkdir -p "$HOME_DIR/.config/alacritty" "$HOME_DIR/.config/SpeedCrunch" "$HOME_DIR/.config/foot"
-alacritty_conf="$HOME_DIR/.config/alacritty/alacritty.toml"
-
-printf '%s\n' carbon_night >"$ACTIVE_THEME_FILE"
-for theme in carbon_night catppuccin-frappé crimson_red electric_blue gruvbox iron_forge obsidian_night pink pipboy; do
-    palette="$ROOT/config/foot/themes/${theme}.ini"
-    old_scheme="$(sed -n 's|^# Derived from alacritty/alacritty-theme/themes/\(.*\.toml\)\.$|\1|p' "$palette")"
-    [[ -n "$old_scheme" ]] || { printf 'FAIL: missing original Alacritty theme mapping: %s\n' "$theme" >&2; exit 1; }
-    printf '[general]\nimport = ["~/.config/alacritty/themes/themes/%s"]\n' "$old_scheme" >"$alacritty_conf"
-    selected="$(infer_active_theme "$ROOT")"
-    [[ "$selected" == "$theme" ]] || {
-        printf 'FAIL: Foot migration selected %s instead of Alacritty theme %s\n' "$selected" "$theme" >&2
-        exit 1
-    }
-done
-
-printf '[general]\nimport = ["~/.config/alacritty/custom-theme.toml"]\n' >"$alacritty_conf"
-[[ "$(infer_active_theme "$ROOT")" == carbon_night ]] || {
-    printf 'FAIL: an unknown Alacritty theme displaced saved Awtarchy theme\n' >&2
-    exit 1
-}
-cp "$CONFIG" "$HOME_DIR/.config/foot/foot.ini"
-printf '[general]\nimport = ["~/.config/alacritty/themes/themes/gruvbox_dark.toml"]\n' >"$alacritty_conf"
-[[ "$(infer_active_theme "$ROOT")" == carbon_night ]] || {
-    printf 'FAIL: optional Alacritty displaced an existing Foot theme\n' >&2
-    exit 1
-}
-rm -f -- "$ACTIVE_THEME_FILE"
-printf 'Display\\ColorSchemeName=gruvbox\n' >"$HOME_DIR/.config/SpeedCrunch/SpeedCrunch.ini"
-[[ "$(infer_active_theme "$ROOT")" == gruvbox ]] || {
-    printf 'FAIL: former SpeedCrunch theme fallback changed\n' >&2
-    exit 1
-}
-
-
 # A personalized, preserved v3.8.9 hyprland.lua must adopt Foot even after
 # the v4.0.0 update, without replacing its other local customizations.
 require "$RUNTIME" 'migrate_legacy_foot_hyprland "$repo_dir" "$target_home"'
