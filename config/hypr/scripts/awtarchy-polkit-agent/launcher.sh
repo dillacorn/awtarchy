@@ -94,7 +94,7 @@ colors = {"background", "foreground"}
 colors.update(f"regular{i}" for i in range(8))
 colors.update(f"bright{i}" for i in range(8))
 color_re = re.compile(r"^[0-9a-fA-F]{6}$")
-font_re = re.compile(r"^[a-zA-Z0-9 ._-]{1,80}:size=(?:[4-9]|[1-6][0-9]|7[0-2])(?:\\.[0-9]{1,2})?$")
+font_re = re.compile(r"^[a-zA-Z0-9 ._-]{1,80}:size=(?:[4-9]|[1-6][0-9]|7[0-2])(?:\.[0-9]{1,2})?$")
 pad_re = re.compile(r"^(?:[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-5][0-6])x(?:[0-9]|[1-9][0-9]|1[0-9][0-9]|2[0-5][0-6])$")
 section = "main"
 for line in lines:
@@ -118,7 +118,7 @@ for line in lines:
             opacity = float(value)
         except ValueError:
             continue
-        if 0.0 <= opacity <= 1.0 and re.fullmatch(r"[0-9]+(?:\\.[0-9]{1,3})?", value):
+        if 0.0 <= opacity <= 1.0 and re.fullmatch(r"[0-9]+(?:\.[0-9]{1,3})?", value):
             print(f"colors.alpha={value}")
 # AWTARCHY_POLKIT_APPEARANCE_PY_END
 PY
