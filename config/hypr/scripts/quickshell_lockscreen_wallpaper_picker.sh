@@ -2,7 +2,7 @@
 set -euo pipefail
 
 AWTWALL_CMD="${AWTWALL_CMD:-awtwall}"
-TERMINAL_CMD="${LOCKSCREEN_WALLPAPER_TERMINAL:-alacritty}"
+TERMINAL_CMD="${LOCKSCREEN_WALLPAPER_TERMINAL:-foot}"
 CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 RESULT_DIR="${CACHE_HOME}/awtarchy"
 RESULT_FILE=""
@@ -99,20 +99,11 @@ mkdir -p -- "$RESULT_DIR"
 RESULT_FILE="$(mktemp "${RESULT_DIR}/lockscreen-wallpaper-selection.XXXXXX")"
 rm -f -- "$RESULT_FILE"
 
-set +e
-terminal_name="$(basename -- "$TERMINAL_CMD")"
-if [[ "$terminal_name" == "alacritty" ]]; then
-    "$TERMINAL_CMD" --option window.startup_mode=Fullscreen \
-        --class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper \
-        -e "$awtwall_path" --select-only --type all --resume \
-        --select-result "$RESULT_FILE" &
-    terminal_pid=$!
-else
-    "$TERMINAL_CMD" --class awtarchy-lock-wallpaper \
-        --title Awtarchy-Lockscreen-Wallpaper -e "$awtwall_path" \
-        --select-only --type all --resume --select-result "$RESULT_FILE" &
-    terminal_pid=$!
-fi
+set +set +e
+"$TERMINAL_CMD" --fullscreen --app-id "$PICKER_CLASS" --title "$PICKER_TITLE" \
+    "$awtwall_path" --select-only --type all --resume \
+    --select-result "$RESULT_FILE" &
+terminal_pid=$!
 
 if have hyprctl && have jq; then
     ensure_picker_fullscreen
