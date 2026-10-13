@@ -480,7 +480,7 @@ jq -e '.update_notifications_enabled == true' \
   "${state_home}/.cache/awtarchy/quickshell-state.json" >/dev/null \
   || fail 'state writer did not enable update notifications'
 
-cat >"${fakebin}/terminal-capture" <<'EOF_CAPTURE'
+cat >"${fakebin}/foot" <<'EOF_CAPTURE'
 #!/usr/bin/env bash
 set -uo pipefail
 python3 - "${AWTARCHY_TEST_TERMINAL_CAPTURE:?}" "$@" <<'PY'
@@ -490,7 +490,7 @@ from pathlib import Path
 
 Path(sys.argv[1]).write_text(json.dumps(sys.argv[2:]), encoding="utf-8")
 PY
-[[ ${1:-} == -e ]] || false
+[[ ${1:-} == --app-id=awtarchy-update ]] || false
 shift
 set +e
 printf '\n' | "$@" >"${AWTARCHY_TEST_TERMINAL_OUTPUT:?}" 2>&1
@@ -499,14 +499,14 @@ set -e
 printf '%s\n' "$status" >"${AWTARCHY_TEST_TERMINAL_STATUS:?}"
 [[ $status -eq 0 ]]
 EOF_CAPTURE
-chmod 0755 "${fakebin}/terminal-capture"
+chmod 0755 "${fakebin}/foot"
 
 held_home="${TMPD}/held-home"
 mkdir -p -- "$held_home"
 printf '%s\n' 'printf "profile-marker\\n"' >"${held_home}/.bash_profile"
 if env \
   HOME="$held_home" \
-  TERMINAL="${fakebin}/terminal-capture" \
+  PATH="${fakebin}:${PATH}" \
   AWTARCHY_TEST_TERMINAL_CAPTURE="${held_home}/capture.json" \
   AWTARCHY_TEST_TERMINAL_OUTPUT="${held_home}/output" \
   AWTARCHY_TEST_TERMINAL_STATUS="${held_home}/status" \
@@ -524,7 +524,7 @@ import json
 import sys
 
 args = json.load(open(sys.argv[1], encoding="utf-8"))
-expected_prefix = ["-e", "bash", "--noprofile", "--norc", "-c"]
+expected_prefix = ["--app-id=awtarchy-update", "bash", "--noprofile", "--norc", "-c"]
 if args[:5] != expected_prefix:
     raise SystemExit(f"held terminal did not use a clean Bash shell: {args!r}")
 PY
