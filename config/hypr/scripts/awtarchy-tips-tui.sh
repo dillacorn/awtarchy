@@ -1074,8 +1074,8 @@ spawn_terminal() {
         exec "$DEFAULT_TERMINAL" --class awtarchy-tips-tui -- "$0" --tui
     fi
 
-    if command -v alacritty >/dev/null 2>&1; then
-        exec alacritty --class awtarchy-tips-tui,awtarchy-tips-tui --title awtarchy-tips-tui -e "$0" --tui
+    if command -v foot >/dev/null 2>&1; then
+        exec foot --app-id awtarchy-tips-tui --title awtarchy-tips-tui "$0" --tui
     fi
 
     printf 'awtarchy-tips-tui: no supported terminal launcher found\n' >&2
