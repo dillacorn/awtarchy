@@ -268,14 +268,14 @@ case "${1:-}" in
     ;;
   "")
     [[ $# -eq 0 ]] || exit 2
-    ALACRITTY="$(command -v alacritty || true)"
-    [[ -n "$ALACRITTY" ]] || { printf 'hyprbars-toggle: alacritty not found\n' >&2; exit 1; }
+    FOOT="$(command -v foot || true)"
+    [[ -n "$FOOT" ]] || { printf 'hyprbars-toggle: foot not found\n' >&2; exit 1; }
     require_hyprpm
     acquire_lock || exit 0
-    exec "$ALACRITTY" \
-      --class "${TERM_CLASS},${TERM_CLASS}" \
-      -T "$TERM_TITLE" \
-      -e bash --noprofile --norc "$SCRIPT_PATH" --interactive
+    exec "$FOOT" \
+      --app-id "$TERM_CLASS" \
+      --title "$TERM_TITLE" \
+      bash --noprofile --norc "$SCRIPT_PATH" --interactive
     ;;
   *)
     printf 'usage: hyprbars_toggle.sh [--status|--toggle]\n' >&2

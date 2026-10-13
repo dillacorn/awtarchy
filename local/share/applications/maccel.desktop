@@ -4,6 +4,6 @@
 [Desktop Entry]
 Type=Application
 Terminal=false
-Exec=/bin/sh -c 'command -v maccel >/dev/null 2>&1 && alacritty --class maccel -e maccel || hyprctl notify 3 5000 "rgb(ff5555)" "maccel is not installed."'
+Exec=/bin/sh -c 'command -v maccel >/dev/null 2>&1 && foot --app-id maccel maccel || hyprctl notify 3 5000 "rgb(ff5555)" "maccel is not installed."'
 Name=maccel
 Icon=utilities-terminal

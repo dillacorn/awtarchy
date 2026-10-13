@@ -113,7 +113,7 @@ hl.on("hyprland.start", function()
     hl.exec_cmd("~/.config/hypr/scripts/hyprpm-auto-reload.sh &")
     hl.exec_cmd("~/.config/hypr/scripts/awtwall-awtarchy-init.sh &")
     -- hl.exec_cmd("~/.config/hypr/scripts/wallpaper_engine.sh &")
-    hl.exec_cmd("sh -lc 'exec alacritty --class awtarchy-tips-tui,awtarchy-tips-tui --title awtarchy-tips-tui -e \"$HOME/.config/hypr/scripts/awtarchy-tips-tui.sh\" --autostart'")
+    hl.exec_cmd("sh -lc 'exec foot --app-id awtarchy-tips-tui --title awtarchy-tips-tui \"$HOME/.config/hypr/scripts/awtarchy-tips-tui.sh\" --autostart'")
     -- hl.exec_cmd("~/.config/hypr/scripts/miclock.sh &")
     hl.exec_cmd("wl-paste --type text --watch cliphist store &")
     hl.exec_cmd("wl-paste --type image --watch cliphist store &")
@@ -531,10 +531,10 @@ local hypr_scripts = "~/.config/hypr/scripts"
 local launch = "~/.config/hypr/scripts/launch_handler.sh"
 
 -- Core apps (define before anything that uses them)
-local terminal = "alacritty"
+local terminal = "foot"
 local web_browser = "firefox"
 local calculator = "speedcrunch"
-local yazi = "alacritty -o 'font.normal.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.italic.family=\"JetBrainsMono Nerd Font Mono\"' -o 'font.bold_italic.family=\"JetBrainsMono Nerd Font Mono\"' -e yazi"
+local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
@@ -543,12 +543,12 @@ local power_menu_noalt = "~/.config/hypr/scripts/quickshell_power_menu.sh noalt"
 local power_menu_key = "~/.config/hypr/scripts/quickshell_power_menu_key.sh"
 local hypr_quicksettings = "~/.config/hypr/scripts/quickshell_quick_settings_toggle.sh"
 local lockscreen_editor = "~/.config/hypr/scripts/quickshell_lockscreen_editor.sh"
-local awtarchy_tips_tui = "~/.config/hypr/scripts/launch_handler.sh awtarchy-tips-tui \"alacritty --class awtarchy-tips-tui -e ~/.config/hypr/scripts/awtarchy-tips-tui.sh\""
+local awtarchy_tips_tui = "~/.config/hypr/scripts/launch_handler.sh awtarchy-tips-tui \"foot --app-id awtarchy-tips-tui ~/.config/hypr/scripts/awtarchy-tips-tui.sh\""
 
 -- Audio
-local wiremix = "~/.config/hypr/scripts/launch_handler.sh wiremix \"alacritty --class Wiremix -e wiremix\""
+local wiremix = "~/.config/hypr/scripts/launch_handler.sh wiremix \"foot --app-id Wiremix wiremix\""
 local pavucontrol = "~/.config/hypr/scripts/launch_handler.sh pavucontrol \"pavucontrol\""
-local pulsemixer = "~/.config/hypr/scripts/launch_handler.sh pulsemixer \"alacritty --class Pulsemixer -e pulsemixer\""
+local pulsemixer = "~/.config/hypr/scripts/launch_handler.sh pulsemixer \"foot --app-id Pulsemixer pulsemixer\""
 local mute_unmute = "wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
 local play_pause = "~/.config/hypr/scripts/play_pause.sh"
 
@@ -562,7 +562,7 @@ local notification_dismiss = "~/.config/hypr/scripts/quickshell_notification_dis
 local notifications_toggle = "~/.config/hypr/scripts/quickshell_notifications_toggle.sh"
 
 -- Themes / wallpaper
-local wallpicker = "~/.config/hypr/scripts/launch_handler.sh wallpicker \"alacritty --class wallpicker -e awtwall --resume\""
+local wallpicker = "~/.config/hypr/scripts/launch_handler.sh wallpicker \"foot --app-id wallpicker awtwall --resume\""
 local theme_select = "~/.config/hypr/scripts/theme_select.sh"
 
 -- Capture / clipboard / QR
@@ -583,10 +583,10 @@ local vibrance_shader = "~/.config/hypr/scripts/vibrance_shader.sh"
 local hyprsunset_ctl = "~/.config/hypr/scripts/hyprsunset_ctl.sh"
 
 -- Terminal tools
-local maccel = "~/.config/hypr/scripts/launch_handler.sh maccel \"alacritty --class maccel -e maccel\""
+local maccel = "~/.config/hypr/scripts/launch_handler.sh maccel \"foot --app-id maccel maccel\""
 local hyprmoncfg = "APP_NO_LAUNCH_IF_TILED=1 ~/.config/hypr/scripts/launch_handler.sh hyprmoncfg \"~/.config/hypr/scripts/default_terminal.sh --class hyprmoncfg -- hyprmoncfg\""
 local smtty = "~/.config/hypr/scripts/launch_handler.sh smtty \"~/.config/hypr/scripts/default_terminal.sh --class smtty -- smtty\""
-local btop = "~/.config/hypr/scripts/launch_handler.sh btop \"alacritty --class btop -e btop\""
+local btop = "~/.config/hypr/scripts/launch_handler.sh btop \"foot --app-id btop btop\""
 
 -- Complex one-off
 local smtty_O = "~/.config/hypr/scripts/launch_handler.sh smtty-O \"~/.config/hypr/scripts/default_terminal.sh --class smtty-O --hold -- smtty -O\""
@@ -1426,6 +1426,10 @@ hl.window_rule({ match = { title = dialogs }, float = true })
 hl.window_rule({ match = { title = dialogs }, center = true })
 
 -- Transparency
+-- Foot uses [colors] alpha=0.85 in foot.ini, matching the retained optional
+-- Alacritty [window] opacity=0.85. Global Hyprland blur remains enabled.
+-- Do not add an extra 0.85 opacity rule for either terminal: compositor opacity
+-- would multiply with the terminal's own alpha and make it too transparent.
 hl.window_rule({ match = { class = "^(wofi)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(Spotify)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { title = "^(YouTube Music|YouTube Music - .+ - YouTube Music|YouTube Music - 1\\. YouTube Music)$" }, opacity = "0.85 0.85" })

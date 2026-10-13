@@ -56,7 +56,7 @@ def test_authenticating_state_clears_secret_and_animates() -> None:
 def test_runtime_output_is_not_attached_to_auth_tty() -> None:
     launcher = LAUNCHER_PATH.read_text(encoding="utf-8")
     tui = TUI_PATH.read_text(encoding="utf-8")
-    assert 'AWTARCHY_POLKIT_ALACRITTY_OPTIONS="$appearance_text"' in launcher
+    assert 'AWTARCHY_POLKIT_FOOT_OPTIONS="$appearance_text"' in launcher
     assert '"$PYTHON" -I "$AGENT"' in launcher
     assert '-e "$SYSTEMD_CAT"' not in launcher
     assert 'SYSTEMD_CAT = "/usr/bin/systemd-cat"' in tui

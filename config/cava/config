@@ -29,7 +29,7 @@ orientation = horizontal
 channels = stereo
 mono_option = average
 reverse = 0
-# Helps eliminate flicker in some terminals (e.g., Alacritty)
+# Helps eliminate flicker in some terminals (e.g., Foot)
 synchronized_sync = 1
 # Leave waveform disabled to keep the “filled bar mass” aesthetic
 waveform = 0

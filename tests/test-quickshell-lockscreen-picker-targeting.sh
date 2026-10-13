@@ -28,7 +28,8 @@ reject_text() {
 
 # Stable picker identity and selection-only behavior are prerequisites for exact
 # client targeting.
-require_text "$PICKER" '--class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper' \
+ # shellcheck disable=SC2016
+require_text "$PICKER" '--fullscreen --app-id "$PICKER_CLASS" --title "$PICKER_TITLE"' \
     'picker terminal identity is not exact and stable'
 require_text "$PICKER" '--select-only --type all' \
     'picker no longer uses Awtwall all-media selection-only mode'
@@ -57,7 +58,7 @@ if [[ "${1:-}" == --help ]]; then
 fi
 EOF
 
-cat >"$TMP/bin/alacritty" <<'EOF'
+cat >"$TMP/bin/foot" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$*" >"$PICKER_TERMINAL_LOG"
 while (( $# )); do
@@ -94,14 +95,14 @@ if [[ "$*" == *'address:0xabc123'* \
     printf '2\n' >"$PICKER_FULLSCREEN_STATE"
 fi
 EOF
-chmod +x "$TMP/bin/awtwall" "$TMP/bin/alacritty" "$TMP/bin/hyprctl"
+chmod +x "$TMP/bin/awtwall" "$TMP/bin/foot" "$TMP/bin/hyprctl"
 
 picker_output="$(
     PATH="$TMP/bin:$PATH" \
     HOME="$TMP/home" \
     XDG_CACHE_HOME="$TMP/cache" \
     AWTWALL_CMD="$TMP/bin/awtwall" \
-    LOCKSCREEN_WALLPAPER_TERMINAL="$TMP/bin/alacritty" \
+    LOCKSCREEN_WALLPAPER_TERMINAL="$TMP/bin/foot" \
     PICKER_TERMINAL_LOG="$TMP/terminal.log" \
     PICKER_HYPR_LOG="$TMP/hypr.log" \
     PICKER_CLIENT_QUERIES="$TMP/client-queries" \

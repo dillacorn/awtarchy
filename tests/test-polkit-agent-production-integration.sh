@@ -33,7 +33,7 @@ require_contains "$HYPR" 'hl.exec_cmd("/usr/bin/systemctl --user restart awtarch
 reject_contains "$HYPR" '/usr/lib/polkit-gnome/polkit-gnome-authentication-agent-1'
 reject_contains "$HYPR" 'special:awtarchy-polkit-agent'
 require_contains "$RUNTIME" '"Utilities:upower polkit python-gobject gnome-keyring '
-require_contains "$RUNTIME" 'local -a required=(quickshell upower playerctl hyprland-qt-support polkit python-gobject) missing=()'
+require_contains "$RUNTIME" 'local -a required=(quickshell foot upower playerctl hyprland-qt-support polkit python-gobject) missing=()'
 
 # Root-owned runtime installation and exact GNOME migration/fallback.
 require_contains "$RUNTIME" 'AWTARCHY_POLKIT_RUNTIME_DIR="/usr/local/libexec/awtarchy/polkit-agent"'
@@ -50,16 +50,16 @@ require_contains "$RUNTIME" 'awtarchy_polkit_verify_service_process()'
 require_contains "$RUNTIME" 'expected_python="$(/usr/bin/readlink -f -- /usr/bin/python3 2>/dev/null)"'
 require_contains "$RUNTIME" "mapfile -d '' -t argv <\"/proc/\${pid}/cmdline\""
 require_contains "$RUNTIME" '"${AWTARCHY_POLKIT_RUNTIME_DIR}/agent.py"'
-reject_contains "$RUNTIME" '[[ "$resolved" == "$expected_alacritty" ]] || return 1'
+reject_contains "$RUNTIME" '[[ "$resolved" == "$expected_foot" ]] || return 1'
 
-# Alacritty is transient and receives one anonymous inherited socket endpoint.
+# Foot is transient and receives one anonymous inherited socket endpoint.
 require_contains "$AGENT" 'socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)'
 require_contains "$AGENT" 'pass_fds=(child_fd,)'
 require_contains "$AGENT" 'frontend_process'
 require_contains "$AGENT" 'frontend_socket'
-require_contains "$AGENT" '"--class"'
-require_contains "$AGENT" 'f"{APP_ID},{APP_ID}"'
-require_contains "$LAUNCHER" 'AWTARCHY_POLKIT_ALACRITTY_OPTIONS="$appearance_text"'
+require_contains "$AGENT" '"--app-id"'
+require_contains "$AGENT" 'APP_ID,'
+require_contains "$LAUNCHER" 'AWTARCHY_POLKIT_FOOT_OPTIONS="$appearance_text"'
 require_contains "$LAUNCHER" '"$PYTHON" -I "$AGENT"'
 reject_contains "$LAUNCHER" '-e "$SYSTEMD_CAT"'
 

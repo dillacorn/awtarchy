@@ -787,7 +787,7 @@ end
 
 -- Terminal-native text selection while Yazi's single-item Rename input is active.
 -- Yazi does not route pointer events to its input layer; releasing mouse
--- capture lets Alacritty select text with the mouse for Ctrl+Shift+C.
+-- capture lets Foot select text with the mouse for Ctrl+Shift+C.
 -- Native Yazi rename/collision handling and bulk rename remain unchanged.
 local AwtarchyYaziRenameMouseReleased = false
 

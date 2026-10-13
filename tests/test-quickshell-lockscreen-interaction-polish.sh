@@ -87,8 +87,10 @@ require_text "$EDITOR" 'id: elementResizeHandle' 'selected element has no pointe
 require_text "$EDITOR" 'id: selectedElementColorButton' 'selected element color control is still buried'
 require_text "$EDITOR" 'root.toggleDrawer("element")' 'selected color affordance does not open element controls'
 
-require_text "$PICKER" 'window.startup_mode=Fullscreen' 'Alacritty lockscreen wallpaper picker is not fullscreen'
-require_text "$PICKER" "basename -- \"\$TERMINAL_CMD\"" 'wallpaper picker does not distinguish the standard Alacritty launch path'
+# shellcheck disable=SC2016
+require_text "$PICKER" '--fullscreen --app-id "$PICKER_CLASS"' 'Foot lockscreen wallpaper picker is not fullscreen'
+# shellcheck disable=SC2016
+require_text "$PICKER" '--title "$PICKER_TITLE"' 'wallpaper picker does not use the stable Foot title'
 
 # Pressing L must hard-hide every Power Menu surface without running its normal
 # opacity animation. Capture may only start after the real backing windows are

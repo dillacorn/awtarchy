@@ -14,6 +14,6 @@ Terminal=false
 Actions=RunInTerminal;
 
 [Desktop Action RunInTerminal]
-Exec=alacritty -e /usr/bin/sunshine
+Exec=foot /usr/bin/sunshine
 Icon=application-x-executable
 Name=Run in Terminal

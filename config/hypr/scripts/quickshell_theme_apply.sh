@@ -14,7 +14,7 @@ STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy"
 HYPR_LUA="$CONFIG_HOME/hypr/hyprland.lua"
 HYPR_CONF="$CONFIG_HOME/hypr/hyprland.conf"
 MICRO_SETTINGS="$CONFIG_HOME/micro/settings.json"
-ALACRITTY_CONF="$CONFIG_HOME/alacritty/alacritty.toml"
+FOOT_CONF="$CONFIG_HOME/foot/foot.ini"
 SPEEDCRUNCH_INI="$CONFIG_HOME/SpeedCrunch/SpeedCrunch.ini"
 
 [[ -f "$THEME" ]] || exit 1
@@ -35,7 +35,6 @@ text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
 kind = sys.argv[2]
 patterns = {
     "micro": r'"colorscheme"\s*:\s*"([^"]+)"',
-    "alacritty": r'themes/themes/([^"\047|]+\.toml)',
     "speedcrunch": r'Display\\ColorSchemeName=([^|\047"\n]+)',
 }
 match = re.search(patterns[kind], text)
@@ -62,7 +61,7 @@ if [[ $active_border =~ ^[[:xdigit:]]{8}$ ]]; then
 fi
 
 micro_scheme="$(theme_value MICRO_COLORSCHEME 'geany')"
-alacritty_theme="$(theme_value ALACRITTY_THEME 'wombat.toml')"
+
 speedcrunch_scheme="$(theme_value SPEEDCRUNCH_COLORSCHEME "$name")"
 
 if [[ -f "$HYPR_LUA" ]]; then
@@ -118,19 +117,58 @@ path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
 PY
 fi
 
-if [[ -n "$alacritty_theme" && -f "$ALACRITTY_CONF" ]]; then
-    python3 - "$ALACRITTY_CONF" "$alacritty_theme" <<'PY'
+if [[ -f "$FOOT_CONF" ]]; then
+    # Exact 18-color palettes migrated from Awtarchy's former Alacritty themes.
+    # Custom themes without a Foot palette retain the Quickshell-derived fallback.
+    python3 - "$FOOT_CONF" "$CONFIG_HOME/foot/themes/${name}.ini" "$background" "$foreground" "$urgent" "$charging" "$focus" "$lock_accent" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-target = f'~/.config/alacritty/themes/themes/{sys.argv[2]}'
-text, count = re.subn(r'~/.config/alacritty/themes/themes/[^"\n]+\.toml', target, text)
-if count:
-    path.write_text(text, encoding="utf-8")
+palette_path = Path(sys.argv[2])
+names = ("background", "foreground", *(f"regular{i}" for i in range(8)), *(f"bright{i}" for i in range(8)))
+fallback_names = ("background", "foreground", "regular1", "regular2", "regular4", "regular5")
+colors = {}
+
+if palette_path.is_file():
+    for line in palette_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.fullmatch(r"([a-z]+[0-9]?)=([0-9a-fA-F]{6})", line)
+        if not match or match.group(1) not in names or match.group(1) in colors:
+            raise SystemExit(f"invalid Foot palette entry in {palette_path}")
+        colors[match.group(1)] = match.group(2).lower()
+    if set(colors) != set(names):
+        raise SystemExit(f"incomplete Foot palette in {palette_path}")
+else:
+    for name, value in zip(fallback_names, sys.argv[3:]):
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+            raise SystemExit(f"invalid Foot theme color for {name}")
+        colors[name] = value[1:].lower()
+
+content = path.read_text(encoding="utf-8")
+for name, value in colors.items():
+    content, count = re.subn(
+        rf"(?m)^({re.escape(name)}=)[0-9A-Fa-f]{{6}}$",
+        lambda match, color=value: match.group(1) + color,
+        content,
+    )
+    if count != 1:
+        raise SystemExit(f"missing Foot palette entry: {name}")
+path.write_text(content, encoding="utf-8")
 PY
+fi
+
+# Recolor existing Foot windows without restarting their shell, Yazi, or
+# scrollback. The helper targets only our user's Foot-owned PTYs, never other
+# terminals or the isolated PolicyKit authentication frontend. Newly opened
+# Foot windows read the updated foot.ini normally.
+FOOT_LIVE_THEME="$CONFIG_HOME/hypr/scripts/foot_theme_live.py"
+if [[ -f "$FOOT_CONF" && -f "$FOOT_LIVE_THEME" ]]; then
+    python3 "$FOOT_LIVE_THEME" "$FOOT_CONF" || \
+        printf '%s\n' 'Foot live recoloring failed; new Foot windows still use the updated theme.' >&2
 fi
 
 if [[ -n "$speedcrunch_scheme" && -f "$SPEEDCRUNCH_INI" ]]; then
@@ -178,7 +216,7 @@ PY
 printf '%s\n' "$name" >"$STATE_DIR/active-theme"
 
 # The PolicyKit terminal uses a trusted root-owned base config plus sanitized
-# visual overrides from the user's current Alacritty config. Restart the hidden
+# visual overrides from the user's current Foot config. Restart the hidden
 # agent after a theme change so its next prompt reflects the new theme.
 if command -v systemctl >/dev/null 2>&1 \
     && systemctl --user is-active --quiet awtarchy-polkit-agent.service 2>/dev/null;

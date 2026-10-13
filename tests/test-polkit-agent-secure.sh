@@ -7,7 +7,7 @@ ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 SOURCE_DIR="${ROOT_DIR}/config/hypr/scripts/awtarchy-polkit-agent"
 AGENT="${SOURCE_DIR}/agent.py"
 TUI="${SOURCE_DIR}/tui.py"
-TERMINAL_CONFIG="${SOURCE_DIR}/alacritty.toml"
+TERMINAL_CONFIG="${SOURCE_DIR}/foot.ini"
 LAUNCHER="${SOURCE_DIR}/launcher.sh"
 SERVICE="${SOURCE_DIR}/awtarchy-polkit-agent.service"
 QML="${SOURCE_DIR}/shell.qml"
@@ -83,7 +83,7 @@ test_launcher_contract() {
     require_contains "$LAUNCHER" 'LD_LIBRARY_PATH'
     require_contains "$LAUNCHER" 'stat -Lc'
     require_contains "$LAUNCHER" '! -L $path'
-    require_contains "$LAUNCHER" 'AWTARCHY_POLKIT_ALACRITTY_OPTIONS="$appearance_text"'
+    require_contains "$LAUNCHER" 'AWTARCHY_POLKIT_FOOT_OPTIONS="$appearance_text"'
     require_contains "$LAUNCHER" '"$PYTHON" -I "$AGENT"'
     require_contains "$LAUNCHER" 'XDG_SESSION_ID="$session_id"'
     require_contains "$LAUNCHER" 'gi.require_version("Polkit", "1.0")'
@@ -94,8 +94,8 @@ test_launcher_contract() {
 
 test_terminal_config_contract() {
     require_file "$TERMINAL_CONFIG"
-    require_contains "$TERMINAL_CONFIG" '[window]'
-    require_contains "$TERMINAL_CONFIG" '[font]'
+    require_contains "$TERMINAL_CONFIG" '[colors-dark]'
+    require_contains "$TERMINAL_CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 }
 
 test_service_contract() {

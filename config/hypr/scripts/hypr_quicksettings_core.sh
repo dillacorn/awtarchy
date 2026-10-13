@@ -206,26 +206,12 @@ launch_terminal() {
     exec "$self" --ui
   fi
 
-  if have_cmd kitty; then
-    exec kitty --class "$TERM_CLASS" -e "$self" --ui
-  fi
   if have_cmd foot; then
     exec foot --app-id="$TERM_CLASS" "$self" --ui
   fi
-  if have_cmd alacritty; then
-    exec alacritty --class "$TERM_CLASS" -e "$self" --ui
-  fi
-  if have_cmd wezterm; then
-    exec wezterm start --class "$TERM_CLASS" -- "$self" --ui
-  fi
-  if have_cmd konsole; then
-    exec konsole --appname "$TERM_CLASS" -e "$self" --ui
-  fi
-  if have_cmd gnome-terminal; then
-    exec gnome-terminal --title="$TERM_CLASS" -- "$self" --ui
-  fi
 
-  exec xterm -T "$TERM_CLASS" -e "$self" --ui
+  printf '%s\n' 'Foot is required for the Awtarchy terminal interface.' >&2
+  exit 127
 }
 
 require_files() {
@@ -1535,12 +1521,12 @@ launch_awtwall() {
     MSG='awtwall is not installed'
     return 1
   fi
-  if ! have_cmd alacritty; then
-    MSG='wallpaper picker: alacritty not found'
+  if ! have_cmd foot; then
+    MSG='wallpaper picker: foot not found'
     return 1
   fi
 
-  printf -v launch_cmd 'alacritty --class wallpicker -e %q --resume' "$awtwall_path"
+  printf -v launch_cmd 'foot --app-id wallpicker %q --resume' "$awtwall_path"
   if [[ -x "$LAUNCH_HANDLER" ]]; then
     if have_cmd setsid; then
       setsid -f "$LAUNCH_HANDLER" wallpicker "$launch_cmd" >/dev/null 2>&1
@@ -1548,9 +1534,9 @@ launch_awtwall() {
       "$LAUNCH_HANDLER" wallpicker "$launch_cmd" >/dev/null 2>&1 &
     fi
   elif have_cmd setsid; then
-    setsid -f alacritty --class wallpicker -e "$awtwall_path" --resume >/dev/null 2>&1
+    setsid -f foot --app-id wallpicker "$awtwall_path" --resume >/dev/null 2>&1
   else
-    alacritty --class wallpicker -e "$awtwall_path" --resume >/dev/null 2>&1 &
+    foot --app-id wallpicker "$awtwall_path" --resume >/dev/null 2>&1 &
   fi
 
   SHOULD_QUIT=1

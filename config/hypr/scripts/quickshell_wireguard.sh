@@ -99,19 +99,19 @@ run_privileged_wg_quick() {
         exec /usr/bin/pkexec "$WIREGUARD_HELPER" "$action" "$name"
     fi
 
-    if [[ -x /usr/bin/alacritty && -x /usr/bin/sudo ]]; then
-        exec /usr/bin/alacritty --title "Awtarchy WireGuard" \
-            -e /usr/bin/sudo "$WIREGUARD_HELPER" "$action" "$name"
+    if [[ -x /usr/bin/foot && -x /usr/bin/sudo ]]; then
+        exec /usr/bin/foot --title "Awtarchy WireGuard" \
+            /usr/bin/sudo "$WIREGUARD_HELPER" "$action" "$name"
     fi
 
-    fail "A privilege prompt is required but neither pkexec nor an Alacritty+sudo fallback is available."
+    fail "A privilege prompt is required but neither pkexec nor an Foot+sudo fallback is available."
 }
 
 edit_profile() {
     local conf="$1"
-    command -v alacritty >/dev/null 2>&1 || fail "Alacritty is required for the protected VPN editor."
+    command -v foot >/dev/null 2>&1 || fail "Foot is required for the protected VPN editor."
     command -v micro >/dev/null 2>&1 || fail "micro is required for the protected VPN editor."
-    exec alacritty --class "${EDITOR_CLASS},${EDITOR_CLASS}" --title "$EDITOR_TITLE" -e micro "$conf"
+    exec foot --app-id "$EDITOR_CLASS" --title "$EDITOR_TITLE" micro "$conf"
 }
 
 local_info() {

@@ -13,7 +13,7 @@ reject_contains() { ! grep -Fq -- "$2" "$1" || fail "$1 still contains: $2"; }
 
 require_contains "$RUNTIME" 'expected_python="$(/usr/bin/readlink -f -- /usr/bin/python3 2>/dev/null)"'
 require_contains "$RUNTIME" '[[ "$resolved" == "$expected_python" ]] || return 1'
-reject_contains "$RUNTIME" '[[ "$resolved" == "$expected_alacritty" ]] || return 1'
+reject_contains "$RUNTIME" '[[ "$resolved" == "$expected_foot" ]] || return 1'
 
 require_contains "$AGENT" 'socket.socketpair(socket.AF_UNIX, socket.SOCK_SEQPACKET)'
 require_contains "$AGENT" 'self.frontend_process: Optional[subprocess.Popen] = None'

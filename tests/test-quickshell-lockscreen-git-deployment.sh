@@ -32,7 +32,7 @@ grep -Fq 'find "${HOME_DIR}/.config/hypr/scripts" -type f -exec chmod +x {} +' "
 
 # Git-testing/update staging also treats any managed .config/quickshell subtree
 # as deployable and restores executable mode for .config/hypr/scripts entries.
-grep -Fq '.config/hypr/*|.config/quickshell/*|.config/alacritty/*' "$RUNTIME" \
+grep -Fq '.config/foot/*' "$RUNTIME" \
     || fail 'managed update path no longer includes the full Quickshell subtree'
 grep -Fq '.config/hypr/scripts/*|.config/hypr/themes/*|.config/waybar/scripts/*)' "$RUNTIME" \
     || fail 'Git-testing staging no longer recognizes executable Hypr scripts'

@@ -559,7 +559,7 @@ Singleton {
                                     return "";
                                 const apps = selected.apps || ({});
                                 return "Micro: " + String(apps.micro || "—")
-                                    + "   Alacritty: " + String(apps.alacritty || "—")
+                                    + "   Foot: " + String(apps.foot || "—")
                                     + "   SpeedCrunch: " + String(apps.speedcrunch || "—");
                             }
                             color: Theme.muted

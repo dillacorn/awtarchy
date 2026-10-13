@@ -77,14 +77,6 @@ source <(sed '/^collect_state$/,$d' "$RECONCILER")
 if ! declare -F aur_package_satisfied >/dev/null; then
   fail 'reconciler has no installer-aligned AUR package satisfaction function'
 else
-  printf '%s\n' alacritty >"$state"
-  aur_package_satisfied alacritty-graphics \
-    || fail 'installed alacritty did not satisfy alacritty-graphics'
-
-  printf '%s\n' alacritty-graphics >"$state"
-  aur_package_satisfied alacritty \
-    || fail 'installed alacritty-graphics did not satisfy alacritty'
-
   printf '%s\n' qimgv-git >"$state"
   aur_package_satisfied qimgv \
     || fail 'installed qimgv-git did not satisfy qimgv'
@@ -125,7 +117,6 @@ fi
 cat >"$runtime" <<'EOF_RUNTIME'
 declare -a PKG_GROUPS=()
 declare -a PACKAGES_AUR=(
-  alacritty-graphics
   qimgv
   hyprmoncfg-bin
   obs-pipewire-audio-capture-bin
@@ -133,13 +124,10 @@ declare -a PACKAGES_AUR=(
 )
 declare -a FLATPAK_CATALOG=()
 EOF_RUNTIME
-printf '%s\n' alacritty qimgv-git hyprmoncfg-git >"$state"
+printf '%s\n' qimgv-git hyprmoncfg-git >"$state"
 review_output="$(bash "$RECONCILER" --review)"
 aur_section="$(printf '%s\n' "$review_output" | sed -n '/^Missing current AUR catalog packages:/,/^Missing current Flatpak catalog apps:/p')"
 
-if printf '%s\n' "$aur_section" | grep -Fq 'alacritty-graphics'; then
-  fail 'review still offered alacritty-graphics despite installed alacritty'
-fi
 if printf '%s\n' "$aur_section" | grep -Fq 'qimgv'; then
   fail 'review still offered qimgv despite installed qimgv-git'
 fi
@@ -188,15 +176,7 @@ else
   [[ ${#FAILED_AUR[@]} -eq 1 && ${FAILED_AUR[0]} == awtwall ]] \
     || fail 'failed AUR package was not recorded for end-of-run reporting'
 
-  printf '%s\n' alacritty >"$state"
-  : >"$scan_log"
-  FAILED_AUR=()
-  install_selected_aur_packages alacritty-graphics \
-    || fail 'equivalent-installed AUR package check returned failure'
-  [[ ! -s $scan_log ]] \
-    || fail 'equivalent-installed AUR package still invoked aur-scan'
-  (( ${#FAILED_AUR[@]} == 0 )) \
-    || fail 'equivalent-installed AUR package was incorrectly recorded as failed'
+
 fi
 
 if declare -F ensure_aur_helper >/dev/null; then
@@ -221,4 +201,4 @@ if (( failures > 0 )); then
   exit 1
 fi
 
-printf 'PASS: reconciler preserves AUR equivalence and delegates best-effort per-package installs to aur-scan\n'
+printf 'PASS: reconciler preserves supported AUR equivalence and delegates best-effort per-package installs to aur-scan\n'

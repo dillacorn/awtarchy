@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Toggle Wiremix inside Alacritty without killing unrelated tiled windows.
+# Toggle Wiremix inside Foot without killing unrelated tiled windows.
 
 set -euo pipefail
 
@@ -13,11 +13,10 @@ kill_list() {
 }
 
 launch_new() {
-  alacritty \
-    --class "$WM_CLASS" \
+  foot \
+    --app-id "$WM_CLASS" \
     --title "$WM_CLASS" \
-    -o window.dynamic_title=false \
-    -e wiremix -p auto -f 30 >/dev/null 2>&1 &
+    wiremix -p auto -f 30 >/dev/null 2>&1 &
 }
 
 ws="$(hyprctl activeworkspace -j 2>/dev/null | jq -r 'try .id // 0')"
