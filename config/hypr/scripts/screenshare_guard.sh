@@ -27,7 +27,7 @@ FALLBACK_TARGETS=(
     files
     wallpicker
     virt-manager
-    alacritty
+    foot
     mpv
 )
 
@@ -46,7 +46,7 @@ declare -A FALLBACK_LABELS=(
     [files]="Files"
     [wallpicker]="Wallpicker"
     [virt-manager]="Virtual Machine Manager"
-    [alacritty]="Alacritty"
+    [foot]="Foot"
     [mpv]="mpv"
 )
 
@@ -65,7 +65,7 @@ declare -A FALLBACK_SECTIONS=(
     [files]=optional
     [wallpicker]=optional
     [virt-manager]=optional
-    [alacritty]=optional
+    [foot]=optional
     [mpv]=optional
 )
 
@@ -84,7 +84,7 @@ declare -A FALLBACK_DEFAULTS=(
     [files]=false
     [wallpicker]=false
     [virt-manager]=false
-    [alacritty]=false
+    [foot]=false
     [mpv]=false
 )
 
