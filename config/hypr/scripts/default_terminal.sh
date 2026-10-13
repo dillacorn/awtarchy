@@ -59,7 +59,7 @@ if [[ -n ${TERMINAL:-} ]]; then
 fi
 
 if (( ${#terminal_args[@]} == 0 )); then
-  for candidate in footclient foot kitty alacritty wezterm konsole gnome-terminal xfce4-terminal xterm; do
+  for candidate in foot footclient kitty alacritty wezterm konsole gnome-terminal xfce4-terminal xterm; do
     if command -v "$candidate" >/dev/null 2>&1; then
       terminal_args=("$candidate")
       break
