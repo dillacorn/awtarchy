@@ -48,28 +48,9 @@ if (( hold_open )); then
   fi
 fi
 
-terminal_args=()
-if [[ -n ${TERMINAL:-} ]]; then
-  # Respect the conventional user preference. Simple arguments are supported;
-  # shell evaluation is deliberately avoided.
-  read -r -a terminal_args <<<"$TERMINAL"
-  if (( ${#terminal_args[@]} == 0 )) || ! command -v "${terminal_args[0]}" >/dev/null 2>&1; then
-    terminal_args=()
-  fi
-fi
-
-if (( ${#terminal_args[@]} == 0 )); then
-  for candidate in foot; do
-    if command -v "$candidate" >/dev/null 2>&1; then
-      terminal_args=("$candidate")
-      break
-    fi
-  done
-fi
-
-(( ${#terminal_args[@]} > 0 )) || {
-  printf '%s\n' 'No supported terminal emulator was found.' >&2
+command -v foot >/dev/null 2>&1 || {
+  printf '%s\n' 'Foot terminal emulator is required by Awtarchy.' >&2
   exit 127
 }
 
-exec "${terminal_args[@]}" --app-id="$window_class" "${command_args[@]}"
+exec foot --app-id="$window_class" "${command_args[@]}"
