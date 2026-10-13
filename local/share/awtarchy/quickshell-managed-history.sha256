@@ -1594,3 +1594,8 @@ afce729bd189974b2a45aca1d2347ec177c2c4821be8c2478ba25d1775987207	.config/hypr/hy
 
 # Exact Foot terminal color theme integration.
 213aa953d367b9af74ae2e6c235efbe2ced803d175e090d1df20e9451059c5bd	.config/hypr/scripts/quickshell_theme_apply.sh
+
+# Current Foot 1.28 config and live ANSI palette broadcasts.
+4fdc905b4422a7c47324f0ebceee8534503d7f9ec7f4ed488fbc94e35bb3f1e3	.config/foot/foot.ini
+711b309043266692d10bf6a99c4f3a8d131f6f0337f62b8f1fab4c9e5232ade6	.config/hypr/scripts/foot_theme_live.py
+dbcedd9e45ae53c7c3ef1aca1a19d16c27d8a8c471379808a7d4d130950f6633	.config/hypr/scripts/quickshell_theme_apply.sh
