@@ -138,6 +138,7 @@ jobs:
           bash -n tests/test-flyout-edge-layout.sh
           bash -n tests/test-flyout-runtime-centering.sh
           bash -n tests/test-launcher-fast-path.sh
+          bash -n tests/test-foot-terminal-migration.sh
           bash -n tests/test-launcher-keyboard-focus.sh
           bash -n tests/test-quickshell-hotkey-latency.sh
           bash -n tests/test-desktop-candidate-validation.sh
@@ -378,6 +379,7 @@ jobs:
           bash tests/test-flyout-edge-layout.sh
           bash tests/test-flyout-runtime-centering.sh
           bash tests/test-launcher-fast-path.sh
+          bash tests/test-foot-terminal-migration.sh
           bash tests/test-launcher-keyboard-focus.sh
           bash tests/test-quickshell-hotkey-latency.sh
           bash tests/test-desktop-candidate-validation.sh
