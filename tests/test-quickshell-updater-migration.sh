@@ -707,6 +707,10 @@ seed_old_home() {
     "$home/.local/state/awtarchy"
 
   cp -a -- "$previous_root/config/." "$home/.config/"
+  # Alacritty is optional after the Foot migration: preserve this custom config.
+  mkdir -p "$home/.config/alacritty"
+  printf '%s\n' '[window]' 'opacity = 0.85' '# keep optional Alacritty' \
+    >"$home/.config/alacritty/alacritty.toml"
   if [[ -d "$previous_root/local/share/applications" ]]; then
     mkdir -p "$home/.local/share/applications"
     cp -a -- "$previous_root/local/share/applications/." "$home/.local/share/applications/"
@@ -759,7 +763,7 @@ EOF
 write_old_package_state() {
   printf '%s\n' \
     waybar-git fuzzel wlogout mako wofi network-manager-applet blueman \
-    networkmanager bluez bluez-utils jq ripdrag \
+    networkmanager bluez bluez-utils jq ripdrag alacritty-graphics \
     >"$1"
 }
 
@@ -989,6 +993,13 @@ fi
 
 assert_package "$package_state" quickshell
 assert_package "$package_state" upower
+assert_package "$package_state" foot
+assert_package "$package_state" alacritty-graphics
+if grep -Eq -- '-R(n|s|dd|ns).*alacritty(-graphics)?' "${TMP}/pacman.log"; then
+  fail "Foot migration attempted to remove an optional Alacritty package"
+fi
+grep -Fxq '# keep optional Alacritty' "$home/.config/alacritty/alacritty.toml" \
+  || fail "Foot migration destroyed the previous optional Alacritty configuration"
 for pkg in waybar waybar-git fuzzel wlogout mako wofi network-manager-applet blueman; do
   assert_no_package "$package_state" "$pkg"
 done
@@ -1136,6 +1147,9 @@ grep -Fq -- '-- personal Hyprland customization survives migration' \
 assert_retired_paths_absent "$beta_home"
 assert_package "$beta_packages" quickshell
 assert_package "$beta_packages" upower
+assert_package "$beta_packages" alacritty-graphics
+grep -Fxq '# keep optional Alacritty' "$beta_home/.config/alacritty/alacritty.toml" \
+  || fail "stable update removed optional Alacritty configuration"
 grep -Fxq "https://github.com/dillacorn/awtarchy/archive/${TEST_MAIN_COMMIT}.tar.gz" \
   "${TMP}/beta-to-release-curl.log" \
   || fail "release handoff did not pin the normal command to main"
