@@ -3,9 +3,9 @@
 
 [Desktop Entry]
 Name=Audio Mixer (Wiremix)
-Comment=Launch Wiremix in Alacritty
+Comment=Launch Wiremix in Foot
 Type=Application
-Exec=alacritty --class Wiremix,Wiremix --title Wiremix -e wiremix
+Exec=foot --app-id Wiremix --title Wiremix wiremix
 Icon=audio-volume-high
 Terminal=false
 Categories=Audio;Utility;System;
