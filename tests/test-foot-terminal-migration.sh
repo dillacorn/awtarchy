@@ -34,7 +34,12 @@ require "$HELPER" 'exec foot --app-id="$window_class"'
 require "$LAUNCHER" 'command: ["foot", ...entry.command]'
 require "$CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 require "$CONFIG" 'pad=22x22'
+require "$CONFIG" '[colors-dark]'
 require "$CONFIG" 'alpha=0.85'
+if grep -Fxq '[colors]' "$CONFIG"; then
+    printf 'FAIL: obsolete Foot [colors] section\n' >&2
+    exit 1
+fi
 # Alacritty Graphics may remain installed as an optional user-managed terminal.
 # The Foot migration must never uninstall it or remove its existing config.
 if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
@@ -47,6 +52,8 @@ require "$RUNTIME" 'pacman_install_one foot'
 require "$CONFIG" 'alpha=0.85'
 require "$ROOT/config/hypr/scripts/quickshell_theme_apply.sh" 'FOOT_CONF="$CONFIG_HOME/foot/foot.ini"'
 require "$ROOT/config/hypr/scripts/quickshell_theme_catalog.sh" '"foot": path.name,'
+require "$ROOT/config/hypr/scripts/quickshell_theme_apply.sh" 'foot_theme_live.py'
+require "$ROOT/config/hypr/scripts/foot_theme_live.py" 'def broadcast(colors:'
 if grep -Eq '^[[:space:]]*alacritty-graphics([[:space:]]|$)' "$RUNTIME"; then
     printf 'FAIL: Alacritty Graphics remains in the package catalog\n' >&2
     exit 1
