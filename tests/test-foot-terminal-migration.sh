@@ -35,7 +35,22 @@ require "$LAUNCHER" 'command: ["foot", ...entry.command]'
 require "$CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 require "$CONFIG" 'pad=22x22'
 require "$CONFIG" 'alpha=0.85'
-require "$RUNTIME" 'remove_retired_alacritty_packages()'
+# Alacritty Graphics may remain installed as an optional user-managed terminal.
+# The Foot migration must never uninstall it or remove its existing config.
+if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
+    printf 'FAIL: Awtarchy must not uninstall Alacritty during the Foot migration\n' >&2
+    exit 1
+fi
+require "$RUNTIME" 'if rel.startswith(".config/alacritty/") and ni is None:'
+require "$RUNTIME" 'if ! pacman -Qq foot >/dev/null 2>&1; then'
+require "$RUNTIME" 'pacman_install_one foot'
+require "$CONFIG" 'alpha=0.85'
+require "$ROOT/config/hypr/scripts/quickshell_theme_apply.sh" 'FOOT_CONF="$CONFIG_HOME/foot/foot.ini"'
+require "$ROOT/config/hypr/scripts/quickshell_theme_catalog.sh" '"foot": path.name,'
+if grep -Eq '^[[:space:]]*alacritty-graphics([[:space:]]|$)' "$RUNTIME"; then
+    printf 'FAIL: Alacritty Graphics remains in the package catalog\n' >&2
+    exit 1
+fi
 require "$RUNTIME" 'local -a required=(quickshell foot upower'
 require "$ROOT/config/hypr/scripts/awtarchy-polkit-agent/launcher.sh" 'FOOT="/usr/bin/foot"'
 
@@ -56,4 +71,4 @@ else
     printf 'SKIP: Foot binary unavailable; native config validation needs the Arch test machine\n'
 fi
 
-printf 'PASS: Foot testing-stage integration contracts\n'
+printf 'PASS: Foot terminal migration and optional Alacritty preservation contracts\n'
