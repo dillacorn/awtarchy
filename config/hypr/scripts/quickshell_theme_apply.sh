@@ -118,18 +118,35 @@ PY
 fi
 
 if [[ -f "$FOOT_CONF" ]]; then
-    python3 - "$FOOT_CONF" "$background" "$foreground" "$urgent" "$charging" "$focus" "$lock_accent" <<'PY'
+    # Exact 18-color palettes migrated from Awtarchy's former Alacritty themes.
+    # Custom themes without a Foot palette retain the Quickshell-derived fallback.
+    python3 - "$FOOT_CONF" "$CONFIG_HOME/foot/themes/${name}.ini" "$background" "$foreground" "$urgent" "$charging" "$focus" "$lock_accent" <<'PY'
 from pathlib import Path
 import re
 import sys
 
 path = Path(sys.argv[1])
-names = ("background", "foreground", "regular1", "regular2", "regular4", "regular5")
+palette_path = Path(sys.argv[2])
+names = ("background", "foreground", *(f"regular{i}" for i in range(8)), *(f"bright{i}" for i in range(8)))
+fallback_names = ("background", "foreground", "regular1", "regular2", "regular4", "regular5")
 colors = {}
-for name, value in zip(names, sys.argv[2:]):
-    if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
-        raise SystemExit(f"invalid Foot theme color for {name}")
-    colors[name] = value[1:].lower()
+
+if palette_path.is_file():
+    for line in palette_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.fullmatch(r"([a-z]+[0-9]?)=([0-9a-fA-F]{6})", line)
+        if not match or match.group(1) not in names or match.group(1) in colors:
+            raise SystemExit(f"invalid Foot palette entry in {palette_path}")
+        colors[match.group(1)] = match.group(2).lower()
+    if set(colors) != set(names):
+        raise SystemExit(f"incomplete Foot palette in {palette_path}")
+else:
+    for name, value in zip(fallback_names, sys.argv[3:]):
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+            raise SystemExit(f"invalid Foot theme color for {name}")
+        colors[name] = value[1:].lower()
 
 content = path.read_text(encoding="utf-8")
 for name, value in colors.items():
