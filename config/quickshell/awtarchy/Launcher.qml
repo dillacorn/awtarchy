@@ -729,7 +729,7 @@ Singleton {
         const workingDirectory = entry.workingDirectory || "";
         if (entry.runInTerminal) {
             Quickshell.execDetached({
-                command: ["alacritty", "-e", ...entry.command],
+                command: ["foot", ...entry.command],
                 workingDirectory: workingDirectory
             });
         } else {
