@@ -80,15 +80,7 @@ chmod 0755 "$tmp/fakebin/hyprctl" "$tmp/fakebin/systemctl"
 for theme in carbon_night catppuccin-frappé crimson_red electric_blue gruvbox iron_forge obsidian_night pink pipboy; do
     palette="$tmp/config/foot/themes/${theme}.ini"
     [[ -f "$palette" ]] || { printf 'FAIL: missing Foot palette: %s\n' "$theme" >&2; exit 1; }
-    [[ "$(grep -Ec '^(background|foreground|regular[0-7]|bright[0-7])=[0-9a-f]{6}
-    foot --check-config --config="$CONFIG"
-    printf 'PASS: Foot configuration validated with installed Foot\n'
-else
-    printf 'SKIP: Foot binary unavailable; native config validation needs the Arch test machine\n'
-fi
-
-printf 'PASS: Foot terminal migration and optional Alacritty preservation contracts\n'
- "$palette")" -eq 18 ]] || {
+    [[ "$(grep -Ec '^(background|foreground|regular[0-7]|bright[0-7])=[0-9a-f]{6}$' "$palette")" -eq 18 ]] || {
         printf 'FAIL: incomplete Foot palette: %s\n' "$theme" >&2
         exit 1
     }
