@@ -22,7 +22,14 @@ require "$RUNTIME" 'config_dirs=(hypr quickshell alacritty foot '
 require "$RUNTIME" '.config/foot/*'
 require "$RUNTIME" '"alacritty", "foot",'
 require "$HYPR" 'local terminal = "foot"'
-require "$HYPR" "local yazi = \"foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi\""
+grep -Fxq -- "local yazi = \"foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi\"" "$HYPR" || {
+    printf '%s\n' 'FAIL: the Foot Yazi command is malformed' >&2
+    exit 1
+}
+if command -v lua >/dev/null 2>&1; then
+    lua -e 'assert(loadfile(arg[1]))' "$HYPR"
+    printf 'PASS: Hyprland Lua syntax validated\n'
+fi
 require "$HELPER" 'for candidate in foot footclient kitty alacritty'
 require "$LAUNCHER" 'command: ["foot", ...entry.command]'
 require "$CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
