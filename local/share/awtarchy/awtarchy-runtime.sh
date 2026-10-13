@@ -6075,49 +6075,8 @@ valid_theme_name() {
   [[ -n "$name" && "$name" != */* && "$name" != "." && "$name" != ".." && "$name" != *$'\n'* ]]
 }
 
-infer_prior_alacritty_theme() {
-  local repo_dir="$1" alacritty_conf="${HOME_DIR}/.config/alacritty/alacritty.toml"
-  [[ -r "$alacritty_conf" ]] || return 1
-
-  # The final Alacritty import is the effective imported color scheme.
-  # Match only shipped Foot palettes; never guess or copy custom user themes.
-  python3 - "$alacritty_conf" "${repo_dir}/config/foot/themes" <<'PY'
-from pathlib import Path
-import re
-import sys
-import tomllib
-
-try:
-    data = tomllib.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-    imports = data.get("general", {}).get("import", [])
-    if isinstance(imports, list) and imports and isinstance(imports[-1], str):
-        filename = Path(imports[-1]).name
-        if re.fullmatch(r"[a-zA-Z0-9_.+-]+\.toml", filename):
-            for palette in sorted(Path(sys.argv[2]).glob("*.ini")):
-                if not palette.is_file():
-                    continue
-                header = palette.read_text(encoding="utf-8").splitlines()[:4]
-                if f"# Derived from alacritty/alacritty-theme/themes/{filename}." in header:
-                    print(palette.stem)
-                    raise SystemExit(0)
-except (OSError, UnicodeError, ValueError, AttributeError):
-    pass
-
-raise SystemExit(1)
-PY
-}
-
 infer_active_theme() {
   local repo_dir="$1" theme="" speed="${HOME_DIR}/.config/SpeedCrunch/SpeedCrunch.ini"
-  # On the first Alacritty -> Foot migration use Alacritty's selected palette.
-  # Never consult optional Alacritty config after Foot is configured.
-  if [[ ! -e "${HOME_DIR}/.config/foot/foot.ini" ]]; then
-    theme="$(infer_prior_alacritty_theme "$repo_dir" || true)"
-    if valid_theme_name "$theme" && [[ -f "${repo_dir}/config/hypr/themes/${theme}" ]]; then
-      printf '%s\n' "$theme"
-      return 0
-    fi
-  fi
   if [[ -r "$ACTIVE_THEME_FILE" ]]; then
     IFS= read -r theme <"$ACTIVE_THEME_FILE" || true
     if valid_theme_name "$theme" && [[ -f "${repo_dir}/config/hypr/themes/${theme}" ]]; then
