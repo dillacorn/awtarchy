@@ -44,7 +44,7 @@ optional_targets=(
     files
     wallpicker
     virt-manager
-    alacritty
+    foot
     mpv
 )
 
