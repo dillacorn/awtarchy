@@ -1426,6 +1426,10 @@ hl.window_rule({ match = { title = dialogs }, float = true })
 hl.window_rule({ match = { title = dialogs }, center = true })
 
 -- Transparency
+-- Foot uses [colors] alpha=0.85 in foot.ini, matching the retained optional
+-- Alacritty [window] opacity=0.85. Global Hyprland blur remains enabled.
+-- Do not add an extra 0.85 opacity rule for either terminal: compositor opacity
+-- would multiply with the terminal's own alpha and make it too transparent.
 hl.window_rule({ match = { class = "^(wofi)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(Spotify)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { title = "^(YouTube Music|YouTube Music - .+ - YouTube Music|YouTube Music - 1\\. YouTube Music)$" }, opacity = "0.85 0.85" })
