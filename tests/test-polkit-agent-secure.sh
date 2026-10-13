@@ -94,7 +94,7 @@ test_launcher_contract() {
 
 test_terminal_config_contract() {
     require_file "$TERMINAL_CONFIG"
-    require_contains "$TERMINAL_CONFIG" '[colors]'
+    require_contains "$TERMINAL_CONFIG" '[colors-dark]'
     require_contains "$TERMINAL_CONFIG" 'font=NotoSansM Nerd Font Mono:size=12'
 }
 
