@@ -99,7 +99,7 @@ mkdir -p -- "$RESULT_DIR"
 RESULT_FILE="$(mktemp "${RESULT_DIR}/lockscreen-wallpaper-selection.XXXXXX")"
 rm -f -- "$RESULT_FILE"
 
-set +set +e
+set +e
 "$TERMINAL_CMD" --fullscreen --app-id "$PICKER_CLASS" --title "$PICKER_TITLE" \
     "$awtwall_path" --select-only --type all --resume \
     --select-result "$RESULT_FILE" &
