@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Open a command in the user's preferred terminal without assuming Alacritty.
+# Open a command in the user's preferred terminal using Foot.
 
 set -euo pipefail
 
@@ -59,7 +59,7 @@ if [[ -n ${TERMINAL:-} ]]; then
 fi
 
 if (( ${#terminal_args[@]} == 0 )); then
-  for candidate in foot footclient kitty alacritty wezterm konsole gnome-terminal xfce4-terminal xterm; do
+  for candidate in foot; do
     if command -v "$candidate" >/dev/null 2>&1; then
       terminal_args=("$candidate")
       break
@@ -72,33 +72,4 @@ fi
   exit 127
 }
 
-terminal_name="${terminal_args[0]##*/}"
-case "$terminal_name" in
-  foot|footclient)
-    exec "${terminal_args[@]}" --app-id="$window_class" "${command_args[@]}"
-    ;;
-  kitty)
-    exec "${terminal_args[@]}" --class "$window_class" "${command_args[@]}"
-    ;;
-  alacritty)
-    exec "${terminal_args[@]}" --class "$window_class" -T "$window_class" -e "${command_args[@]}"
-    ;;
-  wezterm)
-    exec "${terminal_args[@]}" start --class "$window_class" -- "${command_args[@]}"
-    ;;
-  konsole)
-    exec "${terminal_args[@]}" --appname "$window_class" -e "${command_args[@]}"
-    ;;
-  gnome-terminal)
-    exec "${terminal_args[@]}" --title="$window_class" -- "${command_args[@]}"
-    ;;
-  xfce4-terminal)
-    exec "${terminal_args[@]}" --title="$window_class" --execute "${command_args[@]}"
-    ;;
-  xterm)
-    exec "${terminal_args[@]}" -class "$window_class" -T "$window_class" -e "${command_args[@]}"
-    ;;
-  *)
-    exec "${terminal_args[@]}" -e "${command_args[@]}"
-    ;;
-esac
+exec "${terminal_args[@]}" --app-id="$window_class" "${command_args[@]}"
