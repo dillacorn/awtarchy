@@ -33,12 +33,12 @@ ERROR_FAILED = "org.freedesktop.PolicyKit1.Error.Failed"
 ERROR_CANCELLED = "org.freedesktop.PolicyKit1.Error.Cancelled"
 PKACTION = "/usr/bin/pkaction"
 SYSTEMD_CAT = "/usr/bin/systemd-cat"
-ALACRITTY = "/usr/bin/alacritty"
+FOOT = "/usr/bin/foot"
 PYTHON = "/usr/bin/python3"
 TUI = f"{RUNTIME_DIR}/tui.py"
-TERMINAL_CONFIG = f"{RUNTIME_DIR}/alacritty.toml"
+TERMINAL_CONFIG = f"{RUNTIME_DIR}/foot.ini"
 APP_ID = "awtarchy-polkit-agent"
-APPEARANCE_ENV = "AWTARCHY_POLKIT_ALACRITTY_OPTIONS"
+APPEARANCE_ENV = "AWTARCHY_POLKIT_FOOT_OPTIONS"
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9_.:-]{1,128}$")
 MAX_AUTH_ATTEMPTS = 3
 MAX_RESPONSE_BYTES = 4096
@@ -304,7 +304,7 @@ class AwtarchyPolkitAgent:
         for option in raw.splitlines():
             if not option or len(option) > 2048 or any(ord(char) < 0x20 for char in option):
                 continue
-            args.extend(("--option", option))
+            args.extend(("--override", option))
         return args
 
     def _spawn_frontend(self, request: dict) -> None:
@@ -323,15 +323,14 @@ class AwtarchyPolkitAgent:
         try:
             child_fd = child_sock.fileno()
             command = [
-                ALACRITTY,
-                "--config-file",
+                FOOT,
+                "--config",
                 TERMINAL_CONFIG,
                 *self._appearance_args(),
-                "--class",
-                f"{APP_ID},{APP_ID}",
+                "--app-id",
+                APP_ID,
                 "--title",
                 APP_ID,
-                "-e",
                 PYTHON,
                 "-I",
                 TUI,
