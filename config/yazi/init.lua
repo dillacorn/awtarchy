@@ -478,6 +478,15 @@ function AwtarchyYaziCloseTab()
     end
 end
 
+function AwtarchyYaziCreateCurrentTab()
+    local current = cx.active and cx.active.current
+    if not current or not current.cwd then return end
+
+    -- Explicit target keeps the new tab's native name automatic instead of
+    -- inheriting the source tab's custom name from tab_create --current.
+    ya.emit("tab_create", { tostring(current.cwd), raw = true })
+end
+
 local AwtarchyYaziTabDrag = nil
 
 local function AwtarchyYaziTabIndexAtX(tabs, x)
