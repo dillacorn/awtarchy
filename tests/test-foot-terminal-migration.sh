@@ -111,6 +111,87 @@ grep -Fxq 'opacity = 0.85' "$tmp/config/alacritty/alacritty.toml" || {
     exit 1
 }
 
+# A personalized, preserved v3.8.9 hyprland.lua must adopt Foot even after
+# the v4.0.0 update, without replacing its other local customizations.
+require "$RUNTIME" 'migrate_legacy_foot_hyprland "$repo_dir" "$target_home"'
+require "$RUNTIME" 'rollback_quickshell_update'
+migrator="$ROOT/local/share/awtarchy/migrate-foot-hyprland.py"
+[[ -f "$migrator" ]] || { printf 'FAIL: Foot Hyprland migrator missing\\n' >&2; exit 1; }
+python3 - "$migrator" "$HYPR" "$tmp" <<'PY_MIGRATE_FOOT'
+import importlib.util
+from pathlib import Path
+import subprocess
+import sys
+
+script, target, temp = map(Path, sys.argv[1:])
+spec = importlib.util.spec_from_file_location("foot_hyprland", script)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+assert len(module.LEGACY_COMMANDS) == 9, "missing historical Alacritty launch paths"
+current = target.read_text(encoding="utf-8")
+assert all("foot" in module.managed_line(current.splitlines(), key)
+           for key, _ in module.LEGACY_COMMANDS)
+
+live = temp / "preserved-hyprland.lua"
+out = temp / "migrated-hyprland.lua"
+custom = '-- personalized layout should be retained intact\n'
+original = custom + current.replace(
+    'local web_browser = "firefox"', 'local web_browser = "custom-browser"'
+)
+legacy = original
+for key, old_line in module.LEGACY_COMMANDS:
+    new_line = module.managed_line(current.splitlines(), key)
+    assert legacy.count(new_line + "\n") == 1, key
+    legacy = legacy.replace(new_line + "\n", old_line + "\n", 1)
+
+live.write_text(legacy, encoding="utf-8")
+result = subprocess.run(
+    [sys.executable, str(script), str(live), str(target), str(out)],
+    capture_output=True, text=True
+)
+assert result.returncode == 0, result.stderr
+assert out.read_text(encoding="utf-8") == original, "migration damaged personal Hyprland settings"
+
+# Already-migrated and user-authored configurations must be unaffected.
+out.unlink()
+live.write_text(original, encoding="utf-8")
+result = subprocess.run(
+    [sys.executable, str(script), str(live), str(target), str(out)],
+    capture_output=True, text=True
+)
+assert result.returncode == 0 and not out.exists(), "repeat migration was not idempotent"
+
+# Unknown custom Alacritty launch commands must remain user-owned.
+customized = legacy.replace(
+    'local terminal = "alacritty"',
+    'local terminal = "alacritty --my-custom-launcher"'
+)
+live.write_text(customized, encoding="utf-8")
+result = subprocess.run(
+    [sys.executable, str(script), str(live), str(target), str(out)],
+    capture_output=True, text=True
+)
+assert result.returncode == 0, result.stderr
+migrated = out.read_text(encoding="utf-8")
+assert 'local terminal = "alacritty --my-custom-launcher"' in migrated
+assert custom in migrated and 'custom-browser' in migrated
+out.unlink()
+
+# A bad release command must not be substituted into the live configuration.
+bad_target = temp / "bad-hyprland.lua"
+bad_target.write_text(current.replace('local terminal = "foot"',
+                                      'local terminal = "other-terminal"'), encoding="utf-8")
+live.write_text(legacy, encoding="utf-8")
+result = subprocess.run(
+    [sys.executable, str(script), str(live), str(bad_target), str(out)],
+    capture_output=True, text=True
+)
+assert result.returncode != 0 and not out.exists(), "invalid target was accepted"
+
+print("PASS: all nine legacy Hyprland terminal commands, custom preservation and idempotence")
+PY_MIGRATE_FOOT
+
 if command -v foot >/dev/null 2>&1; then
     foot --check-config --config="$CONFIG"
     printf 'PASS: Foot configuration validated with installed Foot\n'

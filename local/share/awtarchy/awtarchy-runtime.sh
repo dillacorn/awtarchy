@@ -3523,6 +3523,52 @@ migrate_awtarchy_polkit_autostart() {
   log "Migrated Hyprland from polkit-gnome to the Awtarchy PolicyKit service."
 }
 
+
+# A preserved pre-v4.0.0 Hyprland file can still launch Alacritty even though
+# the managed release uses Foot. Migrate only exact historical Awtarchy lines;
+# leave custom launchers, unrelated settings and optional Alacritty intact.
+migrate_legacy_foot_hyprland() {
+  local repo_dir="$1" target_home="$2"
+  local rel=".config/hypr/hyprland.lua"
+  local live="${HOME_DIR}/${rel}"
+  local target="${target_home}/${rel}"
+  local migrator="${repo_dir}/local/share/awtarchy/migrate-foot-hyprland.py"
+  local candidate="${TMPD}/migrate-foot-hyprland.lua"
+  local item already_changed=0
+
+  [[ -f "$live" && ! -L "$live" ]] || return 0
+  [[ -f "$target" && -f "$migrator" ]] || {
+    warn "Foot Hyprland migration sources are missing; refusing a partial update."
+    return 1
+  }
+
+  rm -f -- "$candidate"
+  if ! python3 "$migrator" "$live" "$target" "$candidate"; then
+    return 1
+  fi
+  [[ -f "$candidate" ]] || return 0
+
+  if ! validate_candidate "$candidate" "$rel"; then
+    warn "Migrated Foot Hyprland candidate failed validation."
+    return 1
+  fi
+  chmod --reference="$live" "$candidate" || return 1
+
+  for item in "${ROLLBACK_PATHS[@]:-}"; do
+    [[ "$item" == "$rel" ]] && already_changed=1
+  done
+  if (( already_changed == 0 )); then
+    snapshot_for_rollback "$rel" "$live"
+    ROLLBACK_PATHS+=("$rel")
+    make_persistent_backup "$live"
+    CHANGED+=("$rel")
+  fi
+  if ! atomic_copy "$candidate" "$live"; then
+    return 1
+  fi
+  log "Updated preserved Awtarchy terminal commands to Foot without replacing personal Hyprland settings."
+}
+
 awtarchy_polkit_target_uid() {
   id -u "$TARGET_USER" 2>/dev/null
 }
@@ -9827,6 +9873,11 @@ main() {
     || die "Could not stop Quickshell safely before updating managed files."
   log "Applying approved managed-file changes..."
   apply_plan "$plan_file" || die "Update failed and user files were rolled back."
+
+  if ! migrate_legacy_foot_hyprland "$repo_dir" "$target_home"; then
+    rollback_quickshell_update
+    die "Could not migrate preserved Hyprland terminal shortcuts to Foot; user files were rolled back."
+  fi
 
   log "Refreshing Awtarchy PolicyKit integration..."
   if ! install_awtarchy_polkit_agent_runtime "$repo_dir"; then
