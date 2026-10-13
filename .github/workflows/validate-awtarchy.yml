@@ -17,7 +17,15 @@ jobs:
         with:
           fetch-depth: 0
       - name: Install validation tools
-        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils shellcheck lua5.4 foot
+        run: sudo apt-get update && sudo apt-get install -y desktop-file-utils shellcheck lua5.4
+      - name: Validate current Arch Foot config
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
+            pacman -Sy --noconfirm foot
+            foot --version
+            foot --check-config --config=/repo/config/foot/foot.ini
+            foot --check-config --config=/repo/config/hypr/scripts/awtarchy-polkit-agent/foot.ini
+          '
       - name: Bash syntax
         run: |
           test ! -e awtarchy.sh
@@ -380,6 +388,7 @@ jobs:
           bash tests/test-flyout-runtime-centering.sh
           bash tests/test-launcher-fast-path.sh
           bash tests/test-foot-terminal-migration.sh
+          python3 tests/test-foot-live-theme.py
           bash tests/test-launcher-keyboard-focus.sh
           bash tests/test-quickshell-hotkey-latency.sh
           bash tests/test-desktop-candidate-validation.sh
