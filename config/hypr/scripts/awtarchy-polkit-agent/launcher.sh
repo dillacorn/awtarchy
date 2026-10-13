@@ -166,9 +166,9 @@ main() {
 
     # Mirror only visual values from the user's current Foot config and its
     # imports. The trusted parser above whitelists appearance keys and emits
-    # fixed-key --override overrides; shell commands, bindings, env and other
+    # fixed-key --override values; shell commands, bindings, env and other
     # executable configuration never enter the authentication terminal.
-    appearance_text="$(collect_appearance_options "${home_dir}/.config/alacritty/foot.ini" "$home_dir" 2>/dev/null || true)"
+    appearance_text="$(collect_appearance_options "${home_dir}/.config/foot/foot.ini" "$home_dir" 2>/dev/null || true)"
     # Fail before the persistent backend starts so missing PyGObject/PolicyKit
     # bindings are visible immediately in the systemd user journal.
     if ! /usr/bin/env -i \
