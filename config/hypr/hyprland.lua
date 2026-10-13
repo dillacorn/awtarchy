@@ -534,7 +534,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 local terminal = "foot"
 local web_browser = "firefox"
 local calculator = "speedcrunch"
-local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi""
+local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
 -- App/menu launchers
 local app_launcher = "~/.config/hypr/scripts/quickshell_launcher.sh"
