@@ -353,12 +353,6 @@ aur_package_satisfied() {
   local pkg="$1" alt=""
 
   case "$pkg" in
-    alacritty|alacritty-graphics)
-      for alt in alacritty alacritty-graphics; do
-        package_installed "$alt" && return 0
-      done
-      return 1
-      ;;
     qimgv|qimgv-git)
       for alt in qimgv qimgv-git; do
         package_installed "$alt" && return 0
