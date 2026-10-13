@@ -28,24 +28,13 @@ sudo pacman -S ueberzugpp yazi chafa
 - **yazi** – fast terminal file manager
 - **chafa** – terminal graphics renderer
 
-### Image previews in "alacritty" (replaces main-line alacritty)
+### Image previews in Foot
+
+Foot from the official Arch repositories supports Sixel image previews in Yazi without an AUR terminal fork.
 
 ```bash
-aur-scan install alacritty-graphics
+sudo pacman -S --needed foot
 ```
-
----
-
-## 🔊 Audio Control
-```bash
-sudo pacman -S pavucontrol
-```
-
-PulseAudio Volume Control GUI. (wiremix is cooler IMO)
-
----
-
-## 🎵 Media
 
 ### YouTube Music Desktop Client
 ```bash
