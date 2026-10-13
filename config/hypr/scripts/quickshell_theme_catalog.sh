@@ -91,7 +91,7 @@ def parse_theme(path: Path) -> dict[str, object]:
         },
         "apps": {
             "micro": values.get("MICRO_COLORSCHEME", "geany"),
-            "alacritty": values.get("ALACRITTY_THEME", "wombat.toml"),
+            "foot": path.name,
             "speedcrunch": values.get("SPEEDCRUNCH_COLORSCHEME", path.name),
         },
     }
