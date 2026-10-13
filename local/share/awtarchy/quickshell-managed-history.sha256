@@ -1591,3 +1591,6 @@ afce729bd189974b2a45aca1d2347ec177c2c4821be8c2478ba25d1775987207	.config/hypr/hy
 
 # Foot transparency parity and optional-Alacritty preservation.
 094fe4414d1c197a8a1b45d656dad7dd942af0d0354ee807f5fe31e1d3a031e2	.config/hypr/hyprland.lua
+
+# Exact Foot terminal color theme integration.
+213aa953d367b9af74ae2e6c235efbe2ced803d175e090d1df20e9451059c5bd	.config/hypr/scripts/quickshell_theme_apply.sh
