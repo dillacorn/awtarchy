@@ -28,7 +28,7 @@ reject_text() {
 
 # Stable picker identity and selection-only behavior are prerequisites for exact
 # client targeting.
-require_text "$PICKER" '--class awtarchy-lock-wallpaper --title Awtarchy-Lockscreen-Wallpaper' \
+require_text "$PICKER" '--fullscreen --app-id "$PICKER_CLASS" --title "$PICKER_TITLE"' \
     'picker terminal identity is not exact and stable'
 require_text "$PICKER" '--select-only --type all' \
     'picker no longer uses Awtwall all-media selection-only mode'
