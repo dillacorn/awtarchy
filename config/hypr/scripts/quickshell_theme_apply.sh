@@ -35,7 +35,6 @@ text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
 kind = sys.argv[2]
 patterns = {
     "micro": r'"colorscheme"\s*:\s*"([^"]+)"',
-    "alacritty": r'themes/themes/([^"\047|]+\.toml)',
     "speedcrunch": r'Display\\ColorSchemeName=([^|\047"\n]+)',
 }
 match = re.search(patterns[kind], text)
