@@ -27,7 +27,7 @@ grep -Fxq -- "local yazi = \"foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi
     exit 1
 }
 if command -v lua >/dev/null 2>&1; then
-    lua -e 'assert(loadfile(arg[1]))' "$HYPR"
+    HYPR_TO_CHECK="$HYPR" lua -e 'assert(loadfile(os.getenv("HYPR_TO_CHECK")))'
     printf 'PASS: Hyprland Lua syntax validated\n'
 fi
 require "$HELPER" 'for candidate in foot footclient kitty alacritty'
