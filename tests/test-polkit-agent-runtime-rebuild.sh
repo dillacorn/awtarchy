@@ -14,7 +14,7 @@ grep -Fq 'awtarchy_polkit_verify_runtime_tree "$AWTARCHY_POLKIT_RUNTIME_DIR"' "$
 grep -Fq "IFS=' ' read -r uid mode type" "$RUNTIME"
 grep -Fq '"${stage}/agent.py"' "$RUNTIME"
 grep -Fq '"${stage}/tui.py"' "$RUNTIME"
-grep -Fq '"${stage}/alacritty.toml"' "$RUNTIME"
+grep -Fq '"${stage}/foot.ini"' "$RUNTIME"
 grep -Fq '"${stage}/launcher"' "$RUNTIME"
 
 polkit_staging="$(awk '
