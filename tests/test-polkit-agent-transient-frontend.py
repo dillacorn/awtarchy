@@ -53,17 +53,17 @@ def test_idle_terminal_is_not_parked_in_a_special_workspace() -> None:
     assert "special:awtarchy-polkit-agent" not in hypr_source
 
 
-def test_launcher_starts_python_backend_not_alacritty() -> None:
+def test_launcher_starts_python_backend_not_foot() -> None:
     source = LAUNCHER_PATH.read_text(encoding="utf-8")
-    assert 'AWTARCHY_POLKIT_ALACRITTY_OPTIONS="$appearance_text"' in source
+    assert 'AWTARCHY_POLKIT_FOOT_OPTIONS="$appearance_text"' in source
     assert '"$PYTHON" -I "$AGENT"' in source
     tail = source[source.rfind("exec /usr/bin/env -i") :]
-    assert '"$ALACRITTY"' not in tail
+    assert '"$FOOT"' not in tail
 
 
 if __name__ == "__main__":
     test_seqpacket_protocol_round_trip()
     test_backend_is_headless_until_authentication()
     test_idle_terminal_is_not_parked_in_a_special_workspace()
-    test_launcher_starts_python_backend_not_alacritty()
+    test_launcher_starts_python_backend_not_foot()
     print("transient PolicyKit frontend contract passed")
