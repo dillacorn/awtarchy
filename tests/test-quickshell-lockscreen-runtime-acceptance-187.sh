@@ -99,9 +99,9 @@ has "$SCENE" 'const maximum = 100.00;' 'renderer still uses a visible 200%/10x c
 # Production picker owns a stable terminal identity, waits for the actual mapped
 # client, targets its exact address, requests true fullscreen with set semantics,
 # and verifies the resulting fullscreen state. The dedicated contract exercises
-# the bounded retry path with fake Awtwall/Alacritty/Hyprland fixtures.
-has "$PICKER" '--title Awtarchy-Lockscreen-Wallpaper' 'picker title is not stable'
-has "$PICKER" 'window.startup_mode=Fullscreen' 'Alacritty fullscreen request is missing'
+# the bounded retry path with fake Awtwall/Foot/Hyprland fixtures.
+has "$PICKER" '--title "$PICKER_TITLE"' 'picker title is not stable'
+has "$PICKER" '--fullscreen --app-id "$PICKER_CLASS"' 'Foot fullscreen request is missing'
 has "$PICKER" '.address' 'picker does not resolve the mapped Hyprland client address'
 has "$PICKER" 'address:' 'picker does not target the exact mapped client address'
 has "$PICKER" '.fullscreen' 'picker does not verify exact-client fullscreen state'
