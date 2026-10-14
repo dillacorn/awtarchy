@@ -36,7 +36,7 @@ elif [[ $1 == -S && $* == *yazi* ]]; then
   printf 'install\n' >>"$AWTARCHY_YAZI_TEST_CALLS"
 else
   printf 'Unexpected pacman arguments: %s\n' "$*" >&2
-  return 1
+  exit 1
 fi
 PACMAN
 chmod +x "$tmp/pacman"
