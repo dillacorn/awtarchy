@@ -3,6 +3,7 @@
 
 require("recent-files"):setup()
 require("bookmarks"):setup()
+require("tab-workspaces"):setup()
 require("git"):setup { order = 1500 }
 
 local function AwtarchyYaziNormalizeFsPath(value)
@@ -21,12 +22,16 @@ end
 local AwtarchyYaziCollectionRoots = {
     bookmarks = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Bookmarks"),
     recents = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Recently Opened"),
+    groups = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Tab Groups"),
+    pins = AwtarchyYaziNormalizeFsPath(AwtarchyYaziStateDir() .. "/collections/Tab Groups/Pinned Tabs"),
 }
 
 local function AwtarchyYaziCollectionKind(value)
     local path = AwtarchyYaziNormalizeFsPath(value)
     if path == AwtarchyYaziCollectionRoots.bookmarks then return "bookmarks" end
     if path == AwtarchyYaziCollectionRoots.recents then return "recents" end
+    if path == AwtarchyYaziCollectionRoots.groups then return "groups" end
+    if path == AwtarchyYaziCollectionRoots.pins then return "pins" end
     return nil
 end
 
@@ -49,7 +54,7 @@ end
 local AwtarchyYaziCollectionReturns = {}
 
 local function AwtarchyYaziCollectionReturnState()
-    local tab_key = tostring(cx.active.id)
+    local tab_key = tostring(cx.active.id.value)
     local state = AwtarchyYaziCollectionReturns[tab_key]
     if not state then
         state = {}
@@ -59,14 +64,15 @@ local function AwtarchyYaziCollectionReturnState()
 end
 
 local function AwtarchyYaziOpenCollection(kind)
-    local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
+    local plugin = kind == "bookmarks" and "bookmarks"
+        or (kind == "groups" and "tab-workspaces" or "recent-files")
     local state = AwtarchyYaziCollectionReturnState()
 
     if AwtarchyYaziCollectionCwd() ~= kind then
         state[kind] = tostring(cx.active.current.cwd)
     end
 
-    ya.emit("plugin", { plugin })
+    ya.emit("plugin", kind == "groups" and { plugin, "open" } or { plugin })
 end
 
 local function AwtarchyYaziToggleCollection(kind)
@@ -100,6 +106,74 @@ end
 
 function AwtarchyYaziToggleRecents()
     AwtarchyYaziToggleCollection("recents")
+end
+
+function AwtarchyYaziGoTabGroups()
+    -- Both t g and T are two-way collection toggles.
+    AwtarchyYaziToggleCollection("groups")
+end
+
+function AwtarchyYaziToggleTabGroups()
+    AwtarchyYaziToggleCollection("groups")
+end
+
+function AwtarchyYaziSaveTabGroup()
+    ya.emit("plugin", { "tab-workspaces", "save" })
+end
+
+function AwtarchyYaziToggleTabPin()
+    ya.emit("plugin", { "tab-workspaces", "pin" })
+end
+
+function AwtarchyYaziRenameTab()
+    ya.emit("plugin", { "tab-workspaces", "rename-tab" })
+end
+
+-- Quick Mark is deliberately session-local, unlike bookmarks and saved groups.
+-- Each tab has its own return directory so switching tabs cannot corrupt it.
+local AwtarchyYaziQuickMark = nil
+local AwtarchyYaziQuickReturns = {}
+
+function AwtarchyYaziSetQuickMark()
+    local current = cx.active and cx.active.current
+    if not current then return end
+    AwtarchyYaziQuickMark = tostring(current.cwd)
+    AwtarchyYaziQuickReturns = {}
+    ya.notify { title = "Quick Mark", content = "Marked: " .. AwtarchyYaziQuickMark, timeout = 2 }
+end
+
+function AwtarchyYaziGoQuickMark()
+    if not AwtarchyYaziQuickMark then
+        ya.notify { title = "Quick Mark", content = "No directory marked. Press q then q.", level = "warn", timeout = 3 }
+        return
+    end
+    if tostring(cx.active.current.cwd) ~= AwtarchyYaziQuickMark then
+        -- A one-way jump remains reversible through Q.
+        AwtarchyYaziToggleQuickMark()
+    end
+end
+
+function AwtarchyYaziToggleQuickMark()
+    if not AwtarchyYaziQuickMark then
+        ya.notify { title = "Quick Mark", content = "No directory marked. Press q then q.", level = "warn", timeout = 3 }
+        return
+    end
+    local current = tostring(cx.active.current.cwd)
+    local key = tostring(cx.active.id.value)
+    local returning = current == AwtarchyYaziQuickMark
+    local destination = returning and AwtarchyYaziQuickReturns[key] or AwtarchyYaziQuickMark
+    if not destination or destination == current then
+        ya.notify { title = "Quick Mark", content = "No other directory to return to.", timeout = 2 }
+        return
+    end
+    -- Filesystem checks are async-only in Yazi. Let the native cd action
+    -- validate the destination instead of calling fs.cha in init.lua.
+    if returning then
+        AwtarchyYaziQuickReturns[key] = nil
+    else
+        AwtarchyYaziQuickReturns[key] = current
+    end
+    ya.emit("cd", { Url(destination), raw = true })
 end
 
 local AwtarchyYaziDefaultEntityHighlights = Entity.highlights
@@ -170,6 +244,17 @@ local function AwtarchyYaziNavigateCollection(file, new_tab)
     local kind = AwtarchyYaziCollectionCwd()
     if not kind or not file or not AwtarchyYaziIsCollectionItemUrl(file.url) then return false end
 
+    if kind == "groups" and AwtarchyYaziNormalizeFsPath(file.url) == AwtarchyYaziCollectionRoots.pins then
+        ya.emit("plugin", { "tab-workspaces", "open-pins" })
+        return true
+    elseif kind == "groups" or kind == "pins" then
+        ya.emit("plugin", {
+            "tab-workspaces",
+            AwtarchyYaziPluginArgs(kind == "pins" and "activate-pin" or "load", { tostring(file.url) }),
+        })
+        return true
+    end
+
     local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
     ya.emit("plugin", {
         plugin,
@@ -200,15 +285,19 @@ local function AwtarchyYaziDeleteCollectionSelection()
     local kind, markers = AwtarchyYaziCollectionSelection()
     if not kind or #markers == 0 then return false end
 
-    local plugin = kind == "bookmarks" and "bookmarks" or "recent-files"
+    local plugin = kind == "bookmarks" and "bookmarks"
+        or ((kind == "groups" or kind == "pins") and "tab-workspaces" or "recent-files")
     ya.emit("plugin", {
         plugin,
-        AwtarchyYaziPluginArgs("delete", markers),
+        AwtarchyYaziPluginArgs(kind == "groups" and "delete-groups"
+            or (kind == "pins" and "unpin-markers" or "delete"), markers),
     })
     return true
 end
 
 local function AwtarchyYaziOpenFiles(interactive, hovered_only)
+    if (AwtarchyYaziCollectionCwd() == "groups" or AwtarchyYaziCollectionCwd() == "pins")
+        and AwtarchyYaziNavigateCollection(cx.active.current.hovered, false) then return end
     local tab = cx.active
     local recent = {}
 
@@ -451,6 +540,32 @@ function Entity:style()
     return style
 end
 
+function AwtarchyYaziQuitOrQuickMark()
+    -- Preserve the existing quit-with-confirmation model while giving q q
+    -- a short, deterministic action. This chooser is scoped to quitting:
+    -- other Yazi confirmation dialogs never bind q to marking a folder.
+    ya.async(function()
+        local choice = ya.which {
+            cands = {
+                { on = "q", desc = "Quick Mark current directory" },
+                { on = "y", desc = "Yes, quit Yazi" },
+                { on = "Y", desc = "Yes, quit Yazi" },
+                { on = "<Enter>", desc = "Yes, quit Yazi" },
+                { on = "<Space>", desc = "Yes, quit Yazi" },
+                { on = "n", desc = "No, cancel" },
+                { on = "N", desc = "No, cancel" },
+            },
+        }
+        if choice == 1 then
+            -- ya.which resumes in an async context. Access manager state only
+            -- through the Yazi sync bridge, not directly from that callback.
+            ya.emit("app:lua", { "AwtarchyYaziSetQuickMark()" })
+        elseif choice and choice >= 2 and choice <= 5 then
+            ya.emit("quit", { no_cwd_file = false })
+        end
+    end)
+end
+
 function AwtarchyYaziConfirmQuit(no_cwd_file)
     ya.async(function()
         local confirmed = ya.confirm {
@@ -470,12 +585,35 @@ function AwtarchyYaziConfirmQuit(no_cwd_file)
     end)
 end
 
+-- The plugin synchronizes pinned-tab native IDs with this manager UI.
+local AwtarchyYaziPinnedTabIds = {}
+
 function AwtarchyYaziCloseTab()
-    if #cx.tabs > 1 then
-        ya.emit("close", {})
-    else
+    if #cx.tabs <= 1 then
         AwtarchyYaziConfirmQuit(false)
+        return
     end
+    local tab_id = tostring(cx.active.id.value)
+    if not AwtarchyYaziPinnedTabIds[tab_id] then
+        ya.emit("close", {})
+        return
+    end
+    ya.async(function()
+        local choice = ya.which {
+            cands = {
+                { on = "c", desc = "Close this tab (retain its saved pin)" },
+                { on = "u", desc = "Unpin and close this tab" },
+            },
+            title = "Close pinned tab?",
+        }
+        if choice == 1 then
+            ya.emit("close", {})
+        elseif choice == 2 then
+            ya.emit("plugin", {
+                "tab-workspaces", AwtarchyYaziPluginArgs("unpin-and-close", { tab_id }),
+            })
+        end
+    end)
 end
 
 function AwtarchyYaziCreateCurrentTab()
@@ -505,6 +643,75 @@ local function AwtarchyYaziFinishTabDrag()
     if drag and drag.moved then
         ui.render()
     end
+end
+
+-- DDS pin updates run in the same UI state as init.lua. Keep native tab
+-- redraw geometry intact so reordering and click hit-testing still agree.
+ps.sub("awtarchy-yazi-pins", function(ids)
+    local had_pin = next(AwtarchyYaziPinnedTabIds) ~= nil
+    local normalized = {}
+    if type(ids) == "table" then
+        for id, active in pairs(ids) do
+            if active then normalized[tostring(id)] = true end
+        end
+    end
+    AwtarchyYaziPinnedTabIds = normalized
+    local has_pin = next(AwtarchyYaziPinnedTabIds) ~= nil
+
+    -- Native Yazi hides the tab bar for one tab. Reflow when the only
+    -- tab becomes pinned/unpinned so its label and pin icon can be seen.
+    if #cx.tabs == 1 and had_pin ~= has_pin then
+        ya.emit("app:resize", {})
+    else
+        ui.render()
+    end
+end)
+
+local AwtarchyYaziNativeTabsHeight = Tabs.height
+function Tabs.height()
+    if #cx.tabs == 1 and next(AwtarchyYaziPinnedTabIds) ~= nil then
+        return 1
+    end
+    return AwtarchyYaziNativeTabsHeight()
+end
+
+local function AwtarchyYaziTabLabel(index, max_width)
+    local tab = cx.tabs[index]
+    local prefix = string.format(" %d ", index)
+    -- Use a monochrome Nerd Font pin, not a color emoji. The entire label
+    -- shares the normal active/inactive tab text style.
+    -- Reserve the pin's width before truncating the name.
+    local suffix = AwtarchyYaziPinnedTabIds[tostring(tab.id.value)] and " 󰐃 " or " "
+    if not max_width then return prefix .. tab.name .. suffix end
+
+    local available = max_width - ui.width(prefix) - ui.width(suffix)
+    if available < 0 then
+        return ui.truncate(prefix .. suffix, { max = max_width })
+    end
+    return prefix .. ui.truncate(tab.name, { max = available }) .. suffix
+end
+
+function Tabs:redraw()
+    if self.height() < 1 then return {} end
+    local style = self:style()
+    local lines = { ui.Line(th.tabs.sep_outer.open):fg(style.inactive:bg()) }
+    local pos = lines[1]:width()
+    local max = math.floor(self:inner_width() / #cx.tabs)
+    for i = 1, #cx.tabs do
+        local name = AwtarchyYaziTabLabel(i, max)
+        if i == cx.tabs.idx then
+            lines[#lines + 1] = ui.Line {
+                ui.Span(th.tabs.sep_inner.open):fg(style.active:bg()):bg(style.inactive:bg()),
+                ui.Span(name):style(style.active),
+                ui.Span(th.tabs.sep_inner.close):fg(style.active:bg()):bg(style.inactive:bg()),
+            }
+        else
+            lines[#lines + 1] = ui.Line(name):style(style.inactive)
+        end
+        self._offsets[i], pos = pos, pos + lines[#lines]:width()
+    end
+    lines[#lines + 1] = ui.Line(th.tabs.sep_outer.close):fg(style.inactive:bg())
+    return ui.Line(lines):area(self._area)
 end
 
 local AwtarchyYaziDefaultTabsStyle = Tabs.style
@@ -541,8 +748,13 @@ function Tabs:click(event, up)
             return
         end
         AwtarchyYaziFinishTabDrag()
-        ya.emit("tab_switch", { index - 1 })
-        ya.emit("tab_rename", { interactive = true })
+        -- Pin the tab under the pointer, without switching focus.
+        local tab = cx.tabs[index]
+        if tab then
+            ya.emit("plugin", {
+                "tab-workspaces", AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) }),
+            })
+        end
         return
     elseif not event.is_left then
         return
@@ -571,10 +783,7 @@ local function AwtarchyYaziTabMidpoint(tabs, index)
     local last = next_offset
     if not last then
         local max = math.floor(tabs:inner_width() / #cx.tabs)
-        local name = ui.truncate(
-            string.format(" %d %s ", index, cx.tabs[index].name),
-            { max = max }
-        )
+        local name = AwtarchyYaziTabLabel(index, max)
         last = first + ui.width(name)
     end
     return math.floor((first + last) / 2)
@@ -826,6 +1035,21 @@ end
 function AwtarchyYaziRename(hovered_only)
     local current = cx.active and cx.active.current
     if not current or not current.hovered then return end
+
+    if AwtarchyYaziCollectionCwd() == "pins" then
+        ya.notify { title = "Pinned Tabs", content = "Activate this tab before renaming it with t r.", timeout = 3 }
+        return
+    elseif AwtarchyYaziCollectionCwd() == "groups" then
+        if #cx.active.selected > 1 then
+            ya.notify { title = "Tab Groups", content = "Rename one group at a time.", level = "warn", timeout = 3 }
+        elseif AwtarchyYaziIsCollectionItemUrl(current.hovered.url) then
+            ya.emit("plugin", {
+                "tab-workspaces",
+                AwtarchyYaziPluginArgs("rename-group", { tostring(current.hovered.url) }),
+            })
+        end
+        return
+    end
 
     -- A selected set opens Yazi's bulk-editor rename flow. Never release
     -- terminal mouse reporting for bulk rename or a multi-file selection.
@@ -2561,6 +2785,11 @@ function Entity:click(event, up)
     }
     ya.emit("reveal", { self._file.url })
 end
+
+-- Restore saved pin tabs without discarding the native opening tab.
+ya.async(function()
+    ya.emit("plugin", { "tab-workspaces", "restore" })
+end)
 
 AwtarchyYaziTimeFormat = "24h"
 
