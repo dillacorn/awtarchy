@@ -192,6 +192,99 @@ assert result.returncode != 0 and not out.exists(), "invalid target was accepted
 print("PASS: all nine legacy Hyprland terminal commands, custom preservation and idempotence")
 PY_MIGRATE_FOOT
 
+
+# v4.0.0 archives omitted migrate-foot-hyprland.py while the refreshed
+# updater still called it. Exercise the actual shell migration function against
+# a staged archive without the helper, not just the standalone Python script.
+python3 - "$RUNTIME" "$migrator" "$HYPR" "$tmp" <<'PY_FOOT_MISSING_HELPER'
+from pathlib import Path
+import importlib.util
+import re
+import subprocess
+import sys
+
+runtime_path, helper_path, target_path, root = map(Path, sys.argv[1:])
+runtime = runtime_path.read_text(encoding="utf-8")
+match = re.search(
+    r"(?ms)^migrate_legacy_foot_hyprland\(\) \{\n.*?^\}",
+    runtime,
+)
+assert match, "updater Foot migration function missing"
+assert '[[ -f "$target" && -f "$migrator" ]]' not in match.group(), \
+    "updater still requires the helper from the release archive"
+assert "PY_FOOT_HYPRLAND_FALLBACK" in match.group(), \
+    "updater lacks its own migration implementation"
+
+spec = importlib.util.spec_from_file_location("foot_migration", helper_path)
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+
+current = target_path.read_text(encoding="utf-8")
+custom = "-- personal Hyprland customization must survive\n"
+expected = custom + current
+legacy = expected
+for key, original in module.LEGACY_COMMANDS:
+    new = module.managed_line(current.splitlines(), key)
+    assert legacy.count(new + "\n") == 1, key
+    legacy = legacy.replace(new + "\n", original + "\n", 1)
+
+stage = root / "release-without-helper"
+live_home = root / "live-without-helper"
+temp = root / "migration-fallback"
+(stage / ".config/hypr").mkdir(parents=True, exist_ok=True)
+(live_home / ".config/hypr").mkdir(parents=True, exist_ok=True)
+temp.mkdir(exist_ok=True)
+(stage / ".config/hypr/hyprland.lua").write_text(current, encoding="utf-8")
+live_file = live_home / ".config/hypr/hyprland.lua"
+
+# The source archive intentionally contains no standalone helper.
+assert not (stage / "local/share/awtarchy/migrate-foot-hyprland.py").exists()
+
+harness = "\n".join([
+    "set -euo pipefail",
+    match.group(),
+    'HOME_DIR="$1"; TMPD="$2"',
+    'ROLLBACK_PATHS=(); CHANGED=()',
+    'log() { :; }',
+    'warn() { printf "WARN: %s\\n" "$*" >&2; }',
+    'snapshot_for_rollback() { :; }',
+    'make_persistent_backup() { :; }',
+    'validate_candidate() { [[ -s "$1" ]]; }',
+    'atomic_copy() { cp -- "$1" "$2"; }',
+    'migrate_legacy_foot_hyprland "$3" "$4"',
+]) + "\n"
+
+def run_case(source: str, expected_text: str, valid_target=True):
+    live_file.write_text(source, encoding="utf-8")
+    output = stage / ".config/hypr/hyprland.lua"
+    if valid_target:
+        output.write_text(current, encoding="utf-8")
+    else:
+        output.unlink()
+    result = subprocess.run(
+        ["bash", "-c", harness, "foot-test", str(live_home), str(temp), str(stage), str(stage)],
+        capture_output=True, text=True,
+    )
+    assert (result.returncode == 0) == valid_target, result.stderr
+    assert live_file.read_text(encoding="utf-8") == expected_text, \
+        f"unexpected migration result: {result.stdout} {result.stderr}"
+    return result
+
+result = run_case(legacy, expected)
+assert "Updated preserved Awtarchy terminal commands" not in result.stderr, \
+    "unexpected migration diagnostic"
+run_case(expected, expected)  # idempotent on repeat
+run_case(legacy.replace(
+    'local terminal = "alacritty"',
+    'local terminal = "alacritty --custom-options"'
+), expected.replace(
+    'local terminal = "foot"',
+    'local terminal = "alacritty --custom-options"'
+))  # custom terminal command is user-owned
+run_case(legacy, legacy, valid_target=False)  # fail without modifying live file
+print("PASS: updater migrates the v4.0.0 release without an external helper")
+PY_FOOT_MISSING_HELPER
+
 if command -v foot >/dev/null 2>&1; then
     foot --check-config --config="$CONFIG"
     printf 'PASS: Foot configuration validated with installed Foot\n'
