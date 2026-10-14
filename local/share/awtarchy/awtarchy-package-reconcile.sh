@@ -36,6 +36,7 @@ declare -a REQUIRED_ARCH=(
   quickshell
   wl-clipboard
   cliphist
+  yazi
   fd
   7zip
   upower

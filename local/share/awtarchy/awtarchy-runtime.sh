@@ -32,7 +32,7 @@ declare -a PKG_GROUPS=(
   "Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk libnotify nwg-look"
   "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd ttf-jetbrains-mono-nerd noto-fonts-emoji"
   "Themes:papirus-icon-theme materia-gtk-theme kvantum-theme-materia"
-  "Terminal Apps:foot nano micro fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
+  "Terminal Apps:foot nano micro yazi fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
   "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils udisks2 wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
   "Multimedia:ffmpeg avahi nss-mdns mpv snapshot exiv2 zathura zathura-pdf-mupdf"
   "Development:base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust dmidecode nftables"
@@ -2539,6 +2539,7 @@ prepare_base_install() {
 
   retry_command pacman -S --needed --noconfirm git ipcalc dos2unix reflector || exit 1
   pacman_install_one playerctl || die "Failed to install required media-control dependency: playerctl"
+  pacman_install_one yazi || die "Failed to install required Yazi application: yazi"
   pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"
   pacman_install_one 7zip || die "Failed to install required Yazi archive dependency: 7zip"
   pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
@@ -8869,6 +8870,38 @@ EOF_V380_DRAG_LICENSE
   log "Applied v3.8.0 Yazi outbound-drag post-release repair to generated target."
 }
 
+target_requires_yazi_application() {
+  local target_home="$1"
+  local init_file="${target_home}/.config/yazi/init.lua"
+
+  [[ -f "$init_file" && ! -L "$init_file" ]] || return 1
+  grep -Fq 'require("bookmarks"):setup()' "$init_file"
+}
+
+ensure_yazi_application_for_target() {
+  local target_home="$1" pacman_bin="/usr/bin/pacman"
+
+  target_requires_yazi_application "$target_home" || return 0
+
+  if [[ -n ${AWTARCHY_TEST_PACMAN_BIN:-}
+    && ${AWTARCHY_TEST_TARGET_HOME:-} == /tmp/*
+    && -n ${AWTARCHY_TEST_ARCHIVE:-} ]];
+  then
+    pacman_bin="$AWTARCHY_TEST_PACMAN_BIN"
+  fi
+  [[ -x "$pacman_bin" ]] \
+    || die "Yazi is required by the target managed configuration, but pacman is unavailable."
+
+  "$pacman_bin" -Qq yazi >/dev/null 2>&1 && return 0
+
+  log "Installing required Yazi application before managed configuration..."
+  update_pacman_install_with_404_recovery root "$pacman_bin" yazi \
+    || die "Could not install required Yazi application: yazi"
+  record_managed_packages yazi
+  "$pacman_bin" -Qq yazi >/dev/null 2>&1 \
+    || die "Yazi installation completed without a detectable yazi package."
+}
+
 target_requires_yazi_fd() {
   local target_home="$1"
   local init_file="${target_home}/.config/yazi/init.lua"
@@ -9842,6 +9875,7 @@ main() {
   fi
 
   log "Update approved. Preparing required dependencies..."
+  ensure_yazi_application_for_target "$target_home"
   ensure_yazi_fd_dependency_for_target "$target_home"
   ensure_yazi_7zip_dependency_for_target "$target_home"
   ensure_yazi_ripdrag_dependency_for_target "$target_home"
