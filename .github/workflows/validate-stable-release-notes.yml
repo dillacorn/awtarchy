@@ -39,3 +39,68 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+publish-v4-0-1:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'ops/publish-awtarchy-v4.0.1-once' && github.event.pull_request.title == 'One-use publisher: Awtarchy v4.0.1'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Validate and publish exactly Awtarchy v4.0.1
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          tag=v4.0.1
+          title='Awtarchy v4.0.1 Yazi Workspaces & Updater Fix'
+          expected_main=5edf731d48993ba082abfa72d8c3d1bb27adb3b7
+          notes=.github/release-v4.0.1.md
+          actual_main="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$actual_main" == "$expected_main" ]] || { echo 'Main changed; refusing release.' >&2; exit 1; }
+          previous="$(gh api "repos/${GITHUB_REPOSITORY}/releases/latest" --jq '.tag_name')"
+          [[ "$previous" == v4.0.0 ]] || { echo 'Unexpected latest stable release; refusing release.' >&2; exit 1; }
+          if gh release view "$tag" --json tagName >/dev/null 2>&1; then
+            echo 'Release already exists; refusing to overwrite.' >&2
+            exit 1
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" >/dev/null 2>&1; then
+            echo 'Tag already exists; refusing to overwrite.' >&2
+            exit 1
+          fi
+          gh release view "$previous" --json body --jq '.body' > /tmp/awtarchy-previous-release.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes "$notes" \
+            --previous /tmp/awtarchy-previous-release.md
+          gh release create "$tag" --target "$expected_main" --title "$title" \
+            --notes-file "$notes" --latest
+          gh release view "$tag" --json body --jq '.body' > /tmp/awtarchy-published-release.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes /tmp/awtarchy-published-release.md \
+            --previous /tmp/awtarchy-previous-release.md
+          release_json="$(gh api "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}")"
+          tag_sha="$(gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/${tag}" --jq '.object.sha')"
+          RELEASE_JSON="$release_json" TAG_SHA="$tag_sha" EXPECTED="$expected_main" TITLE="$title" \
+            python3 - "$notes" /tmp/awtarchy-published-release.md <<'PY_VERIFY_RELEASE'
+          import json
+          import os
+          from pathlib import Path
+          import sys
+
+          data = json.loads(os.environ["RELEASE_JSON"])
+          expected = os.environ["EXPECTED"]
+          assert data["tag_name"] == "v4.0.1"
+          assert data["name"] == os.environ["TITLE"]
+          assert data["target_commitish"] == expected
+          assert os.environ["TAG_SHA"] == expected, "release tag points at the wrong commit"
+          assert not data["draft"] and not data["prerelease"]
+          source, published = (Path(value).read_text(encoding="utf-8").rstrip("\n") for value in sys.argv[1:])
+          assert source == published, "published notes differ from validated notes"
+          assert data["body"].rstrip("\n") == source
+          print("PASS: published release, body, metadata, and immutable target verified")
+          PY_VERIFY_RELEASE
+          if ! gh api --method DELETE \
+            "repos/${GITHUB_REPOSITORY}/git/refs/heads/ops/publish-awtarchy-v4.0.1-once"; then
+            echo '::warning::Temporary publishing branch requires manual cleanup'
+          fi
+
