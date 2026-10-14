@@ -355,6 +355,7 @@ jobs:
           bash tests/test-yazi-clipboard.sh
           bash tests/test-yazi-installation.sh
           lua5.4 tests/test-yazi-tab-workspaces.lua
+          lua5.4 tests/test-yazi-quickmark.lua
           bash tests/test-mic-noise-suppression.sh
           bash tests/test-always-awake-persistence.sh
           bash tests/test-aur-scanner-retirement.sh
