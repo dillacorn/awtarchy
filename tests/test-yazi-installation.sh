@@ -11,6 +11,7 @@ fail() { printf 'FAIL: %s\n' "$*" >&2; return 1; }
 grep -Fq 'Terminal Apps:foot nano micro yazi ' "$RUNTIME" || fail 'Yazi is not selected by default'
 grep -Fq 'pacman_install_one yazi || die' "$RUNTIME" || fail 'fresh install does not install Yazi before plugin setup'
 grep -Eq '^[[:space:]]+yazi$' "$RECONCILER" || fail 'Yazi absent from package reconciliation requirements'
+# shellcheck disable=SC2016 -- verify the literal runtime variable reference.
 grep -Fq 'ensure_yazi_application_for_target "$target_home"' "$RUNTIME" || fail 'update preflight omits Yazi'
 
 # Exercise the actual preflight functions using an isolated fake pacman.
