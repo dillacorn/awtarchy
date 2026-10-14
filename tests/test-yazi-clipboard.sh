@@ -65,10 +65,10 @@ expected = {
     ("g", "g"): "arrow top",
     ("G",): "arrow bot",
     ("<Enter>",): 'lua "AwtarchyYaziSmartEnter()"',
-    ("b",): 'lua "AwtarchyYaziToggleBookmarks()"',
-    ("B",): 'lua "AwtarchyYaziBookmarkHovered()"',
-    ("r",): 'lua "AwtarchyYaziToggleRecents()"',
-    ("R",): 'lua "AwtarchyYaziRename(false)"',
+    ("b",): 'lua "AwtarchyYaziBookmarkHovered()"',
+    ("B",): 'lua "AwtarchyYaziToggleBookmarks()"',
+    ("r",): 'lua "AwtarchyYaziRename(false)"',
+    ("R",): 'lua "AwtarchyYaziToggleRecents()"',
     ("g", "r"): 'lua "AwtarchyYaziGoRecents()"',
     ("g", "b"): 'lua "AwtarchyYaziGoBookmarks()"',
     ("g", "m"): "plugin mounts",
@@ -80,8 +80,8 @@ expected = {
     ("d", "g"): "plugin drag",
     ("d", "p"): 'lua "AwtarchyYaziDropToParent()"',
     ("<F2>",): 'lua "AwtarchyYaziRename(false)"',
-    ("q",): 'lua "AwtarchyYaziConfirmQuit(false)"',
-    ("Q",): 'lua "AwtarchyYaziConfirmQuit(true)"',
+    ("q",): 'lua "AwtarchyYaziQuitOrQuickMark()"',
+    ("Q",): 'lua "AwtarchyYaziToggleQuickMark()"',
     ("<C-w>",): 'lua "AwtarchyYaziCloseTab()"',
     ("<C-t>",): 'lua "AwtarchyYaziCreateCurrentTab()"',
     ("<C-1>",): "tab_switch 0",
@@ -110,6 +110,14 @@ expected = {
     ("e", "f"): 'lua "AwtarchyYaziExtractZipFolder()"',
     ("t", "e"): 'shell --orphan -- "$HOME/.config/hypr/scripts/default_terminal.sh" -- bash',
     ("t", "n"): 'lua "AwtarchyYaziOpenHoveredTab()"',
+    ("t", "t"): 'lua "AwtarchyYaziCreateCurrentTab()"',
+    ("t", "g"): 'lua "AwtarchyYaziGoTabGroups()"',
+    ("t", "s"): 'lua "AwtarchyYaziSaveTabGroup()"',
+    ("t", "p"): 'lua "AwtarchyYaziToggleTabPin()"',
+    ("t", "r"): 'lua "AwtarchyYaziRenameTab()"',
+    ("T",): 'lua "AwtarchyYaziToggleTabGroups()"',
+    ("g", "q"): 'lua "AwtarchyYaziGoQuickMark()"',
+    ("g", "Q"): 'lua "AwtarchyYaziConfirmQuit(true)"',
     ("m", "t"): 'lua "AwtarchyYaziToggleTimeFormat()"',
     ("m", "v"): 'lua "AwtarchyYaziTogglePreview()"',
     ("m", "x"): 'lua "AwtarchyYaziTogglePreviewMax()"',
@@ -142,13 +150,13 @@ if not any(
     raise SystemExit(1)
 if by_keys.get(("m", "t"), {}).get("desc") != "Toggle modified time 24h/12h":
     raise SystemExit(1)
-if by_keys.get(("b",), {}).get("desc") != "Toggle bookmarks":
+if by_keys.get(("b",), {}).get("desc") != "Bookmark/unbookmark highlighted item":
     raise SystemExit(1)
-if by_keys.get(("B",), {}).get("desc") != "Bookmark/unbookmark highlighted item":
+if by_keys.get(("B",), {}).get("desc") != "Toggle bookmarks / previous directory":
     raise SystemExit(1)
-if by_keys.get(("r",), {}).get("desc") != "Toggle recent files":
+if by_keys.get(("r",), {}).get("desc") != "Rename":
     raise SystemExit(1)
-if by_keys.get(("R",), {}).get("desc") != "Rename":
+if by_keys.get(("R",), {}).get("desc") != "Toggle recently opened / previous directory":
     raise SystemExit(1)
 
 # Rename input must restore mouse capture regardless of Insert/Normal mode.
@@ -209,10 +217,10 @@ grep -Fq 'on = ["<S-Up>"]' "$KEYMAP" \
   || fail 'Yazi Shift+Up range-selection binding is missing'
 grep -Fq 'on = ["<S-Down>"]' "$KEYMAP" \
   || fail 'Yazi Shift+Down range-selection binding is missing'
-grep -Fq 'AwtarchyYaziConfirmQuit(false)' "$KEYMAP" \
-  || fail 'Yazi q quit confirmation binding is missing'
+grep -Fq 'AwtarchyYaziQuitOrQuickMark()' "$KEYMAP" \
+  || fail 'Yazi q quit or Quick Mark chooser is missing'
 grep -Fq 'AwtarchyYaziConfirmQuit(true)' "$KEYMAP" \
-  || fail 'Yazi Q quit-without-cwd confirmation binding is missing'
+  || fail 'Yazi g Q quit-without-cwd confirmation binding is missing'
 grep -Fq 'AwtarchyYaziCloseTab()' "$KEYMAP" \
   || fail 'Yazi Ctrl+W tab-close replacement is missing'
 python3 - "$YAZI_INIT" <<'PY_TAB_NAME' || fail 'Yazi Ctrl+T tab naming helper does not preserve automatic tab names'
@@ -254,6 +262,7 @@ if command -v luac >/dev/null 2>&1; then
   luac -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
   luac -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac -p "$ROOT/config/yazi/plugins/tab-workspaces.yazi/main.lua" || fail 'Yazi tab workspaces plugin does not parse as Lua'
   luac -p "$YAZI_PREVIEW_REFIT" || fail 'Yazi preview-refit plugin does not parse as Lua'
   luac -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
   luac -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
@@ -261,6 +270,7 @@ elif command -v luac5.4 >/dev/null 2>&1; then
   luac5.4 -p "$YAZI_INIT" || fail 'Yazi init.lua does not parse as Lua'
   luac5.4 -p "$YAZI_RECENT" || fail 'Yazi recent-files plugin does not parse as Lua'
   luac5.4 -p "$YAZI_BOOKMARKS" || fail 'Yazi bookmarks plugin does not parse as Lua'
+  luac5.4 -p "$ROOT/config/yazi/plugins/tab-workspaces.yazi/main.lua" || fail 'Yazi tab workspaces plugin does not parse as Lua'
   luac5.4 -p "$YAZI_PREVIEW_REFIT" || fail 'Yazi preview-refit plugin does not parse as Lua'
   luac5.4 -p "$YAZI_MOUNTS" || fail 'Yazi mounts plugin does not parse as Lua'
   luac5.4 -p "$YAZI_GIT" || fail 'Yazi git plugin does not parse as Lua'
@@ -301,7 +311,7 @@ grep -Fq 'function AwtarchyYaziToggleBookmarks()' "$YAZI_INIT" \
   || fail 'Yazi one-key bookmarks toggle helper is missing'
 grep -Fq 'function AwtarchyYaziToggleRecents()' "$YAZI_INIT" \
   || fail 'Yazi one-key recents toggle helper is missing'
-grep -Fq 'local tab_key = tostring(cx.active.id)' "$YAZI_INIT" \
+grep -Fq 'local tab_key = tostring(cx.active.id.value)' "$YAZI_INIT" \
   || fail 'Yazi collection return targets are not scoped per tab'
 grep -Fq 'state[kind] = tostring(cx.active.current.cwd)' "$YAZI_INIT" \
   || fail 'Yazi collection toggles do not remember the exact source directory'
@@ -408,7 +418,7 @@ grep -Fq 'function AwtarchyYaziConfirmQuit(no_cwd_file)' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation helper is missing'
 grep -Fq 'function AwtarchyYaziCloseTab()' "$YAZI_INIT" \
   || fail 'Yazi tab-close helper is missing'
-grep -Fq 'if #cx.tabs > 1 then' "$YAZI_INIT" \
+grep -Fq 'if #cx.tabs <= 1 then' "$YAZI_INIT" \
   || fail 'Yazi Ctrl+W does not distinguish tab close from last-tab quit'
 grep -Fq 'function Tabs:drag(event)' "$YAZI_INIT" \
   || fail 'Yazi tab bar does not accept native mouse drag events'
@@ -422,8 +432,8 @@ grep -Fq 'for _ = 1, math.abs(target - current) do' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not shift across intervening tabs'
 grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not use native tab_swap'
-grep -Fq 'ya.emit("tab_rename", { interactive = true })' "$YAZI_INIT" \
-  || fail 'Yazi right-click tab rename does not use native interactive tab_rename'
+grep -Fq 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' "$YAZI_INIT" \
+  || fail 'Yazi right-click tab pinning does not preserve the hovered stable native ID'
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
 grep -Fq 'Yes: Y / Enter / Space' "$YAZI_INIT" \
