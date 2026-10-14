@@ -49,6 +49,8 @@ for binding in bindings:
     if isinstance(keys, str):
         keys = [keys]
     if isinstance(keys, list):
+        if tuple(keys) in by_keys:
+            raise SystemExit(f"Duplicate Yazi manager key: {keys!r}")
         by_keys[tuple(keys)] = binding
 
 for keys in [("g",), ("g", "B"), ("a",), ("/",), ("n",), ("N",)]:
@@ -434,6 +436,30 @@ grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not use native tab_swap'
 grep -Fq 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' "$YAZI_INIT" \
   || fail 'Yazi right-click tab pinning does not preserve the hovered stable native ID'
+# WGDot parity: pin styling remains monochrome and tab geometry includes the icon.
+grep -Fq 'AwtarchyYaziPinnedTabIds[tostring(tab.id.value)] and " 󰐃 " or " "' "$YAZI_INIT" \
+  || fail 'Yazi pin glyph is not using the monochrome Nerd Font at the stable native tab ID'
+grep -Fq 'local available = max_width - ui.width(prefix) - ui.width(suffix)' "$YAZI_INIT" \
+  || fail 'Yazi pin width is not reserved before truncating tab names'
+grep -Fq 'function Tabs.height()' "$YAZI_INIT" \
+  || fail 'Yazi pinned single-tab bar is not visible'
+grep -Fq 'local name = AwtarchyYaziTabLabel(index, max)' "$YAZI_INIT" \
+  || fail 'Yazi live-drag tab hitboxes do not account for rendered pin width'
+if grep -Fq '📌' "$YAZI_INIT"; then
+  fail 'Yazi tab pins must never use color emoji'
+fi
+python3 - "$YAZI_INIT" <<'PY_TAB_CLICK' || fail 'Right-click tab actions must not change focus'
+import sys
+source = open(sys.argv[1], encoding="utf-8").read()
+start = source.index("function Tabs:click(event, up)")
+end = source.index("local function AwtarchyYaziTabMidpoint", start)
+mouse = source[start:end]
+right = mouse.split("if event.is_right then", 1)[1].split("elseif not event.is_left then", 1)[0]
+if 'ya.emit("tab_switch"' in right or 'ya.emit("tab_rename"' in right:
+    raise SystemExit("Right-click must not focus or rename the hovered tab")
+if 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' not in right:
+    raise SystemExit("Right-click did not forward hovered native tab ID")
+PY_TAB_CLICK
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
 grep -Fq 'Yes: Y / Enter / Space' "$YAZI_INIT" \
