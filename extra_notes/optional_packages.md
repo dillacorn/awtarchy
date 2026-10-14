@@ -18,22 +18,14 @@ https://www.maccel.org/
 
 ## 📁 File Management
 
-### TUI File Manager Suite
-Modern terminal-based file management with image previews:
-```bash
-sudo pacman -S ueberzugpp yazi chafa
-```
+### Yazi file manager
 
-- **ueberzugpp** – image previews in terminal
-- **yazi** – fast terminal file manager
-- **chafa** – terminal graphics renderer
+Awtarchy installs **yazi** from the official Arch repository by default and maintains its Yazi configuration and vendored plugins. You do not need to install Yazi separately.
 
-### Image previews in Foot
-
-Foot from the official Arch repositories supports Sixel image previews in Yazi without an AUR terminal fork.
+Awtarchy's default **Foot** terminal supports native Sixel image previews in Yazi. This works without `ueberzugpp` or `chafa`, so neither is made a required package. These renderers remain optional for other terminal setups.
 
 ```bash
-sudo pacman -S --needed foot
+sudo pacman -S --needed foot yazi
 ```
 
 ### YouTube Music Desktop Client

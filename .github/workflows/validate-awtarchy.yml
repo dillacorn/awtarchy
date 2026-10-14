@@ -106,6 +106,7 @@ jobs:
           bash -n tests/test-aur-scanner-docs.sh
           bash -n tests/test-awtarchy-tips-content.sh
           bash -n tests/test-yazi-clipboard.sh
+          bash -n tests/test-yazi-installation.sh
           bash -n tests/test-mic-noise-suppression.sh
           bash -n tests/test-always-awake-persistence.sh
           bash -n tests/test-aur-scanner-retirement.sh
@@ -250,6 +251,7 @@ jobs:
             tests/test-aur-helper-policy.sh \
             tests/test-aur-scanner-docs.sh \
             tests/test-yazi-clipboard.sh \
+            tests/test-yazi-installation.sh \
             tests/test-aur-scanner-retirement.sh \
             tests/test-package-reconciler.sh \
             tests/test-package-reconciler-alternatives.sh \
@@ -351,6 +353,9 @@ jobs:
           bash tests/test-aur-scanner-docs.sh
           bash tests/test-awtarchy-tips-content.sh
           bash tests/test-yazi-clipboard.sh
+          bash tests/test-yazi-installation.sh
+          lua5.4 tests/test-yazi-tab-workspaces.lua
+          lua5.4 tests/test-yazi-quickmark.lua
           bash tests/test-mic-noise-suppression.sh
           bash tests/test-always-awake-persistence.sh
           bash tests/test-aur-scanner-retirement.sh

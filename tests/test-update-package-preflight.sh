@@ -130,6 +130,7 @@ cat >"$tmp/installed" <<'PKGS'
 quickshell
 wl-clipboard
 cliphist
+yazi
 fd
 7zip
 upower
