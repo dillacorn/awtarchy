@@ -40,8 +40,13 @@ jobs:
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
 
-publish-v4-0-1:
-    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' && github.event.pull_request.base.ref == 'main' && github.event.pull_request.head.ref == 'ops/publish-awtarchy-v4.0.1-once' && github.event.pull_request.title == 'One-use publisher: Awtarchy v4.0.1'
+  publish-v4-0-1:
+    if: >-
+      github.event_name == 'pull_request'
+      && github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy'
+      && github.event.pull_request.base.ref == 'main'
+      && github.event.pull_request.head.ref == 'ops/publish-awtarchy-v4.0.1-once'
+      && github.event.pull_request.title == 'One-use publisher: Awtarchy v4.0.1'
     runs-on: ubuntu-latest
     permissions:
       contents: write
