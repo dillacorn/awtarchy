@@ -211,7 +211,7 @@ local publish_pins = ya.sync(function(st)
 end)
 
 local toggle_pin = ya.sync(function(st, requested_id)
-    -- A right-click passes the stable ID of the tab underneath the pointer.
+    -- Middle-click pinning passes the stable ID of the hovered tab.
     -- Keyboard t p passes no ID and still targets the currently focused tab.
     -- Resolve on execution, since tab indices can shift between input and
     -- plugin dispatch when tabs are dragged or reordered.
