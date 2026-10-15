@@ -743,17 +743,15 @@ function Tabs:click(event, up)
         return
     end
 
-    if event.is_right then
-        if up then
-            return
-        end
+    if event.is_middle or event.is_right then
+        if up then return end
         AwtarchyYaziFinishTabDrag()
-        -- Pin the tab under the pointer, without switching focus.
+        -- Capture the hovered native tab identity before dispatch. Neither
+        -- mouse action switches focus; the plugin resolves the stable ID.
         local tab = cx.tabs[index]
         if tab then
-            ya.emit("plugin", {
-                "tab-workspaces", AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) }),
-            })
+            local action = event.is_middle and "pin" or "rename-tab"
+            ya.emit("plugin", { "tab-workspaces", AwtarchyYaziPluginArgs(action, { tostring(tab.id.value) }) })
         end
         return
     elseif not event.is_left then
