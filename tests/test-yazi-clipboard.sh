@@ -434,8 +434,12 @@ grep -Fq 'for _ = 1, math.abs(target - current) do' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not shift across intervening tabs'
 grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not use native tab_swap'
-grep -Fq 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' "$YAZI_INIT" \
-  || fail 'Yazi right-click tab pinning does not preserve the hovered stable native ID'
+grep -Fq 'if event.is_middle or event.is_right then' "$YAZI_INIT" \
+  || fail 'Yazi middle-click pin/right-click rename tab routing is missing'
+grep -Fq 'local action = event.is_middle and "pin" or "rename-tab"' "$YAZI_INIT" \
+  || fail 'Yazi tab mouse buttons do not map to pin and rename'
+grep -Fq 'AwtarchyYaziPluginArgs(action, { tostring(tab.id.value) })' "$YAZI_INIT" \
+  || fail 'Yazi hovered tab actions do not preserve the stable native ID'
 # WGDot parity: pin styling remains monochrome and tab geometry includes the icon.
 grep -Fq 'AwtarchyYaziPinnedTabIds[tostring(tab.id.value)] and " 󰐃 " or " "' "$YAZI_INIT" \
   || fail 'Yazi pin glyph is not using the monochrome Nerd Font at the stable native tab ID'
