@@ -434,8 +434,12 @@ grep -Fq 'for _ = 1, math.abs(target - current) do' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not shift across intervening tabs'
 grep -Fq 'ya.emit("tab_swap", { step })' "$YAZI_INIT" \
   || fail 'Yazi tab drag does not use native tab_swap'
-grep -Fq 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' "$YAZI_INIT" \
-  || fail 'Yazi right-click tab pinning does not preserve the hovered stable native ID'
+grep -Fq 'if event.is_middle or event.is_right then' "$YAZI_INIT" \
+  || fail 'Yazi middle-click pin/right-click rename tab routing is missing'
+grep -Fq 'local action = event.is_middle and "pin" or "rename-tab"' "$YAZI_INIT" \
+  || fail 'Yazi tab mouse buttons do not map to pin and rename'
+grep -Fq 'AwtarchyYaziPluginArgs(action, { tostring(tab.id.value) })' "$YAZI_INIT" \
+  || fail 'Yazi hovered tab actions do not preserve the stable native ID'
 # WGDot parity: pin styling remains monochrome and tab geometry includes the icon.
 grep -Fq 'AwtarchyYaziPinnedTabIds[tostring(tab.id.value)] and " 󰐃 " or " "' "$YAZI_INIT" \
   || fail 'Yazi pin glyph is not using the monochrome Nerd Font at the stable native tab ID'
@@ -448,17 +452,19 @@ grep -Fq 'local name = AwtarchyYaziTabLabel(index, max)' "$YAZI_INIT" \
 if grep -Fq '📌' "$YAZI_INIT"; then
   fail 'Yazi tab pins must never use color emoji'
 fi
-python3 - "$YAZI_INIT" <<'PY_TAB_CLICK' || fail 'Right-click tab actions must not change focus'
+python3 - "$YAZI_INIT" <<'PY_TAB_CLICK' || fail 'Middle/right-click tab actions must not change focus'
 import sys
 source = open(sys.argv[1], encoding="utf-8").read()
 start = source.index("function Tabs:click(event, up)")
 end = source.index("local function AwtarchyYaziTabMidpoint", start)
 mouse = source[start:end]
-right = mouse.split("if event.is_right then", 1)[1].split("elseif not event.is_left then", 1)[0]
-if 'ya.emit("tab_switch"' in right or 'ya.emit("tab_rename"' in right:
-    raise SystemExit("Right-click must not focus or rename the hovered tab")
-if 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' not in right:
-    raise SystemExit("Right-click did not forward hovered native tab ID")
+buttons = mouse.split("if event.is_middle or event.is_right then", 1)[1].split("elseif not event.is_left then", 1)[0]
+if 'ya.emit("tab_switch"' in buttons or 'ya.emit("tab_rename"' in buttons:
+    raise SystemExit("Middle/right-click must not switch focus or bypass the stable-ID plugin")
+if 'local action = event.is_middle and "pin" or "rename-tab"' not in buttons:
+    raise SystemExit("Middle/right-click action mapping changed")
+if 'AwtarchyYaziPluginArgs(action, { tostring(tab.id.value) })' not in buttons:
+    raise SystemExit("Mouse tab action did not forward hovered native ID")
 PY_TAB_CLICK
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
