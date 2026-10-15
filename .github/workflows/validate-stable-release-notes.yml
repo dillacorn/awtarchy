@@ -39,3 +39,80 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  release-v4-0-2-once:
+    if: >-
+      ${{
+        github.event_name == 'pull_request' &&
+        github.event.action == 'opened' &&
+        github.event.pull_request.title == 'Release bridge: Awtarchy v4.0.2 Yazi Mouse Tabs' &&
+        github.event.pull_request.head.ref == 'chore/release-v4.0.2-bridge' &&
+        github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+        github.event.pull_request.base.ref == 'main' &&
+        github.event.pull_request.base.sha == 'dc29041811c36cf9b3dc9165f7c4e8695c68c9f3'
+      }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Publish approved Awtarchy v4.0.2
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: dillacorn/awtarchy
+          RELEASE_SHA: dc29041811c36cf9b3dc9165f7c4e8695c68c9f3
+        run: |
+          set -euo pipefail
+          release="v4.0.2"
+          title="Awtarchy v4.0.2 Yazi Mouse Tab Controls"
+          actual_main="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')"
+          test "$actual_main" = "$RELEASE_SHA" || { echo "STOP: main moved"; exit 1; }
+          if gh api "repos/$GH_REPO/git/ref/tags/$release" >/dev/null 2>&1; then
+            echo "STOP: tag already exists"
+            exit 1
+          fi
+          if gh release view "$release" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "STOP: release already exists"
+            exit 1
+          fi
+          previous="$RUNNER_TEMP/awtarchy-v4.0.1-previous.md"
+          notes="$RUNNER_TEMP/awtarchy-v4.0.2-notes.md"
+          published="$RUNNER_TEMP/awtarchy-v4.0.2-published.md"
+          gh release view v4.0.1 --repo "$GH_REPO" --json body --jq '.body' > "$previous"
+          test -s "$previous"
+          cat > "$notes" <<'AWT_RELEASE_NOTES'
+          # Awtarchy v4.0.2 Yazi Mouse Tab Controls
+
+          This patch release brings the tested Yazi mouse tab controls to Awtarchy's Arch Linux configuration.
+
+          ## Install and update
+
+          - [Install](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Update](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md), or run awtarchy update.
+
+          ## Yazi
+
+          - Middle-click any tab to pin or unpin it without changing focus, including inactive tabs.
+          - Right-click any tab to rename it through the existing tab-name prompt, without changing focus.
+          - Preserve native left-click tab switching, live tab drag reordering, keyboard t p and t r, saved pins, stable tab IDs, and the monochrome pin icon.
+
+          ## Validation
+
+          - Awtarchy [PR #283](https://github.com/dillacorn/awtarchy/pull/283) passed all 13 GitHub Actions workflows, including Lua behavioral tests and updater integration tests.
+          - The matching Yazi mouse controls were tested successfully on Windows in WGDot v4.8.2. An interactive Arch/Foot test of this port remains unverified.
+          AWT_RELEASE_NOTES
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$release" --title "$title" --notes "$notes" --previous "$previous"
+          gh release create "$release" --repo "$GH_REPO" --target "$RELEASE_SHA" --title "$title" --notes-file "$notes" --latest
+          metadata="$(gh api "repos/$GH_REPO/releases/tags/$release")"
+          printf '%s\n' "$metadata" | jq -e --arg title "$title" --arg sha "$RELEASE_SHA" \
+            '.name == $title and .tag_name == "v4.0.2" and .target_commitish == $sha and .draft == false and .prerelease == false' >/dev/null
+          actual_tag="$(gh api "repos/$GH_REPO/git/ref/tags/$release" --jq '.object.sha')"
+          test "$actual_tag" = "$RELEASE_SHA"
+          gh release view "$release" --repo "$GH_REPO" --json body --jq '.body' > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$release" --title "$title" --notes "$published" --previous "$previous"
+          test "$(cat "$published")" = "$(cat "$notes")"
+          echo "Verified stable $release at $RELEASE_SHA with exact valid notes."
+          gh api --method DELETE "repos/$GH_REPO/git/refs/heads/chore/release-v4.0.2-bridge"
