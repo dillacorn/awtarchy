@@ -452,17 +452,19 @@ grep -Fq 'local name = AwtarchyYaziTabLabel(index, max)' "$YAZI_INIT" \
 if grep -Fq '📌' "$YAZI_INIT"; then
   fail 'Yazi tab pins must never use color emoji'
 fi
-python3 - "$YAZI_INIT" <<'PY_TAB_CLICK' || fail 'Right-click tab actions must not change focus'
+python3 - "$YAZI_INIT" <<'PY_TAB_CLICK' || fail 'Middle/right-click tab actions must not change focus'
 import sys
 source = open(sys.argv[1], encoding="utf-8").read()
 start = source.index("function Tabs:click(event, up)")
 end = source.index("local function AwtarchyYaziTabMidpoint", start)
 mouse = source[start:end]
-right = mouse.split("if event.is_right then", 1)[1].split("elseif not event.is_left then", 1)[0]
-if 'ya.emit("tab_switch"' in right or 'ya.emit("tab_rename"' in right:
-    raise SystemExit("Right-click must not focus or rename the hovered tab")
-if 'AwtarchyYaziPluginArgs("pin", { tostring(tab.id.value) })' not in right:
-    raise SystemExit("Right-click did not forward hovered native tab ID")
+buttons = mouse.split("if event.is_middle or event.is_right then", 1)[1].split("elseif not event.is_left then", 1)[0]
+if 'ya.emit("tab_switch"' in buttons or 'ya.emit("tab_rename"' in buttons:
+    raise SystemExit("Middle/right-click must not switch focus or bypass the stable-ID plugin")
+if 'local action = event.is_middle and "pin" or "rename-tab"' not in buttons:
+    raise SystemExit("Middle/right-click action mapping changed")
+if 'AwtarchyYaziPluginArgs(action, { tostring(tab.id.value) })' not in buttons:
+    raise SystemExit("Mouse tab action did not forward hovered native ID")
 PY_TAB_CLICK
 grep -Fq 'title = "Quit Yazi?"' "$YAZI_INIT" \
   || fail 'Yazi quit confirmation prompt is missing'
