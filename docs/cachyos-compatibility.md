@@ -17,19 +17,32 @@ command configured by Awtarchy. Do **not** change package-owned files under
 `/usr/share`, replace the user's shell, or overwrite their Fish config
 during an Awtarchy update.
 
-To opt out of that greeting, edit the existing
-`~/.config/fish/config.fish` and define an empty function **after** the
-CachyOS configuration has been sourced:
+Awtarchy now handles the **unmodified CachyOS Fish user template**
+automatically during installation and after a successful configuration
+update. When Fish is the login shell and the system's CachyOS greeting
+still runs Fastfetch, the helper:
+- recognizes the original user template and CachyOS vendor greeting;
+- saves the exact original as `~/.config/fish/config.fish.backup.TIMESTAMP`;
+- appends an empty user `fish_greeting` function, so opening Foot is quiet.
+
+It does not remove Fastfetch, change `~/.config/fastfetch`, modify
+`/usr/share`, change the login shell, or touch Fish files with custom
+active commands or existing greeting overrides. Re-running the updater
+does not repeat the edit or create extra backups. Updating with
+`awtarchy git update --branch investigate/cachyos-compatibility` is
+sufficient to test this behavior on an existing installation.
+
+Custom Fish configurations are deliberately preserved. Users with
+customized startup files who also want to disable their greeting can add
+this function at the end of `~/.config/fish/config.fish`:
 
 ```fish
 function fish_greeting
 end
 ```
 
-The CachyOS template may already have a commented-out `fish_greeting`
-example; uncommenting its definition and matching `end` is preferable to
-adding a duplicate. Preserve the rest of the user's Fish configuration.
-A new interactive Foot/Fish window is enough to verify the greeting change.
+Open a new Foot window to confirm the change; running `fastfetch`
+manually still uses the installed Awtarchy appearance.
 
 References:
 
