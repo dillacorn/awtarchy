@@ -15,6 +15,8 @@ pronounced: **aw-tar-chee**
 
 For the current commands and install behavior, use the [Installation guide](INSTALL.md). Existing users should use the [Updating guide](UPDATING.md).
 
+**CachyOS (limited community testing):** Awtarchy has been installed and tested successfully on one CachyOS desktop, including fixes for the Fish terminal greeting and Quickshell brightness/volume scrolling. This does **not** make CachyOS an officially supported installation target: other CachyOS defaults, packages, and configurations have not been broadly tested. Minimal vanilla Arch Linux remains the recommended base. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
+
 > **Development note:** Awtarchy is a personal passion project maintained in spare time. Large language models have been used as development tools to assist with writing, reviewing, refactoring, documentation, and troubleshooting parts of the project. I use that assistance to spend more of my limited project time testing changes on real systems, diagnosing failures, and validating releases. LLM-assisted changes are not assumed correct simply because they were generated; they are reviewed and tested as part of the normal development process.
 
 ## Why this approach
