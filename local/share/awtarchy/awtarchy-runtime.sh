@@ -4298,6 +4298,15 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  # CachyOS sources its stock Fish greeting from the user's config.fish.
+  # Respect custom greetings; adjust only the untouched distro template.
+  local cachyos_fish_helper="${REPO_DIR}/local/share/awtarchy/cachyos-fish-greeting.py"
+  if [[ -f "$cachyos_fish_helper" && ! -L "$cachyos_fish_helper" ]]; then
+    # Read the helper as root: the installer checkout may be under a private
+    # root-owned temp directory. Python and all writes still run as the user.
+    run_as_target env "HOME=${HOME_DIR}" python3 - --home "$HOME_DIR" <"$cachyos_fish_helper" \
+      || warn "Could not adjust CachyOS's stock Fish greeting; the existing shell config was preserved."
+  fi
   configure_sunshine_awtarchy_hook_stage
   configure_installer_mic_suppression_stage
   install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
@@ -10099,6 +10108,14 @@ main() {
   fi
   write_audit "$source_label" "$active_theme"
   [[ "${EUID}" -eq 0 ]] && chown -R "${TARGET_USER}:${TARGET_USER}" "$STATE_DIR" 2>/dev/null || true
+
+  # Only after the approved live update is committed: preserve rollback
+  # boundaries and avoid touching unrecognized/custom Fish configuration.
+  local cachyos_fish_helper="${repo_dir}/local/share/awtarchy/cachyos-fish-greeting.py"
+  if [[ -f "$cachyos_fish_helper" && ! -L "$cachyos_fish_helper" ]]; then
+    run_target env "HOME=${HOME_DIR}" python3 "$cachyos_fish_helper" --home "$HOME_DIR" \
+      || warn "Could not adjust CachyOS's stock Fish greeting; the existing shell config was preserved."
+  fi
 
   # A preserved hyprland.lua may have intentionally won a three-way merge
   # conflict. Apply only the one-time, conflict-safe Hyprmoncfg integration;
