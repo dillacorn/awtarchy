@@ -4302,7 +4302,9 @@ run_install() {
   # Respect custom greetings; adjust only the untouched distro template.
   local cachyos_fish_helper="${REPO_DIR}/local/share/awtarchy/cachyos-fish-greeting.py"
   if [[ -f "$cachyos_fish_helper" && ! -L "$cachyos_fish_helper" ]]; then
-    run_as_target env "HOME=${HOME_DIR}" python3 "$cachyos_fish_helper" --home "$HOME_DIR" \
+    # Read the helper as root: the installer checkout may be under a private
+    # root-owned temp directory. Python and all writes still run as the user.
+    run_as_target env "HOME=${HOME_DIR}" python3 - --home "$HOME_DIR" <"$cachyos_fish_helper" \
       || warn "Could not adjust CachyOS's stock Fish greeting; the existing shell config was preserved."
   fi
   configure_sunshine_awtarchy_hook_stage
