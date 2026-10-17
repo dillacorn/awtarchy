@@ -39,3 +39,91 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v4-0-3:
+    name: Publish exact v4.0.3 from validated main
+    needs: release-notes-contract
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'Publish exact v4.0.3 release' &&
+      github.event.pull_request.head.ref == 'release/v4.0.3-bridge' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.base.ref == 'main'
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-awtarchy-v4-0-3
+      cancel-in-progress: false
+    steps:
+      - name: Checkout existing main without helper-branch content
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: main
+          fetch-depth: 0
+      - name: Validate immutable release target and notes, then publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN: 9be8135987a7f44b5df906a215916699dc64e523
+          RELEASE_TAG: v4.0.3
+          RELEASE_TITLE: Awtarchy v4.0.3 Quickshell & CachyOS Fixes
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REPOSITORY" = 'dillacorn/awtarchy'
+          test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN"
+          test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_MAIN"
+          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            echo 'STOP: v4.0.3 tag already exists' >&2
+            exit 1
+          fi
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo 'STOP: v4.0.3 release already exists' >&2
+            exit 1
+          fi
+          gh release view v4.0.2 --repo "$GITHUB_REPOSITORY" --json body --jq .body > previous-stable.md
+          gh release view v4.0.2 --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
+            --jq '(.isDraft == false) and (.isPrerelease == false)' | grep -Fxq true
+          cat > proposed-release.md <<'AWTARCHY_RELEASE_NOTES'
+          # Awtarchy v4.0.3 Quickshell & CachyOS Fixes
+          
+          This patch release corrects Awtarchy's Quickshell brightness/volume mouse-wheel direction and improves compatibility with the default CachyOS Fish greeting.
+          
+          ## Install and update
+          
+          - [Install](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Update](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md), or run `awtarchy update`.
+          
+          ## Fixes
+          
+          - Quickshell: correct the direction of continuous mouse-wheel events on brightness and volume controls.
+          - CachyOS Fish: automatically suppress the default Fastfetch greeting in new Foot windows when the recognized stock configuration is present, backing up the original and preserving customized Fish files. Manual Fastfetch remains available.
+          - Document limited community-tested CachyOS compatibility in the README while keeping vanilla Arch Linux the primary supported base.
+          
+          ## Validation
+          
+          - [PR #287](https://github.com/dillacorn/awtarchy/pull/287) passed 29 GitHub Actions workflows on its final head, including Awtarchy updater integration and documentation checks.
+          - The affected CachyOS user confirmed Fastfetch no longer appears automatically and Quickshell brightness/volume scrolling is back to normal. Broader CachyOS combinations have not been validated.
+          AWTARCHY_RELEASE_NOTES
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
+            --notes proposed-release.md --previous previous-stable.md
+          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --target "$EXPECTED_MAIN" --title "$RELEASE_TITLE" \
+            --notes-file proposed-release.md --latest
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json body --jq .body > published-release.md
+          cmp -s proposed-release.md published-release.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
+            --notes published-release.md --previous previous-stable.md
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            --jq '[.name, .target_commitish, (.draft | tostring), (.prerelease | tostring)] | @tsv' \
+            | grep -Fxq "$RELEASE_TITLE$(printf '\t')$EXPECTED_MAIN$(printf '\t')false$(printf '\t')false"
+          git fetch --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-list -n1 "$RELEASE_TAG")" = "$EXPECTED_MAIN"
+          echo 'VERIFIED: v4.0.3 release notes, title, tag target and publication status'
+      - name: Remove one-use helper branch after verified publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X DELETE 'repos/dillacorn/awtarchy/git/refs/heads/release/v4.0.3-bridge'
