@@ -126,7 +126,7 @@ class CachyosFishGreetingTests(unittest.TestCase):
         self.assertLess(update, audit)
         self.assertLess(audit, helper)
         self.assertIn('run_target env "HOME=${HOME_DIR}" python3 "$cachyos_fish_helper"', runtime)
-        self.assertIn('run_as_target env "HOME=${HOME_DIR}" python3 "$cachyos_fish_helper"', runtime)
+        self.assertIn('run_as_target env "HOME=${HOME_DIR}" python3 - --home "$HOME_DIR" <"$cachyos_fish_helper"', runtime)
 
 
 if __name__ == "__main__":
