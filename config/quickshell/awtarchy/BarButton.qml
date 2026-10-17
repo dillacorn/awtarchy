@@ -94,11 +94,11 @@ Rectangle {
 
         const rawPixelDelta = Number(wheel.pixelDelta.y);
         if (Number.isFinite(rawPixelDelta) && rawPixelDelta !== 0) {
-            // Qt/Wayland does not reliably expose Hyprland's natural-scroll
-            // state through WheelEvent.inverted. Pixel deltas are the smooth
-            // touchpad path here, so reverse them directly to match the mouse
-            // wheel-up-increases, wheel-down-decreases control direction.
-            const pixelDelta = -rawPixelDelta;
+            // Qt/Wayland already normalizes pixelDelta and angleDelta to
+            // the same up-positive/down-negative direction. Continuous mouse
+            // wheels can report pixelDelta too, so negating it here reverses
+            // brightness/volume on those devices.
+            const pixelDelta = rawPixelDelta;
             wheelAngleRemainder = 0;
             wheelPixelRemainder += pixelDelta;
             wheelReset.restart();
