@@ -25,8 +25,8 @@ require_source 'scrollGestureEnabled: true' \
   'BarButton does not explicitly accept trackpad scroll gestures'
 require_source 'const rawPixelDelta = Number(wheel.pixelDelta.y);' \
   'BarButton does not read smooth pixel deltas'
-require_source 'const pixelDelta = -rawPixelDelta;' \
-  'BarButton does not reverse the smooth trackpad direction'
+require_source 'const pixelDelta = rawPixelDelta;' \
+  'BarButton reverses Qt-normalized pixel wheel direction'
 require_source 'const angleDelta = Number(wheel.angleDelta.y);' \
   'BarButton does not retain discrete mouse-wheel deltas'
 require_source 'wheelPixelRemainder += pixelDelta;' \
@@ -46,6 +46,10 @@ fi
 
 if grep -Fq 'wheel.inverted' "$BAR_BUTTON"; then
   fail 'trackpad direction still depends on the unreliable WheelEvent.inverted flag'
+fi
+
+if grep -Fq 'const pixelDelta = -rawPixelDelta;' "$BAR_BUTTON"; then
+  fail 'bar wheel input regressed to double-inverting continuous pixel events'
 fi
 
 brightness_control_count="$(grep -Fc 'onWheelUp: bar.ddcAction("up")' "$BAR")"
