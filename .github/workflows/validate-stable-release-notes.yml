@@ -41,7 +41,7 @@ jobs:
         run: bash tests/test-install-update-docs.sh
 
   publish-v4-0-3:
-    name: Publish exact v4.0.3 from validated main
+    name: Verify existing v4.0.3 and remove helper branch
     needs: release-notes-contract
     if: >-
       github.event_name == 'pull_request' &&
@@ -61,7 +61,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
-      - name: Validate immutable release target and notes, then publish
+      - name: Verify immutable release target and published notes
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_MAIN: 9be8135987a7f44b5df906a215916699dc64e523
@@ -72,14 +72,8 @@ jobs:
           test "$GITHUB_REPOSITORY" = 'dillacorn/awtarchy'
           test "$(git rev-parse HEAD)" = "$EXPECTED_MAIN"
           test "$(git ls-remote origin refs/heads/main | cut -f1)" = "$EXPECTED_MAIN"
-          if git ls-remote --exit-code --tags origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
-            echo 'STOP: v4.0.3 tag already exists' >&2
-            exit 1
-          fi
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo 'STOP: v4.0.3 release already exists' >&2
-            exit 1
-          fi
+          test "$(git ls-remote --tags origin "refs/tags/$RELEASE_TAG" | cut -f1)" = "$EXPECTED_MAIN"
+          gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null
           gh release view v4.0.2 --repo "$GITHUB_REPOSITORY" --json body --jq .body > previous-stable.md
           gh release view v4.0.2 --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease \
             --jq '(.isDraft == false) and (.isPrerelease == false)' | grep -Fxq true
@@ -107,12 +101,9 @@ jobs:
           python3 .github/scripts/validate-stable-release-notes.py \
             --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
             --notes proposed-release.md --previous previous-stable.md
-          gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --target "$EXPECTED_MAIN" --title "$RELEASE_TITLE" \
-            --notes-file proposed-release.md --latest
           gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
             --json body --jq .body > published-release.md
-          cmp -s proposed-release.md published-release.md
+          python3 -c 'from pathlib import Path; expected = Path("proposed-release.md").read_text(); actual = Path("published-release.md").read_text(); assert expected.rstrip("\n") == actual.rstrip("\n"), "Published release notes differ"'
           python3 .github/scripts/validate-stable-release-notes.py \
             --version "$RELEASE_TAG" --title "$RELEASE_TITLE" \
             --notes published-release.md --previous previous-stable.md
