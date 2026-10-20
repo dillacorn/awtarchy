@@ -32,6 +32,19 @@ PS1='󰞷 \w\$ '
 
 # --- Functions ---
 
+# Foot's terminfo may be missing on SSH targets such as embedded devices.
+# Keep Foot's local TERM and substitute a portable value for SSH only.
+ssh() {
+  case ${TERM:-} in
+    foot|foot-direct)
+      TERM=xterm-256color command ssh "$@"
+      ;;
+    *)
+      command ssh "$@"
+      ;;
+  esac
+}
+
 # Run a command in the background, redirecting output to a log file
 background() {
   if [ $# -lt 1 ]; then
