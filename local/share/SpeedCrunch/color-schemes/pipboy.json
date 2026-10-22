@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speedcrunch.org/schemas/theme-v1.schema.json",
+  "name": "Pip-Boy",
+  "author": "Awtarchy",
+  "number": "#a4ff47",
+  "parens": "#8bd93b",
+  "list": "#8bd93b",
+  "unit": "#b8f77a",
+  "result": "#d5ff9a",
+  "comment": "#80a56a",
+  "function": "#a4ff47",
+  "operator": "#a4ff47",
+  "variable": "#c7f88a",
+  "separator": "#325c32",
+  "background": "#050805",
+  "primary": "#a4ff47"
+}
