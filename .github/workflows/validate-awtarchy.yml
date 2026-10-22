@@ -334,6 +334,8 @@ jobs:
             local/share/applications/quickshell_bar_toggle.desktop
       - name: CachyOS Fish greeting regressions
         run: python3 tests/test-cachyos-fish-greeting.py
+      - name: SpeedCrunch theme and window rules
+        run: python3 tests/test-speedcrunch-compatibility.py
       - name: Command and updater integration tests
         run: |
           no_sudo_bin="$(mktemp -d)"
