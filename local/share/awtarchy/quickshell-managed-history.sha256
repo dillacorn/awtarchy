@@ -1600,3 +1600,6 @@ afce729bd189974b2a45aca1d2347ec177c2c4821be8c2478ba25d1775987207	.config/hypr/hy
 711b309043266692d10bf6a99c4f3a8d131f6f0337f62b8f1fab4c9e5232ade6	.config/hypr/scripts/foot_theme_live.py
 dbcedd9e45ae53c7c3ef1aca1a19d16c27d8a8c471379808a7d4d130950f6633	.config/hypr/scripts/quickshell_theme_apply.sh
 8f60bc051de7132a65caaf3eb87a461868c71e2b377682b25e9d0e3865116f3e	.config/quickshell/awtarchy/BarButton.qml
+
+# SpeedCrunch Qt 6 window-class rules (legacy history retained).
+2c47c30586f81d04b522728bb62b7d2358ab7ccb24a380b972e08e085eb09a38	.config/hypr/hyprland.lua
