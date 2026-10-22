@@ -1,15 +1,18 @@
 {
-  "background": "#0f1113",
-  "cursor": "#cfd6d8",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speedcrunch.org/schemas/theme-v1.schema.json",
+  "name": "Iron Forge",
+  "author": "Awtarchy",
   "number": "#9ad0ce",
   "parens": "#6ecfd0",
+  "list": "#6ecfd0",
+  "unit": "#c5a0e6",
   "result": "#8fd18d",
   "comment": "#6a7b86",
-  "matched": "#ffffff",
   "function": "#cbb88c",
   "operator": "#8cb4e8",
   "variable": "#c5a0e6",
-  "scrollbar": "#0a0c0f",
   "separator": "#1a1f24",
-  "editorbackground": "#0f1113"
+  "background": "#0f1113",
+  "primary": "#cfd6d8"
 }
