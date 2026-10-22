@@ -1,15 +1,18 @@
 {
-  "background": "#2b2b2b",
-  "cursor": "#e0e0e0",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://speedcrunch.org/schemas/theme-v1.schema.json",
+  "name": "Carbon Night",
+  "author": "Awtarchy",
   "number": "#e6e6e6",
   "parens": "#a0a0a0",
+  "list": "#a0a0a0",
+  "unit": "#c8c8c8",
   "result": "#f0f0f0",
   "comment": "#909090",
-  "matched": "#ffffff",
   "function": "#d0d0d0",
   "operator": "#d8d8d8",
   "variable": "#c8c8c8",
-  "scrollbar": "#2a2a2a",
   "separator": "#4a4a4a",
-  "editorbackground": "#353535"
+  "background": "#2b2b2b",
+  "primary": "#e0e0e0"
 }
