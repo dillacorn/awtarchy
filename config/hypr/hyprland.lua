@@ -1434,12 +1434,12 @@ hl.window_rule({ match = { class = "^(wofi)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(Spotify)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { title = "^(YouTube Music|YouTube Music - .+ - YouTube Music|YouTube Music - 1\\. YouTube Music)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(com\\.github\\.th_ch\\.youtube_music|brave-music\\.youtube\\.com__-.*)$" }, opacity = "0.85 0.85" })
-hl.window_rule({ match = { class = "^(pcmanfm-qt|localsend|org\\.pulseaudio\\.pavucontrol|org\\.speedcrunch\\.speedcrunch|net\\.davidotek\\.pupgui2|wallpicker)$" }, opacity = "0.95 0.95" })
+hl.window_rule({ match = { class = "^(pcmanfm-qt|localsend|org\\.pulseaudio\\.pavucontrol|org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)|net\\.davidotek\\.pupgui2|wallpicker)$" }, opacity = "0.95 0.95" })
 
 -- Float + size + center
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.speedcrunch$" }, float = true })
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.speedcrunch$" }, size = { "(monitor_w*0.15)", "(monitor_h*0.55)" } })
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.speedcrunch$" }, center = true })
+hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, float = true })
+hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, size = { "(monitor_w*0.15)", "(monitor_h*0.55)" } })
+hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, center = true })
 
 hl.window_rule({ match = { class = "^org\\.pulseaudio\\.pavucontrol$" }, float = true })
 hl.window_rule({ match = { class = "^org\\.pulseaudio\\.pavucontrol$" }, size = { "(monitor_w*0.55)", "(monitor_h*0.70)" } })
