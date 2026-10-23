@@ -28,9 +28,9 @@ still runs Fastfetch, the helper:
 It does not remove Fastfetch, change `~/.config/fastfetch`, modify
 `/usr/share`, change the login shell, or touch Fish files with custom
 active commands or existing greeting overrides. Re-running the updater
-does not repeat the edit or create extra backups. Updating with
-`awtarchy git update --branch investigate/cachyos-compatibility` is
-sufficient to test this behavior on an existing installation.
+does not repeat the edit or create extra backups. On an existing installation, use `awtarchy update` to apply the latest
+published Awtarchy configuration. The maintenance runtime may refresh separately
+from `main`.
 
 Custom Fish configurations are deliberately preserved. Users with
 customized startup files who also want to disable their greeting can add
