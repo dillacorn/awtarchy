@@ -126,7 +126,10 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp
     legacy_class = r"org\\.speedcrunch\\.speedcrunch"
     new_class = r"org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)"
     assert current.count(new_class) == 4
-    original = current.replace(new_class, legacy_class)
+    new_size = "size = { 347, 510 }"
+    old_size = 'size = { "(monitor_w*0.15)", "(monitor_h*0.55)" }'
+    assert current.count(new_size) == 1
+    original = current.replace(new_class, legacy_class).replace(new_size, old_size)
     # An unrelated user edit and existing rules must survive exactly.
     original += "\n-- custom user rule, leave unchanged\n"
     live.write_text(original, encoding="utf-8")
@@ -135,7 +138,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp
          str(ROOT / "config/hypr/hyprland.lua"), str(output)],
         text=True, capture_output=True, check=True,
     )
-    assert "Migrated 4" in result.stdout
+    assert "Migrated 5" in result.stdout
     assert output.read_text(encoding="utf-8") == (
         current + "\n-- custom user rule, leave unchanged\n"
     ), "SpeedCrunch migration changed unrelated Hyprland content"
@@ -149,6 +152,26 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp
         check=True, capture_output=True, text=True,
     )
     assert not output.exists(), "SpeedCrunch migration is not idempotent"
+
+    # Already-updated class with old stock dimensions must migrate independently.
+    live.write_text(current.replace(new_size, old_size), encoding="utf-8")
+    subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    assert output.read_text(encoding="utf-8") == current
+    output.unlink()
+
+    # A user-customized size must not be replaced.
+    custom = current.replace(new_size, "size = { 420, 540 }")
+    live.write_text(custom, encoding="utf-8")
+    subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    assert not output.exists(), "user-customized SpeedCrunch dimensions were modified"
 
     # Do not overwrite incomplete or intentionally customized rule sets.
     float_rule = next(
@@ -181,4 +204,4 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp
         "ambiguous duplicate SpeedCrunch rules should be rejected"
     )
 
-print("SpeedCrunch compatibility tests passed (9 themes, window rules, switching, preserved-config migration).")
+print("SpeedCrunch compatibility tests passed (9 themes, 347x510 geometry, preserved-config migration).")
