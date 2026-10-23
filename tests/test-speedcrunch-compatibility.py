@@ -151,8 +151,12 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp
     assert not output.exists(), "SpeedCrunch migration is not idempotent"
 
     # Do not overwrite incomplete or intentionally customized rule sets.
+    float_rule = next(
+        line for line in original.splitlines()
+        if legacy_class in line and ", float = true" in line
+    )
     incomplete = original.replace(
-        'float = true })', 'float = false })', 1
+        float_rule, float_rule.replace("float = true", "float = false"), 1
     )
     live.write_text(incomplete, encoding="utf-8")
     subprocess.run(
