@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Migrate only Awtarchy's old SpeedCrunch class rules in preserved Hyprland Lua.
+"""Migrate stock SpeedCrunch window rules in a preserved Hyprland Lua config.
 
-Leave every unrelated line, user override, and custom rule untouched. Generate
-a candidate for the existing updater's validation, backup, and rollback path.
+Replace only recognized Awtarchy defaults. Leave unrelated window rules,
+user-selected sizes, and other customizations untouched. The updater handles
+candidate validation, backups, and rollback before installing this output.
 """
 
 from pathlib import Path
@@ -10,6 +11,8 @@ import sys
 
 OLD_CLASS = r"org\\.speedcrunch\\.speedcrunch"
 NEW_CLASS = r"org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)"
+OLD_SIZE = 'size = { "(monitor_w*0.15)", "(monitor_h*0.55)" }'
+NEW_SIZE = "size = { 347, 510 }"
 RULES = ("opacity", "float", "size", "center")
 
 
@@ -49,43 +52,59 @@ def migrate(live: Path, staged: Path, output: Path) -> int:
     for kind in RULES:
         if sum(rule_kind(line, new_rules[kind]) == kind for line in target_lines) != 1:
             raise ValueError(f"staged Awtarchy SpeedCrunch {kind} rule is missing or ambiguous")
+    target_size_rule = next(
+        line for line in target_lines
+        if rule_kind(line, new_rules["size"]) == "size"
+    )
+    if NEW_SIZE not in target_size_rule:
+        raise ValueError("staged Awtarchy SpeedCrunch size no longer matches the migration")
 
     lines = original.splitlines(keepends=True)
-    matches: dict[str, int] = {}
+    old_matches: dict[str, int] = {}
     for index, line in enumerate(lines):
         for kind in RULES:
             if rule_kind(line, old_rules[kind]) == kind:
-                if kind in matches:
+                if kind in old_matches:
                     raise ValueError(f"duplicate legacy SpeedCrunch {kind} rule")
-                matches[kind] = index
+                old_matches[kind] = index
                 break
 
-    if not matches:
-        return 0
-    # A partial set might reflect intentional customization: change nothing.
-    if set(matches) != set(RULES):
+    # A partial legacy set might reflect intentional customization.
+    if old_matches and set(old_matches) != set(RULES):
         print("SpeedCrunch rule migration skipped: incomplete legacy rule set.", file=sys.stderr)
         return 0
 
-    # Preserve all properties and exact formatting. Change only the class regex.
-    for kind, index in matches.items():
+    count = 0
+    for kind, index in old_matches.items():
         line = lines[index]
         old = old_rules[kind]
-        new = new_rules[kind]
         if line.count(old) != 1:
             raise ValueError(f"legacy SpeedCrunch {kind} class is ambiguous")
-        lines[index] = line.replace(old, new, 1)
+        lines[index] = line.replace(old, new_rules[kind], 1)
+        count += 1
 
-    output.write_text("".join(lines), encoding="utf-8")
-    return len(matches)
+    size_matches = [
+        index for index, line in enumerate(lines)
+        if rule_kind(line, new_rules["size"]) == "size"
+    ]
+    if len(size_matches) > 1:
+        raise ValueError("duplicate SpeedCrunch size rules")
+    if size_matches:
+        index = size_matches[0]
+        if OLD_SIZE in lines[index]:
+            if lines[index].count(OLD_SIZE) != 1:
+                raise ValueError("ambiguous legacy SpeedCrunch size")
+            lines[index] = lines[index].replace(OLD_SIZE, NEW_SIZE, 1)
+            count += 1
+
+    if count:
+        output.write_text("".join(lines), encoding="utf-8")
+    return count
 
 
 def main() -> int:
     if len(sys.argv) != 4:
-        print(
-            "usage: migrate-speedcrunch-hyprland.py LIVE STAGED OUTPUT",
-            file=sys.stderr,
-        )
+        print("usage: migrate-speedcrunch-hyprland.py LIVE STAGED OUTPUT", file=sys.stderr)
         return 2
     try:
         count = migrate(*(Path(arg) for arg in sys.argv[1:]))
@@ -93,7 +112,7 @@ def main() -> int:
         print(f"SpeedCrunch rule migration: {exc}", file=sys.stderr)
         return 1
     if count:
-        print(f"Migrated {count} legacy SpeedCrunch rules in preserved Hyprland Lua.")
+        print(f"Migrated {count} legacy SpeedCrunch rule or size changes in preserved Hyprland Lua.")
     return 0
 
 
