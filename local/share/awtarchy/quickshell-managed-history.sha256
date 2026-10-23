@@ -1603,3 +1603,6 @@ dbcedd9e45ae53c7c3ef1aca1a19d16c27d8a8c471379808a7d4d130950f6633	.config/hypr/sc
 
 # SpeedCrunch Qt 6 window-class rules (legacy history retained).
 2c47c30586f81d04b522728bb62b7d2358ab7ccb24a380b972e08e085eb09a38	.config/hypr/hyprland.lua
+
+# SpeedCrunch user-preferred 347x510 floating size.
+4160a3d98506338210f1b0e38ea59260b9bc960917bfa06b569ea2e9debd9eed	.config/hypr/hyprland.lua
