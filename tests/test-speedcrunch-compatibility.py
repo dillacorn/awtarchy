@@ -112,4 +112,69 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-") as temp:
         active = (home / ".local/state/awtarchy/active-theme").read_text().strip()
         assert active == theme_name, f"incorrect theme state for {theme_name}"
 
-print("SpeedCrunch compatibility tests passed (9 themes, window rules, switching).")
+MIGRATOR = ROOT / "local/share/awtarchy/migrate-speedcrunch-hyprland.py"
+RUNTIME = ROOT / "local/share/awtarchy/awtarchy-runtime.sh"
+assert "migrate_legacy_speedcrunch_hyprland \"$repo_dir\" \"$target_home\"" in (
+    RUNTIME.read_text(encoding="utf-8")
+), "preserved config updater must invoke the SpeedCrunch migration"
+
+with tempfile.TemporaryDirectory(prefix="awtarchy-speedcrunch-migrate-") as temp:
+    tempdir = Path(temp)
+    live = tempdir / "hyprland.lua"
+    output = tempdir / "migrated.lua"
+    current = lua
+    legacy_class = r"org\\.speedcrunch\\.speedcrunch"
+    new_class = r"org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)"
+    assert current.count(new_class) == 4
+    original = current.replace(new_class, legacy_class)
+    # An unrelated user edit and existing rules must survive exactly.
+    original += "\n-- custom user rule, leave unchanged\n"
+    live.write_text(original, encoding="utf-8")
+    result = subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        text=True, capture_output=True, check=True,
+    )
+    assert "Migrated 4" in result.stdout
+    assert output.read_text(encoding="utf-8") == (
+        current + "\n-- custom user rule, leave unchanged\n"
+    ), "SpeedCrunch migration changed unrelated Hyprland content"
+
+    # Already-migrated configs require no write or backup.
+    live.write_text(output.read_text(encoding="utf-8"), encoding="utf-8")
+    output.unlink()
+    subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    assert not output.exists(), "SpeedCrunch migration is not idempotent"
+
+    # Do not overwrite incomplete or intentionally customized rule sets.
+    incomplete = original.replace(
+        'float = true })', 'float = false })', 1
+    )
+    live.write_text(incomplete, encoding="utf-8")
+    subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        check=True, capture_output=True, text=True,
+    )
+    assert not output.exists(), "incomplete user-customized rules were modified"
+
+    # Duplicate managed rules are ambiguous and must not be migrated.
+    duplicate = next(
+        line for line in original.splitlines()
+        if "speedcrunch" in line and ", float = true" in line
+    )
+    live.write_text(original + duplicate + "\n", encoding="utf-8")
+    result = subprocess.run(
+        ["python3", str(MIGRATOR), str(live),
+         str(ROOT / "config/hypr/hyprland.lua"), str(output)],
+        capture_output=True, text=True,
+    )
+    assert result.returncode != 0 and not output.exists(), (
+        "ambiguous duplicate SpeedCrunch rules should be rejected"
+    )
+
+print("SpeedCrunch compatibility tests passed (9 themes, window rules, switching, preserved-config migration).")
