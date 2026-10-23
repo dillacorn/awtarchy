@@ -3528,6 +3528,42 @@ migrate_awtarchy_polkit_autostart() {
 # A preserved pre-v4.0.0 Hyprland file can still launch Alacritty even though
 # the managed release uses Foot. Migrate only exact historical Awtarchy lines;
 # leave custom launchers, unrelated settings and optional Alacritty intact.
+migrate_legacy_speedcrunch_hyprland() {
+  local repo_dir="$1" target_home="$2"
+  local rel=".config/hypr/hyprland.lua"
+  local live="${HOME_DIR}/${rel}" target="${target_home}/${rel}"
+  local migrator="${repo_dir}/local/share/awtarchy/migrate-speedcrunch-hyprland.py"
+  local candidate="${TMPD}/migrate-speedcrunch-hyprland.lua"
+  local item already_changed=0
+
+  [[ "$UPDATE_MODE" == "preserve" ]] || return 0
+  [[ -f "$live" && ! -L "$live" ]] || return 0
+  [[ -f "$target" && ! -L "$target" ]] || return 1
+  [[ -f "$migrator" && ! -L "$migrator" ]] || return 1
+
+  rm -f -- "$candidate"
+  python3 "$migrator" "$live" "$target" "$candidate" || return 1
+  [[ -f "$candidate" ]] || return 0
+
+  if ! validate_candidate "$candidate" "$rel"; then
+    warn "Migrated SpeedCrunch Hyprland candidate failed validation."
+    return 1
+  fi
+  chmod --reference="$live" "$candidate" || return 1
+
+  for item in "${ROLLBACK_PATHS[@]:-}"; do
+    [[ "$item" == "$rel" ]] && already_changed=1
+  done
+  if (( already_changed == 0 )); then
+    snapshot_for_rollback "$rel" "$live"
+    ROLLBACK_PATHS+=("$rel")
+    make_persistent_backup "$live"
+    CHANGED+=("$rel")
+  fi
+  atomic_copy "$candidate" "$live" || return 1
+  log "Updated preserved SpeedCrunch window rules without replacing personal Hyprland settings."
+}
+
 migrate_legacy_foot_hyprland() {
   local repo_dir="$1" target_home="$2"
   local rel=".config/hypr/hyprland.lua"
@@ -10011,6 +10047,11 @@ main() {
   if ! migrate_legacy_foot_hyprland "$repo_dir" "$target_home"; then
     rollback_quickshell_update
     die "Could not migrate preserved Hyprland terminal shortcuts to Foot; user files were rolled back."
+  fi
+
+  if ! migrate_legacy_speedcrunch_hyprland "$repo_dir" "$target_home"; then
+    rollback_quickshell_update
+    die "Could not migrate preserved SpeedCrunch window rules; user files were rolled back."
   fi
 
   log "Refreshing Awtarchy PolicyKit integration..."
