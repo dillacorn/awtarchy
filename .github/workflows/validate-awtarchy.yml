@@ -148,6 +148,7 @@ jobs:
           bash -n tests/test-flyout-runtime-centering.sh
           bash -n tests/test-launcher-fast-path.sh
           bash -n tests/test-foot-terminal-migration.sh
+          bash -n tests/test-foot-ssh-term.sh
           bash -n tests/test-launcher-keyboard-focus.sh
           bash -n tests/test-quickshell-hotkey-latency.sh
           bash -n tests/test-desktop-candidate-validation.sh
@@ -397,6 +398,7 @@ jobs:
           bash tests/test-flyout-runtime-centering.sh
           bash tests/test-launcher-fast-path.sh
           bash tests/test-foot-terminal-migration.sh
+          bash tests/test-foot-ssh-term.sh
           python3 tests/test-foot-live-theme.py
           bash tests/test-launcher-keyboard-focus.sh
           bash tests/test-quickshell-hotkey-latency.sh

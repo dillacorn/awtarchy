@@ -206,8 +206,31 @@ die() { fail "$*"; }
 eval "$repair_definition"
 
 repair_v350_aur_helper_policy_target "$v350_target_home" v3.5.0
-cmp -s "${v350_target_home}/.bashrc" "$BASHRC" \
-  || fail 'v3.5.0 post-release repair does not produce the current fixed bashrc'
+# Compare the exact AUR helper policy, not unrelated newer bashrc additions
+# (for example Foot-specific SSH defaults) absent from the v3.5.0 archive.
+python3 - "$v350_original" "${v350_target_home}/.bashrc" "$BASHRC" <<'PY_CHECK_V350_REPAIR'
+from pathlib import Path
+import sys
+
+original, repaired, current = (Path(p).read_text(encoding="utf-8") for p in sys.argv[1:])
+start = "# Retire public AurGuard commands from shells that source this file after an update.\n"
+end = "\nsysupdate() {\n"
+
+def split_policy(content):
+    if content.count(start) != 1 or content.count(end) != 1:
+        raise SystemExit("FAIL: could not isolate the AUR helper policy")
+    prefix, remainder = content.split(start, 1)
+    policy, suffix = remainder.split(end, 1)
+    return prefix, start + policy, end + suffix
+
+old_prefix, _, old_suffix = split_policy(original)
+new_prefix, new_policy, new_suffix = split_policy(repaired)
+_, expected_policy, _ = split_policy(current)
+if old_prefix != new_prefix or old_suffix != new_suffix:
+    raise SystemExit("FAIL: v3.5.0 AUR helper repair changed unrelated bashrc content")
+if new_policy != expected_policy:
+    raise SystemExit("FAIL: v3.5.0 AUR helper repair does not match current policy")
+PY_CHECK_V350_REPAIR
 
 repair_v350_aur_helper_policy_target "$control_target_home" v3.4.7
 cmp -s "${control_target_home}/.bashrc" "$v350_original" \
