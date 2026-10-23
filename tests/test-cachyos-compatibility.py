@@ -8,15 +8,17 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 RUNTIME = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text()
 DOCS = (ROOT / "docs/cachyos-compatibility.md").read_text()
+RECONCILER = (ROOT / "local/share/awtarchy/awtarchy-package-reconcile.sh").read_text()
+BACKEND = (ROOT / "config/hypr/scripts/hypr_quicksettings.sh").read_text()
 
 
-def function(name: str) -> str:
-    start = re.search(rf"(?m)^{re.escape(name)}\(\)\s*\{{", RUNTIME)
+def function(name: str, source: str = RUNTIME) -> str:
+    start = re.search(rf"(?m)^{re.escape(name)}\(\)\s*\{{", source)
     if start is None:
         raise AssertionError(f"Missing function: {name}")
-    next_fn = re.search(r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{", RUNTIME[start.end():])
-    end = len(RUNTIME) if next_fn is None else start.end() + next_fn.start()
-    return RUNTIME[start.start():end]
+    next_fn = re.search(r"(?m)^[A-Za-z_][A-Za-z0-9_]*\(\)\s*\{", source[start.end():])
+    end = len(source) if next_fn is None else start.end() + next_fn.start()
+    return source[start.start():end]
 
 
 def shell(script: str) -> str:
@@ -112,6 +114,51 @@ install_flatpak_apps_stage
 ''')
         self.assertIn("exists in system scope", output)
         self.assertNotIn("DUPLICATE", output)
+
+    def test_existing_display_manager_is_preserved(self):
+        output = shell(function("install_ly_stage") + r'''
+INSTALL_LY=1
+systemctl() {
+  [[ "$1" == is-enabled && "$2" == --quiet && "$3" == sddm.service ]]
+}
+warn() { printf 'PRESERVED\n'; }
+install_ly_stage
+''')
+        self.assertEqual(output.strip(), "PRESERVED")
+
+    def test_cachyos_network_stays_user_owned(self):
+        source = function("install_arch_repo_apps_stage")
+        reconcile = function("hardware_reconcile")
+        self.assertIn('if is_cachyos_install; then', source)
+        self.assertIn('preserving existing networking, DNS and mDNS services', source)
+        self.assertIn('if ! is_cachyos_install; then\n    configure_mdns_stack', reconcile)
+
+    def test_external_scheduler_survives_session_restore(self):
+        output = shell(function("machine_scheduler_restore", BACKEND) + r'''
+SCHED_EXT_RESTORE_ENABLED=1
+SCHED_EXT_LAST_SELECTED=scx_p2dq
+SCHED_EXT_RUNNING=scx_lavd
+SCHED_EXT_ENABLED=1
+sched_ext_state_load() { :; }
+valid_scheduler() { return 0; }
+refresh_sched_ext() { :; }
+sched_ext_switch_or_start() { printf 'OVERWRITTEN\n'; }
+machine_scheduler_restore
+printf 'PRESERVED\n'
+''')
+        self.assertEqual(output.strip(), "PRESERVED")
+
+    def test_package_dependency_provider_counts_as_installed(self):
+        output = shell(function("package_satisfied", RECONCILER) + r'''
+package_installed() { return 1; }
+pacman() { [[ "$1" == -T && "$2" == quickshell ]]; }
+package_satisfied quickshell
+printf 'SATISFIED\n'
+if package_satisfied missing-package; then
+  printf 'FALSE POSITIVE\n'
+fi
+''')
+        self.assertEqual(output.strip(), "SATISFIED")
 
     def test_stable_documentation(self):
         self.assertIn("awtarchy update", DOCS)
