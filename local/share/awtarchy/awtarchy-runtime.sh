@@ -2525,7 +2525,7 @@ configure_sunshine_awtarchy_hook_stage() {
 
 is_cachyos_install() {
   command -v pacman-conf >/dev/null 2>&1 || return 1
-  pacman-conf --repo-list 2>/dev/null | grep -Eq '^cachyos($|-)' 
+  pacman-conf --repo-list 2>/dev/null | grep -Eq '^cachyos($|-)'
 }
 
 prepare_base_install() {
