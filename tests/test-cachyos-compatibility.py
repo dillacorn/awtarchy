@@ -115,6 +115,30 @@ install_flatpak_apps_stage
         self.assertIn("exists in system scope", output)
         self.assertNotIn("DUPLICATE", output)
 
+    def test_cachyos_legacy_config_and_backups_are_preserved(self):
+        output = shell(function("remove_legacy_shell_files_stage") + r'''
+is_cachyos_install() { return 0; }
+log() { printf 'PRESERVED\n'; }
+remove_legacy_shell_path_stage() { printf 'REMOVED\n'; }
+remove_legacy_shell_files_stage
+''')
+        self.assertEqual(output.strip(), "PRESERVED")
+
+    def test_untracked_cachyos_packages_are_preserved(self):
+        output = shell(function("remove_legacy_shell_packages_stage") + r'''
+HOME_DIR=/nonexistent/awtarchy-test-home
+AWTARCHY_MANAGED_PACKAGES_FILE=/nonexistent/awtarchy-managed-packages
+is_cachyos_install() { return 0; }
+log() { :; }
+warn() { printf 'PRESERVED\n'; }
+pacman() {
+  if [[ "$1" == -Qq ]]; then printf 'waybar\n'; return 0; fi
+  printf 'REMOVED\n'
+}
+remove_legacy_shell_packages_stage
+''')
+        self.assertEqual(output.strip(), "PRESERVED")
+
     def test_existing_display_manager_is_preserved(self):
         output = shell(function("install_ly_stage") + r'''
 INSTALL_LY=1
