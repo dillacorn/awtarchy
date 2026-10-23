@@ -2523,6 +2523,11 @@ configure_sunshine_awtarchy_hook_stage() {
   fi
 }
 
+is_cachyos_install() {
+  command -v pacman-conf >/dev/null 2>&1 || return 1
+  pacman-conf --repo-list 2>/dev/null | grep -Eq '^cachyos($|-)' 
+}
+
 prepare_base_install() {
   local required_space_mb=1024 available_space_mb
   available_space_mb="$(df --output=avail / | tail -1)"
@@ -2531,10 +2536,13 @@ prepare_base_install() {
 
   log "Updating package list and installing bootstrap packages..."
   if ! retry_command pacman -Syu --noconfirm; then
+    if is_cachyos_install; then
+      die "System update failed on CachyOS. Leaving Arch and CachyOS mirrorlists unchanged; repair the failing repositories with the appropriate CachyOS tools, then retry."
+    fi
     warn "System update failed. Trying reflector mirror refresh."
     pacman -S --needed --noconfirm reflector || true
     retry_command reflector --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist
-    retry_command pacman -Syu --noconfirm || exit 1
+    retry_command pacman -Syu --noconfirm || return 1
   fi
 
   retry_command pacman -S --needed --noconfirm git ipcalc dos2unix reflector || exit 1
@@ -2570,8 +2578,8 @@ reconcile_power_profile_backend() {
 install_arch_repo_apps_stage() {
   (( INSTALL_ARCH == 1 )) || { warn "Skipping Arch repo application install."; return 0; }
 
-  if ! grep -q "^\[multilib\]" /etc/pacman.conf || ! grep -q "^Include = /etc/pacman.d/mirrorlist" /etc/pacman.conf; then
-    die "Multilib repository is not enabled. Enable [multilib] in /etc/pacman.conf, then rerun."
+  if ! command -v pacman-conf >/dev/null 2>&1 || ! pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib; then
+    die "Multilib repository is not enabled in effective pacman configuration. Enable it, then rerun."
   fi
 
   if pacman -Qi jack2 >/dev/null 2>&1; then
@@ -3012,12 +3020,18 @@ install_flatpak_apps_stage() {
   log "Updating installed Flatpak apps in ${scope} scope..."
   run_flatpak_scope "$scope" update -y || true
 
-  local app name i
+  local app name i other_scope
+  other_scope=user
+  [[ "$scope" == user ]] && other_scope=system
   for i in "${!FLATPAK_SELECTED_IDS[@]}"; do
     app="${FLATPAK_SELECTED_IDS[$i]}"
     name="${FLATPAK_SELECTED_NAMES[$i]}"
     if run_flatpak_scope "$scope" list --app --columns=application | grep -Fxq "$app"; then
       printf '%s\n' "${COLOR_YELLOW}${name} (${app}) already installed. Skipping...${COLOR_RESET}"
+      continue
+    fi
+    if run_flatpak_scope "$other_scope" list --app --columns=application | grep -Fxq "$app"; then
+      log "${name} (${app}) exists in ${other_scope} scope; keeping that installation instead of duplicating it."
       continue
     fi
     local retries=3 count=0
@@ -4566,13 +4580,8 @@ backup_root_file(){
 }
 
 multilib_enabled(){
-  [[ -f /etc/pacman.conf ]] || return 1
-  awk '
-    $0 ~ /^[[:space:]]*#/{next}
-    $0 ~ /^\[multilib\]/{found=1}
-    found && $0 ~ /^Include[[:space:]]*=/{ok=1}
-    END{exit (ok?0:1)}
-  ' /etc/pacman.conf
+  command -v pacman-conf >/dev/null 2>&1 || return 1
+  pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib
 }
 
 pacman_install(){
@@ -5410,6 +5419,13 @@ install_nvidia_auto(){
     log "  - modern -> install nvidia-open* (Arch/Cachy strategy below)"
     log "  - older  -> install nvidia-580xx-dkms stack from AUR"
     nvidia_plan_report
+    return 0
+  fi
+
+  # A working NVIDIA driver is user-owned system state, even when its packages
+  # came from CachyOS instead of an Arch repository.
+  if command -v nvidia-smi >/dev/null 2>&1 && timeout 5s nvidia-smi -L >/dev/null 2>&1; then
+    log "Working NVIDIA driver detected; preserving installed driver packages."
     return 0
   fi
 
