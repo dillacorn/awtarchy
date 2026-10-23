@@ -374,7 +374,10 @@ machine_scheduler_restore() {
   valid_scheduler "$SCHED_EXT_LAST_SELECTED" || return 0
 
   refresh_sched_ext
+  # A running scheduler may have been started by CachyOS or another service.
+  # Passive Awtarchy session restore must never replace it.
   [[ "$SCHED_EXT_RUNNING" == "$SCHED_EXT_LAST_SELECTED" ]] && return 0
+  [[ "$SCHED_EXT_ENABLED" == '1' ]] && return 0
   sched_ext_deps_ok || return 0
 
   if (( EUID != 0 )) && ! sudo_can_run_scxctl_noninteractive; then

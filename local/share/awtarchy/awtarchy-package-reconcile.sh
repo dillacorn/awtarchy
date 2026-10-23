@@ -329,6 +329,8 @@ package_installed() {
 package_satisfied() {
   local pkg="$1"
   package_installed "$pkg" && return 0
+  # pacman -T also recognizes dependency providers, including CachyOS alternatives.
+  pacman -T "$pkg" >/dev/null 2>&1 && return 0
 
   case "$pkg" in
     zathura-pdf-mupdf)
