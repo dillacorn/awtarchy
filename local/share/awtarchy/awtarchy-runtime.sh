@@ -4139,6 +4139,10 @@ remove_legacy_shell_packages_stage() {
   done
 
   for pkg in "${installed[@]}"; do
+    if is_cachyos_install && ! grep -Fxq -- "$pkg" "$managed_file" 2>/dev/null; then
+      warn "Preserving untracked CachyOS desktop package: ${pkg}"
+      continue
+    fi
     log "Removing retired Awtarchy shell package: ${pkg}"
     if pacman -Rns --noconfirm "$pkg"; then
       if [[ -f "$managed_file" ]]; then
@@ -4180,6 +4184,13 @@ remove_legacy_shell_path_stage() {
 }
 
 remove_legacy_shell_files_stage() {
+  # CachyOS may already have a user-owned desktop. Without ownership records,
+  # deleting a familiar path (or its backups) is not safe.
+  if is_cachyos_install; then
+    log "CachyOS: preserving legacy desktop files, customizations and backups."
+    return 0
+  fi
+
   local scripts_dir="${HOME_DIR}/.config/hypr/scripts"
   local applications_dir="${HOME_DIR}/.local/share/applications"
   local obsolete
