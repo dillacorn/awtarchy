@@ -14,10 +14,12 @@ RULES = ("opacity", "float", "size", "center")
 
 
 def rule_kind(line: str, class_pattern: str) -> str | None:
-    if "hl.window_rule(" not in line or f"class = \"{class_pattern}\"" not in line:
+    if "hl.window_rule(" not in line or class_pattern not in line:
         return None
-    if ", opacity = " in line:
+    if ", opacity = " in line and "class = " in line:
         return "opacity"
+    if f'class = "{class_pattern}"' not in line:
+        return None
     if ", float = true" in line:
         return "float"
     if ", size = " in line:
@@ -31,10 +33,10 @@ def migrate(live: Path, staged: Path, output: Path) -> int:
     original = live.read_text(encoding="utf-8")
     target = staged.read_text(encoding="utf-8")
     old_rules = {
-        "opacity": f"org\\\\.speedcrunch\\\\.speedcrunch",
-        "float": f"^org\\\\.speedcrunch\\\\.speedcrunch$",
-        "size": f"^org\\\\.speedcrunch\\\\.speedcrunch$",
-        "center": f"^org\\\\.speedcrunch\\\\.speedcrunch$",
+        "opacity": OLD_CLASS,
+        "float": f"^{OLD_CLASS}$",
+        "size": f"^{OLD_CLASS}$",
+        "center": f"^{OLD_CLASS}$",
     }
     new_rules = {
         "opacity": NEW_CLASS,
