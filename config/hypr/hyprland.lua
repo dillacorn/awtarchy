@@ -1438,7 +1438,7 @@ hl.window_rule({ match = { class = "^(pcmanfm-qt|localsend|org\\.pulseaudio\\.pa
 
 -- Float + size + center
 hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, float = true })
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, size = { "(monitor_w*0.15)", "(monitor_h*0.55)" } })
+hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, size = { 347, 510 } })
 hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, center = true })
 
 hl.window_rule({ match = { class = "^org\\.pulseaudio\\.pavucontrol$" }, float = true })
