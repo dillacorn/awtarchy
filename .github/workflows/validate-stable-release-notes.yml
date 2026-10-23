@@ -39,3 +39,97 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v405-foot-ssh:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'release: publish v4.0.5 Foot SSH (one-use)' &&
+      github.event.pull_request.head.ref == 'automation/release-v4.0.5-foot-ssh-once' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Check out approved merged main
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Validate and publish v4.0.5 Foot SSH
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected="607eda48bb12d20ea56045ad5129105e8ad4f203"
+          version="v4.0.5"
+          title="Awtarchy v4.0.5 Foot SSH Compatibility"
+          main_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq .commit.sha)"
+          if [[ "$main_sha" != "$expected" ]]; then
+            printf "STOP: main moved from approved release commit (%s != %s)\n" "$main_sha" "$expected" >&2
+            exit 1
+          fi
+          latest="$(gh release view --json tagName --jq .tagName)"
+          if [[ "$latest" != "v4.0.4" ]]; then
+            printf "STOP: latest stable release changed to %s\n" "$latest" >&2
+            exit 1
+          fi
+          if gh release view "$version" --json tagName >/dev/null 2>&1; then
+            echo "STOP: v4.0.5 release already exists" >&2
+            exit 1
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" >/dev/null 2>&1; then
+            echo "STOP: v4.0.5 tag already exists" >&2
+            exit 1
+          fi
+          notes="$RUNNER_TEMP/v4.0.5.md"
+          previous="$RUNNER_TEMP/v4.0.4.md"
+          published="$RUNNER_TEMP/v4.0.5-published.md"
+          cat >"$notes" <<'RELEASE_NOTES'
+          # Awtarchy v4.0.5 Foot SSH Compatibility
+          
+          This patch release improves SSH compatibility between Foot and remote systems without Foot terminal definitions.
+          
+          ## Install and update
+          
+          - [Install](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Update](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md), or run `awtarchy update`.
+          
+          ## Fixes
+          
+          - SSH launched from interactive Bash under Foot (`TERM=foot` or `foot-direct`) advertises `xterm-256color` to the remote session.
+          - Foot retains its original local terminal type. Non-Foot SSH sessions, arguments, and exit codes are unchanged.
+          - No modifications to remote devices, `~/.ssh/config`, or Foot configuration are necessary.
+          
+          ## Validation
+          
+          - [PR #301](https://github.com/dillacorn/awtarchy/pull/301) passed all 13 GitHub Actions checks, including a focused SSH stub regression test.
+          - Regression coverage validates both Foot terminal types, other terminals, SSH argument preservation, and nonzero exit status handling.
+          RELEASE_NOTES
+          gh release view v4.0.4 --json body --jq .body >"$previous"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" --notes "$notes" --previous "$previous"
+          gh release create "$version" --target "$expected" --title "$title" --notes-file "$notes" --latest
+          gh release view "$version" --json body --jq .body >"$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" --notes "$published" --previous "$previous"
+          python3 - "$notes" "$published" <<'VERIFY_NOTES'
+          from pathlib import Path
+          import sys
+          expected = Path(sys.argv[1]).read_text(encoding="utf-8").rstrip("\r\n")
+          published = Path(sys.argv[2]).read_text(encoding="utf-8").rstrip("\r\n")
+          if expected != published:
+              raise SystemExit("Published release body does not match validated notes")
+          print("PASS: published release body matches proposed notes")
+          VERIFY_NOTES
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$version" | jq -e \
+            --arg title "$title" --arg target "$expected" \
+            '.tag_name == "v4.0.5" and .name == $title and .draft == false and .prerelease == false and .target_commitish == $target'
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$version" --jq .object.sha)"
+          if [[ "$tag_sha" != "$expected" ]]; then
+            printf "STOP: published tag points to unexpected commit %s\n" "$tag_sha" >&2
+            exit 1
+          fi
+          echo "PASS: v4.0.5 release published at approved merge commit $expected"
+          gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/automation/release-v4.0.5-foot-ssh-once" >/dev/null \
+            || echo "WARN: helper branch cleanup needs manual follow-up"
