@@ -2625,13 +2625,17 @@ install_arch_repo_apps_stage() {
   fi
 
   log "Configuring system services..."
-  configure_mdns_stack
-  systemctl enable --now avahi-daemon || true
-  if systemctl is-active --quiet unbound; then systemctl disable --now unbound || true; fi
-  systemctl enable --now systemd-resolved || true
-  systemctl stop dnsmasq.service || true
-  systemctl disable dnsmasq.service || true
-  systemctl enable --now NetworkManager || true
+  if is_cachyos_install; then
+    log "CachyOS detected: preserving existing networking, DNS and mDNS services."
+  else
+    configure_mdns_stack
+    systemctl enable --now avahi-daemon || true
+    if systemctl is-active --quiet unbound; then systemctl disable --now unbound || true; fi
+    systemctl enable --now systemd-resolved || true
+    systemctl stop dnsmasq.service || true
+    systemctl disable dnsmasq.service || true
+    systemctl enable --now NetworkManager || true
+  fi
 
   if [[ "$IS_VM" == false ]]; then
     if grep -qi Intel /proc/cpuinfo && [[ "$IS_LAPTOP" == true ]]; then
@@ -3245,7 +3249,15 @@ enable_keyring_pam_stage() {
 
 install_ly_stage() {
   (( INSTALL_LY == 1 )) || { warn "Skipping Ly install."; return 0; }
-  local tty="tty2"
+  local tty="tty2" existing_manager
+
+  # Do not create a competing login manager alongside CachyOS desktop defaults.
+  for existing_manager in sddm.service gdm.service lightdm.service; do
+    if systemctl is-active --quiet "$existing_manager" || systemctl is-enabled --quiet "$existing_manager"; then
+      warn "Existing login manager ${existing_manager} detected; leaving it in place instead of enabling Ly."
+      return 0
+    fi
+  done
 
   log "Installing/enabling Ly on ${tty} for next boot only..."
   if [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
