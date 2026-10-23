@@ -7055,7 +7055,9 @@ hardware_reconcile() {
     ensure_current_hardware_packages
   fi
 
-  configure_mdns_stack
+  if ! is_cachyos_install; then
+    configure_mdns_stack
+  fi
 }
 
 
