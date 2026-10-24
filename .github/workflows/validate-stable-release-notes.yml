@@ -63,10 +63,8 @@ jobs:
           git fetch origin main --tags
           actual_main="$(git rev-parse refs/remotes/origin/main)"
           [[ "$actual_main" == "$expected_main" ]] || { echo "STOP: main changed since approved validation"; exit 1; }
-          if gh release view v4.1.0 --repo dillacorn/awtarchy >/dev/null 2>&1; then echo "STOP: v4.1.0 release already exists"; exit 1; fi
-          if git show-ref --verify --quiet refs/tags/v4.1.0; then echo "STOP: v4.1.0 tag already exists"; exit 1; fi
-          previous_tag="$(gh release view --repo dillacorn/awtarchy --json tagName --jq .tagName)"
-          [[ "$previous_tag" != v4.1.0 ]] || { echo "STOP: latest is v4.1.0"; exit 1; }
+          previous_tag="$(gh release list --repo dillacorn/awtarchy --limit 30 --json tagName,isDraft,isPrerelease --jq '.[] | select(.tagName != "v4.1.0" and .isDraft == false and .isPrerelease == false) | .tagName' | head -n1)"
+          [[ -n "$previous_tag" ]] || { echo "STOP: no previous stable release available for validation"; exit 1; }
           gh release view "$previous_tag" --repo dillacorn/awtarchy --json body --jq .body > "$RUNNER_TEMP/previous-stable.md"
           cat > "$RUNNER_TEMP/v4.1.0-notes.md" <<'AWTARCHY_V410_NOTES'
           # Awtarchy v4.1.0 CachyOS Support
@@ -94,8 +92,13 @@ jobs:
           - Laptop power behavior and less-common existing-system setups remain less broadly tested; CI fixtures do not replace hardware testing.
           AWTARCHY_V410_NOTES
           python3 .github/scripts/validate-stable-release-notes.py --version v4.1.0 --title "$title" --notes "$RUNNER_TEMP/v4.1.0-notes.md" --previous "$RUNNER_TEMP/previous-stable.md"
-          gh release create v4.1.0 --repo dillacorn/awtarchy --target "$expected_main" --title "$title" --notes-file "$RUNNER_TEMP/v4.1.0-notes.md" --latest
-          gh release view v4.1.0 --repo dillacorn/awtarchy --json body --jq .body > "$RUNNER_TEMP/v4.1.0-published.md"
+          if gh release view v4.1.0 --repo dillacorn/awtarchy >/dev/null 2>&1; then
+            echo "v4.1.0 already exists: verifying the published artifact without modifying the release."
+          else
+            if git show-ref --verify --quiet refs/tags/v4.1.0; then echo "STOP: v4.1.0 tag exists without a release"; exit 1; fi
+            gh release create v4.1.0 --repo dillacorn/awtarchy --target "$expected_main" --title "$title" --notes-file "$RUNNER_TEMP/v4.1.0-notes.md" --latest
+          fi
+          gh release view v4.1.0 --repo dillacorn/awtarchy --json body | python3 -c 'import json,sys;sys.stdout.write(json.load(sys.stdin)["body"])' > "$RUNNER_TEMP/v4.1.0-published.md"
           cmp -- "$RUNNER_TEMP/v4.1.0-notes.md" "$RUNNER_TEMP/v4.1.0-published.md"
           python3 .github/scripts/validate-stable-release-notes.py --version v4.1.0 --title "$title" --notes "$RUNNER_TEMP/v4.1.0-published.md" --previous "$RUNNER_TEMP/previous-stable.md"
           metadata="$(gh release view v4.1.0 --repo dillacorn/awtarchy --json name,tagName,isDraft,isPrerelease,targetCommitish,url)"
