@@ -44,7 +44,7 @@ class GpuCursorPolicyTests(TestCase):
 
     def add_card(self, number, pci_vendor):
         device = self.sysfs / f"card{number}" / "device"
-        device.mkdir(parents=True)
+        device.mkdir(parents=True, exist_ok=True)
         (device / "vendor").write_text(pci_vendor + "\n", encoding="ascii")
 
     def assert_mode(self, expected):
