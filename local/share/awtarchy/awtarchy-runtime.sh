@@ -4334,6 +4334,13 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
+  # The installer checkout may be root-owned; pass the trusted helper via stdin.
+  local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"
+  if [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
+    run_as_target python3 - --config "${HOME_DIR}/.config/hypr/hyprland.lua" <"$gpu_cursor_helper" \
+      || die "Could not apply the GPU-specific Hyprland cursor policy."
+  fi
   # CachyOS sources its stock Fish greeting from the user's config.fish.
   # Respect custom greetings; adjust only the untouched distro template.
   local cachyos_fish_helper="${REPO_DIR}/local/share/awtarchy/cachyos-fish-greeting.py"
@@ -9980,6 +9987,16 @@ main() {
   repair_v347_idle_inhibitor_feedback_target "$target_home" "$tag"
   repair_v350_aur_helper_policy_target "$target_home" "$tag"
   repair_v353_update_notifier_target "$target_home" "$tag"
+
+  # Configure the staged release BEFORE building the update plan, so the GPU
+  # choice participates in normal review, three-way merge, and rollback.
+  local gpu_cursor_helper="${repo_dir}/local/share/awtarchy/awtarchy-gpu-cursor.py"
+  if [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
+    python3 "$gpu_cursor_helper" \
+      --config "${target_home}/.config/hypr/hyprland.lua" \
+      --fallback "${HOME_DIR}/.config/hypr/hyprland.lua" \
+      || die "Could not prepare the GPU-specific Hyprland cursor policy; live files were not changed."
+  fi
 
   bootstrap_previous_baseline "$active_theme"
   augment_baseline_from_local_git_history "$target_home"
