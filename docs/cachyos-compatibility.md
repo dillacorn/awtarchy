@@ -1,7 +1,14 @@
 # CachyOS-specific Awtarchy behavior
 
-Awtarchy targets a minimal Arch installation. CachyOS can supply additional
-system-wide shell defaults that are not part of Awtarchy's configuration.
+**CachyOS is an officially supported Awtarchy base starting with v4.1.0.**
+Vanilla Arch Linux remains recommended. Community testing has verified a CachyOS
+desktop with NVIDIA graphics, Ly login, working networking, Quickshell, and Yazi.
+Laptop power handling and some unusual existing-system configurations have not
+had comparable hardware coverage. See the [installation guide](../INSTALL.md).
+
+Awtarchy respects existing CachyOS drivers, network/DNS services, display
+managers, and desktop files where possible. CachyOS also supplies shell defaults
+that are different from a minimal Arch installation.
 
 ## Fastfetch when opening Foot
 
@@ -28,9 +35,10 @@ still runs Fastfetch, the helper:
 It does not remove Fastfetch, change `~/.config/fastfetch`, modify
 `/usr/share`, change the login shell, or touch Fish files with custom
 active commands or existing greeting overrides. Re-running the updater
-does not repeat the edit or create extra backups. On an existing installation, use `awtarchy update` to apply the latest
-published Awtarchy configuration. The maintenance runtime may refresh separately
-from `main`.
+does not repeat the edit or create extra backups.
+
+On an existing installation, run `awtarchy update` to apply the latest published
+Awtarchy configuration. The maintenance runtime can refresh from `main` separately.
 
 Custom Fish configurations are deliberately preserved. Users with
 customized startup files who also want to disable their greeting can add
@@ -65,3 +73,12 @@ or angle deltas before proposing a device-specific workaround.
 
 - [Qt WheelEvent semantics](https://doc.qt.io/qt-6/qml-qtquick-wheelevent.html)
 - [Quickshell wheel investigation](https://github.com/dillacorn/awtarchy/issues/286)
+
+## NVIDIA cursor handling
+
+During installation and configuration updates, Awtarchy configures Hyprland's
+`cursor.no_hardware_cursors` according to detected GPU hardware. NVIDIA systems
+(including hybrid NVIDIA + Intel/AMD systems) use `1` (software cursor); AMD/Intel-only
+systems use `2` (automatic). When GPU detection is inconclusive, the existing
+cursor setting is retained when available. Personal Hyprland configurations
+continue through Awtarchy's usual update backup and rollback handling.
