@@ -63,8 +63,8 @@ jobs:
           git fetch origin main --tags
           actual_main="$(git rev-parse refs/remotes/origin/main)"
           [[ "$actual_main" == "$expected_main" ]] || { echo "STOP: main changed since approved validation"; exit 1; }
-          previous_tag="$(gh release list --repo dillacorn/awtarchy --limit 30 --json tagName,isDraft,isPrerelease --jq '.[] | select(.tagName != "v4.1.0" and .isDraft == false and .isPrerelease == false) | .tagName' | head -n1)"
-          [[ -n "$previous_tag" ]] || { echo "STOP: no previous stable release available for validation"; exit 1; }
+          previous_tag="$(gh release list --repo dillacorn/awtarchy --limit 30 --json tagName,isDraft,isPrerelease --jq '[.[] | select(.tagName != "v4.1.0" and .isDraft == false and .isPrerelease == false)] | .[0].tagName')"
+          [[ -n "$previous_tag" && "$previous_tag" != null ]] || { echo "STOP: no previous stable release available for validation"; exit 1; }
           gh release view "$previous_tag" --repo dillacorn/awtarchy --json body --jq .body > "$RUNNER_TEMP/previous-stable.md"
           cat > "$RUNNER_TEMP/v4.1.0-notes.md" <<'AWTARCHY_V410_NOTES'
           # Awtarchy v4.1.0 CachyOS Support
