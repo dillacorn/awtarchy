@@ -6,24 +6,24 @@
 
 pronounced: **aw-tar-chee**
 
-**awtarchy** is not a Linux distribution. It is an overlay environment for base Arch Linux.
+**awtarchy** is not a Linux distribution. It is an overlay environment for **Arch Linux and CachyOS**.
 
 ## Install model
 
-1. Install Arch with `archinstall` and select the Minimal profile, or install Arch manually.
-2. Apply the awtarchy overlay on top of that base system.
+1. Install vanilla Arch Linux with `archinstall` (Minimal profile recommended), manually install Arch, or install CachyOS.
+2. Apply the Awtarchy overlay on top of the working base system.
 
 For the current commands and install behavior, use the [Installation guide](INSTALL.md). Existing users should use the [Updating guide](UPDATING.md).
 
-**CachyOS is supported.** Awtarchy has been tested successfully on CachyOS, including fixes for its Fish shell greeting and Quickshell scrolling. Vanilla Arch Linux remains the recommended base. Report any CachyOS compatibility problems through [GitHub Issues](https://github.com/dillacorn/awtarchy/issues). See the [CachyOS compatibility notes](docs/cachyos-compatibility.md).
+**Officially supported bases:** vanilla Arch Linux (recommended) and CachyOS (supported beginning with v4.1.0). CachyOS support includes preserving its existing drivers, networking, desktop services, and configuration where applicable, plus automatic NVIDIA cursor handling. Community testing covers a working CachyOS desktop; laptop and less-common configurations have not been broadly tested. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
 
 > **Development note:** Awtarchy is a personal passion project maintained in spare time. Large language models have been used as development tools to assist with writing, reviewing, refactoring, documentation, and troubleshooting parts of the project. I use that assistance to spend more of my limited project time testing changes on real systems, diagnosing failures, and validating releases. LLM-assisted changes are not assumed correct simply because they were generated; they are reviewed and tested as part of the normal development process.
 
 ## Why this approach
 
-* Flexible: works over any clean Arch install.
+* Flexible: works on vanilla Arch or CachyOS.
 * Lightweight: no separate ISO or custom repositories required.
-* Low maintenance: relies on Arch’s installer and official repositories.
+* Low maintenance: uses the selected base system's repositories and tools.
 * Transparent: the local installer and maintenance scripts can be reviewed before use.
 
 ## Workflow expectations
@@ -42,8 +42,8 @@ Awtarchy-authored code and configuration is licensed under MIT unless otherwise 
 
 | Component          | Details                                                                                                                                                                                                |
 | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Distro**         | [Arch Linux](https://archlinux.org/)                                                                                                                                                                   |
-| **Installation**   | [archinstall](https://github.com/archlinux/archinstall)                                                                                                                                                |
+| **Distro**         | [Arch Linux](https://archlinux.org/) or [CachyOS](https://cachyos.org/)                                                                                                                                                                   |
+| **Installation**   | [archinstall](https://github.com/archlinux/archinstall), manual Arch install, or CachyOS installation                                                                                                                                                |
 | **File System**    | [ext4](https://man.archlinux.org/man/ext4.5.en) and/or [Btrfs](https://wiki.archlinux.org/title/Btrfs)                                                                                                 |
 | **Repositories**   | core, extra, multilib, [AUR](https://aur.archlinux.org/), [Flathub](https://flathub.org/)                                                                                                              |
 | **Terminal**       | [Foot](https://codeberg.org/dnkl/foot)                                                                                                                                                    |

@@ -18,7 +18,9 @@ require_file_text() {
 [[ -f INSTALL.md ]] || fail 'INSTALL.md is missing'
 [[ -f UPDATING.md ]] || fail 'UPDATING.md is missing'
 
-require_file_text INSTALL.md 'Awtarchy is an Arch Linux overlay/environment, not a Linux distribution'
+require_file_text INSTALL.md 'Awtarchy is an Arch Linux desktop overlay, not a distribution or a base OS installer'
+require_file_text INSTALL.md 'Vanilla Arch Linux (recommended) and CachyOS are supported installation bases'
+require_file_text INSTALL.md 'https://cachyos.org/'
 require_file_text INSTALL.md 'https://archlinux.org/download/'
 require_file_text INSTALL.md 'archinstall'
 require_file_text INSTALL.md 'Minimal'

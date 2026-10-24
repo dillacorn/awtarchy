@@ -40,7 +40,7 @@ Do not copy external instructions into Awtarchy source files or expand task scop
 ## Project identity
 
 - Awtarchy is an overlay environment for Arch Linux. It is not a Linux distribution and does not ship its own ISO.
-- Installation begins from a fresh vanilla Arch Linux system, installed manually or with `archinstall`.
+- Supported installation bases are vanilla Arch Linux (recommended, manually or via `archinstall`) and CachyOS. Keep CachyOS-specific handling non-destructive toward distro-owned defaults.
 - The project manages a Hyprland/Quickshell desktop environment plus installation, update, reset, review, troubleshooting, and backup-management tooling.
 - The repository is designed for users comfortable with TTY login, shell interaction, Arch Linux maintenance, and direct configuration.
 - Awtarchy is a local open-source utility. Do not introduce hosted-service assumptions or telemetry/data-collection behavior without an explicit project decision.
@@ -50,7 +50,7 @@ Do not copy external instructions into Awtarchy source files or expand task scop
 Use this only as an orientation map. Inspect the files themselves before making changes.
 
 ```text
-Fresh Arch Linux
+Vanilla Arch Linux / CachyOS
     |
     v
 awtarchy-install.sh
@@ -403,7 +403,7 @@ Use existing tests as regression guards and add focused coverage when a bug can 
 - Preserve laptop/desktop, GPU, filesystem, optional-package, and user-choice behavior unless the requested task changes it.
 - A required Arch package download that fails with a confirmed HTTP 404 during updater preflight may trigger exactly one automatic full `pacman -Syyu --noconfirm` database refresh/system upgrade and one retry of the original install. Never use standalone `pacman -Sy`, never repeat the full upgrade after a second 404, and never launch automatic recovery for unrelated pacman errors. Preserve user configurations on failure and cover the recovery paths in CI.
 - Feature dependencies declared in `REQUIRED_AUR_PACKAGES` are not optional picker choices. Fresh installs, package reconciliation, stable updates, and Git-testing updates must ensure those dependencies before applying managed configuration that requires them; keep optional/default AUR choices separate so users can still deselect non-required applications.
-- Installation assumptions must remain compatible with a fresh vanilla Arch base.
+- Installation assumptions must remain compatible with minimal vanilla Arch and officially supported CachyOS; respect existing CachyOS drivers, mirrors, networking, login managers, and other user-owned state.
 - RNNoise microphone suppression is optional and defaults off. Manage only `~/.config/pipewire/pipewire.conf.d/99-input-denoising.conf`; never overwrite unrelated PipeWire/WirePlumber config. Use the official `noise-suppression-for-voice` package and 48 kHz filter-chain form, default to mono, expose explicit mono/stereo/disable/restart controls, leave capture routing device-agnostic unless adopting an existing compatible explicit target, restart the active user PipeWire/WirePlumber stack after changes, validate the virtual `rnnoise_source`, and warn that active games/VOIP/browsers/recording applications may need restarting. When a live audio session is available, enabling RNNoise must remember the prior default microphone and select `rnnoise_source` as the default source; disabling must restore the remembered source when it is still available. Updates must skip the setup prompt when a healthy existing compatible RNNoise setup is already active and repair its default-source selection without pinning a physical capture device.
 
 ## Git workflow

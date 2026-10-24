@@ -1,19 +1,16 @@
 # Installing Awtarchy
 
-Awtarchy is an Arch Linux overlay/environment, not a Linux distribution and not an Arch Linux installer. Start with a working vanilla Arch Linux system, then apply Awtarchy on top of it.
+Awtarchy is an Arch Linux desktop overlay, not a distribution or a base OS installer. **Vanilla Arch Linux (recommended) and CachyOS are supported installation bases.**
 
-## Install Arch first
+## Install a supported base first
 
 For a new machine:
 
-1. Download the official Arch Linux ISO from the [Arch Linux download page](https://archlinux.org/download/).
-2. Boot the Arch ISO.
-3. Install Arch Linux.
-   - Recommended: run the official `archinstall` guided installer and choose the **Minimal** profile.
-   - Manual installation is also supported; follow the [ArchWiki Installation Guide](https://wiki.archlinux.org/title/Installation_guide).
-4. Boot into the installed Arch system and log in.
+1. **Recommended:** install [vanilla Arch Linux](https://archlinux.org/download/) using `archinstall` with the **Minimal** profile, or follow the [ArchWiki Installation Guide](https://wiki.archlinux.org/title/Installation_guide) for manual installation.
+2. **Alternatively:** install [CachyOS](https://cachyos.org/) using its official installer. A minimal setup is preferable, but an existing working CachyOS desktop can be used.
+3. Boot into your installed system and log in before running Awtarchy.
 
-Awtarchy expects a minimal vanilla Arch base. It does not require a custom ISO or a separate distribution installation.
+Awtarchy overlays its own Hyprland/Quickshell desktop and managed configuration. CachyOS-specific safeguards preserve existing driver/network/display-manager state where practical, but installed desktop configuration may still be updated by Awtarchy. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
 
 ## Install Awtarchy
 
