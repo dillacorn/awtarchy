@@ -39,3 +39,70 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+  one-shot-v4-1-0-release:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.ref == 'automation/release-v4.1.0-once' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.title == 'One-shot v4.1.0 release publication bridge'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+      - name: Validate and publish exact v4.1.0 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          expected_main="2bdbe518db31653fb61943f4a8264ac45dd3b718"
+          title="Awtarchy v4.1.0 CachyOS Support"
+          git fetch origin main --tags
+          actual_main="$(git rev-parse refs/remotes/origin/main)"
+          [[ "$actual_main" == "$expected_main" ]] || { echo "STOP: main changed since approved validation"; exit 1; }
+          if gh release view v4.1.0 --repo dillacorn/awtarchy >/dev/null 2>&1; then echo "STOP: v4.1.0 release already exists"; exit 1; fi
+          if git show-ref --verify --quiet refs/tags/v4.1.0; then echo "STOP: v4.1.0 tag already exists"; exit 1; fi
+          previous_tag="$(gh release view --repo dillacorn/awtarchy --json tagName --jq .tagName)"
+          [[ "$previous_tag" != v4.1.0 ]] || { echo "STOP: latest is v4.1.0"; exit 1; }
+          gh release view "$previous_tag" --repo dillacorn/awtarchy --json body --jq .body > "$RUNNER_TEMP/previous-stable.md"
+          cat > "$RUNNER_TEMP/v4.1.0-notes.md" <<'AWTARCHY_V410_NOTES'
+          # Awtarchy v4.1.0 CachyOS Support
+          
+          Awtarchy officially supports CachyOS as an installation base alongside vanilla Arch Linux, which remains recommended. This update also hardens compatibility with existing CachyOS system configuration.
+          
+          ## Install and update
+          
+          - [Installation guide](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Updating guide](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)
+          - Existing installations: `awtarchy update`.
+          
+          ## CachyOS support and fixes
+          
+          - Preserve working NVIDIA drivers, existing networking/DNS state, desktop files, and other CachyOS-owned configuration where possible.
+          - Avoid conflicting login managers, duplicate Flatpak installations, and unintended sched-ext scheduler changes.
+          - Detect effective multilib and installed package providers; avoid unsafe blanket Arch mirror recovery on CachyOS.
+          - Automatically use software cursors on NVIDIA GPUs and automatic cursor mode on AMD/Intel. Apply the setting during installs and updates, including personalized Hyprland configuration with backup/rollback protection.
+          - Update installation and compatibility documentation for the officially supported CachyOS base.
+          
+          ## Validation
+          
+          - 29 GitHub Actions workflows passed on the CachyOS hardening PR #305, and 21 passed on the v4.1.0 integration PR #308.
+          - Community CachyOS desktop smoke testing confirmed NVIDIA RTX 5070 graphics, Ly login, network/DNS, LAVD scheduler, and Yazi functioning after the compatibility update (issue #306).
+          - Laptop power behavior and less-common existing-system setups remain less broadly tested; CI fixtures do not replace hardware testing.
+          AWTARCHY_V410_NOTES
+          python3 .github/scripts/validate-stable-release-notes.py --version v4.1.0 --title "$title" --notes "$RUNNER_TEMP/v4.1.0-notes.md" --previous "$RUNNER_TEMP/previous-stable.md"
+          gh release create v4.1.0 --repo dillacorn/awtarchy --target "$expected_main" --title "$title" --notes-file "$RUNNER_TEMP/v4.1.0-notes.md" --latest
+          gh release view v4.1.0 --repo dillacorn/awtarchy --json body --jq .body > "$RUNNER_TEMP/v4.1.0-published.md"
+          cmp -- "$RUNNER_TEMP/v4.1.0-notes.md" "$RUNNER_TEMP/v4.1.0-published.md"
+          python3 .github/scripts/validate-stable-release-notes.py --version v4.1.0 --title "$title" --notes "$RUNNER_TEMP/v4.1.0-published.md" --previous "$RUNNER_TEMP/previous-stable.md"
+          metadata="$(gh release view v4.1.0 --repo dillacorn/awtarchy --json name,tagName,isDraft,isPrerelease,targetCommitish,url)"
+          printf '%s\n' "$metadata" | jq -e --arg title "$title" --arg sha "$expected_main" '.name == $title and .tagName == "v4.1.0" and .isDraft == false and .isPrerelease == false and .targetCommitish == $sha'
+          git fetch origin "refs/tags/v4.1.0:refs/tags/v4.1.0"
+          tag_commit="$(git rev-parse "refs/tags/v4.1.0^{commit}")"
+          [[ "$tag_commit" == "$expected_main" ]] || { echo "FAIL: published tag is not approved main"; exit 1; }
+          printf 'RELEASE_VERIFIED %s %s\n' "$tag_commit" "$(printf '%s' "$metadata" | jq -r .url)"
+          # Single-use bridge: remove only this temporary helper branch after successful publication.
+          gh api -X DELETE repos/dillacorn/awtarchy/git/refs/heads/automation/release-v4.1.0-once || echo "WARN: temporary branch cleanup requires manual follow-up"
