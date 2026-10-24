@@ -137,6 +137,13 @@ class GpuCursorPolicyTests(TestCase):
         plan = runtime.index('build_plan "$target_home" "$plan_file"')
         self.assertLess(staging, plan)
         self.assertIn('--fallback "${HOME_DIR}/.config/hypr/hyprland.lua"', runtime)
+        self.assertIn('apply_gpu_cursor_policy_to_preserved_hyprland "$gpu_cursor_helper"', runtime)
+        self.assertIn('install_live_file "$rel" "$candidate" "$live" 1', runtime)
+        self.assertLess(
+            runtime.index('apply_gpu_cursor_policy_to_preserved_hyprland "$gpu_cursor_helper"'),
+            runtime.index('if ! validate_live; then'),
+        )
+
 
 
 if __name__ == "__main__":
