@@ -1606,3 +1606,6 @@ dbcedd9e45ae53c7c3ef1aca1a19d16c27d8a8c471379808a7d4d130950f6633	.config/hypr/sc
 
 # SpeedCrunch user-preferred 347x510 floating size.
 4160a3d98506338210f1b0e38ea59260b9bc960917bfa06b569ea2e9debd9eed	.config/hypr/hyprland.lua
+
+# CachyOS sched-ext session restore preserves externally running schedulers.
+7edcbc4b8c467280471708798db446bba404a63d0aec152013eaabaa177b6306	.config/hypr/scripts/hypr_quicksettings.sh

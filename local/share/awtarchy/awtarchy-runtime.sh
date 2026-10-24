@@ -2523,6 +2523,11 @@ configure_sunshine_awtarchy_hook_stage() {
   fi
 }
 
+is_cachyos_install() {
+  command -v pacman-conf >/dev/null 2>&1 || return 1
+  pacman-conf --repo-list 2>/dev/null | grep -Eq '^cachyos($|-)'
+}
+
 prepare_base_install() {
   local required_space_mb=1024 available_space_mb
   available_space_mb="$(df --output=avail / | tail -1)"
@@ -2531,10 +2536,13 @@ prepare_base_install() {
 
   log "Updating package list and installing bootstrap packages..."
   if ! retry_command pacman -Syu --noconfirm; then
+    if is_cachyos_install; then
+      die "System update failed on CachyOS. Leaving Arch and CachyOS mirrorlists unchanged; repair the failing repositories with the appropriate CachyOS tools, then retry."
+    fi
     warn "System update failed. Trying reflector mirror refresh."
     pacman -S --needed --noconfirm reflector || true
     retry_command reflector --verbose --latest 5 --sort rate --save /etc/pacman.d/mirrorlist
-    retry_command pacman -Syu --noconfirm || exit 1
+    retry_command pacman -Syu --noconfirm || return 1
   fi
 
   retry_command pacman -S --needed --noconfirm git ipcalc dos2unix reflector || exit 1
@@ -2570,8 +2578,8 @@ reconcile_power_profile_backend() {
 install_arch_repo_apps_stage() {
   (( INSTALL_ARCH == 1 )) || { warn "Skipping Arch repo application install."; return 0; }
 
-  if ! grep -q "^\[multilib\]" /etc/pacman.conf || ! grep -q "^Include = /etc/pacman.d/mirrorlist" /etc/pacman.conf; then
-    die "Multilib repository is not enabled. Enable [multilib] in /etc/pacman.conf, then rerun."
+  if ! command -v pacman-conf >/dev/null 2>&1 || ! pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib; then
+    die "Multilib repository is not enabled in effective pacman configuration. Enable it, then rerun."
   fi
 
   if pacman -Qi jack2 >/dev/null 2>&1; then
@@ -2617,13 +2625,17 @@ install_arch_repo_apps_stage() {
   fi
 
   log "Configuring system services..."
-  configure_mdns_stack
-  systemctl enable --now avahi-daemon || true
-  if systemctl is-active --quiet unbound; then systemctl disable --now unbound || true; fi
-  systemctl enable --now systemd-resolved || true
-  systemctl stop dnsmasq.service || true
-  systemctl disable dnsmasq.service || true
-  systemctl enable --now NetworkManager || true
+  if is_cachyos_install; then
+    log "CachyOS detected: preserving existing networking, DNS and mDNS services."
+  else
+    configure_mdns_stack
+    systemctl enable --now avahi-daemon || true
+    if systemctl is-active --quiet unbound; then systemctl disable --now unbound || true; fi
+    systemctl enable --now systemd-resolved || true
+    systemctl stop dnsmasq.service || true
+    systemctl disable dnsmasq.service || true
+    systemctl enable --now NetworkManager || true
+  fi
 
   if [[ "$IS_VM" == false ]]; then
     if grep -qi Intel /proc/cpuinfo && [[ "$IS_LAPTOP" == true ]]; then
@@ -3012,12 +3024,18 @@ install_flatpak_apps_stage() {
   log "Updating installed Flatpak apps in ${scope} scope..."
   run_flatpak_scope "$scope" update -y || true
 
-  local app name i
+  local app name i other_scope
+  other_scope=user
+  [[ "$scope" == user ]] && other_scope=system
   for i in "${!FLATPAK_SELECTED_IDS[@]}"; do
     app="${FLATPAK_SELECTED_IDS[$i]}"
     name="${FLATPAK_SELECTED_NAMES[$i]}"
     if run_flatpak_scope "$scope" list --app --columns=application | grep -Fxq "$app"; then
       printf '%s\n' "${COLOR_YELLOW}${name} (${app}) already installed. Skipping...${COLOR_RESET}"
+      continue
+    fi
+    if run_flatpak_scope "$other_scope" list --app --columns=application | grep -Fxq "$app"; then
+      log "${name} (${app}) exists in ${other_scope} scope; keeping that installation instead of duplicating it."
       continue
     fi
     local retries=3 count=0
@@ -3231,7 +3249,15 @@ enable_keyring_pam_stage() {
 
 install_ly_stage() {
   (( INSTALL_LY == 1 )) || { warn "Skipping Ly install."; return 0; }
-  local tty="tty2"
+  local tty="tty2" existing_manager
+
+  # Do not create a competing login manager alongside CachyOS desktop defaults.
+  for existing_manager in sddm.service gdm.service lightdm.service; do
+    if systemctl is-active --quiet "$existing_manager" || systemctl is-enabled --quiet "$existing_manager"; then
+      warn "Existing login manager ${existing_manager} detected; leaving it in place instead of enabling Ly."
+      return 0
+    fi
+  done
 
   log "Installing/enabling Ly on ${tty} for next boot only..."
   if [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
@@ -4113,6 +4139,10 @@ remove_legacy_shell_packages_stage() {
   done
 
   for pkg in "${installed[@]}"; do
+    if is_cachyos_install && ! grep -Fxq -- "$pkg" "$managed_file" 2>/dev/null; then
+      warn "Preserving untracked CachyOS desktop package: ${pkg}"
+      continue
+    fi
     log "Removing retired Awtarchy shell package: ${pkg}"
     if pacman -Rns --noconfirm "$pkg"; then
       if [[ -f "$managed_file" ]]; then
@@ -4154,6 +4184,13 @@ remove_legacy_shell_path_stage() {
 }
 
 remove_legacy_shell_files_stage() {
+  # CachyOS may already have a user-owned desktop. Without ownership records,
+  # deleting a familiar path (or its backups) is not safe.
+  if is_cachyos_install; then
+    log "CachyOS: preserving legacy desktop files, customizations and backups."
+    return 0
+  fi
+
   local scripts_dir="${HOME_DIR}/.config/hypr/scripts"
   local applications_dir="${HOME_DIR}/.local/share/applications"
   local obsolete
@@ -4566,13 +4603,8 @@ backup_root_file(){
 }
 
 multilib_enabled(){
-  [[ -f /etc/pacman.conf ]] || return 1
-  awk '
-    $0 ~ /^[[:space:]]*#/{next}
-    $0 ~ /^\[multilib\]/{found=1}
-    found && $0 ~ /^Include[[:space:]]*=/{ok=1}
-    END{exit (ok?0:1)}
-  ' /etc/pacman.conf
+  command -v pacman-conf >/dev/null 2>&1 || return 1
+  pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib
 }
 
 pacman_install(){
@@ -5410,6 +5442,13 @@ install_nvidia_auto(){
     log "  - modern -> install nvidia-open* (Arch/Cachy strategy below)"
     log "  - older  -> install nvidia-580xx-dkms stack from AUR"
     nvidia_plan_report
+    return 0
+  fi
+
+  # A working NVIDIA driver is user-owned system state, even when its packages
+  # came from CachyOS instead of an Arch repository.
+  if command -v nvidia-smi >/dev/null 2>&1 && timeout 5s nvidia-smi -L >/dev/null 2>&1; then
+    log "Working NVIDIA driver detected; preserving installed driver packages."
     return 0
   fi
 
@@ -7027,7 +7066,9 @@ hardware_reconcile() {
     ensure_current_hardware_packages
   fi
 
-  configure_mdns_stack
+  if ! is_cachyos_install; then
+    configure_mdns_stack
+  fi
 }
 
 
