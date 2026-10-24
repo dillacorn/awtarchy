@@ -7991,6 +7991,30 @@ remove_live_file() {
   REMOVED+=("$rel")
 }
 
+apply_gpu_cursor_policy_to_preserved_hyprland() {
+  local helper="$1" rel=".config/hypr/hyprland.lua"
+  local live="${HOME_DIR}/${rel}" candidate=""
+
+  [[ "$UPDATE_MODE" == preserve ]] || return 0
+  [[ -f "$helper" && ! -L "$helper" ]] || return 0
+  local item
+  local preserved=0
+  for item in "${PRESERVED[@]}"; do
+    [[ "$item" == "$rel" ]] && preserved=1
+  done
+  (( preserved == 1 )) || return 0
+  [[ -f "$live" && ! -L "$live" ]] || return 1
+
+  candidate="$(mktemp --tmpdir="$TMPD" '.gpu-cursor-preserved.XXXXXX')" || return 1
+  cp -- "$live" "$candidate" || return 1
+  python3 "$helper" --config "$candidate" || return 1
+
+  if ! cmp -s -- "$live" "$candidate"; then
+    install_live_file "$rel" "$candidate" "$live" 1 || return 1
+    log "Applied GPU cursor policy to preserved Hyprland configuration (backup and rollback available)."
+  fi
+}
+
 apply_plan() {
   local plan_file="$1"
   local class rel local_file target_file baseline_file merge_tmp
@@ -10060,6 +10084,14 @@ main() {
     || die "Could not stop Quickshell safely before updating managed files."
   log "Applying approved managed-file changes..."
   apply_plan "$plan_file" || die "Update failed and user files were rolled back."
+
+  # Preserve mode may keep a personalized Hyprland file unchanged even when
+  # the GPU-specific cursor setting needs to change. Apply the same narrowly
+  # scoped policy with normal update snapshots/backups before live validation.
+  if ! apply_gpu_cursor_policy_to_preserved_hyprland "$gpu_cursor_helper"; then
+    rollback_quickshell_update
+    die "Could not apply the GPU cursor policy to preserved Hyprland settings; user files were rolled back."
+  fi
 
   if ! migrate_legacy_foot_hyprland "$repo_dir" "$target_home"; then
     rollback_quickshell_update
