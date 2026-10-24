@@ -128,15 +128,15 @@ class GpuCursorPolicyTests(TestCase):
     def test_installer_and_updater_use_shared_helper_before_diff(self):
         runtime = RUNTIME.read_text(encoding="utf-8")
         self.assertIn(
-            'run_as_target python3 - --config "\${HOME_DIR}/.config/hypr/hyprland.lua" <"$gpu_cursor_helper"',
+            'run_as_target python3 - --config "${HOME_DIR}/.config/hypr/hyprland.lua" <"$gpu_cursor_helper"',
             runtime,
         )
         staging = runtime.index(
-            '--config "\${target_home}/.config/hypr/hyprland.lua"'
+            '--config "${target_home}/.config/hypr/hyprland.lua"'
         )
         plan = runtime.index('build_plan "$target_home" "$plan_file"')
         self.assertLess(staging, plan)
-        self.assertIn('--fallback "\${HOME_DIR}/.config/hypr/hyprland.lua"', runtime)
+        self.assertIn('--fallback "${HOME_DIR}/.config/hypr/hyprland.lua"', runtime)
 
 
 if __name__ == "__main__":
