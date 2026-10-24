@@ -187,6 +187,8 @@ jobs:
           python3 -m py_compile tests/test-config-noise-comparison.py
           python3 -m py_compile tests/test-keyring-pam-cleanup.py
           test -x config/hypr/scripts/quickshell_sensitive_capture.sh
+      - name: GPU-aware Hyprland cursor policy
+        run: python3 tests/test_gpu_cursor_policy.py
       - name: ShellCheck command code
         run: |
           shellcheck \
