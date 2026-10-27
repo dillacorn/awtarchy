@@ -1798,7 +1798,9 @@ pacman_recovery_supported_runtime() {
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     return 0
   fi
-  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+  # Always invoke the absolute pacman binary below. PATH shims, aliases or
+  # a /usr/sbin preference must not make genuine Arch installations fail.
+  [[ -x /usr/bin/pacman ]]
 }
 
 pacman_recovery_configure() {
@@ -2172,7 +2174,7 @@ pacman_mirror_repair_404() {
 pacman_mirror_report() {
   printf '%s\n' 'Awtarchy package mirror diagnostic (read-only)'
   pacman_recovery_supported_runtime \
-    || { printf '%s\n' 'SKIP: standard /usr/bin/pacman not available'; return 0; }
+    || { printf '%s\n' 'SKIP: /usr/bin/pacman is missing or not executable'; return 0; }
   pacman_recovery_configure \
     || { printf '%s\n' 'SKIP: Pacman configuration unavailable'; return 0; }
   if [[ ! -x $PACMAN_RECOVERY_CURL ]]; then
