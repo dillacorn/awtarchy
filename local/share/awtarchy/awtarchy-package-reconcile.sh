@@ -2112,17 +2112,17 @@ pacman_mirror_online_url() {
 
 # Print-only operations never refresh databases or install packages.
 pacman_mirror_upgrade_urls() {
-  local output="" repo="" file="" url="" resolved=""
+  local printed_urls="" repo="" file="" url="" resolved=""
   if (( $# )); then
-    output="$("$PACMAN_RECOVERY_PACMAN" "$@" --print --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+    printed_urls="$("$PACMAN_RECOVERY_PACMAN" "$@" --print --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
   else
-    output="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+    printed_urls="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
   fi
-  [[ -n $output ]] || return 0
+  [[ -n $printed_urls ]] || return 0
   while IFS=$'\t' read -r repo file url; do
     resolved="$(pacman_mirror_online_url "$repo" "$file" "$url")" || continue
     printf '%s\t%s\n' "$repo" "$resolved"
-  done <<<"$output"
+  done <<<"$printed_urls"
 }
 pacman_mirror_known_repo() {
   pacman_recovery_repo_is_arch "$1" || pacman_recovery_repo_is_cachyos "$1"
