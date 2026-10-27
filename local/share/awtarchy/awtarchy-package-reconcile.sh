@@ -18,6 +18,7 @@ PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
 PACMAN_MIRROR_CHECK_ONLY=0
 PACMAN_MIRROR_REPORT_ONLY=0
+PACMAN_MIRROR_REPORT_PACKAGE=""
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
@@ -171,6 +172,13 @@ while (( $# )); do
       ;;
     --mirror-report)
       PACMAN_MIRROR_REPORT_ONLY=1
+      ;;
+    --mirror-report-package)
+      shift
+      (( $# > 0 )) || die "--mirror-report-package needs a pending package name."
+      [[ $1 =~ ^[A-Za-z0-9@._+-]+$ ]] || die "Invalid package name for read-only mirror diagnostic."
+      PACMAN_MIRROR_REPORT_ONLY=1
+      PACMAN_MIRROR_REPORT_PACKAGE="$1"
       ;;
     --pacman-recovery-run)
       PACMAN_RECOVERY_RUN_ONLY=1
@@ -2192,6 +2200,36 @@ pacman_mirror_report() {
     return 0
   fi
   printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
+  if [[ -n $PACMAN_MIRROR_REPORT_PACKAGE ]]; then
+    local package_repo package_url package_file status="" matched=0
+    while IFS=$'\t' read -r package_repo package_url; do
+      pacman_mirror_known_repo "$package_repo" || continue
+      [[ $package_url == https://* || $package_url == http://* ]] || continue
+      package_file="${package_url##*/}"
+      [[ $package_file == "$PACMAN_MIRROR_REPORT_PACKAGE"-*.pkg.tar.* ]] || continue
+      matched=1
+      status="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 3 \
+        --max-time 6 --output /dev/null --write-out '%{http_code}' \
+        -- "${package_url}.sig" 2>/dev/null || true)"
+      printf 'Selected package: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+      printf 'Repository: %s\n' "$package_repo"
+      printf 'Signature URL: %s.sig\n' "$package_url"
+      printf 'HTTP status: %s\n' "${status:-unavailable}"
+      if [[ $status == 404 ]]; then
+        printf 'DETECTED: HTTP 404 for repository %s\n' "$package_repo"
+      elif [[ $status == 200 ]]; then
+        printf '%s\n' 'HTTP 200: Signature available at tested URL'
+      else
+        printf '%s\n' 'INCONCLUSIVE: Could not confirm signature availability'
+      fi
+      break
+    done <<<"$pending_urls"
+    if (( matched == 0 )); then
+      printf 'NOT IN PENDING UPGRADES: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+    fi
+    printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
+    return 0
+  fi
   printf '%s\n' 'Testing up to six pending package signatures:'
   if repo="$(PACMAN_MIRROR_REPORT_VERBOSE=1 pacman_mirror_find_404_repo "" probe)"; then
     printf 'DETECTED: HTTP 404 for repository %s\n' "$repo"
