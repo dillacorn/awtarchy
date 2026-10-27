@@ -16,6 +16,7 @@ MIGRATE_LOCKSCREEN_RETIREMENT_ONLY=0
 NEEDS_ACTION_ONLY=0
 PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
+PACMAN_MIRROR_CHECK_ONLY=0
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
@@ -164,6 +165,9 @@ while (( $# )); do
     --pacman-recovery-check)
       PACMAN_RECOVERY_CHECK_ONLY=1
       ;;
+    --mirror-check)
+      PACMAN_MIRROR_CHECK_ONLY=1
+      ;;
     --pacman-recovery-run)
       PACMAN_RECOVERY_RUN_ONLY=1
       shift
@@ -198,7 +202,7 @@ if [[ -n "$NVIDIA_ROLLBACK_VERSION" && ! "$NVIDIA_ROLLBACK_VERSION" =~ ^[0-9]+([
   die "NVIDIA driver version must look like 610.57.04."
 fi
 
-if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 )); then
+if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 )); then
   [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
     || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
   have pacman || die "pacman is required for package reconciliation."
@@ -1800,6 +1804,7 @@ pacman_recovery_configure() {
     PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
     PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
     PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_CURL="${AWTARCHY_CURL_BIN:-/nonexistent/curl}"
     PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
   else
     PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
@@ -1807,6 +1812,7 @@ pacman_recovery_configure() {
     PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
     PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
     PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_CURL=/usr/bin/curl
     PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
   fi
 
@@ -2068,9 +2074,101 @@ pacman_sync_db_preflight() {
   pacman_recovery_repair "${repos[@]}"
 }
 
+
+# Use only read-only pacman print output. This never refreshes databases.
+pacman_mirror_upgrade_urls() {
+  "$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%l' 2>/dev/null
+}
+
+pacman_mirror_known_repo() {
+  pacman_recovery_repo_is_arch "$1" || pacman_recovery_repo_is_cachyos "$1"
+}
+
+# In failure mode match the exact missing archive; in probe mode sample at
+# most six package signatures to keep startup bounded (not exhaustive).
+pacman_mirror_find_404_repo() {
+  local errors="$1" mode="$2" file="" line repo url code index=0
+  local -a urls=()
+  if [[ $mode == failure ]]; then
+    while IFS= read -r line; do
+      if [[ $line =~ ^error:\ failed\ retrieving\ file\ \'([^\']+)\'\ from\ .*:\ The\ requested\ URL\ returned\ error:\ 404$ ]]; then
+        file="${BASH_REMATCH[1]}"
+        break
+      fi
+    done <"$errors"
+    [[ -n $file ]] || return 1
+  fi
+  mapfile -t urls < <(pacman_mirror_upgrade_urls)
+  local step=1
+  if [[ $mode == probe ]]; then
+    (( ${#urls[@]} > 0 )) || return 1
+    step=$(( (${#urls[@]} + 5) / 6 ))
+    [[ -x $PACMAN_RECOVERY_CURL ]] || return 1
+  fi
+  for (( index=0; index<${#urls[@]}; index+=step )); do
+    IFS=$'\t' read -r repo url <<<"${urls[index]}"
+    pacman_mirror_known_repo "$repo" || continue
+    [[ $url == http://* || $url == https://* ]] || continue
+    if [[ $mode == failure ]]; then
+      [[ $url == */"$file" || $url == */"${file%.sig}" ]] || continue
+    else
+      [[ $url == *.pkg.tar.* ]] || continue
+      code="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 1 \
+        --max-time 2 --output /dev/null --write-out '%{http_code}' \
+        -- "${url}.sig" 2>/dev/null || true)"
+      [[ $code == 404 ]] || continue
+    fi
+    printf '%s\n' "$repo"
+    return 0
+  done
+  return 1
+}
+
+pacman_mirror_repair_404() {
+  local repo="$1" answer="" backup=""
+  pacman_mirror_known_repo "$repo" || return 1
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    [[ ${AWTARCHY_ASSUME_PACMAN_REPAIR:-no} == yes ]] || return 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || return 1
+    printf '\nAwtarchy detected a package mirror HTTP 404 (%s).\n' "$repo" >/dev/tty
+    printf 'Refreshing mirrors also performs a full system upgrade, potentially\n' >/dev/tty
+    printf 'including the kernel and GPU drivers. Signatures remain verified.\n' >/dev/tty
+    printf 'Repair mirror and upgrade the system? [y/N] ' >/dev/tty
+    IFS= read -r answer </dev/tty || answer=""
+    [[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || return 1
+  fi
+  if pacman_recovery_repo_is_arch "$repo"; then
+    [[ -x $PACMAN_RECOVERY_REFLECTOR ]] || { warn "reflector is unavailable"; return 1; }
+    if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} != 1 && -f /etc/pacman.d/mirrorlist && ! -L /etc/pacman.d/mirrorlist ]]; then
+      backup="/etc/pacman.d/mirrorlist.awtarchy-$(date -u +%Y%m%dT%H%M%SZ).bak"
+      pacman_recovery_as_root cp -p -- /etc/pacman.d/mirrorlist "$backup" || return 1
+    fi
+    pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+      --protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist \
+      || return 1
+  else
+    [[ -x $PACMAN_RECOVERY_CACHY_RATE ]] || { warn "cachyos-rate-mirrors is unavailable"; return 1; }
+    pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" || return 1
+  fi
+  log "Resynchronizing databases and upgrading installed packages..."
+  pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" -Syyu
+}
+
+pacman_mirror_menu_check() {
+  [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 || ( -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ) ]] || return 0
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 0
+  local repo=""
+  repo="$(pacman_mirror_find_404_repo "" probe)" || return 0
+  pacman_mirror_repair_404 "$repo" || true
+  return 0
+}
+
 pacman_recovery_run_command() {
   local error_file rc=0 retry_rc=0
   local -a repos=() args=("$@")
+  local mirror_repo=""
 
   pacman_recovery_supported_runtime || {
     as_root pacman "${args[@]}"
@@ -2087,10 +2185,14 @@ pacman_recovery_run_command() {
   fi
 
   mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  if (( ${#repos[@]} == 0 )) && grep -Fq 'The requested URL returned error: 404' "$error_file"; then
+    mirror_repo="$(pacman_mirror_find_404_repo "$error_file" failure || true)"
+  fi
   rm -f -- "$error_file"
-  (( ${#repos[@]} > 0 )) || return "$rc"
-
-  if ! pacman_recovery_repair "${repos[@]}"; then
+  if (( ${#repos[@]} == 0 )); then
+    [[ -n $mirror_repo ]] || return "$rc"
+    pacman_mirror_repair_404 "$mirror_repo" || return "$rc"
+  elif ! pacman_recovery_repair "${repos[@]}"; then
     return "$rc"
   fi
 
@@ -2371,6 +2473,11 @@ if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
     [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
     apply_nvidia_rollback 0
   fi
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_CHECK_ONLY == 1 )); then
+  pacman_mirror_menu_check
   exit $?
 fi
 
