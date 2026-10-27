@@ -526,6 +526,21 @@ if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
 fi
 
 reset_recovery_case extra mirror-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight --mirror-repair extra \
+  || fail "declined manual mirror recovery should remain nonfatal"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "declined manual mirror recovery altered the system"
+fi
+
+reset_recovery_case extra mirror-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-repair extra \
+  || fail "approved manual mirror recovery did not complete"
+grep -Fq $'reflector\t--protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist' "$recovery_log" \
+  || fail "approved manual recovery did not refresh mirrors"
+grep -Fq -- '-Syyu' "$recovery_log" \
+  || fail "approved manual recovery did not run a full Pacman upgrade"
+
+reset_recovery_case extra mirror-404
 AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight \
   || fail "read-only mirror preflight failed when repair was declined"
 grep -Fq $'curl\t' "$recovery_log" || fail "mirror preflight did not check a package signature"
