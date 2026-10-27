@@ -392,6 +392,8 @@ AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm 
 
 
 run_mirror_preflight() {
+  local -a mirror_options=("$@")
+  (( ${#mirror_options[@]} )) || mirror_options=(--mirror-check)
   RECOVERY_STATE="$recovery_state" \
   RECOVERY_LOG="$recovery_log" \
   RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
@@ -402,7 +404,7 @@ run_mirror_preflight() {
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
   AWTARCHY_CURL_BIN="$recovery_bin/curl" \
-  "$RECONCILER" "${1:---mirror-check}"
+  "$RECONCILER" "${mirror_options[@]}"
 }
 
 reset_recovery_case extra mirror-404
@@ -423,6 +425,32 @@ grep -Fq 'NO CONFIRMED 404 in sample' <<<"$report" \
   || fail "read-only report mistook a timeout for HTTP 404"
 if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "network-timeout report called mutating commands"
+fi
+
+reset_recovery_case extra mirror-404
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package example 2>&1)" \
+  || fail "targeted read-only mirror report unexpectedly failed"
+grep -Fq 'Selected package: example' <<<"$report" \
+  || fail "targeted mirror report did not select the expected package"
+grep -Fq 'DETECTED: HTTP 404 for repository extra' <<<"$report" \
+  || fail "targeted report missed the known signature 404"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "targeted report called mutating commands"
+fi
+
+reset_recovery_case extra network-timeout
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package example 2>&1)" \
+  || fail "targeted report failed on simulated timeout"
+grep -Fq 'INCONCLUSIVE: Could not confirm signature availability' <<<"$report" \
+  || fail "targeted report mistook network timeout for a broken mirror"
+
+reset_recovery_case extra mirror-404
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package absent 2>&1)" \
+  || fail "targeted report failed on absent package"
+grep -Fq 'NOT IN PENDING UPGRADES: absent' <<<"$report" \
+  || fail "targeted report misidentified a missing package"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "absent package report called mutating commands"
 fi
 
 reset_recovery_case extra mirror-404
