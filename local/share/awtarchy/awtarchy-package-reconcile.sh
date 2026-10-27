@@ -1814,6 +1814,7 @@ pacman_recovery_supported_runtime() {
 pacman_recovery_configure() {
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_PACMAN_CONF_BIN="${AWTARCHY_PACMAN_CONF_BIN:-/nonexistent/pacman-conf}"
     PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
     PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
     PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
@@ -1822,6 +1823,7 @@ pacman_recovery_configure() {
     PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
   else
     PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_PACMAN_CONF_BIN=/usr/bin/pacman-conf
     PACMAN_RECOVERY_CONF=/etc/pacman.conf
     PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
     PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
@@ -2089,16 +2091,39 @@ pacman_sync_db_preflight() {
 }
 
 
-# Use only read-only pacman print output. This never refreshes databases.
-pacman_mirror_upgrade_urls() {
-  if (( $# )); then
-    # Include new packages selected by reconciliation, not only upgrades.
-    "$PACMAN_RECOVERY_PACMAN" "$@" --print --print-format $'%r\t%l' 2>/dev/null
-  else
-    "$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%l' 2>/dev/null
+# Print queries can return file:// paths for cached archives, even when
+# Pacman still needs signatures from an HTTP(S) mirror. Use pacman-conf
+# to resolve Includes and repository mirror variables.
+pacman_mirror_online_url() {
+  local repo="$1" file="$2" location="$3" server=""
+  if [[ $location == https://* || $location == http://* ]]; then
+    printf '%s\n' "$location"
+    return 0
   fi
+  [[ $location == file://* && -n $file && $file != */* ]] || return 1
+  [[ -x $PACMAN_RECOVERY_PACMAN_CONF_BIN ]] || return 1
+  while IFS= read -r server; do
+    [[ $server == https://* || $server == http://* ]] || continue
+    printf '%s/%s\n' "${server%/}" "$file"
+    return 0
+  done < <("$PACMAN_RECOVERY_PACMAN_CONF_BIN" -r "$repo" Server 2>/dev/null)
+  return 1
 }
 
+# Print-only operations never refresh databases or install packages.
+pacman_mirror_upgrade_urls() {
+  local output="" repo="" file="" url="" resolved=""
+  if (( $# )); then
+    output="$("$PACMAN_RECOVERY_PACMAN" "$@" --print --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+  else
+    output="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+  fi
+  [[ -n $output ]] || return 0
+  while IFS=$'\t' read -r repo file url; do
+    resolved="$(pacman_mirror_online_url "$repo" "$file" "$url")" || continue
+    printf '%s\t%s\n' "$repo" "$resolved"
+  done <<<"$output"
+}
 pacman_mirror_known_repo() {
   pacman_recovery_repo_is_arch "$1" || pacman_recovery_repo_is_cachyos "$1"
 }
