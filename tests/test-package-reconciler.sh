@@ -398,14 +398,14 @@ reset_recovery_case extra mirror-404
 AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight \
   || fail "read-only mirror preflight failed when repair was declined"
 grep -Fq $'curl\t' "$recovery_log" || fail "mirror preflight did not check a package signature"
-if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "declined mirror repair modified mirrorlist or started full upgrade"
 fi
 
 reset_recovery_case extra network-timeout
 AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight \
   || fail "unreachable mirror preflight unexpectedly failed"
-if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "network timeout was treated as confirmed mirror HTTP 404"
 fi
 
@@ -413,7 +413,7 @@ reset_recovery_case extra mirror-404
 if AWTARCHY_ASSUME_PACMAN_REPAIR=no run_recovery_pacman -Syu --needed --noconfirm quickshell >/dev/null 2>&1; then
   fail "declined pacman mirror repair unexpectedly succeeded"
 fi
-if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "declined package-download repair mutated mirrors or upgraded packages"
 fi
 
@@ -422,14 +422,14 @@ AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm 
   || fail "confirmed mirror HTTP 404 recovery and retry failed"
 grep -Fq $'reflector\t--protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist' "$recovery_log" \
   || fail "HTTP 404 did not refresh Arch mirrors"
-grep -Fq ' -Syyu' "$recovery_log" || fail "HTTP 404 recovery did not upgrade the system"
+grep -Fq -- '-Syyu' "$recovery_log" || fail "HTTP 404 recovery did not upgrade the system"
 [[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
   || fail "original failed package command was not retried once"
 
 reset_recovery_case extra mirror-404
 AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight \
   || fail "confirmed startup mirror preflight recovery failed"
-grep -Fq ' -Syyu' "$recovery_log" \
+grep -Fq -- '-Syyu' "$recovery_log" \
   || fail "startup mirror preflight did not perform approved system upgrade"
 
 printf 'PASS: package reconciler, sync DB and opt-in HTTP 404 mirror recovery\n'
