@@ -1684,7 +1684,9 @@ main() {
       ;;
     packages)
       ensure_latest_updater "$@"
-      check_package_mirrors_once
+      if [[ ${2:-} != --review ]]; then
+        check_package_mirrors_once
+      fi
       shift
       run_package_reconciler "$@"
       ;;
