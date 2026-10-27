@@ -201,6 +201,11 @@ for (( i=0; i<${#args[@]}; i++ )); do
   fi
 done
 
+if [[ " $* " == *' -Sup '* ]]; then
+  printf 'extra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+  exit 0
+fi
+
 if [[ " $* " == *' -Slq '* ]]; then
   if [[ -f "${RECOVERY_STATE}/repaired" ]]; then
     exit 0
@@ -231,6 +236,11 @@ if [[ " $* " == *' reflector '* ]]; then
   exit 64
 fi
 
+if [[ " $* " == *' -Syyu '* ]]; then
+  : >"${RECOVERY_STATE}/repaired"
+  exit 0
+fi
+
 if [[ " $* " == *' -Syy '* ]]; then
   : >"${RECOVERY_STATE}/repaired"
   exit 0
@@ -239,6 +249,11 @@ fi
 if [[ " $* " == *' -Syu '* ]]; then
   if [[ -f "${RECOVERY_STATE}/repaired" ]]; then
     exit 0
+  fi
+  if [[ $mode == mirror-404 ]]; then
+    printf "%s\n" "error: failed retrieving file 'example-1-1-x86_64.pkg.tar.zst.sig' from mirror.example.invalid : The requested URL returned error: 404" >&2
+    printf '%s\n' 'error: failed to commit transaction (failed to retrieve some files)' >&2
+    exit 44
   fi
   if [[ $mode == package-signature ]]; then
     printf '%s\n' 'error: /var/cache/pacman/pkg/example.pkg.tar.zst is corrupted (invalid or corrupted package (PGP signature))' >&2
@@ -263,6 +278,17 @@ printf 'reflector\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
 EOF_REFLECTOR
 chmod 0755 "$recovery_bin/reflector"
 
+cat >"$recovery_bin/curl" <<'EOF_CURL'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'curl\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
+case "$(cat "${RECOVERY_STATE}/mode")" in
+  mirror-404) printf '404' ;;
+  *) printf '000' ;;
+esac
+EOF_CURL
+chmod 0755 "$recovery_bin/curl"
+
 run_recovery_check() {
   RECOVERY_STATE="$recovery_state" \
   RECOVERY_LOG="$recovery_log" \
@@ -286,6 +312,7 @@ run_recovery_pacman() {
   AWTARCHY_PACMAN_CONF="$recovery_conf" \
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
+  AWTARCHY_CURL_BIN="$recovery_bin/curl" \
   "$RECONCILER" --pacman-recovery-run -- "$@"
 }
 
@@ -352,4 +379,57 @@ AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm 
 [[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
   || fail "pacman recovery did not retry the original command exactly once"
 
-printf 'PASS: package reconciler review, launcher contracts, and pacman sync database recovery\n'
+
+run_mirror_preflight() {
+  RECOVERY_STATE="$recovery_state" \
+  RECOVERY_LOG="$recovery_log" \
+  RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
+  AWTARCHY_PACMAN_RECOVERY_TEST_MODE=1 \
+  AWTARCHY_PACMAN_BIN="$recovery_bin/pacman" \
+  AWTARCHY_PACMAN_SYNC_DIR="$recovery_sync" \
+  AWTARCHY_PACMAN_CONF="$recovery_conf" \
+  AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
+  AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
+  AWTARCHY_CURL_BIN="$recovery_bin/curl" \
+  "$RECONCILER" --mirror-check
+}
+
+reset_recovery_case extra mirror-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight \
+  || fail "read-only mirror preflight failed when repair was declined"
+grep -Fq $'curl\t' "$recovery_log" || fail "mirror preflight did not check a package signature"
+if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+  fail "declined mirror repair modified mirrorlist or started full upgrade"
+fi
+
+reset_recovery_case extra network-timeout
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight \
+  || fail "unreachable mirror preflight unexpectedly failed"
+if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+  fail "network timeout was treated as confirmed mirror HTTP 404"
+fi
+
+reset_recovery_case extra mirror-404
+if AWTARCHY_ASSUME_PACMAN_REPAIR=no run_recovery_pacman -Syu --needed --noconfirm quickshell >/dev/null 2>&1; then
+  fail "declined pacman mirror repair unexpectedly succeeded"
+fi
+if grep -Eq 'reflector| -Syyu ' "$recovery_log"; then
+  fail "declined package-download repair mutated mirrors or upgraded packages"
+fi
+
+reset_recovery_case extra mirror-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm quickshell \
+  || fail "confirmed mirror HTTP 404 recovery and retry failed"
+grep -Fq $'reflector\t--protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist' "$recovery_log" \
+  || fail "HTTP 404 did not refresh Arch mirrors"
+grep -Fq ' -Syyu' "$recovery_log" || fail "HTTP 404 recovery did not upgrade the system"
+[[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
+  || fail "original failed package command was not retried once"
+
+reset_recovery_case extra mirror-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight \
+  || fail "confirmed startup mirror preflight recovery failed"
+grep -Fq ' -Syyu' "$recovery_log" \
+  || fail "startup mirror preflight did not perform approved system upgrade"
+
+printf 'PASS: package reconciler, sync DB and opt-in HTTP 404 mirror recovery\n'
