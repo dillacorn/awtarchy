@@ -45,6 +45,8 @@ grep -Fq 'Reconcile packages (install current / remove replaced)' "$LAUNCHER" \
   || fail "maintenance menu does not expose package reconciliation"
 grep -Fq 'new_package_reconciler=' "$LAUNCHER" \
   || fail "self-update does not install the package reconciler"
+grep -Fq 'if [[ ${2:-} != --review ]]; then' "$LAUNCHER" \
+  || fail "awtarchy packages --review may invoke an upgrading mirror repair"
 
 home="${TMP}/home"
 fakebin="${TMP}/fakebin"
@@ -201,7 +203,10 @@ for (( i=0; i<${#args[@]}; i++ )); do
   fi
 done
 
-if [[ " $* " == *' -Sup '* ]]; then
+if [[ " $* " == *' -Sup '* || " $* " == *' --print '* ]]; then
+  if [[ $(cat "${RECOVERY_STATE}/mode") == explicit-404 && " $* " == *' -Sup '* ]]; then
+    exit 0
+  fi
   printf 'extra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
   exit 0
 fi
@@ -250,7 +255,7 @@ if [[ " $* " == *' -Syu '* ]]; then
   if [[ -f "${RECOVERY_STATE}/repaired" ]]; then
     exit 0
   fi
-  if [[ $mode == mirror-404 ]]; then
+  if [[ $mode == mirror-404 || $mode == explicit-404 ]]; then
     printf "%s\n" "error: failed retrieving file 'example-1-1-x86_64.pkg.tar.zst.sig' from mirror.example.invalid : The requested URL returned error: 404" >&2
     printf '%s\n' 'error: failed to commit transaction (failed to retrieve some files)' >&2
     exit 44
@@ -425,6 +430,14 @@ grep -Fq $'reflector\t--protocol https --age 12 --latest 20 --sort rate --save /
 grep -Fq -- '-Syyu' "$recovery_log" || fail "HTTP 404 recovery did not upgrade the system"
 [[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
   || fail "original failed package command was not retried once"
+
+reset_recovery_case extra explicit-404
+AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm quickshell \
+  || fail "404 recovery did not recognize an explicitly selected installation target"
+grep -Fq -- '--print' "$recovery_log" \
+  || fail "404 recovery failed to reconstruct the original target set"
+grep -Fq -- '-Syyu' "$recovery_log" \
+  || fail "explicit target recovery did not synchronize and upgrade"
 
 reset_recovery_case extra mirror-404
 AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight \
