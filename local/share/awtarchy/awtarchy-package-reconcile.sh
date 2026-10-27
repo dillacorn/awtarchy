@@ -2201,12 +2201,17 @@ pacman_mirror_report() {
   fi
   printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
   if [[ -n $PACMAN_MIRROR_REPORT_PACKAGE ]]; then
-    local package_repo package_url package_file status="" matched=0
-    while IFS=$'\t' read -r package_repo package_url; do
+    local package_name package_repo package_url status="" matched=0 named_urls=""
+    # Pacman's %n is the authoritative package name; matching filename
+    # prefixes confuses glycin with glycin-gtk4.
+    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%n\t%r\t%l' 2>/dev/null)"; then
+      printf '%s\n' 'SKIP: Could not read named pending upgrades'
+      return 0
+    fi
+    while IFS=$'\t' read -r package_name package_repo package_url; do
+      [[ $package_name == "$PACMAN_MIRROR_REPORT_PACKAGE" ]] || continue
       pacman_mirror_known_repo "$package_repo" || continue
       [[ $package_url == https://* || $package_url == http://* ]] || continue
-      package_file="${package_url##*/}"
-      [[ $package_file == "$PACMAN_MIRROR_REPORT_PACKAGE"-*.pkg.tar.* ]] || continue
       matched=1
       status="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 3 \
         --max-time 6 --output /dev/null --write-out '%{http_code}' \
@@ -2223,7 +2228,7 @@ pacman_mirror_report() {
         printf '%s\n' 'INCONCLUSIVE: Could not confirm signature availability'
       fi
       break
-    done <<<"$pending_urls"
+    done <<<"$named_urls"
     if (( matched == 0 )); then
       printf 'NOT IN PENDING UPGRADES: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
     fi
