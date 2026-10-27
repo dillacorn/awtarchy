@@ -2612,7 +2612,7 @@ if (( PACMAN_MIRROR_REPAIR_ONLY == 1 )); then
   pacman_recovery_supported_runtime || die "Standard Pacman installation is unavailable."
   pacman_recovery_configure || die "Pacman configuration is unavailable."
   pacman_mirror_known_repo "$PACMAN_MIRROR_REPAIR_REPO" || die "Not an official Arch/CachyOS repository."
-  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "Manual repair requires an interactive terminal."
+  [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 || ( -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ) ]] || die "Manual repair requires an interactive terminal."
   pacman_mirror_repair_404 "$PACMAN_MIRROR_REPAIR_REPO" 1
   exit $?
 fi
