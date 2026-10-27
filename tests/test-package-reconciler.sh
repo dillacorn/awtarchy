@@ -213,13 +213,13 @@ if [[ ${1:-} == -Sp ]]; then
   # A direct sync query works when the target is absent from pending upgrades.
   case "${*: -1}" in
     glycin)
-      printf 'glycin\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst\n'
+      printf 'glycin\textra\tglycin-2.2.5-1-x86_64.pkg.tar.zst\tfile:///var/cache/pacman/pkg/glycin-2.2.5-1-x86_64.pkg.tar.zst\n'
       ;;
     glycin-gtk4)
-      printf 'glycin-gtk4\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\n'
+      printf 'glycin-gtk4\textra\tglycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\thttps://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\n'
       ;;
     example)
-      printf 'example\textra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+      printf 'example\textra\texample-1-1-x86_64.pkg.tar.zst\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
       ;;
     *)
       exit 1
@@ -232,13 +232,10 @@ if [[ " $* " == *' -Sup '* || " $* " == *' --print '* ]]; then
   if [[ $(cat "${RECOVERY_STATE}/mode") == explicit-404 && " $* " == *' -Sup '* ]]; then
     exit 0
   fi
-  if [[ " $* " == *'%n'* ]]; then
-    # Prefix collision first: glycin-gtk4 must not match a glycin query.
-    printf 'glycin-gtk4\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\n'
-    printf 'glycin\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst\n'
-    printf 'example\textra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+  if [[ $(cat "${RECOVERY_STATE}/mode") == cached-upgrade ]]; then
+    printf 'extra\texample-1-1-x86_64.pkg.tar.zst\tfile:///var/cache/pacman/pkg/example-1-1-x86_64.pkg.tar.zst\n'
   else
-    printf 'extra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+    printf 'extra\texample-1-1-x86_64.pkg.tar.zst\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
   fi
   exit 0
 fi
@@ -315,6 +312,15 @@ printf 'reflector\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
 EOF_REFLECTOR
 chmod 0755 "$recovery_bin/reflector"
 
+cat >"$recovery_bin/pacman-conf" <<'EOF_PACMAN_CONF'
+#!/usr/bin/env bash
+set -euo pipefail
+printf 'pacman-conf\t%s\n' "$*" >>"${RECOVERY_LOG:?}"
+[[ ${1:-} == -r && ${2:-} == extra && ${3:-} == Server ]] || exit 66
+printf '%s\n' 'https://mirror.example.invalid/extra/os/x86_64'
+EOF_PACMAN_CONF
+chmod 0755 "$recovery_bin/pacman-conf"
+
 cat >"$recovery_bin/curl" <<'EOF_CURL'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -332,6 +338,7 @@ run_recovery_check() {
   RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_PACMAN_RECOVERY_TEST_MODE=1 \
   AWTARCHY_PACMAN_BIN="$recovery_bin/pacman" \
+  AWTARCHY_PACMAN_CONF_BIN="$recovery_bin/pacman-conf" \
   AWTARCHY_PACMAN_SYNC_DIR="$recovery_sync" \
   AWTARCHY_PACMAN_CONF="$recovery_conf" \
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
@@ -345,6 +352,7 @@ run_recovery_pacman() {
   RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_PACMAN_RECOVERY_TEST_MODE=1 \
   AWTARCHY_PACMAN_BIN="$recovery_bin/pacman" \
+  AWTARCHY_PACMAN_CONF_BIN="$recovery_bin/pacman-conf" \
   AWTARCHY_PACMAN_SYNC_DIR="$recovery_sync" \
   AWTARCHY_PACMAN_CONF="$recovery_conf" \
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
@@ -425,6 +433,7 @@ run_mirror_preflight() {
   RECOVERY_CACHY_RATE_PATH="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_PACMAN_RECOVERY_TEST_MODE=1 \
   AWTARCHY_PACMAN_BIN="$recovery_bin/pacman" \
+  AWTARCHY_PACMAN_CONF_BIN="$recovery_bin/pacman-conf" \
   AWTARCHY_PACMAN_SYNC_DIR="$recovery_sync" \
   AWTARCHY_PACMAN_CONF="$recovery_conf" \
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
@@ -451,6 +460,18 @@ grep -Fq 'NO CONFIRMED 404 in sample' <<<"$report" \
   || fail "read-only report mistook a timeout for HTTP 404"
 if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "network-timeout report called mutating commands"
+fi
+
+reset_recovery_case extra cached-upgrade
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report 2>&1)" \
+  || fail "cached archive preflight did not complete"
+grep -Fq 'Signature URL:' <<<"$report" && fail "sample mirror report unexpectedly printed target-only diagnostics"
+grep -Fq 'https://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst.sig' <<<"$report" \
+  || fail "cached package URL was not converted into the configured mirror URL"
+grep -Fq 'pacman-conf' "$recovery_log" \
+  || fail "cached package did not invoke the repo mirror resolver"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "cached archive read-only preflight mutated system state"
 fi
 
 reset_recovery_case extra mirror-404
