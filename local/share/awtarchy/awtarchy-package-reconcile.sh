@@ -16,6 +16,11 @@ MIGRATE_LOCKSCREEN_RETIREMENT_ONLY=0
 NEEDS_ACTION_ONLY=0
 PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
+PACMAN_MIRROR_CHECK_ONLY=0
+PACMAN_MIRROR_REPORT_ONLY=0
+PACMAN_MIRROR_REPORT_PACKAGE=""
+PACMAN_MIRROR_REPAIR_ONLY=0
+PACMAN_MIRROR_REPAIR_REPO=""
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
@@ -164,6 +169,26 @@ while (( $# )); do
     --pacman-recovery-check)
       PACMAN_RECOVERY_CHECK_ONLY=1
       ;;
+    --mirror-check)
+      PACMAN_MIRROR_CHECK_ONLY=1
+      ;;
+    --mirror-report)
+      PACMAN_MIRROR_REPORT_ONLY=1
+      ;;
+    --mirror-repair)
+      shift
+      (( $# > 0 )) || die "--mirror-repair requires the name of a configured repository."
+      [[ $1 =~ ^[a-zA-Z0-9@._+-]+$ ]] || die "Invalid repository name."
+      PACMAN_MIRROR_REPAIR_ONLY=1
+      PACMAN_MIRROR_REPAIR_REPO="$1"
+      ;;
+    --mirror-report-package)
+      shift
+      (( $# > 0 )) || die "--mirror-report-package needs a pending package name."
+      [[ $1 =~ ^[A-Za-z0-9@._+-]+$ ]] || die "Invalid package name for read-only mirror diagnostic."
+      PACMAN_MIRROR_REPORT_ONLY=1
+      PACMAN_MIRROR_REPORT_PACKAGE="$1"
+      ;;
     --pacman-recovery-run)
       PACMAN_RECOVERY_RUN_ONLY=1
       shift
@@ -198,7 +223,7 @@ if [[ -n "$NVIDIA_ROLLBACK_VERSION" && ! "$NVIDIA_ROLLBACK_VERSION" =~ ^[0-9]+([
   die "NVIDIA driver version must look like 610.57.04."
 fi
 
-if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 )); then
+if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 && PACMAN_MIRROR_REPORT_ONLY == 0 && PACMAN_MIRROR_REPAIR_ONLY == 0 )); then
   [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
     || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
   have pacman || die "pacman is required for package reconciliation."
@@ -1790,23 +1815,29 @@ pacman_recovery_supported_runtime() {
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     return 0
   fi
-  [[ $(command -v pacman 2>/dev/null || true) == /usr/bin/pacman && -x /usr/bin/pacman ]]
+  # Always invoke the absolute pacman binary below. PATH shims, aliases or
+  # a /usr/sbin preference must not make genuine Arch installations fail.
+  [[ -x /usr/bin/pacman ]]
 }
 
 pacman_recovery_configure() {
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     PACMAN_RECOVERY_PACMAN="${AWTARCHY_PACMAN_BIN:?test mode requires AWTARCHY_PACMAN_BIN}"
+    PACMAN_RECOVERY_PACMAN_CONF_BIN="${AWTARCHY_PACMAN_CONF_BIN:-/nonexistent/pacman-conf}"
     PACMAN_RECOVERY_CONF="${AWTARCHY_PACMAN_CONF:?test mode requires AWTARCHY_PACMAN_CONF}"
     PACMAN_RECOVERY_SYNC_DIR="${AWTARCHY_PACMAN_SYNC_DIR:?test mode requires AWTARCHY_PACMAN_SYNC_DIR}"
     PACMAN_RECOVERY_CACHY_RATE="${AWTARCHY_CACHY_RATE_BIN:-/nonexistent/cachyos-rate-mirrors}"
     PACMAN_RECOVERY_REFLECTOR="${AWTARCHY_REFLECTOR_BIN:-/nonexistent/reflector}"
+    PACMAN_RECOVERY_CURL="${AWTARCHY_CURL_BIN:-/nonexistent/curl}"
     PACMAN_RECOVERY_SKIP_MIRROR_REFRESH="${AWTARCHY_SKIP_MIRROR_REFRESH:-0}"
   else
     PACMAN_RECOVERY_PACMAN=/usr/bin/pacman
+    PACMAN_RECOVERY_PACMAN_CONF_BIN=/usr/bin/pacman-conf
     PACMAN_RECOVERY_CONF=/etc/pacman.conf
     PACMAN_RECOVERY_SYNC_DIR=/var/lib/pacman/sync
     PACMAN_RECOVERY_CACHY_RATE=/usr/bin/cachyos-rate-mirrors
     PACMAN_RECOVERY_REFLECTOR=/usr/bin/reflector
+    PACMAN_RECOVERY_CURL=/usr/bin/curl
     PACMAN_RECOVERY_SKIP_MIRROR_REFRESH=0
   fi
 
@@ -2068,9 +2099,208 @@ pacman_sync_db_preflight() {
   pacman_recovery_repair "${repos[@]}"
 }
 
+
+# Print queries can return file:// paths for cached archives, even when
+# Pacman still needs signatures from an HTTP(S) mirror. Use pacman-conf
+# to resolve Includes and repository mirror variables.
+pacman_mirror_online_url() {
+  local repo="$1" file="$2" location="$3" server=""
+  if [[ $location == https://* || $location == http://* ]]; then
+    printf '%s\n' "$location"
+    return 0
+  fi
+  [[ $location == file://* && -n $file && $file != */* ]] || return 1
+  [[ -x $PACMAN_RECOVERY_PACMAN_CONF_BIN ]] || return 1
+  while IFS= read -r server; do
+    [[ $server == https://* || $server == http://* ]] || continue
+    printf '%s/%s\n' "${server%/}" "$file"
+    return 0
+  done < <("$PACMAN_RECOVERY_PACMAN_CONF_BIN" -r "$repo" Server 2>/dev/null)
+  return 1
+}
+
+# Print-only operations never refresh databases or install packages.
+pacman_mirror_upgrade_urls() {
+  local printed_urls="" repo="" file="" url="" resolved=""
+  if (( $# )); then
+    printed_urls="$("$PACMAN_RECOVERY_PACMAN" "$@" --print --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+  else
+    printed_urls="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%r\t%f\t%l' 2>/dev/null)" || return 1
+  fi
+  [[ -n $printed_urls ]] || return 0
+  while IFS=$'\t' read -r repo file url; do
+    resolved="$(pacman_mirror_online_url "$repo" "$file" "$url")" || continue
+    printf '%s\t%s\n' "$repo" "$resolved"
+  done <<<"$printed_urls"
+}
+pacman_mirror_known_repo() {
+  pacman_recovery_repo_is_arch "$1" || pacman_recovery_repo_is_cachyos "$1"
+}
+
+# In failure mode match the exact missing archive; in probe mode sample at
+# most six package signatures to keep startup bounded (not exhaustive).
+pacman_mirror_find_404_repo() {
+  local errors="$1" mode="$2" file="" line repo url code index=0
+  shift 2
+  local -a urls=()
+  if [[ $mode == failure ]]; then
+    while IFS= read -r line; do
+      if [[ $line =~ ^error:\ failed\ retrieving\ file\ \'([^\']+)\'\ from\ .*:\ The\ requested\ URL\ returned\ error:\ 404$ ]]; then
+        file="${BASH_REMATCH[1]}"
+        break
+      fi
+    done <"$errors"
+    [[ -n $file ]] || return 1
+  fi
+  mapfile -t urls < <(pacman_mirror_upgrade_urls "$@")
+  local step=1
+  if [[ $mode == probe ]]; then
+    (( ${#urls[@]} > 0 )) || return 1
+    step=$(( (${#urls[@]} + 5) / 6 ))
+    [[ -x $PACMAN_RECOVERY_CURL ]] || return 1
+  fi
+  for (( index=0; index<${#urls[@]}; index+=step )); do
+    IFS=$'\t' read -r repo url <<<"${urls[index]}"
+    pacman_mirror_known_repo "$repo" || continue
+    [[ $url == http://* || $url == https://* ]] || continue
+    if [[ $mode == failure ]]; then
+      [[ $url == */"$file" || $url == */"${file%.sig}" ]] || continue
+    else
+      [[ $url == *.pkg.tar.* ]] || continue
+      code="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 1 \
+        --max-time 2 --output /dev/null --write-out '%{http_code}' \
+        -- "${url}.sig" 2>/dev/null || true)"
+      if [[ ${PACMAN_MIRROR_REPORT_VERBOSE:-0} == 1 ]]; then
+        printf '  %s: HTTP %s (%s)\n' "$repo" "${code:-unavailable}" "${url}.sig" >&2
+      fi
+      [[ $code == 404 ]] || continue
+    fi
+    printf '%s\n' "$repo"
+    return 0
+  done
+  return 1
+}
+
+pacman_mirror_repair_404() {
+  local repo="$1" manual="${2:-0}" answer="" backup=""
+  pacman_mirror_known_repo "$repo" || return 1
+  if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
+    [[ ${AWTARCHY_ASSUME_PACMAN_REPAIR:-no} == yes ]] || return 1
+  else
+    [[ -r /dev/tty && -w /dev/tty ]] || return 1
+    if [[ $manual == 1 ]]; then
+      printf '\nAwtarchy manual mirror recovery requested (%s).\n' "$repo" >/dev/tty
+    else
+      printf '\nAwtarchy detected a package mirror HTTP 404 (%s).\n' "$repo" >/dev/tty
+    fi
+    printf 'Refreshing mirrors also performs a full system upgrade, potentially\n' >/dev/tty
+    printf 'including the kernel and GPU drivers. Signatures remain verified.\n' >/dev/tty
+    printf 'Repair mirror and upgrade the system? [y/N] ' >/dev/tty
+    IFS= read -r answer </dev/tty || answer=""
+    [[ $answer == y || $answer == Y || $answer == yes || $answer == YES ]] || return 1
+  fi
+  if pacman_recovery_repo_is_arch "$repo"; then
+    [[ -x $PACMAN_RECOVERY_REFLECTOR ]] || { warn "reflector is unavailable"; return 1; }
+    if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} != 1 && -f /etc/pacman.d/mirrorlist && ! -L /etc/pacman.d/mirrorlist ]]; then
+      backup="/etc/pacman.d/mirrorlist.awtarchy-$(date -u +%Y%m%dT%H%M%SZ).bak"
+      pacman_recovery_as_root cp -p -- /etc/pacman.d/mirrorlist "$backup" || return 1
+    fi
+    pacman_recovery_as_root "$PACMAN_RECOVERY_REFLECTOR" \
+      --protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist \
+      || return 1
+  else
+    [[ -x $PACMAN_RECOVERY_CACHY_RATE ]] || { warn "cachyos-rate-mirrors is unavailable"; return 1; }
+    pacman_recovery_as_root "$PACMAN_RECOVERY_CACHY_RATE" || return 1
+  fi
+  log "Resynchronizing databases and upgrading installed packages..."
+  pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" -Syyu
+}
+
+# Public, non-interactive diagnostic. It cannot trigger sudo or mirror writes.
+pacman_mirror_report() {
+  printf '%s\n' 'Awtarchy package mirror diagnostic (read-only)'
+  pacman_recovery_supported_runtime \
+    || { printf '%s\n' 'SKIP: /usr/bin/pacman is missing or not executable'; return 0; }
+  pacman_recovery_configure \
+    || { printf '%s\n' 'SKIP: Pacman configuration unavailable'; return 0; }
+  if [[ ! -x $PACMAN_RECOVERY_CURL ]]; then
+    printf '%s\n' 'SKIP: /usr/bin/curl is not installed'
+    return 0
+  fi
+
+  local pending_urls="" repo=""
+  if [[ -n $PACMAN_MIRROR_REPORT_PACKAGE ]]; then
+    local package_name package_repo package_file package_url remote_url="" status="" matched=0 named_urls=""
+    # An explicit sync target is valid even when it isn't a pending upgrade.
+    # Pacman's %n identifies an exact package, not a filename prefix.
+    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sp --print-format $'%n\t%r\t%f\t%l' \
+      "$PACMAN_MIRROR_REPORT_PACKAGE" 2>/dev/null)"; then
+      printf 'NOT FOUND IN SYNC DATABASE: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+      return 0
+    fi
+    printf 'Checking exact repository package: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+    while IFS=$'\t' read -r package_name package_repo package_file package_url; do
+      [[ $package_name == "$PACMAN_MIRROR_REPORT_PACKAGE" ]] || continue
+      pacman_mirror_known_repo "$package_repo" || continue
+      matched=1
+      remote_url="$(pacman_mirror_online_url "$package_repo" "$package_file" "$package_url")" || {
+        printf 'NO NETWORK URL: %s (%s)\n' "$package_name" "$package_url"
+        break
+      }
+      status="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 3 \
+        --max-time 6 --output /dev/null --write-out '%{http_code}' \
+        -- "${remote_url}.sig" 2>/dev/null || true)"
+      printf 'Selected package: %s\n' "$package_name"
+      printf 'Repository: %s\n' "$package_repo"
+      printf 'Signature URL: %s.sig\n' "$remote_url"
+      printf 'HTTP status: %s\n' "${status:-unavailable}"
+      if [[ $status == 404 ]]; then
+        printf 'DETECTED: HTTP 404 for repository %s\n' "$package_repo"
+      elif [[ $status == 200 ]]; then
+        printf '%s\n' 'HTTP 200: Signature available at tested URL'
+      else
+        printf '%s\n' 'INCONCLUSIVE: Could not confirm signature availability'
+      fi
+      break
+    done <<<"$named_urls"
+    if (( matched == 0 )); then
+      printf 'NO EXACT PACKAGE URL: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+    fi
+    printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
+    return 0
+  fi
+
+  if ! pending_urls="$(pacman_mirror_upgrade_urls)"; then
+    printf '%s\n' 'SKIP: Could not read pending upgrades from local Pacman databases'
+    return 0
+  fi
+  if [[ -z $pending_urls ]]; then
+    printf '%s\n' 'NO PENDING UPGRADES: Nothing to probe using current sync databases'
+    return 0
+  fi
+  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
+  printf '%s\n' 'Testing up to six pending package signatures:'
+  if repo="$(PACMAN_MIRROR_REPORT_VERBOSE=1 pacman_mirror_find_404_repo "" probe)"; then
+    printf 'DETECTED: HTTP 404 for repository %s\n' "$repo"
+  else
+    printf '%s\n' 'NO CONFIRMED 404 in sample (does not guarantee all mirrors are healthy)'
+  fi
+  printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
+}
+pacman_mirror_menu_check() {
+  [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 || ( -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ) ]] || return 0
+  pacman_recovery_supported_runtime || return 0
+  pacman_recovery_configure || return 0
+  local repo=""
+  repo="$(pacman_mirror_find_404_repo "" probe)" || return 0
+  pacman_mirror_repair_404 "$repo" || true
+  return 0
+}
+
 pacman_recovery_run_command() {
   local error_file rc=0 retry_rc=0
   local -a repos=() args=("$@")
+  local mirror_repo=""
 
   pacman_recovery_supported_runtime || {
     as_root pacman "${args[@]}"
@@ -2087,10 +2317,14 @@ pacman_recovery_run_command() {
   fi
 
   mapfile -t repos < <(pacman_recovery_parse_repos "$error_file" || true)
+  if (( ${#repos[@]} == 0 )) && grep -Fq 'The requested URL returned error: 404' "$error_file"; then
+    mirror_repo="$(pacman_mirror_find_404_repo "$error_file" failure "${args[@]}" || true)"
+  fi
   rm -f -- "$error_file"
-  (( ${#repos[@]} > 0 )) || return "$rc"
-
-  if ! pacman_recovery_repair "${repos[@]}"; then
+  if (( ${#repos[@]} == 0 )); then
+    [[ -n $mirror_repo ]] || return "$rc"
+    pacman_mirror_repair_404 "$mirror_repo" || return "$rc"
+  elif ! pacman_recovery_repair "${repos[@]}"; then
     return "$rc"
   fi
 
@@ -2371,6 +2605,25 @@ if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
     [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
     apply_nvidia_rollback 0
   fi
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_REPAIR_ONLY == 1 )); then
+  pacman_recovery_supported_runtime || die "Standard Pacman installation is unavailable."
+  pacman_recovery_configure || die "Pacman configuration is unavailable."
+  pacman_mirror_known_repo "$PACMAN_MIRROR_REPAIR_REPO" || die "Not an official Arch/CachyOS repository."
+  [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 || ( -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ) ]] || die "Manual repair requires an interactive terminal."
+  pacman_mirror_repair_404 "$PACMAN_MIRROR_REPAIR_REPO" 1
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_REPORT_ONLY == 1 )); then
+  pacman_mirror_report
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_CHECK_ONLY == 1 )); then
+  pacman_mirror_menu_check
   exit $?
 fi
 
