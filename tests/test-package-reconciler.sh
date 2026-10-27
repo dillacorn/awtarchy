@@ -397,8 +397,28 @@ run_mirror_preflight() {
   AWTARCHY_CACHY_RATE_BIN="$recovery_bin/cachyos-rate-mirrors" \
   AWTARCHY_REFLECTOR_BIN="$recovery_bin/reflector" \
   AWTARCHY_CURL_BIN="$recovery_bin/curl" \
-  "$RECONCILER" --mirror-check
+  "$RECONCILER" "${1:---mirror-check}"
 }
+
+reset_recovery_case extra mirror-404
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report 2>&1)" \
+  || fail "read-only mirror report unexpectedly failed"
+grep -Fq 'DETECTED: HTTP 404 for repository extra' <<<"$report" \
+  || fail "read-only report did not identify the simulated 404"
+grep -Fq 'No sudo, package upgrades, database changes, or mirrorlist edits' <<<"$report" \
+  || fail "read-only report did not confirm its non-mutating mode"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "read-only mirror report called mutating commands"
+fi
+
+reset_recovery_case extra network-timeout
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report 2>&1)" \
+  || fail "read-only report failed on simulated network timeout"
+grep -Fq 'NO CONFIRMED 404 in sample' <<<"$report" \
+  || fail "read-only report mistook a timeout for HTTP 404"
+if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
+  fail "network-timeout report called mutating commands"
+fi
 
 reset_recovery_case extra mirror-404
 AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight \
