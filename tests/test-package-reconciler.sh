@@ -45,6 +45,7 @@ grep -Fq 'Reconcile packages (install current / remove replaced)' "$LAUNCHER" \
   || fail "maintenance menu does not expose package reconciliation"
 grep -Fq 'new_package_reconciler=' "$LAUNCHER" \
   || fail "self-update does not install the package reconciler"
+# shellcheck disable=SC2016 # Exact launcher-source text, not shell expansion.
 grep -Fq 'if [[ ${2:-} != --review ]]; then' "$LAUNCHER" \
   || fail "awtarchy packages --review may invoke an upgrading mirror repair"
 
