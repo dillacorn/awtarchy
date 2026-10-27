@@ -526,8 +526,9 @@ if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
 fi
 
 reset_recovery_case extra mirror-404
-AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight --mirror-repair extra \
-  || fail "declined manual mirror recovery should remain nonfatal"
+if AWTARCHY_ASSUME_PACMAN_REPAIR=no run_mirror_preflight --mirror-repair extra; then
+  fail "declined manual recovery should return an unsuccessful status"
+fi
 if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "declined manual mirror recovery altered the system"
 fi
