@@ -19,6 +19,8 @@ PACMAN_RECOVERY_RUN_ONLY=0
 PACMAN_MIRROR_CHECK_ONLY=0
 PACMAN_MIRROR_REPORT_ONLY=0
 PACMAN_MIRROR_REPORT_PACKAGE=""
+PACMAN_MIRROR_REPAIR_ONLY=0
+PACMAN_MIRROR_REPAIR_REPO=""
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
@@ -173,6 +175,13 @@ while (( $# )); do
     --mirror-report)
       PACMAN_MIRROR_REPORT_ONLY=1
       ;;
+    --mirror-repair)
+      shift
+      (( $# > 0 )) || die "--mirror-repair requires the name of a configured repository."
+      [[ $1 =~ ^[a-zA-Z0-9@._+-]+$ ]] || die "Invalid repository name."
+      PACMAN_MIRROR_REPAIR_ONLY=1
+      PACMAN_MIRROR_REPAIR_REPO="$1"
+      ;;
     --mirror-report-package)
       shift
       (( $# > 0 )) || die "--mirror-report-package needs a pending package name."
@@ -214,7 +223,7 @@ if [[ -n "$NVIDIA_ROLLBACK_VERSION" && ! "$NVIDIA_ROLLBACK_VERSION" =~ ^[0-9]+([
   die "NVIDIA driver version must look like 610.57.04."
 fi
 
-if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 && PACMAN_MIRROR_REPORT_ONLY == 0 )); then
+if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 && PACMAN_MIRROR_REPORT_ONLY == 0 && PACMAN_MIRROR_REPAIR_ONLY == 0 )); then
   [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
     || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
   have pacman || die "pacman is required for package reconciliation."
@@ -2173,13 +2182,17 @@ pacman_mirror_find_404_repo() {
 }
 
 pacman_mirror_repair_404() {
-  local repo="$1" answer="" backup=""
+  local repo="$1" manual="${2:-0}" answer="" backup=""
   pacman_mirror_known_repo "$repo" || return 1
   if [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 ]]; then
     [[ ${AWTARCHY_ASSUME_PACMAN_REPAIR:-no} == yes ]] || return 1
   else
     [[ -r /dev/tty && -w /dev/tty ]] || return 1
-    printf '\nAwtarchy detected a package mirror HTTP 404 (%s).\n' "$repo" >/dev/tty
+    if [[ $manual == 1 ]]; then
+      printf '\nAwtarchy manual mirror recovery requested (%s).\n' "$repo" >/dev/tty
+    else
+      printf '\nAwtarchy detected a package mirror HTTP 404 (%s).\n' "$repo" >/dev/tty
+    fi
     printf 'Refreshing mirrors also performs a full system upgrade, potentially\n' >/dev/tty
     printf 'including the kernel and GPU drivers. Signatures remain verified.\n' >/dev/tty
     printf 'Repair mirror and upgrade the system? [y/N] ' >/dev/tty
@@ -2592,6 +2605,15 @@ if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
     [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
     apply_nvidia_rollback 0
   fi
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_REPAIR_ONLY == 1 )); then
+  pacman_recovery_supported_runtime || die "Standard Pacman installation is unavailable."
+  pacman_recovery_configure || die "Pacman configuration is unavailable."
+  pacman_mirror_known_repo "$PACMAN_MIRROR_REPAIR_REPO" || die "Not an official Arch/CachyOS repository."
+  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "Manual repair requires an interactive terminal."
+  pacman_mirror_repair_404 "$PACMAN_MIRROR_REPAIR_REPO" 1
   exit $?
 fi
 
