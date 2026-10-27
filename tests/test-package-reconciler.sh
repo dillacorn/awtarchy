@@ -429,7 +429,7 @@ AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_recovery_pacman -Syu --needed --noconfirm 
 grep -Fq $'reflector\t--protocol https --age 12 --latest 20 --sort rate --save /etc/pacman.d/mirrorlist' "$recovery_log" \
   || fail "HTTP 404 did not refresh Arch mirrors"
 grep -Fq -- '-Syyu' "$recovery_log" || fail "HTTP 404 recovery did not upgrade the system"
-[[ $(grep -c $'pacman\t-Syu' "$recovery_log" || true) -eq 2 ]] \
+[[ $(grep -F $'pacman\t-Syu' "$recovery_log" | grep -Fvc -- '--print' || true) -eq 2 ]] \
   || fail "original failed package command was not retried once"
 
 reset_recovery_case extra explicit-404
