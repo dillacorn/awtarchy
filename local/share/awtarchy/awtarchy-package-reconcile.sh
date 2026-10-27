@@ -2191,23 +2191,16 @@ pacman_mirror_report() {
   fi
 
   local pending_urls="" repo=""
-  if ! pending_urls="$(pacman_mirror_upgrade_urls)"; then
-    printf '%s\n' 'SKIP: Could not read pending upgrades from local Pacman databases'
-    return 0
-  fi
-  if [[ -z $pending_urls ]]; then
-    printf '%s\n' 'NO PENDING UPGRADES: Nothing to probe using current sync databases'
-    return 0
-  fi
-  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
   if [[ -n $PACMAN_MIRROR_REPORT_PACKAGE ]]; then
     local package_name package_repo package_url status="" matched=0 named_urls=""
-    # Pacman's %n is the authoritative package name; matching filename
-    # prefixes confuses glycin with glycin-gtk4.
-    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sup --print-format $'%n\t%r\t%l' 2>/dev/null)"; then
-      printf '%s\n' 'SKIP: Could not read named pending upgrades'
+    # An explicit sync target is valid even when it isn't a pending upgrade.
+    # Pacman's %n identifies an exact package, not a filename prefix.
+    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sp --print-format $'%n\t%r\t%l' \
+      "$PACMAN_MIRROR_REPORT_PACKAGE" 2>/dev/null)"; then
+      printf 'NOT FOUND IN SYNC DATABASE: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
       return 0
     fi
+    printf 'Checking exact repository package: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
     while IFS=$'\t' read -r package_name package_repo package_url; do
       [[ $package_name == "$PACMAN_MIRROR_REPORT_PACKAGE" ]] || continue
       pacman_mirror_known_repo "$package_repo" || continue
@@ -2216,7 +2209,7 @@ pacman_mirror_report() {
       status="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 3 \
         --max-time 6 --output /dev/null --write-out '%{http_code}' \
         -- "${package_url}.sig" 2>/dev/null || true)"
-      printf 'Selected package: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+      printf 'Selected package: %s\n' "$package_name"
       printf 'Repository: %s\n' "$package_repo"
       printf 'Signature URL: %s.sig\n' "$package_url"
       printf 'HTTP status: %s\n' "${status:-unavailable}"
@@ -2230,11 +2223,21 @@ pacman_mirror_report() {
       break
     done <<<"$named_urls"
     if (( matched == 0 )); then
-      printf 'NOT IN PENDING UPGRADES: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
+      printf 'NO EXACT PACKAGE URL: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
     fi
     printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
     return 0
   fi
+
+  if ! pending_urls="$(pacman_mirror_upgrade_urls)"; then
+    printf '%s\n' 'SKIP: Could not read pending upgrades from local Pacman databases'
+    return 0
+  fi
+  if [[ -z $pending_urls ]]; then
+    printf '%s\n' 'NO PENDING UPGRADES: Nothing to probe using current sync databases'
+    return 0
+  fi
+  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
   printf '%s\n' 'Testing up to six pending package signatures:'
   if repo="$(PACMAN_MIRROR_REPORT_VERBOSE=1 pacman_mirror_find_404_repo "" probe)"; then
     printf 'DETECTED: HTTP 404 for repository %s\n' "$repo"
@@ -2243,7 +2246,6 @@ pacman_mirror_report() {
   fi
   printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
 }
-
 pacman_mirror_menu_check() {
   [[ ${AWTARCHY_PACMAN_RECOVERY_TEST_MODE:-0} == 1 || ( -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ) ]] || return 0
   pacman_recovery_supported_runtime || return 0
