@@ -17,6 +17,7 @@ NEEDS_ACTION_ONLY=0
 PACMAN_RECOVERY_CHECK_ONLY=0
 PACMAN_RECOVERY_RUN_ONLY=0
 PACMAN_MIRROR_CHECK_ONLY=0
+PACMAN_MIRROR_REPORT_ONLY=0
 NVIDIA_ROLLBACK_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
@@ -168,6 +169,9 @@ while (( $# )); do
     --mirror-check)
       PACMAN_MIRROR_CHECK_ONLY=1
       ;;
+    --mirror-report)
+      PACMAN_MIRROR_REPORT_ONLY=1
+      ;;
     --pacman-recovery-run)
       PACMAN_RECOVERY_RUN_ONLY=1
       shift
@@ -202,7 +206,7 @@ if [[ -n "$NVIDIA_ROLLBACK_VERSION" && ! "$NVIDIA_ROLLBACK_VERSION" =~ ^[0-9]+([
   die "NVIDIA driver version must look like 610.57.04."
 fi
 
-if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 )); then
+if (( PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0 && PACMAN_MIRROR_CHECK_ONLY == 0 && PACMAN_MIRROR_REPORT_ONLY == 0 )); then
   [[ -r "$RUNTIME" && ! -L "$RUNTIME" ]] \
     || die "Awtarchy runtime is unavailable or unsafe: ${RUNTIME}"
   have pacman || die "pacman is required for package reconciliation."
@@ -2122,6 +2126,9 @@ pacman_mirror_find_404_repo() {
       code="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 1 \
         --max-time 2 --output /dev/null --write-out '%{http_code}' \
         -- "${url}.sig" 2>/dev/null || true)"
+      if [[ ${PACMAN_MIRROR_REPORT_VERBOSE:-0} == 1 ]]; then
+        printf '  %s: HTTP %s (%s)\n' "$repo" "${code:-unavailable}" "${url}.sig" >&2
+      fi
       [[ $code == 404 ]] || continue
     fi
     printf '%s\n' "$repo"
@@ -2159,6 +2166,37 @@ pacman_mirror_repair_404() {
   fi
   log "Resynchronizing databases and upgrading installed packages..."
   pacman_recovery_as_root "$PACMAN_RECOVERY_PACMAN" -Syyu
+}
+
+# Public, non-interactive diagnostic. It cannot trigger sudo or mirror writes.
+pacman_mirror_report() {
+  printf '%s\n' 'Awtarchy package mirror diagnostic (read-only)'
+  pacman_recovery_supported_runtime \
+    || { printf '%s\n' 'SKIP: standard /usr/bin/pacman not available'; return 0; }
+  pacman_recovery_configure \
+    || { printf '%s\n' 'SKIP: Pacman configuration unavailable'; return 0; }
+  if [[ ! -x $PACMAN_RECOVERY_CURL ]]; then
+    printf '%s\n' 'SKIP: /usr/bin/curl is not installed'
+    return 0
+  fi
+
+  local urls="" repo=""
+  if ! urls="$(pacman_mirror_upgrade_urls)"; then
+    printf '%s\n' 'SKIP: Could not read pending upgrades from local Pacman databases'
+    return 0
+  fi
+  if [[ -z $urls ]]; then
+    printf '%s\n' 'NO PENDING UPGRADES: Nothing to probe using current sync databases'
+    return 0
+  fi
+  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$urls" | wc -l)"
+  printf '%s\n' 'Testing up to six pending package signatures:'
+  if repo="$(PACMAN_MIRROR_REPORT_VERBOSE=1 pacman_mirror_find_404_repo "" probe)"; then
+    printf 'DETECTED: HTTP 404 for repository %s\n' "$repo"
+  else
+    printf '%s\n' 'NO CONFIRMED 404 in sample (does not guarantee all mirrors are healthy)'
+  fi
+  printf '%s\n' 'No sudo, package upgrades, database changes, or mirrorlist edits were performed.'
 }
 
 pacman_mirror_menu_check() {
@@ -2479,6 +2517,11 @@ if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
     [[ -r /dev/tty && -w /dev/tty ]] || die "NVIDIA rollback requires an interactive terminal."
     apply_nvidia_rollback 0
   fi
+  exit $?
+fi
+
+if (( PACMAN_MIRROR_REPORT_ONLY == 1 )); then
+  pacman_mirror_report
   exit $?
 fi
 
