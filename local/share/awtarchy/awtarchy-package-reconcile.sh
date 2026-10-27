@@ -2180,16 +2180,16 @@ pacman_mirror_report() {
     return 0
   fi
 
-  local urls="" repo=""
-  if ! urls="$(pacman_mirror_upgrade_urls)"; then
+  local pending_urls="" repo=""
+  if ! pending_urls="$(pacman_mirror_upgrade_urls)"; then
     printf '%s\n' 'SKIP: Could not read pending upgrades from local Pacman databases'
     return 0
   fi
-  if [[ -z $urls ]]; then
+  if [[ -z $pending_urls ]]; then
     printf '%s\n' 'NO PENDING UPGRADES: Nothing to probe using current sync databases'
     return 0
   fi
-  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$urls" | wc -l)"
+  printf 'Pending upgrade URLs: %s\n' "$(printf '%s\n' "$pending_urls" | wc -l)"
   printf '%s\n' 'Testing up to six pending package signatures:'
   if repo="$(PACMAN_MIRROR_REPORT_VERBOSE=1 pacman_mirror_find_404_repo "" probe)"; then
     printf 'DETECTED: HTTP 404 for repository %s\n' "$repo"
