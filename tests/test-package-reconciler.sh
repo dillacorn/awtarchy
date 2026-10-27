@@ -213,7 +213,14 @@ if [[ " $* " == *' -Sup '* || " $* " == *' --print '* ]]; then
   if [[ $(cat "${RECOVERY_STATE}/mode") == explicit-404 && " $* " == *' -Sup '* ]]; then
     exit 0
   fi
-  printf 'extra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+  if [[ " $* " == *'%n'* ]]; then
+    # Prefix collision first: glycin-gtk4 must not match a glycin query.
+    printf 'glycin-gtk4\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\n'
+    printf 'glycin\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst\n'
+    printf 'example\textra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+  else
+    printf 'extra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+  fi
   exit 0
 fi
 
@@ -436,6 +443,27 @@ grep -Fq 'DETECTED: HTTP 404 for repository extra' <<<"$report" \
   || fail "targeted report missed the known signature 404"
 if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "targeted report called mutating commands"
+fi
+
+reset_recovery_case extra mirror-404
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package glycin 2>&1)" \
+  || fail "exact-name mirror report failed for glycin"
+grep -Fq 'Signature URL: https://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst.sig' <<<"$report" \
+  || fail "glycin report did not select the exact glycin package"
+if grep -Fq 'glycin-gtk4' <<<"$report"; then
+  fail "glycin report incorrectly selected glycin-gtk4"
+fi
+if grep -Fq 'glycin-gtk4' "$recovery_log"; then
+  fail "glycin report probed the similarly prefixed glycin-gtk4"
+fi
+
+reset_recovery_case extra mirror-404
+report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package glycin-gtk4 2>&1)" \
+  || fail "exact-name mirror report failed for glycin-gtk4"
+grep -Fq 'Signature URL: https://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst.sig' <<<"$report" \
+  || fail "glycin-gtk4 report did not select its own signature"
+if grep -Fq 'Signature URL: https://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst.sig' <<<"$report"; then
+  fail "glycin-gtk4 report selected glycin"
 fi
 
 reset_recovery_case extra network-timeout
