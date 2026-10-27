@@ -45,6 +45,11 @@ grep -Fq 'Reconcile packages (install current / remove replaced)' "$LAUNCHER" \
   || fail "maintenance menu does not expose package reconciliation"
 grep -Fq 'new_package_reconciler=' "$LAUNCHER" \
   || fail "self-update does not install the package reconciler"
+# The installed pacman is always called by absolute path. A PATH shim or
+# /usr/sbin-first environment must not disable the non-mutating probe.
+grep -Fq '[[ -x /usr/bin/pacman ]]' "$RECONCILER" \
+  || fail "mirror probe rejects systems with a real Pacman binary outside PATH preference"
+
 # shellcheck disable=SC2016 # Exact launcher-source text, not shell expansion.
 grep -Fq 'if [[ ${2:-} != --review ]]; then' "$LAUNCHER" \
   || fail "awtarchy packages --review may invoke an upgrading mirror repair"
