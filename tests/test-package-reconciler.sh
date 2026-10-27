@@ -209,6 +209,25 @@ for (( i=0; i<${#args[@]}; i++ )); do
   fi
 done
 
+if [[ ${1:-} == -Sp ]]; then
+  # A direct sync query works when the target is absent from pending upgrades.
+  case "${*: -1}" in
+    glycin)
+      printf 'glycin\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst\n'
+      ;;
+    glycin-gtk4)
+      printf 'glycin-gtk4\textra\thttps://mirror.example.invalid/extra/os/x86_64/glycin-gtk4-2.2.5-1-x86_64.pkg.tar.zst\n'
+      ;;
+    example)
+      printf 'example\textra\thttps://mirror.example.invalid/extra/os/x86_64/example-1-1-x86_64.pkg.tar.zst\n'
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+  exit 0
+fi
+
 if [[ " $* " == *' -Sup '* || " $* " == *' --print '* ]]; then
   if [[ $(cat "${RECOVERY_STATE}/mode") == explicit-404 && " $* " == *' -Sup '* ]]; then
     exit 0
@@ -448,6 +467,10 @@ fi
 reset_recovery_case extra mirror-404
 report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package glycin 2>&1)" \
   || fail "exact-name mirror report failed for glycin"
+grep -Fq 'Checking exact repository package: glycin' <<<"$report" \
+  || fail "explicit glycin package did not use the direct sync query"
+grep -Fq -- '-Sp' "$recovery_log" \
+  || fail "named mirror report did not call read-only pacman -Sp"
 grep -Fq 'Signature URL: https://mirror.example.invalid/extra/os/x86_64/glycin-2.2.5-1-x86_64.pkg.tar.zst.sig' <<<"$report" \
   || fail "glycin report did not select the exact glycin package"
 if grep -Fq 'glycin-gtk4' <<<"$report"; then
@@ -475,7 +498,7 @@ grep -Fq 'INCONCLUSIVE: Could not confirm signature availability' <<<"$report" \
 reset_recovery_case extra mirror-404
 report="$(AWTARCHY_ASSUME_PACMAN_REPAIR=yes run_mirror_preflight --mirror-report-package absent 2>&1)" \
   || fail "targeted report failed on absent package"
-grep -Fq 'NOT IN PENDING UPGRADES: absent' <<<"$report" \
+grep -Fq 'NOT FOUND IN SYNC DATABASE: absent' <<<"$report" \
   || fail "targeted report misidentified a missing package"
 if grep -Eq 'reflector|-Syyu' "$recovery_log"; then
   fail "absent package report called mutating commands"
