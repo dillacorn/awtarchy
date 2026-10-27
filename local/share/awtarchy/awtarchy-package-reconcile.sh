@@ -2217,26 +2217,29 @@ pacman_mirror_report() {
 
   local pending_urls="" repo=""
   if [[ -n $PACMAN_MIRROR_REPORT_PACKAGE ]]; then
-    local package_name package_repo package_url status="" matched=0 named_urls=""
+    local package_name package_repo package_file package_url remote_url="" status="" matched=0 named_urls=""
     # An explicit sync target is valid even when it isn't a pending upgrade.
     # Pacman's %n identifies an exact package, not a filename prefix.
-    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sp --print-format $'%n\t%r\t%l' \
+    if ! named_urls="$("$PACMAN_RECOVERY_PACMAN" -Sp --print-format $'%n\t%r\t%f\t%l' \
       "$PACMAN_MIRROR_REPORT_PACKAGE" 2>/dev/null)"; then
       printf 'NOT FOUND IN SYNC DATABASE: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
       return 0
     fi
     printf 'Checking exact repository package: %s\n' "$PACMAN_MIRROR_REPORT_PACKAGE"
-    while IFS=$'\t' read -r package_name package_repo package_url; do
+    while IFS=$'\t' read -r package_name package_repo package_file package_url; do
       [[ $package_name == "$PACMAN_MIRROR_REPORT_PACKAGE" ]] || continue
       pacman_mirror_known_repo "$package_repo" || continue
-      [[ $package_url == https://* || $package_url == http://* ]] || continue
       matched=1
+      remote_url="$(pacman_mirror_online_url "$package_repo" "$package_file" "$package_url")" || {
+        printf 'NO NETWORK URL: %s (%s)\n' "$package_name" "$package_url"
+        break
+      }
       status="$("$PACMAN_RECOVERY_CURL" -LI --silent --connect-timeout 3 \
         --max-time 6 --output /dev/null --write-out '%{http_code}' \
-        -- "${package_url}.sig" 2>/dev/null || true)"
+        -- "${remote_url}.sig" 2>/dev/null || true)"
       printf 'Selected package: %s\n' "$package_name"
       printf 'Repository: %s\n' "$package_repo"
-      printf 'Signature URL: %s.sig\n' "$package_url"
+      printf 'Signature URL: %s.sig\n' "$remote_url"
       printf 'HTTP status: %s\n' "${status:-unavailable}"
       if [[ $status == 404 ]]; then
         printf 'DETECTED: HTTP 404 for repository %s\n' "$package_repo"
