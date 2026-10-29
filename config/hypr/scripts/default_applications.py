@@ -187,55 +187,108 @@ def put(stdscr: curses.window, y: int, x: int, value: str,
 
 def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
          category_index: int, option_index: int, mode: str, notice: str) -> None:
+    """Render one focused screen at a time, using terminal-default colors."""
     stdscr.erase()
     h, w = stdscr.getmaxyx()
     if h < 14 or w < 35:
         put(stdscr, 1, 2, "Resize Default Applications", max(w - 3, 1))
         stdscr.refresh()
         return
+
     width = w - 4
-    put(stdscr, 1, 2, "AWTARCHY DEFAULT APPLICATIONS", width, curses.A_BOLD)
-    stdscr.hline(2, 2, curses.ACS_HLINE, width)
     keys = list(CATALOG)
-    for idx, category in enumerate(keys):
-        y = 4 + idx * 2
-        app = pending.get(category, "")
-        is_changed = app != effective(category, saved)
-        marker = "> " if idx == category_index else "  "
-        text = f"{marker}{LABELS[category]:<15} {label(category, app) if app else '(unavailable)'}"
-        if is_changed:
-            text += " *"
-        put(stdscr, y, 2, text, width,
-            curses.A_REVERSE if idx == category_index and mode == "main" else 0)
-    y = 4 + len(keys) * 2 + 1
+    category = keys[category_index]
     if mode == "choose":
-        category = keys[category_index]
-        options = installed(category)
-        put(stdscr, y, 2, f"Choose {LABELS[category]} ({option_index + 1}/{len(options)}):",
-            width, curses.A_BOLD)
-        visible_count = max(0, h - y - 3)
-        first_visible = max(0, option_index - visible_count + 1)
-        for i in range(first_visible, min(len(options), first_visible + visible_count)):
-            app_label = options[i][1]
-            put(stdscr, y + 1 + i - first_visible, 4,
-                ("> " if i == option_index else "  ") + app_label,
-                width - 2, curses.A_REVERSE if i == option_index else 0)
-        help_text = "Enter: Choose   Esc: Back"
+        title = f"DEFAULT {LABELS[category].upper()}"
     elif mode == "review":
-        put(stdscr, y, 2, "Apply Awtarchy launcher defaults?", width, curses.A_BOLD)
-        put(stdscr, y + 1, 2, "Existing MIME/XDG associations remain unchanged.", width)
-        help_text = "Enter: Apply   Esc: Cancel"
+        title = "REVIEW DEFAULT APPLICATIONS"
     else:
-        put(stdscr, y, 2, notice, width, curses.A_DIM)
-        help_text = "Enter: Choose   S: Review/Save   Esc: Close"
-    put(stdscr, h - 2, 2, help_text, width, curses.A_DIM)
+        title = "AWTARCHY DEFAULT APPLICATIONS"
+
+    put(stdscr, 1, 2, title, width, curses.A_BOLD)
+    try:
+        stdscr.hline(2, 2, curses.ACS_HLINE, width)
+    except curses.error:
+        pass
+
+    if mode == "choose":
+        # No other categories or their current selections are shown here.
+        # The entire viewport belongs to the installed app choices.
+        options = installed(category)
+        current = pending.get(category, "")
+        available_rows = max(1, h - 8)
+        first_visible = max(0, min(
+            option_index - available_rows + 1,
+            len(options) - available_rows
+        ))
+        for index in range(first_visible,
+                           min(len(options), first_visible + available_rows)):
+            app, app_label = options[index]
+            prefix = "> " if index == option_index else "  "
+            selected = "  (current)" if app == current else ""
+            put(stdscr, 4 + index - first_visible, 2,
+                prefix + app_label + selected, width,
+                curses.A_REVERSE if index == option_index else 0)
+        put(stdscr, h - 4, 2,
+            f"Choice {option_index + 1}/{len(options)}", width, curses.A_DIM)
+        footer = "Enter: Select   Esc: Back"
+    elif mode == "review":
+        changed = [(key, pending.get(key, ""))
+                   for key in keys
+                   if pending.get(key, "") != effective(key, saved)]
+        for i, (key, app) in enumerate(changed[:max(0, h - 9)]):
+            put(stdscr, 4 + i, 2, f"{LABELS[key]}: {label(key, app)}",
+                width)
+        put(stdscr, h - 6, 2, "Apply these launcher preferences?",
+            width, curses.A_BOLD)
+        put(stdscr, h - 5, 2, "MIME and XDG settings are unchanged.",
+            width, curses.A_DIM)
+        footer = "Enter: Save   Esc: Back"
+    else:
+        for idx, key in enumerate(keys):
+            y = 4 + idx * 2
+            app = pending.get(key, "")
+            changed = app != effective(key, saved)
+            text = (("> " if idx == category_index else "  ")
+                    + f"{LABELS[key]:<15} "
+                    + (label(key, app) if app else "(unavailable)"))
+            if changed:
+                text += " *"
+            put(stdscr, y, 2, text, width,
+                curses.A_REVERSE if idx == category_index else 0)
+        put(stdscr, h - 4, 2, notice, width, curses.A_DIM)
+        footer = "Enter: Choose   S: Save   Esc: Close"
+
+    put(stdscr, h - 2, 2, footer, width, curses.A_DIM)
     stdscr.refresh()
 
 
+def setup_colors(stdscr: curses.window) -> None:
+    """Honor Foot's configured foreground/background, including transparency.
+
+    Curses' built-in colors otherwise default to opaque black even when Foot
+    has a translucent background. Do not impose a private color scheme.
+    """
+    if not curses.has_colors():
+        return
+    curses.start_color()
+    try:
+        curses.use_default_colors()
+        curses.init_pair(1, -1, -1)
+        stdscr.bkgd(" ", curses.color_pair(1))
+    except curses.error:
+        # Terminals without default-color support retain curses' safe defaults.
+        pass
+
+
 def tui(stdscr: curses.window) -> None:
-    curses.curs_set(0)
+    try:
+        curses.curs_set(0)
+    except curses.error:
+        pass
     curses.noecho()
     stdscr.keypad(True)
+    setup_colors(stdscr)
     saved = load()
     pending = {category: effective(category, saved) for category in CATALOG}
     keys = list(CATALOG)
