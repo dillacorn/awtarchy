@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Toggle the single floating Default Applications selector.
 set -euo pipefail
+export APP_NO_LAUNCH_IF_TILED=1
 
 scripts_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
 printf -v selector_path '%q' "${scripts_dir}/default_applications.py"
