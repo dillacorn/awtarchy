@@ -1,0 +1,13 @@
+# Awtarchy-managed shortcut to its shared default-applications selector.
+[Desktop Entry]
+Type=Application
+Name=Default Applications
+GenericName=Application Preferences
+Comment=Select installed terminal, browser, file manager and editor
+Exec=sh -c "exec $HOME/.config/hypr/scripts/default_applications.sh"
+TryExec=foot
+Icon=preferences-desktop-default-applications
+Terminal=false
+StartupNotify=false
+Categories=Settings;System;Utility;
+Keywords=default;applications;terminal;browser;editor;file;manager;
