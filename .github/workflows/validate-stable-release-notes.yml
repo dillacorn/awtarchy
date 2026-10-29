@@ -39,3 +39,76 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  # One-use publication job for the explicitly authorized v4.1.2 release.
+  # Exists ONLY in the temporary PR branch, never merge to main.
+  publish-v4-1-2:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.title == 'release(v4.1.2): one-use publication bridge' &&
+      github.event.pull_request.head.ref == 'release/v4.1.2-one-use-publisher' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    concurrency:
+      group: awtarchy-one-use-v4-1-2-publisher
+      cancel-in-progress: false
+    steps:
+      - name: Read the exact one-use release source
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+
+      - name: Validate, publish and verify stable v4.1.2
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_MAIN_SHA: a8344f667c2bf339d0898bc57ad5165003a32983
+        run: |
+          set -euo pipefail
+          tag="v4.1.2"
+          title="Awtarchy v4.1.2 Qalc and Default Applications"
+          notes=".github/release-notes/v4.1.2.md"
+          previous="$RUNNER_TEMP/awtarchy-previous-stable.md"
+          published="$RUNNER_TEMP/awtarchy-published-v4.1.2.md"
+          actual_main="$(gh api "repos/$GITHUB_REPOSITORY/commits/main" --jq .sha)"
+          test "$actual_main" = "$EXPECTED_MAIN_SHA" || {
+            echo "STOP: main moved; refusing to publish a different commit."
+            exit 1
+          }
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "STOP: $tag is already published."
+            exit 1
+          fi
+          gh release view v4.1.0 --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$previous"
+          test -s "$notes" && test -s "$previous"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes "$notes" --previous "$previous"
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" \
+            --target "$EXPECTED_MAIN_SHA" --title "$title" --notes-file "$notes" --latest
+          gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$tag" --title "$title" --notes "$published" --previous "$previous"
+          python3 -c 'import sys; from pathlib import Path; a,b=[Path(p).read_text(encoding="utf-8").rstrip("\n") for p in sys.argv[1:]]; assert a == b, "Published body differs from validated notes"' "$notes" "$published"
+          metadata="$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" \
+            --json tagName,name,isDraft,isPrerelease,targetCommitish)"
+          test "$(jq -r .tagName <<< "$metadata")" = "$tag"
+          test "$(jq -r .name <<< "$metadata")" = "$title"
+          test "$(jq -r .isDraft <<< "$metadata")" = "false"
+          test "$(jq -r .isPrerelease <<< "$metadata")" = "false"
+          test "$(jq -r .targetCommitish <<< "$metadata")" = "$EXPECTED_MAIN_SHA"
+          tag_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" --jq .object.sha)"
+          test "$tag_sha" = "$EXPECTED_MAIN_SHA"
+          echo "VERIFIED: $tag published, release and tag point to $EXPECTED_MAIN_SHA."
+
+      - name: Close one-use PR and delete its helper branch
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+          gh pr close "$PR_NUMBER" --repo "$GITHUB_REPOSITORY" --delete-branch
