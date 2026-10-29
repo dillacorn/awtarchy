@@ -142,8 +142,8 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert not any("Browser 0" in text for y, text in visible)
         assert not any("PCManFM-Qt" in text for y, text in visible)
         assert (16, "Choice 24/24") in visible
-        assert (19, "Up/Dn/Wheel Move  Enter/Click Open") in visible
-        assert (20, "Pg/Home/End /Find c Clear Esc/q Back") in visible
+        assert (19, "Up/Dn/Pg/Home/End/Wheel Move") in visible
+        assert (20, "Enter/Space/Right  Left/B/Q/Esc Back") in visible
         assert all(y < 18 for y, text in visible if "Browser " in text)
 
         # Drawing the main menu again restores the category view.
@@ -153,8 +153,8 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert any("Terminal" in text for y, text in visible)
         assert any("File Manager" in text for y, text in visible)
         assert not any("Browser 23" in text for y, text in visible)
-        assert (19, "Up/Dn/Wheel Move  Enter/Click Open") in visible
-        assert (20, "Pg/Home/End /Find c Clear Esc/q Back") in visible
+        assert (19, "Up/Dn/Pg/Home/End/Wheel Move") in visible
+        assert (20, "Enter/Space/Right  Left/B/Q/Esc Back") in visible
 
         # A too-small viewport displays the resize prompt instead of clipping.
         small = FakeScreen(15, 34)
@@ -303,6 +303,49 @@ assert any(mode == "main" and query == "browser" and searching
            for mode, _, _, query, searching, _ in search_back)
 assert any(mode == "main" and query == "" and not searching
            for mode, _, _, query, searching, _ in search_back)
+
+# Space and Right select a category or an application, always returning
+# to the category menu without saving the pending selection.
+space_steps = run_navigation([
+    apps.curses.KEY_DOWN, ord(" "), apps.curses.KEY_DOWN, ord(" "),
+    ord("b")])
+assert any(mode == "choose" and cat == 1
+           for mode, cat, _, _, _, _ in space_steps)
+assert any(mode == "main" and prefs["browser"] == "chromium"
+           for mode, _, _, _, _, prefs in space_steps)
+
+right_steps = run_navigation([
+    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT,
+    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT,
+    apps.curses.KEY_LEFT])
+assert any(mode == "choose" and cat == 1
+           for mode, cat, _, _, _, _ in right_steps)
+assert any(mode == "main" and prefs["browser"] == "chromium"
+           for mode, _, _, _, _, prefs in right_steps)
+
+# Left, b/B, q/Q and Esc work from child screens, and back from the main
+# screen closes it. Returning from a choice screen does not stage a change.
+back_steps = run_navigation([
+    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT, apps.curses.KEY_LEFT,
+    ord(" "), ord("b"), apps.curses.KEY_RIGHT, ord("q"), ord("B")])
+assert sum(mode == "choose" for mode, _, _, _, _, _ in back_steps) >= 3
+assert all(prefs["browser"] == "firefox"
+           for _, _, _, _, _, prefs in back_steps)
+
+# Space/Right must never bypass the explicit Enter confirmation on the
+# review screen. b leaves the review screen without writing the preferences.
+review_steps = run_navigation([
+    apps.curses.KEY_DOWN, ord(" "), apps.curses.KEY_DOWN, ord(" "),
+    ord("s"), ord(" "), apps.curses.KEY_RIGHT, ord("b"), ord("q")])
+assert sum(mode == "review" for mode, _, _, _, _, _ in review_steps) >= 3
+assert review_steps[-1][0] == "main"
+
+# Search is a text field: b and the spacebar remain printable characters
+# rather than triggering Back/Select until the user finishes searching.
+search_input = run_navigation([
+    ord("/"), ord("b"), ord(" "), ord("q"), 10, 27])
+assert any(mode == "main" and query == "b q" and searching
+           for mode, _, _, query, searching, _ in search_input)
 
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
