@@ -289,9 +289,9 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
             if searching or filter_text else notice or hint)
     put(stdscr, h - 5, 2, info, width, curses.A_DIM)
     # Two compact help lines avoid truncation in floating Foot windows.
-    put(stdscr, h - 3, 2, "Up/Dn/Pg/Home/End/Wheel Move", width,
+    put(stdscr, h - 3, 2, "Up/Dn/Pg/Home/End/Wheel: Move", width,
         curses.A_DIM)
-    put(stdscr, h - 2, 2, "Enter/Space/Right  Left/B/Q/Esc Back",
+    put(stdscr, h - 2, 2, "Enter/Space/Right: Open  Left/B/Q/Esc: Back",
         width, curses.A_DIM)
     stdscr.refresh()
 
@@ -413,9 +413,9 @@ def tui(stdscr: curses.window) -> None:
             key = stdscr.getch()
 
             if searching:
-                if key in (10, 13, curses.KEY_ENTER):
+                if key in (10, 13, curses.KEY_ENTER, curses.KEY_RIGHT):
                     searching = False
-                elif key == 27:
+                elif key in (27, curses.KEY_LEFT):
                     filters[key_filter] = previous_filter
                     searching = False
                 elif key in (curses.KEY_BACKSPACE, 8, 127):
