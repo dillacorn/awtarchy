@@ -61,6 +61,29 @@ assert next(y for y, x, text in screen.lines if text == "> 6+7") < 22
 assert next(y for y, x, text in screen.lines if text == "  = 13") < 22
 assert screen.cursor == (24, 7)
 
+# When history fills the window, no text may touch the heading/divider.
+# Only whole expression/result groups remain visible, newest nearest input.
+full_history = [(f"{i}+{i}", str(i * 2)) for i in range(40)]
+calc.draw(screen, "", 0, full_history, "")
+assert (1, 2, "Qalc") in screen.lines
+shown = [(y, text) for y, x, text in screen.lines
+         if text.startswith("> ") or text.startswith("  = ")]
+assert shown
+assert all(4 <= y <= 20 for y, text in shown), shown
+assert [text for y, text in shown if text.startswith("> ")] == [
+    f"> {i}+{i}" for i in range(35, 40)
+]
+assert [text for y, text in shown if text.startswith("  = ")] == [
+    f"  = {i * 2}" for i in range(35, 40)
+]
+
+# A short terminal must also keep completed calculations below the header.
+screen.getmaxyx = lambda: (12, 40)
+calc.draw(screen, "", 0, full_history, "")
+short_rows = [(y, text) for y, x, text in screen.lines
+              if text.startswith("> ") or text.startswith("  = ")]
+assert short_rows == [(4, "> 39+39"), (5, "  = 78")], short_rows
+
 with tempfile.TemporaryDirectory(prefix="awtarchy-qalc-bottom-") as temp:
     fake = Path(temp) / "qalc"
     fake.write_text(
