@@ -39,7 +39,10 @@ assert "SUPER+ALT+A                  Default applications" in TIPS
 assert "openDefaultApplications()" in QUICKSETTINGS
 assert "default_applications.sh" in QUICKSETTINGS
 assert '"bash", defaultAppsLauncher' in QUICKSETTINGS
-assert "visible_count = max(0, h - y - 3)" in SCRIPT.read_text()
+assert "setup_colors(stdscr)" in SCRIPT.read_text()
+assert "available_rows = max(1, h - 8)" in SCRIPT.read_text()
+assert "size = { 540, 460 }" in LUA
+assert 'label: "apps"' in QUICKSETTINGS
 assert (ROOT / "config/hypr/scripts/default_applications.sh").exists()
 assert "default_applications.py" in BASHRC
 assert "VISUAL" in BASHRC
@@ -98,37 +101,74 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-default-apps-test-") as direct
             except ValueError:
                 pass
 
-# Long installed-choice lists must scroll into view, without drawing on the
-# terminal footer or hiding the active option below the window.
+# The category chooser occupies its own page, never overlapping the main
+# categories. The selected entry must stay visible with a full-height list.
 class FakeScreen:
-    def __init__(self):
+    def __init__(self, h=22, w=56):
+        self.h, self.w = h, w
         self.rows = []
+        self.color = None
 
     def erase(self):
         self.rows = []
 
     def getmaxyx(self):
-        return 22, 56
+        return self.h, self.w
 
     def addnstr(self, y, x, text, width, attr=0):
-        self.rows.append((y, str(text)[:width]))
+        self.rows.append((y, x, str(text)[:width], attr))
 
     def hline(self, *args):
         pass
+
+    def bkgd(self, text, attr):
+        self.color = (text, attr)
 
     def refresh(self):
         pass
 
 
+pending = apps.DEFAULTS.copy()
 screen = FakeScreen()
-browser_options = [(f"browser{i}", f"Browser {i}") for i in range(12)]
+options = [(f"browser{i}", f"Browser {i}") for i in range(24)]
 with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
-    with mock.patch.object(apps, "installed", return_value=browser_options):
-        apps.draw(screen, {key: apps.DEFAULTS[key] for key in apps.CATALOG},
-                  {}, 1, 11, "choose", "")
-assert any("Browser 11" in text and 0 < row < 20 for row, text in screen.rows)
-assert not any("Browser 0" in text for row, text in screen.rows)
-assert any("12/12" in text for row, text in screen.rows)
+    with mock.patch.object(apps, "installed", return_value=options):
+        apps.draw(screen, pending, {}, 1, 23, "choose", "")
+        visible = [(y, text) for y, x, text, attr in screen.rows]
+        assert (1, "DEFAULT WEB BROWSER") in visible
+        assert any("Browser 23" in text and 4 <= y <= 17 for y, text in visible)
+        assert not any("Browser 0" in text for y, text in visible)
+        assert not any("PCManFM-Qt" in text for y, text in visible)
+        assert (18, "Choice 24/24") in visible
+        assert (20, "Enter: Select   Esc: Back") in visible
+        assert all(y < 18 for y, text in visible if "Browser " in text)
+
+        # Drawing the main menu again restores the category view.
+        apps.draw(screen, pending, {}, 1, 0, "main", "")
+        visible = [(y, text) for y, x, text, attr in screen.rows]
+        assert (1, "AWTARCHY DEFAULT APPLICATIONS") in visible
+        assert any("Terminal" in text for y, text in visible)
+        assert any("File Manager" in text for y, text in visible)
+        assert not any("Browser 23" in text for y, text in visible)
+        assert (20, "Enter: Choose   S: Save   Esc: Close") in visible
+
+        # A too-small viewport displays the resize prompt instead of clipping.
+        small = FakeScreen(15, 34)
+        apps.draw(small, pending, {}, 1, 0, "main", "")
+        assert any("Resize Default Applications" in text
+                   for y, x, text, attr in small.rows)
+
+# Curses must use the terminal's actual colors, not an opaque black backdrop.
+with mock.patch.object(apps.curses, "has_colors", return_value=True), \
+     mock.patch.object(apps.curses, "start_color") as start_color, \
+     mock.patch.object(apps.curses, "use_default_colors") as use_defaults, \
+     mock.patch.object(apps.curses, "init_pair") as init_pair, \
+     mock.patch.object(apps.curses, "color_pair", return_value=17):
+    apps.setup_colors(screen)
+    start_color.assert_called_once_with()
+    use_defaults.assert_called_once_with()
+    init_pair.assert_called_once_with(1, -1, -1)
+    assert screen.color == (" ", 17)
 
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
