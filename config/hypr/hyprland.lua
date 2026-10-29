@@ -1467,7 +1467,7 @@ hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, size = { "(monitor
 hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, center = true })
 
 hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, float = true })
-hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, size = { 480, 420 } })
+hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, size = { 540, 460 } })
 hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, center = true })
 
 hl.window_rule({ match = { class = "^(maccel)$" }, float = true })
