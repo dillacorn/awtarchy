@@ -121,8 +121,11 @@ def effective(category: str, saved: dict[str, str]) -> str:
 def save(prefs: dict[str, str], path: Path | None = None) -> None:
     path = path or config_file()
     safe_state_path(path)
+    previous = load(path)
     for category, name in prefs.items():
-        if category not in CATALOG or name not in choices(category):
+        if category not in CATALOG or (
+            name not in choices(category) and previous.get(category) != name
+        ):
             raise ValueError(f"Unavailable {category}: {name}")
     path.parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     safe_state_path(path)
@@ -139,6 +142,15 @@ def save(prefs: dict[str, str], path: Path | None = None) -> None:
     finally:
         if os.path.exists(tmp):
             os.unlink(tmp)
+
+
+def set_default(category: str, app: str) -> None:
+    """Save one installed choice without disturbing other app preferences."""
+    if category not in CATALOG or app not in choices(category):
+        raise ValueError(f"{app} is not an installed supported {category}")
+    current = load()
+    current[category] = app
+    save(current)
 
 
 def label(category: str, app: str) -> str:
@@ -230,26 +242,12 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
     categories = list(CATALOG)
     category = categories[category_index]
     title = ("DEFAULT " + LABELS[category].upper() if mode == "choose"
-             else "REVIEW DEFAULT APPLICATIONS" if mode == "review"
              else "AWTARCHY DEFAULT APPLICATIONS")
     put(stdscr, 1, 2, title, width, curses.A_BOLD)
     try:
         stdscr.hline(2, 2, curses.ACS_HLINE, width)
     except curses.error:
         pass
-
-    if mode == "review":
-        changed = [(key, pending.get(key, "")) for key in categories
-                   if pending.get(key, "") != effective(key, saved)]
-        for i, (key, app) in enumerate(changed[:max(0, h - 9)]):
-            put(stdscr, 4 + i, 2, f"{LABELS[key]}: {label(key, app)}", width)
-        put(stdscr, h - 6, 2, "Apply these launcher preferences?",
-            width, curses.A_BOLD)
-        put(stdscr, h - 5, 2, "MIME and XDG settings are unchanged.",
-            width, curses.A_DIM)
-        put(stdscr, h - 2, 2, "Enter: Save   Left/B/Q/Esc: Back", width, curses.A_DIM)
-        stdscr.refresh()
-        return
 
     entries = menu_entries(mode, category_index, filter_text)
     selected_index = option_index if mode == "choose" else category_index
@@ -272,19 +270,15 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
         for idx, (original_idx, app, display) in enumerate(entries):
             y = 4 + idx * 2
             selected = pending.get(app, "")
-            changed = selected != effective(app, saved)
             row = (("> " if idx == position else "  ")
                    + f"{display:<15} "
                    + (label(app, selected) if selected else "(unavailable)"))
-            if changed:
-                row += " *"
             put(stdscr, y, 2, row, width,
                 curses.A_REVERSE if idx == position else 0)
         if not entries:
             put(stdscr, 4, 2, "No matches. Press / to search or c to clear.", width)
 
-    hint = ("/ Find  c Clear  S Save" if mode == "main"
-            else "/ Find  c Clear")
+    hint = "/ Find  c Clear  (selection saves immediately)"
     info = ("Search: " + filter_text + ("_" if searching else "")
             if searching or filter_text else notice or hint)
     put(stdscr, h - 5, 2, info, width, curses.A_DIM)
@@ -388,20 +382,27 @@ def tui(stdscr: curses.window) -> None:
             mode = "choose"
             searching = False
         elif mode == "choose":
-            apps = installed(categories[category_index])
+            category = categories[category_index]
+            apps = installed(category)
             if 0 <= selected < len(apps):
-                pending[categories[category_index]] = apps[selected][0]
+                app = apps[selected][0]
+                try:
+                    set_default(category, app)
+                except (OSError, ValueError) as exc:
+                    notice = f"Not changed: {exc}"
+                    return
+                saved[category] = app
+                pending[category] = app
                 option_index = selected
                 mode = "main"
                 searching = False
-                notice = "Selection staged. Press S to review and save."
+                notice = f"{LABELS[category]}: {label(category, app)} (saved)"
 
     try:
         while True:
             key_filter = "main" if mode == "main" else categories[category_index]
             filter_text = filters.get(key_filter, "")
-            entries = menu_entries(mode, category_index, filter_text) \
-                if mode != "review" else []
+            entries = menu_entries(mode, category_index, filter_text)
             selected_index = option_index if mode == "choose" else category_index
             if entries and not any(i == selected_index for i, _, _ in entries):
                 if mode == "choose":
@@ -432,17 +433,6 @@ def tui(stdscr: curses.window) -> None:
                     return
                 mode = "main"
                 continue
-            if mode == "review":
-                if key in (10, 13, curses.KEY_ENTER):
-                    try:
-                        save({category: app for category, app in pending.items() if app})
-                        saved = load()
-                        notice = "Saved. New launcher shortcuts use these defaults."
-                    except (OSError, ValueError) as exc:
-                        notice = f"Not saved: {exc}"
-                    mode = "main"
-                continue
-
             move = 0
             clicked: int | None = None
             if key == curses.KEY_MOUSE:
@@ -476,11 +466,6 @@ def tui(stdscr: curses.window) -> None:
             elif key in (10, 13, 32, curses.KEY_ENTER, curses.KEY_RIGHT):
                 if entries:
                     clicked = (option_index if mode == "choose" else category_index)
-            elif mode == "main" and key in (ord("s"), ord("S")):
-                if any(pending[k] != effective(k, saved) for k in CATALOG):
-                    mode = "review"
-                else:
-                    notice = "No changes to save."
 
             if move and entries:
                 old = current_position(
@@ -517,12 +502,7 @@ def main() -> int:
         if args.action == "get":
             print(effective(args.category, load()))
         elif args.action == "set":
-            saved = load()
-            if args.app not in choices(args.category):
-                raise ValueError(f"{args.app} is not an installed supported {args.category}")
-            saved[args.category] = args.app
-            save({key: effective(key, saved) for key in CATALOG
-                  if effective(key, saved)})
+            set_default(args.category, args.app)
             print(f"{LABELS[args.category]}: {label(args.category, args.app)}")
         elif args.action == "launch":
             launch(args.category, args.arguments)
