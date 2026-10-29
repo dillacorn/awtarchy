@@ -103,6 +103,25 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-default-apps-test-") as direct
             except ValueError:
                 pass
 
+# A newly selected app must not overwrite a different category that was
+# temporarily uninstalled: keep the previously saved preference for later.
+with tempfile.TemporaryDirectory(prefix="awtarchy-defaults-apply-") as tmp:
+    with mock.patch.dict(os.environ, {"XDG_CONFIG_HOME": tmp}):
+        installed = {"foot", "firefox", "pcmanfm-qt", "micro", "kitty"}
+        with mock.patch.object(apps.shutil, "which",
+                               side_effect=lambda app: app if app in installed else None):
+            apps.set_default("terminal", "kitty")
+            installed.remove("kitty")
+            apps.set_default("browser", "firefox")
+            assert apps.load() == {"terminal": "kitty", "browser": "firefox"}
+            assert apps.effective("terminal", apps.load()) == "foot"
+            try:
+                apps.set_default("browser", "uninstalled-browser")
+                raise AssertionError("Uninstalled application accepted")
+            except ValueError:
+                pass
+            assert apps.load()["browser"] == "firefox"
+
 # The category chooser occupies its own page, never overlapping the main
 # categories. The selected entry must stay visible with a full-height list.
 class FakeScreen:
@@ -174,8 +193,7 @@ with mock.patch.object(apps.curses, "has_colors", return_value=True), \
     init_pair.assert_called_once_with(1, -1, -1)
     assert screen.color == (" ", 17)
 
-# Enter opens a focused choice page; Enter on an application returns to the
-# category page with a pending change. Esc exits without persisting it.
+# TUI keyboard/mouse tests emulate persistence, not merely staged changes.
 class KeyboardScreen(FakeScreen):
     def __init__(self, keys):
         super().__init__()
@@ -188,62 +206,38 @@ class KeyboardScreen(FakeScreen):
         return next(self.keys)
 
 
-keyboard = KeyboardScreen([apps.curses.KEY_DOWN, 10,
-                           apps.curses.KEY_DOWN, 10, 27])
-renders = []
 installed_by_category = {
-    "terminal": [("foot", "Foot")],
+    "terminal": [("foot", "Foot"), ("kitty", "Kitty")],
     "browser": [("firefox", "Firefox"), ("chromium", "Chromium")],
-    "file-manager": [("pcmanfm-qt", "PCManFM-Qt")],
-    "editor": [("micro", "Micro")],
+    "file-manager": [("pcmanfm-qt", "PCManFM-Qt"), ("thunar", "Thunar")],
+    "editor": [("micro", "Micro"), ("nvim", "Neovim")],
 }
 
 
-def record_draw(_screen, pending, _saved, category_idx, option_idx, mode, _notice,
-                _filter_text="", _searching=False):
-    renders.append((mode, category_idx, dict(pending)))
-
-
-with mock.patch.object(apps, "load", return_value={}), \
-     mock.patch.object(apps, "installed",
-                       side_effect=lambda category: installed_by_category[category]), \
-     mock.patch.object(apps, "draw", side_effect=record_draw), \
-     mock.patch.object(apps, "setup_colors"), \
-     mock.patch.object(apps, "setup_mouse"), \
-     mock.patch.object(apps.curses, "mousemask"), \
-     mock.patch.object(apps.curses, "curs_set"), \
-     mock.patch.object(apps.curses, "noecho"), \
-     mock.patch.object(apps, "save") as save_preferences:
-    apps.tui(keyboard)
-    save_preferences.assert_not_called()
-assert any(mode == "choose" and category_idx == 1 for mode, category_idx, _ in renders)
-assert any(mode == "main" and prefs["browser"] == "chromium"
-           for mode, _, prefs in renders)
-
-# Tips-style paging, indexed filtering, and wheel/click targeting.
-assert apps.window_start(23, 24, 11) == 13
-assert apps.window_start(3, 4, 11) == 0
-assert apps.page_size(22, "choose") == 11
-assert apps.page_size(22, "main") == 4
-with mock.patch.object(apps, "installed",
-                       return_value=[("firefox", "Firefox"),
-                                     ("chromium", "Chromium")]):
-    assert apps.menu_entries("choose", 1, "chrom") == [
-        (1, "chromium", "Chromium")]
-    assert apps.current_position([(1, "chromium", "Chromium")], 1) == 0
-
-
-def run_navigation(keys, mouse_events=()):
+def run_navigation(keys, mouse_events=(), failing=False):
     screen = KeyboardScreen(keys)
     snapshots = []
-
-    def capture(_screen, pending, _saved, cat, option, mode,
-                _notice, filter_text="", searching=False):
-        snapshots.append((mode, cat, option, filter_text, searching,
-                          dict(pending)))
-
+    saved = {}
+    writes = []
     events = iter(mouse_events)
-    with mock.patch.object(apps, "load", return_value={}), \
+
+    def read_state(path=None):
+        return dict(saved)
+
+    def persist(state, path=None):
+        if failing:
+            raise OSError("simulated write failure")
+        saved.clear()
+        saved.update(state)
+        writes.append(dict(state))
+
+    def capture(_screen, pending, _saved, cat, option, mode, notice,
+                filter_text="", searching=False):
+        snapshots.append((mode, cat, option, filter_text, searching,
+                          dict(pending), notice))
+
+    with mock.patch.object(apps, "load", side_effect=read_state), \
+         mock.patch.object(apps, "save", side_effect=persist), \
          mock.patch.object(apps, "installed",
                            side_effect=lambda cat: installed_by_category[cat]), \
          mock.patch.object(apps, "draw", side_effect=capture), \
@@ -253,120 +247,125 @@ def run_navigation(keys, mouse_events=()):
          mock.patch.object(apps.curses, "curs_set"), \
          mock.patch.object(apps.curses, "noecho"), \
          mock.patch.object(apps.curses, "getmouse",
-                           side_effect=lambda: next(events)), \
-         mock.patch.object(apps, "save") as do_save:
+                           side_effect=lambda: next(events)):
         apps.tui(screen)
-        do_save.assert_not_called()
-    return snapshots
+    return snapshots, writes, saved
 
 
-search_steps = run_navigation([
-    apps.curses.KEY_DOWN, 10, ord("/"),
-    *map(ord, "chrom"), 10, 10, 27])
-assert any(mode == "choose" and query == "chrom"
-           for mode, _, _, query, _, _ in search_steps)
-assert any(mode == "main" and state["browser"] == "chromium"
-           for mode, _, _, _, _, state in search_steps)
+def chosen(snapshots, category, value):
+    return any(mode == "main" and state[category] == value
+               for mode, _, _, _, _, state, _ in snapshots)
 
-# Clicking a category opens its own choices page; clicking an app returns.
-clicked = run_navigation(
+
+# Enter picks and persists immediately, returning to the category menu.
+steps, writes, state = run_navigation([
+    apps.curses.KEY_DOWN, 10, apps.curses.KEY_DOWN, 10, ord("b")])
+assert any(row[0] == "choose" and row[1] == 1 for row in steps)
+assert chosen(steps, "browser", "chromium")
+assert writes == [{"browser": "chromium"}]
+assert state["browser"] == "chromium"
+assert any("saved" in row[6] for row in steps)
+
+# Multiple category selections persist separately without any Save action.
+steps, writes, state = run_navigation([
+    apps.curses.KEY_DOWN, 10, apps.curses.KEY_DOWN, 10,
+    apps.curses.KEY_HOME, 10, apps.curses.KEY_DOWN, 10, 27])
+assert len(writes) == 2 and state == {
+    "browser": "chromium", "terminal": "kitty"}
+assert writes[0] == {"browser": "chromium"}
+assert writes[1] == state
+
+# The Tips-style search filters within the chooser. Selection saves on Enter.
+steps, writes, state = run_navigation([
+    apps.curses.KEY_DOWN, 10, ord("/"), *map(ord, "chrom"), 10, 10, 27])
+assert any(row[0] == "choose" and row[3] == "chrom" for row in steps)
+assert state == {"browser": "chromium"} and len(writes) == 1
+
+# Mouse clicks select a category and immediately save the chosen application.
+steps, writes, state = run_navigation(
     [apps.curses.KEY_MOUSE, apps.curses.KEY_MOUSE, 27],
     [(0, 4, 6, 0, apps.curses.BUTTON1_CLICKED),
      (0, 4, 5, 0, apps.curses.BUTTON1_CLICKED)])
-assert any(mode == "choose" and cat == 1 for mode, cat, _, _, _, _ in clicked)
-assert any(mode == "main" and state["browser"] == "chromium"
-           for mode, _, _, _, _, state in clicked)
+assert chosen(steps, "browser", "chromium")
+assert writes == [{"browser": "chromium"}]
 
-# Mouse wheel changes the focused row, not the application preference.
-wheel = run_navigation(
-    [apps.curses.KEY_MOUSE, apps.curses.KEY_MOUSE,
-     apps.curses.KEY_MOUSE, 10, 27],
-    [(0, 1, 0, 0, apps.curses.BUTTON5_PRESSED),
-     (0, 4, 6, 0, apps.curses.BUTTON1_CLICKED),
-     (0, 1, 0, 0, apps.curses.BUTTON5_PRESSED)])
-assert any(mode == "main" and cat == 1 for mode, cat, _, _, _, _ in wheel)
-assert any(mode == "main" and state["browser"] == "chromium"
-           for mode, _, _, _, _, state in wheel)
+# Space and Right both commit immediately, without requiring S or Enter.
+for enter_key in (ord(" "), apps.curses.KEY_RIGHT):
+    steps, writes, state = run_navigation([
+        apps.curses.KEY_DOWN, enter_key,
+        apps.curses.KEY_DOWN, enter_key, apps.curses.KEY_LEFT])
+    assert chosen(steps, "browser", "chromium")
+    assert writes == [{"browser": "chromium"}]
 
-# PgUp/PgDn/Home/End are available on both screens and q acts like Esc.
-page = run_navigation([
-    apps.curses.KEY_END, 10, ord("q"),
-    apps.curses.KEY_HOME, 10, 27, 27])
-assert any(mode == "choose" and cat == 3 for mode, cat, _, _, _, _ in page)
-assert any(mode == "choose" and cat == 0 for mode, cat, _, _, _, _ in page)
+# Back in a chooser never writes. Esc, Q and B retain their navigation roles.
+for back in (apps.curses.KEY_LEFT, ord("b"), ord("B"), ord("q"), 27):
+    steps, writes, state = run_navigation([
+        apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT, back, ord("q")])
+    assert not writes and not state
+    assert any(mode == "main" for mode, *_ in steps)
 
-# Search cancellation restores the prior menu filter, and c clears it.
-search_back = run_navigation([
-    ord("/"), *map(ord, "browser"), 27, ord("/"),
-    *map(ord, "editor"), 10, ord("c"), 27])
-assert any(mode == "main" and query == "browser" and searching
-           for mode, _, _, query, searching, _ in search_back)
-assert any(mode == "main" and query == "" and not searching
-           for mode, _, _, query, searching, _ in search_back)
+# No S/save confirmation exists: S cannot trigger a write.
+steps, writes, state = run_navigation([ord("s"), 27])
+assert not writes and not state
+assert all(row[0] != "review" for row in steps)
 
-# Space and Right select a category or an application, always returning
-# to the category menu without saving the pending selection.
-space_steps = run_navigation([
-    apps.curses.KEY_DOWN, ord(" "), apps.curses.KEY_DOWN, ord(" "),
-    ord("b")])
-assert any(mode == "choose" and cat == 1
-           for mode, cat, _, _, _, _ in space_steps)
-assert any(mode == "main" and prefs["browser"] == "chromium"
-           for mode, _, _, _, _, prefs in space_steps)
+# Failure must leave the previous selected app in place and the chooser open.
+steps, writes, state = run_navigation([
+    apps.curses.KEY_DOWN, 10, apps.curses.KEY_DOWN, 10, 27, 27],
+    failing=True)
+assert not writes and not state
+assert any(row[0] == "choose" and "Not changed:" in row[6] for row in steps)
+assert not chosen(steps, "browser", "chromium")
 
-right_steps = run_navigation([
-    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT,
-    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT,
-    apps.curses.KEY_LEFT])
-assert any(mode == "choose" and cat == 1
-           for mode, cat, _, _, _, _ in right_steps)
-assert any(mode == "main" and prefs["browser"] == "chromium"
-           for mode, _, _, _, _, prefs in right_steps)
+# Search remains text input: b and Space do not accidentally select.
+steps, writes, state = run_navigation([
+    ord("/"), ord("b"), ord(" "), ord("q"), 10, ord("b")])
+assert any(searching and query == "b q"
+           for _, _, _, query, searching, _, _ in steps)
+assert not writes and not state
 
-# Left, b/B, q/Q and Esc work from child screens, and back from the main
-# screen closes it. Returning from a choice screen does not stage a change.
-back_steps = run_navigation([
-    apps.curses.KEY_DOWN, apps.curses.KEY_RIGHT, apps.curses.KEY_LEFT,
-    ord(" "), ord("b"), apps.curses.KEY_RIGHT, ord("q"), ord("B")])
-assert sum(mode == "choose" for mode, _, _, _, _, _ in back_steps) >= 3
-assert all(prefs["browser"] == "firefox"
-           for _, _, _, _, _, prefs in back_steps)
-
-# Space/Right must never bypass the explicit Enter confirmation on the
-# review screen. b leaves the review screen without writing the preferences.
-review_steps = run_navigation([
-    apps.curses.KEY_DOWN, ord(" "), apps.curses.KEY_DOWN, ord(" "),
-    ord("s"), ord(" "), apps.curses.KEY_RIGHT, ord("b"), ord("q")])
-assert sum(mode == "review" for mode, _, _, _, _, _ in review_steps) >= 3
-assert review_steps[-1][0] == "main"
-
-# Search is a text field: b and the spacebar remain printable characters
-# rather than triggering Back/Select until the user finishes searching.
-search_input = run_navigation([
-    ord("/"), ord("b"), ord(" "), ord("q"), 10, 27])
-assert any(mode == "main" and query == "b q" and searching
-           for mode, _, _, query, searching, _ in search_input)
-
-# Search mode keeps normal typing for b and Space, but Right accepts the
-# query and Left cancels it, returning control to menu navigation.
-search_arrows = run_navigation([
+# Left/Right inside a search cancel or finish typing, but never save.
+steps, writes, state = run_navigation([
     ord("/"), ord("b"), ord(" "), apps.curses.KEY_LEFT,
     ord("/"), ord("e"), apps.curses.KEY_RIGHT, ord("b")])
 assert any(searching and query == "b "
-           for _, _, _, query, searching, _ in search_arrows)
+           for _, _, _, query, searching, _, _ in steps)
 assert any(not searching and query == "e"
-           for _, _, _, query, searching, _ in search_arrows)
+           for _, _, _, query, searching, _, _ in steps)
+assert not writes
 
-# UI contract: the selected entry and save confirmation both exist.
+# Page navigation, search helper, and wheel support are retained.
+assert apps.window_start(23, 24, 11) == 13
+assert apps.window_start(3, 4, 11) == 0
+assert apps.page_size(22, "choose") == 11
+assert apps.page_size(22, "main") == 4
+with mock.patch.object(apps, "installed",
+                       return_value=[("firefox", "Firefox"),
+                                     ("chromium", "Chromium")]):
+    assert apps.menu_entries("choose", 1, "chrom") == [
+        (1, "chromium", "Chromium")]
+steps, writes, state = run_navigation([
+    apps.curses.KEY_MOUSE, apps.curses.KEY_MOUSE,
+    apps.curses.KEY_MOUSE, 10, 27],
+    [(0, 1, 0, 0, apps.curses.BUTTON5_PRESSED),
+     (0, 4, 6, 0, apps.curses.BUTTON1_CLICKED),
+     (0, 1, 0, 0, apps.curses.BUTTON5_PRESSED)])
+assert writes == [{"browser": "chromium"}]
+assert state["browser"] == "chromium"
+
+# UI contract: no pending selections or save/review screen.
 code = SCRIPT.read_text(encoding="utf-8")
-assert 'mode = "review"' in code
-assert 'mode == "choose"' in code
-assert "MIME and XDG settings are unchanged." in code
+assert 'mode = "review"' not in code
+assert 'mode == "review"' not in code
+assert "Selection staged" not in code
+assert 'Press S' not in code
+assert "selection saves immediately" in code
+assert 'set_default(category, app)' in code
 assert 'execvp(selected, [selected, *args])' in code
 assert "curses.wrapper(tui)" in code
 assert (ROOT / "config/hypr/scripts/launch_handler.sh").exists()
 assert (ROOT / "local/share/applications/awtarchy-default-applications.desktop").exists()
 
-# Ensure the Python file compiles, and the CLI prints machine-readable status.
+# Ensure the Python file compiles.
 subprocess.run(["python3", "-m", "py_compile", str(SCRIPT)], check=True)
-print("PASS: default app discovery, saved state, launcher safety and UI contracts")
+print("PASS: default applications save immediately on selection")
