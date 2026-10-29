@@ -49,6 +49,8 @@ class FakeScreen:
         pass
 
 
+calc.curses.has_colors = lambda: False
+calc.curses.ACS_HLINE = ord("-")
 screen = FakeScreen()
 calc.draw(screen, "2+7", 3, [("10+10", "20"), ("6+7", "13")], "9")
 assert (1, 2, "Qalc") in screen.lines
