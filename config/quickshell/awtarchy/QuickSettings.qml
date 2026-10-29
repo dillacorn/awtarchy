@@ -1349,7 +1349,7 @@ Singleton {
                         }
 
                         SettingsButton {
-                            label: "Apps"
+                            label: "apps"
                             textSize: root.scaledText(9)
                             onClicked: root.openDefaultApplications()
                         }
