@@ -10,6 +10,7 @@ on:
       - local/share/awtarchy/awtarchy-package-reconcile.sh
       - tests/test-current-package-catalog.sh
       - tests/test-qalc-replacement.py
+      - local/share/applications/qalc-calculator.desktop
       - tests/test-qalc-bottom.py
       - config/hypr/scripts/qalc-bottom.py
       - config/hypr/scripts/qalc-terminal.sh
