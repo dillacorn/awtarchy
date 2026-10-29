@@ -450,7 +450,8 @@ Core launchers
   SUPER+D / ALT+P              Application launcher
   SUPER+RETURN                 Terminal
   SUPER+B                      Web browser
-  SUPER+E                      PCManFM-Qt
+  SUPER+E                      Default file manager
+  SUPER+ALT+A                  Default applications
   ALT+SHIFT+C / SUPER+SHIFT+C   Qalc live calculator
   SUPER+SHIFT+E                Yazi
   SUPER+CTRL+M                 Monitor configuration
