@@ -38,6 +38,8 @@ assert LUA.count('class = "^awtarchy-default-apps$"') == 3
 assert "SUPER+ALT+A                  Default applications" in TIPS
 assert "openDefaultApplications()" in QUICKSETTINGS
 assert "default_applications.sh" in QUICKSETTINGS
+assert '"bash", defaultAppsLauncher' in QUICKSETTINGS
+assert "visible_count = max(0, h - y - 3)" in SCRIPT.read_text()
 assert (ROOT / "config/hypr/scripts/default_applications.sh").exists()
 assert "default_applications.py" in BASHRC
 assert "VISUAL" in BASHRC
