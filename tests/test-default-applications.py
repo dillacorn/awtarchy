@@ -98,6 +98,37 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-default-apps-test-") as direct
             except ValueError:
                 pass
 
+# Long installed-choice lists must scroll into view, without drawing on the
+# terminal footer or hiding the active option below the window.
+class FakeScreen:
+    def __init__(self):
+        self.rows = []
+
+    def erase(self):
+        self.rows = []
+
+    def getmaxyx(self):
+        return 22, 56
+
+    def addnstr(self, y, x, text, width, attr=0):
+        self.rows.append((y, str(text)[:width]))
+
+    def hline(self, *args):
+        pass
+
+    def refresh(self):
+        pass
+
+
+screen = FakeScreen()
+browser_options = [(f"browser{i}", f"Browser {i}") for i in range(12)]
+with mock.patch.object(apps, "installed", return_value=browser_options):
+    apps.draw(screen, {key: apps.DEFAULTS[key] for key in apps.CATALOG},
+              {}, 1, 11, "choose", "")
+assert any("Browser 11" in text and 0 < row < 20 for row, text in screen.rows)
+assert not any("Browser 0" in text for row, text in screen.rows)
+assert any("12/12" in text for row, text in screen.rows)
+
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
 assert 'mode = "review"' in code
