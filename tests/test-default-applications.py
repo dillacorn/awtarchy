@@ -217,7 +217,7 @@ assert any(mode == "main" and prefs["browser"] == "chromium"
 code = SCRIPT.read_text(encoding="utf-8")
 assert 'mode = "review"' in code
 assert 'mode == "choose"' in code
-assert "Existing MIME/XDG associations remain unchanged." in code
+assert "MIME and XDG settings are unchanged." in code
 assert 'execvp(selected, [selected, *args])' in code
 assert "curses.wrapper(tui)" in code
 assert (ROOT / "config/hypr/scripts/launch_handler.sh").exists()
