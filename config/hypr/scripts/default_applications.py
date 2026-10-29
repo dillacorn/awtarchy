@@ -211,9 +211,14 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
     if mode == "choose":
         category = keys[category_index]
         options = installed(category)
-        put(stdscr, y, 2, f"Choose {LABELS[category]}:", width, curses.A_BOLD)
-        for i, (_, app_label) in enumerate(options[:max(0, h - y - 4)]):
-            put(stdscr, y + 1 + i, 4, ("> " if i == option_index else "  ") + app_label,
+        put(stdscr, y, 2, f"Choose {LABELS[category]} ({option_index + 1}/{len(options)}):",
+            width, curses.A_BOLD)
+        visible_count = max(0, h - y - 3)
+        first_visible = max(0, option_index - visible_count + 1)
+        for i in range(first_visible, min(len(options), first_visible + visible_count)):
+            app_label = options[i][1]
+            put(stdscr, y + 1 + i - first_visible, 4,
+                ("> " if i == option_index else "  ") + app_label,
                 width - 2, curses.A_REVERSE if i == option_index else 0)
         help_text = "Enter: Choose   Esc: Back"
     elif mode == "review":
