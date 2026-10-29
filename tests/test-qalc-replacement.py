@@ -2,6 +2,8 @@
 """Qalc launcher, multi-instance behavior and preserved-config migration."""
 
 from pathlib import Path
+import configparser
+import shlex
 import subprocess
 import tempfile
 import os
@@ -19,6 +21,23 @@ assert lua.count('"ALT + SHIFT + C", calculator') == 2
 assert lua.count('"SUPER + SHIFT + C", calculator') == 2
 assert '"SUPER + ALT + C", hl.dsp.exec_cmd(calculator)' in lua
 assert "launch_handler.sh awtarchy-qalc" not in lua
+
+desktop = ROOT / "local/share/applications/qalc-calculator.desktop"
+parser = configparser.ConfigParser(interpolation=None)
+parser.optionxform = str
+assert parser.read(desktop, encoding="utf-8") == [str(desktop)]
+entry = parser["Desktop Entry"]
+assert "Calculator" in entry["Name"]
+assert entry["GenericName"] == "Calculator"
+assert "calculator;" in entry["Keywords"]
+assert "Calculator;" in entry["Categories"]
+assert entry["Icon"] == "accessories-calculator"
+assert entry["Terminal"] == "false"
+assert entry["TryExec"] == "foot"
+launcher = shlex.split(entry["Exec"])
+assert launcher[:2] == ["sh", "-c"]
+assert "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh" in launcher[2]
+assert "launch_handler.sh" not in entry["Exec"]
 assert 'gvfs-afc libqalculate imagemagick' in runtime
 assert 'ensure_qalc_for_target "$target_home"' in runtime
 assert 'migrate_qalc_hyprland "$repo_dir" "$target_home"' in runtime
