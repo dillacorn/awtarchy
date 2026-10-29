@@ -533,7 +533,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 -- Core apps (define before anything that uses them)
 local terminal = "foot"
 local web_browser = "firefox"
-local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s 'autocalc on'"
+local calculator = "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"
 local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
 -- App/menu launchers
