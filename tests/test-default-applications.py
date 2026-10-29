@@ -40,7 +40,9 @@ assert "openDefaultApplications()" in QUICKSETTINGS
 assert "default_applications.sh" in QUICKSETTINGS
 assert '"bash", defaultAppsLauncher' in QUICKSETTINGS
 assert "setup_colors(stdscr)" in SCRIPT.read_text()
-assert "available_rows = max(1, h - 8)" in SCRIPT.read_text()
+assert "setup_mouse()" in SCRIPT.read_text()
+assert "page_size(height: int, mode: str)" in SCRIPT.read_text()
+assert "menu_entries(mode: str, category_index: int," in SCRIPT.read_text()
 assert "size = { 540, 460 }" in LUA
 assert 'label: "apps"' in QUICKSETTINGS
 assert (ROOT / "config/hypr/scripts/default_applications.sh").exists()
@@ -139,8 +141,9 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert any("Browser 23" in text and 4 <= y <= 17 for y, text in visible)
         assert not any("Browser 0" in text for y, text in visible)
         assert not any("PCManFM-Qt" in text for y, text in visible)
-        assert (18, "Choice 24/24") in visible
-        assert (20, "Enter: Select   Esc: Back") in visible
+        assert (16, "Choice 24/24") in visible
+        assert (19, "Up/Dn/Wheel Move  Enter/Click Open") in visible
+        assert (20, "Pg/Home/End /Find c Clear Esc/q Back") in visible
         assert all(y < 18 for y, text in visible if "Browser " in text)
 
         # Drawing the main menu again restores the category view.
@@ -150,7 +153,8 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert any("Terminal" in text for y, text in visible)
         assert any("File Manager" in text for y, text in visible)
         assert not any("Browser 23" in text for y, text in visible)
-        assert (20, "Enter: Choose   S: Save   Esc: Close") in visible
+        assert (19, "Up/Dn/Wheel Move  Enter/Click Open") in visible
+        assert (20, "Pg/Home/End /Find c Clear Esc/q Back") in visible
 
         # A too-small viewport displays the resize prompt instead of clipping.
         small = FakeScreen(15, 34)
@@ -195,7 +199,8 @@ installed_by_category = {
 }
 
 
-def record_draw(_screen, pending, _saved, category_idx, option_idx, mode, _notice):
+def record_draw(_screen, pending, _saved, category_idx, option_idx, mode, _notice,
+                _filter_text="", _searching=False):
     renders.append((mode, category_idx, dict(pending)))
 
 
@@ -204,6 +209,8 @@ with mock.patch.object(apps, "load", return_value={}), \
                        side_effect=lambda category: installed_by_category[category]), \
      mock.patch.object(apps, "draw", side_effect=record_draw), \
      mock.patch.object(apps, "setup_colors"), \
+     mock.patch.object(apps, "setup_mouse"), \
+     mock.patch.object(apps.curses, "mousemask"), \
      mock.patch.object(apps.curses, "curs_set"), \
      mock.patch.object(apps.curses, "noecho"), \
      mock.patch.object(apps, "save") as save_preferences:
