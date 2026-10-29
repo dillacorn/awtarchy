@@ -190,7 +190,7 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
     """Render one focused screen at a time, using terminal-default colors."""
     stdscr.erase()
     h, w = stdscr.getmaxyx()
-    if h < 14 or w < 35:
+    if h < 17 or w < 40:
         put(stdscr, 1, 2, "Resize Default Applications", max(w - 3, 1))
         stdscr.refresh()
         return
