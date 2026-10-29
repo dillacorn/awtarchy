@@ -10,6 +10,9 @@ on:
       - local/share/awtarchy/awtarchy-package-reconcile.sh
       - tests/test-current-package-catalog.sh
       - tests/test-qalc-replacement.py
+      - tests/test-qalc-bottom.py
+      - config/hypr/scripts/qalc-bottom.py
+      - config/hypr/scripts/qalc-terminal.sh
       - local/share/awtarchy/migrate-qalc-hyprland.py
       - config/hypr/hyprland.lua
       - tests/test-cheese-snapshot-migration.sh
@@ -39,8 +42,9 @@ jobs:
         run: bash tests/test-current-package-catalog.sh
       - name: Qalc launch and preserved-config migration regression
         run: |
-          python3 -m py_compile local/share/awtarchy/migrate-qalc-hyprland.py tests/test-qalc-replacement.py
+          python3 -m py_compile local/share/awtarchy/migrate-qalc-hyprland.py tests/test-qalc-replacement.py tests/test-qalc-bottom.py config/hypr/scripts/qalc-bottom.py
           python3 tests/test-qalc-replacement.py
+          python3 tests/test-qalc-bottom.py
       - name: Cheese replacement regression
         run: bash tests/test-cheese-snapshot-migration.sh
       - name: Update package preflight regression
