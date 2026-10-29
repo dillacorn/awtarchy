@@ -533,7 +533,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 -- Core apps (define before anything that uses them)
 local terminal = "foot"
 local web_browser = "firefox"
-local calculator = "speedcrunch"
+local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s 'autocalc on'"
 local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
 -- App/menu launchers
@@ -1434,12 +1434,12 @@ hl.window_rule({ match = { class = "^(wofi)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(Spotify)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { title = "^(YouTube Music|YouTube Music - .+ - YouTube Music|YouTube Music - 1\\. YouTube Music)$" }, opacity = "0.85 0.85" })
 hl.window_rule({ match = { class = "^(com\\.github\\.th_ch\\.youtube_music|brave-music\\.youtube\\.com__-.*)$" }, opacity = "0.85 0.85" })
-hl.window_rule({ match = { class = "^(pcmanfm-qt|localsend|org\\.pulseaudio\\.pavucontrol|org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)|net\\.davidotek\\.pupgui2|wallpicker)$" }, opacity = "0.95 0.95" })
+hl.window_rule({ match = { class = "^(pcmanfm-qt|localsend|org\\.pulseaudio\\.pavucontrol|net\\.davidotek\\.pupgui2|wallpicker)$" }, opacity = "0.95 0.95" })
 
 -- Float + size + center
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, float = true })
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, size = { 347, 510 } })
-hl.window_rule({ match = { class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$" }, center = true })
+hl.window_rule({ match = { class = "^awtarchy-qalc$" }, float = true })
+hl.window_rule({ match = { class = "^awtarchy-qalc$" }, size = { 347, 510 } })
+hl.window_rule({ match = { class = "^awtarchy-qalc$" }, center = true })
 
 hl.window_rule({ match = { class = "^org\\.pulseaudio\\.pavucontrol$" }, float = true })
 hl.window_rule({ match = { class = "^org\\.pulseaudio\\.pavucontrol$" }, size = { "(monitor_w*0.55)", "(monitor_h*0.70)" } })
