@@ -170,6 +170,49 @@ with mock.patch.object(apps.curses, "has_colors", return_value=True), \
     init_pair.assert_called_once_with(1, -1, -1)
     assert screen.color == (" ", 17)
 
+# Enter opens a focused choice page; Enter on an application returns to the
+# category page with a pending change. Esc exits without persisting it.
+class KeyboardScreen(FakeScreen):
+    def __init__(self, keys):
+        super().__init__()
+        self.keys = iter(keys)
+
+    def keypad(self, enabled):
+        pass
+
+    def getch(self):
+        return next(self.keys)
+
+
+keyboard = KeyboardScreen([apps.curses.KEY_DOWN, 10,
+                           apps.curses.KEY_DOWN, 10, 27])
+renders = []
+installed_by_category = {
+    "terminal": [("foot", "Foot")],
+    "browser": [("firefox", "Firefox"), ("chromium", "Chromium")],
+    "file-manager": [("pcmanfm-qt", "PCManFM-Qt")],
+    "editor": [("micro", "Micro")],
+}
+
+
+def record_draw(_screen, pending, _saved, category_idx, option_idx, mode, _notice):
+    renders.append((mode, category_idx, dict(pending)))
+
+
+with mock.patch.object(apps, "load", return_value={}), \
+     mock.patch.object(apps, "installed",
+                       side_effect=lambda category: installed_by_category[category]), \
+     mock.patch.object(apps, "draw", side_effect=record_draw), \
+     mock.patch.object(apps, "setup_colors"), \
+     mock.patch.object(apps.curses, "curs_set"), \
+     mock.patch.object(apps.curses, "noecho"), \
+     mock.patch.object(apps, "save") as save_preferences:
+    apps.tui(keyboard)
+    save_preferences.assert_not_called()
+assert any(mode == "choose" and category_idx == 1 for mode, category_idx, _ in renders)
+assert any(mode == "main" and prefs["browser"] == "chromium"
+           for mode, _, prefs in renders)
+
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
 assert 'mode = "review"' in code
