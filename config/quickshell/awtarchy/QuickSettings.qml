@@ -85,8 +85,7 @@ Singleton {
     readonly property string backend: configHome + "/hypr/scripts/hypr_quicksettings.sh"
     readonly property string stateScript: configHome + "/hypr/scripts/quickshell_application_state.sh"
     readonly property string terminalLauncher: configHome + "/hypr/scripts/default_terminal.sh"
-    readonly property string defaultAppsHandler: configHome + "/hypr/scripts/launch_handler.sh"
-    readonly property string defaultAppsScript: configHome + "/hypr/scripts/default_applications.py"
+    readonly property string defaultAppsLauncher: configHome + "/hypr/scripts/default_applications.sh"
     readonly property string positionScript: configHome + "/hypr/scripts/quickshell_flyout_position.sh"
     readonly property string prepareScript: configHome + "/hypr/scripts/quickshell_flyout_prepare.sh"
     readonly property bool disableNumlockAtSessionStart: numlockSettings.disableNumlockAtSessionStart
@@ -682,10 +681,7 @@ Singleton {
     }
 
     function openDefaultApplications() {
-        Quickshell.execDetached([
-            defaultAppsHandler, "awtarchy-default-apps",
-            "foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 " + defaultAppsScript + " tui"
-        ]);
+        Quickshell.execDetached([defaultAppsLauncher]);
         close();
     }
 
