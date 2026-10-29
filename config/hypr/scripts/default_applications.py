@@ -310,7 +310,8 @@ def main() -> int:
             if args.app not in choices(args.category):
                 raise ValueError(f"{args.app} is not an installed supported {args.category}")
             saved[args.category] = args.app
-            save(saved)
+            save({key: effective(key, saved) for key in CATALOG
+                  if effective(key, saved)})
             print(f"{LABELS[args.category]}: {label(args.category, args.app)}")
         elif args.action == "launch":
             launch(args.category, args.arguments)
