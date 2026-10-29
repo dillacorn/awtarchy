@@ -291,7 +291,7 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
     # Two compact help lines avoid truncation in floating Foot windows.
     put(stdscr, h - 3, 2, "Up/Dn/Pg/Home/End/Wheel Move", width,
         curses.A_DIM)
-    put(stdscr, h - 2, 2, "Enter/Sp/Right Select  Left/B/Q/Esc Back",
+    put(stdscr, h - 2, 2, "Enter/Space/Right  Left/B/Q/Esc Back",
         width, curses.A_DIM)
     stdscr.refresh()
 
