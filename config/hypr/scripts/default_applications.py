@@ -212,7 +212,7 @@ def window_start(position: int, total: int, capacity: int) -> int:
 
 
 def page_size(height: int, mode: str) -> int:
-    return max(1, height - 9) if mode == "choose" else len(CATALOG)
+    return max(1, height - 11) if mode == "choose" else len(CATALOG)
 
 
 def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
@@ -287,9 +287,9 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
             if searching or filter_text else notice)
     put(stdscr, h - 5, 2, info, width, curses.A_DIM)
     # Two compact help lines avoid truncation in floating Foot windows.
-    put(stdscr, h - 3, 2, "Arrows/jk/Wheel Move   Enter/Click Select", width,
+    put(stdscr, h - 3, 2, "Up/Dn/Wheel Move  Enter/Click Open", width,
         curses.A_DIM)
-    put(stdscr, h - 2, 2, "PgUp/Dn Home/End   / Find   c Clear   Esc/q Back",
+    put(stdscr, h - 2, 2, "Pg/Home/End /Find c Clear Esc/q Back",
         width, curses.A_DIM)
     stdscr.refresh()
 
