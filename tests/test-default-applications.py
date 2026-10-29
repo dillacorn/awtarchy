@@ -220,6 +220,90 @@ assert any(mode == "choose" and category_idx == 1 for mode, category_idx, _ in r
 assert any(mode == "main" and prefs["browser"] == "chromium"
            for mode, _, prefs in renders)
 
+# Tips-style paging, indexed filtering, and wheel/click targeting.
+assert apps.window_start(23, 24, 11) == 13
+assert apps.window_start(3, 4, 11) == 0
+assert apps.page_size(22, "choose") == 11
+assert apps.page_size(22, "main") == 4
+with mock.patch.object(apps, "installed",
+                       return_value=[("firefox", "Firefox"),
+                                     ("chromium", "Chromium")]):
+    assert apps.menu_entries("choose", 1, "chrom") == [
+        (1, "chromium", "Chromium")]
+    assert apps.current_position([(1, "chromium", "Chromium")], 1) == 0
+
+
+def run_navigation(keys, mouse_events=()):
+    screen = KeyboardScreen(keys)
+    snapshots = []
+
+    def capture(_screen, pending, _saved, cat, option, mode,
+                _notice, filter_text="", searching=False):
+        snapshots.append((mode, cat, option, filter_text, searching,
+                          dict(pending)))
+
+    events = iter(mouse_events)
+    with mock.patch.object(apps, "load", return_value={}), \
+         mock.patch.object(apps, "installed",
+                           side_effect=lambda cat: installed_by_category[cat]), \
+         mock.patch.object(apps, "draw", side_effect=capture), \
+         mock.patch.object(apps, "setup_colors"), \
+         mock.patch.object(apps, "setup_mouse"), \
+         mock.patch.object(apps.curses, "mousemask"), \
+         mock.patch.object(apps.curses, "curs_set"), \
+         mock.patch.object(apps.curses, "noecho"), \
+         mock.patch.object(apps.curses, "getmouse",
+                           side_effect=lambda: next(events)), \
+         mock.patch.object(apps, "save") as do_save:
+        apps.tui(screen)
+        do_save.assert_not_called()
+    return snapshots
+
+
+search_steps = run_navigation([
+    apps.curses.KEY_DOWN, 10, ord("/"),
+    *map(ord, "chrom"), 10, 10, 27])
+assert any(mode == "choose" and query == "chrom"
+           for mode, _, _, query, _, _ in search_steps)
+assert any(mode == "main" and state["browser"] == "chromium"
+           for mode, _, _, _, _, state in search_steps)
+
+# Clicking a category opens its own choices page; clicking an app returns.
+clicked = run_navigation(
+    [apps.curses.KEY_MOUSE, apps.curses.KEY_MOUSE, 27],
+    [(0, 4, 6, 0, apps.curses.BUTTON1_CLICKED),
+     (0, 4, 5, 0, apps.curses.BUTTON1_CLICKED)])
+assert any(mode == "choose" and cat == 1 for mode, cat, _, _, _, _ in clicked)
+assert any(mode == "main" and state["browser"] == "chromium"
+           for mode, _, _, _, _, state in clicked)
+
+# Mouse wheel changes the focused row, not the application preference.
+wheel = run_navigation(
+    [apps.curses.KEY_MOUSE, apps.curses.KEY_MOUSE,
+     apps.curses.KEY_MOUSE, 10, 27],
+    [(0, 1, 0, 0, apps.curses.BUTTON5_PRESSED),
+     (0, 4, 6, 0, apps.curses.BUTTON1_CLICKED),
+     (0, 1, 0, 0, apps.curses.BUTTON5_PRESSED)])
+assert any(mode == "main" and cat == 1 for mode, cat, _, _, _, _ in wheel)
+assert any(mode == "main" and state["browser"] == "chromium"
+           for mode, _, _, _, _, state in wheel)
+
+# PgUp/PgDn/Home/End are available on both screens and q acts like Esc.
+page = run_navigation([
+    apps.curses.KEY_END, 10, ord("q"),
+    apps.curses.KEY_HOME, 10, 27, 27])
+assert any(mode == "choose" and cat == 3 for mode, cat, _, _, _, _ in page)
+assert any(mode == "choose" and cat == 0 for mode, cat, _, _, _, _ in page)
+
+# Search cancellation restores the prior menu filter, and c clears it.
+search_back = run_navigation([
+    ord("/"), *map(ord, "browser"), 27, ord("/"),
+    *map(ord, "editor"), 10, ord("c"), 27])
+assert any(mode == "main" and query == "browser" and searching
+           for mode, _, _, query, searching, _ in search_back)
+assert any(mode == "main" and query == "" and not searching
+           for mode, _, _, query, searching, _ in search_back)
+
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
 assert 'mode = "review"' in code
