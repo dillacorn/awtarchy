@@ -247,7 +247,7 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
             width, curses.A_BOLD)
         put(stdscr, h - 5, 2, "MIME and XDG settings are unchanged.",
             width, curses.A_DIM)
-        put(stdscr, h - 2, 2, "Enter: Save   Esc/q: Back", width, curses.A_DIM)
+        put(stdscr, h - 2, 2, "Enter: Save   Left/B/Q/Esc: Back", width, curses.A_DIM)
         stdscr.refresh()
         return
 
@@ -283,13 +283,15 @@ def draw(stdscr: curses.window, pending: dict[str, str], saved: dict[str, str],
         if not entries:
             put(stdscr, 4, 2, "No matches. Press / to search or c to clear.", width)
 
+    hint = ("/ Find  c Clear  S Save" if mode == "main"
+            else "/ Find  c Clear")
     info = ("Search: " + filter_text + ("_" if searching else "")
-            if searching or filter_text else notice)
+            if searching or filter_text else notice or hint)
     put(stdscr, h - 5, 2, info, width, curses.A_DIM)
     # Two compact help lines avoid truncation in floating Foot windows.
-    put(stdscr, h - 3, 2, "Up/Dn/Wheel Move  Enter/Click Open", width,
+    put(stdscr, h - 3, 2, "Up/Dn/Pg/Home/End/Wheel Move", width,
         curses.A_DIM)
-    put(stdscr, h - 2, 2, "Pg/Home/End /Find c Clear Esc/q Back",
+    put(stdscr, h - 2, 2, "Enter/Sp/Right Select  Left/B/Q/Esc Back",
         width, curses.A_DIM)
     stdscr.refresh()
 
@@ -424,7 +426,8 @@ def tui(stdscr: curses.window) -> None:
 
             if key == curses.KEY_RESIZE:
                 continue
-            if key in (27, ord("q"), ord("Q")):
+            if key in (27, curses.KEY_LEFT, ord("q"), ord("Q"),
+                       ord("b"), ord("B")):
                 if mode == "main":
                     return
                 mode = "main"
@@ -470,7 +473,7 @@ def tui(stdscr: curses.window) -> None:
             elif key in (ord("c"), ord("C")):
                 filters[key_filter] = ""
                 continue
-            elif key in (10, 13, curses.KEY_ENTER):
+            elif key in (10, 13, 32, curses.KEY_ENTER, curses.KEY_RIGHT):
                 if entries:
                     clicked = (option_index if mode == "choose" else category_index)
             elif mode == "main" and key in (ord("s"), ord("S")):
