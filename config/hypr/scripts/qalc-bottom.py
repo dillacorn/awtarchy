@@ -131,11 +131,12 @@ class LivePreview:
 
 
 def history_rows(history: list[tuple[str, str]], height: int) -> list[tuple[str, bool]]:
-    """Newest completed calculation is closest to the fixed bottom input."""
+    """Keep the newest complete expression/result groups; never split one."""
+    visible = history[-(height // 3):] if height >= 3 else []
     rows: list[tuple[str, bool]] = []
-    for expr, result in history:
+    for expr, result in visible:
         rows.extend((("> " + expr, False), ("  = " + result, True), ("", False)))
-    return rows[-max(0, height):] if height > 0 else []
+    return rows
 
 
 def add_line(stdscr: curses.window, row: int, column: int, text: str,
@@ -171,12 +172,16 @@ def draw(stdscr: curses.window, expression: str, cursor: int,
 
     input_y = height - 2
     preview_y = height - 4
-    available_history = max(0, preview_y - 4)
+    history_top = 4  # Keep a blank row below the header divider (row 2).
+    history_bottom = preview_y - 2
+    available_history = max(0, history_bottom - history_top + 1)
     rows = history_rows(history, available_history)
-    first_row = preview_y - 2 - len(rows)
+    first_row = history_bottom - len(rows) + 1
     for i, (text, is_result) in enumerate(rows):
-        add_line(stdscr, first_row + i, margin, text, content_width,
-                 cyan if is_result else muted)
+        row = first_row + i
+        if history_top <= row <= history_bottom:
+            add_line(stdscr, row, margin, text, content_width,
+                     cyan if is_result else muted)
 
     if preview:
         add_line(stdscr, preview_y, margin, "= " + preview,
