@@ -33,7 +33,7 @@ declare -a PKG_GROUPS=(
   "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd ttf-jetbrains-mono-nerd noto-fonts-emoji"
   "Themes:papirus-icon-theme materia-gtk-theme kvantum-theme-materia"
   "Terminal Apps:foot nano micro yazi fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
-  "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils udisks2 wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc speedcrunch imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
+  "Utilities:upower polkit python-gobject gnome-keyring networkmanager bluez bluez-utils udisks2 wiremix pcmanfm-qt gvfs gvfs-smb gvfs-mtp gvfs-afc libqalculate imagemagick pipewire pipewire-pulse pipewire-alsa ufw jq earlyoom libsixel xdg-utils python usbutils awww"
   "Multimedia:ffmpeg avahi nss-mdns mpv snapshot exiv2 zathura zathura-pdf-mupdf"
   "Development:base-devel archlinux-keyring bubblewrap gnupg coreutils clang ninja go rust dmidecode nftables"
   "Network Tools:firefox wireguard-tools wireplumber openssh iptables systemd-resolvconf dnsmasq dhcpcd inetutils openbsd-netcat"
@@ -3554,12 +3554,12 @@ migrate_awtarchy_polkit_autostart() {
 # A preserved pre-v4.0.0 Hyprland file can still launch Alacritty even though
 # the managed release uses Foot. Migrate only exact historical Awtarchy lines;
 # leave custom launchers, unrelated settings and optional Alacritty intact.
-migrate_legacy_speedcrunch_hyprland() {
+migrate_qalc_hyprland() {
   local repo_dir="$1" target_home="$2"
   local rel=".config/hypr/hyprland.lua"
   local live="${HOME_DIR}/${rel}" target="${target_home}/${rel}"
-  local migrator="${repo_dir}/local/share/awtarchy/migrate-speedcrunch-hyprland.py"
-  local candidate="${TMPD}/migrate-speedcrunch-hyprland.lua"
+  local migrator="${repo_dir}/local/share/awtarchy/migrate-qalc-hyprland.py"
+  local candidate="${TMPD}/migrate-qalc-hyprland.lua"
   local item already_changed=0
 
   [[ "$UPDATE_MODE" == "preserve" ]] || return 0
@@ -3572,7 +3572,7 @@ migrate_legacy_speedcrunch_hyprland() {
   [[ -f "$candidate" ]] || return 0
 
   if ! validate_candidate "$candidate" "$rel"; then
-    warn "Migrated SpeedCrunch Hyprland candidate failed validation."
+    warn "Migrated Qalc Hyprland candidate failed validation."
     return 1
   fi
   chmod --reference="$live" "$candidate" || return 1
@@ -3587,7 +3587,7 @@ migrate_legacy_speedcrunch_hyprland() {
     CHANGED+=("$rel")
   fi
   atomic_copy "$candidate" "$live" || return 1
-  log "Updated preserved SpeedCrunch window rules without replacing personal Hyprland settings."
+  log "Updated preserved Qalc calculator launcher and window rules without replacing personal Hyprland settings."
 }
 
 migrate_legacy_foot_hyprland() {
@@ -4022,7 +4022,7 @@ copy_awtarchy_configs_stage() {
     retry_command run_as_target chmod 0644 "$dest"
   done
 
-  local -a config_dirs=(hypr quickshell foot gtk-3.0 Kvantum SpeedCrunch fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
+  local -a config_dirs=(hypr quickshell foot gtk-3.0 Kvantum fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
@@ -4052,8 +4052,6 @@ copy_awtarchy_configs_stage() {
   fi
 
   create_directory "${HOME_DIR}/.local/share/nwg-look"
-  create_directory "${HOME_DIR}/.local/share/SpeedCrunch"
-  create_directory "${HOME_DIR}/.local/share/SpeedCrunch/color-schemes"
 
   [[ -f "${REPO_DIR}/Xresources" ]] && retry_command run_as_target cp -- "${REPO_DIR}/Xresources" "${HOME_DIR}/.Xresources"
   [[ -f "${REPO_DIR}/config/mimeapps.list" ]] && retry_command run_as_target cp -- "${REPO_DIR}/config/mimeapps.list" "${HOME_DIR}/.config/"
@@ -4065,11 +4063,6 @@ copy_awtarchy_configs_stage() {
     "${HOME_DIR}/.config/mimeapps.list" \
     "${HOME_DIR}/.config/gamemode.ini" \
     "${HOME_DIR}/.local/share/nwg-look/gsettings" 2>/dev/null || true
-
-  if compgen -G "${REPO_DIR}/local/share/SpeedCrunch/color-schemes/*.json" >/dev/null; then
-    retry_command run_as_target cp "${REPO_DIR}/local/share/SpeedCrunch/color-schemes/"*.json "${HOME_DIR}/.local/share/SpeedCrunch/color-schemes/"
-    run_as_target chmod 0644 "${HOME_DIR}/.local/share/SpeedCrunch/color-schemes/"*.json || true
-  fi
 
   create_directory "${HOME_DIR}/.local/share/applications"
   if [[ -d "${REPO_DIR}/local/share/applications" ]]; then
@@ -6223,19 +6216,13 @@ build_target_home() {
   # the exact release instead of maintaining a list that can omit new paths.
   while IFS= read -r -d '' config_dir; do
     d="${config_dir##*/}"
+    [[ "$d" == "SpeedCrunch" ]] && continue  # Preserve legacy data as user-owned.
     mkdir -p -- "${target_home}/.config/${d}"
     cp -a --no-preserve=ownership -- "${config_dir}/." "${target_home}/.config/${d}/"
   done < <(find "${repo_dir}/config" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
 
   copy_target "${repo_dir}/local/share/nwg-look/gsettings" \
     "${target_home}/.local/share/nwg-look/gsettings"
-
-  if [[ -d "${repo_dir}/local/share/SpeedCrunch/color-schemes" ]]; then
-    mkdir -p -- "${target_home}/.local/share/SpeedCrunch/color-schemes"
-    cp -a --no-preserve=ownership -- \
-      "${repo_dir}/local/share/SpeedCrunch/color-schemes/." \
-      "${target_home}/.local/share/SpeedCrunch/color-schemes/"
-  fi
 
   if [[ -d "${repo_dir}/local/share/applications" ]]; then
     mkdir -p -- "${target_home}/.local/share/applications"
@@ -6300,7 +6287,6 @@ allowed = {
     "QS_BACKGROUND", "QS_HOVER", "QS_FOCUS", "QS_ACTIVE",
     "QS_URGENT", "QS_CHARGING", "QS_CRITICAL", "QS_FOREGROUND",
     "QS_DARK", "QS_MUTED", "MICRO_COLORSCHEME",
-    "SPEEDCRUNCH_COLORSCHEME",
     # Read-only compatibility keys from pre-Quickshell Awtarchy themes.
     "W_BG", "W_COLOR", "W_CUSTOM_HOVER_BG", "W_FOCUS_BG",
     "W_ACTIVE_BG", "W_URGENT_BG", "W_BATT_CHARGING_BG",
@@ -6362,12 +6348,6 @@ if not micro:
     match = re.search(r'"colorscheme"\s*:\s*"([^"]+)"', text)
     micro = match.group(1).strip() if match else "geany"
 micro = safe_name(micro, "Micro colorscheme")
-
-speedcrunch = values.get("SPEEDCRUNCH_COLORSCHEME", "").strip()
-if not speedcrunch:
-    match = re.search(r'Display\\ColorSchemeName=([^|\'"\n]+)', text)
-    speedcrunch = match.group(1).strip() if match else theme_name
-speedcrunch = safe_name(speedcrunch, "SpeedCrunch colorscheme")
 
 hypr_lua = home / ".config/hypr/hyprland.lua"
 hypr_conf = home / ".config/hypr/hyprland.conf"
@@ -6439,17 +6419,6 @@ if foot_ini.is_file():
         if count != 1:
             raise SystemExit(f"Foot configuration missing exact {key} palette entry")
     foot_ini.write_text(content, encoding="utf-8")
-
-speed_ini = home / ".config/SpeedCrunch/SpeedCrunch.ini"
-if speed_ini.is_file():
-    content = speed_ini.read_text(encoding="utf-8")
-    content, count = re.subn(
-        r"(?m)^Display\\ColorSchemeName=.*$",
-        lambda _match: f"Display\\ColorSchemeName={speedcrunch}",
-        content,
-    )
-    if count:
-        speed_ini.write_text(content, encoding="utf-8")
 
 theme_json = home / ".config/quickshell/awtarchy/theme.json"
 theme_json.parent.mkdir(parents=True, exist_ok=True)
@@ -7630,7 +7599,9 @@ for rel in all_paths:
     # existing Alacritty configuration merely because Awtarchy no longer
     # ships or updates it. Dropping it from the new baseline makes it
     # user-owned for subsequent updates, even in clean/reset mode.
-    if rel.startswith(".config/alacritty/") and ni is None:
+    if (rel.startswith(".config/alacritty/")
+        or rel.startswith(".config/SpeedCrunch/")
+        or rel.startswith(".local/share/SpeedCrunch/")) and ni is None:
         continue
     if ni is not None and li == ni:
         continue
@@ -9086,6 +9057,18 @@ target_requires_yazi_application() {
   grep -Fq 'require("bookmarks"):setup()' "$init_file"
 }
 
+ensure_qalc_for_target() {
+  local target_home="$1" target_lua="${1}/.config/hypr/hyprland.lua"
+  [[ -f "$target_lua" && ! -L "$target_lua" ]] || return 0
+  grep -Fq 'local calculator = "foot --app-id awtarchy-qalc' "$target_lua" || return 0
+  command -v qalc >/dev/null 2>&1 && return 0
+  install_managed_pacman_packages "Qalc calculator" libqalculate || return 1
+  command -v qalc >/dev/null 2>&1 || {
+    warn "Qalc is unavailable; install libqalculate before this configuration update."
+    return 1
+  }
+}
+
 ensure_yazi_application_for_target() {
   local target_home="$1" pacman_bin="/usr/bin/pacman"
 
@@ -10097,6 +10080,8 @@ main() {
   ensure_yazi_fd_dependency_for_target "$target_home"
   ensure_yazi_7zip_dependency_for_target "$target_home"
   ensure_yazi_ripdrag_dependency_for_target "$target_home"
+  ensure_qalc_for_target "$target_home" \
+    || die "Qalc is required for the new calculator shortcut; no managed files were changed."
 
   log "Checking Awtarchy system integration..."
   if target_uses_direct_aur_scanner "$target_home"; then
@@ -10139,9 +10124,9 @@ main() {
     die "Could not migrate preserved Hyprland terminal shortcuts to Foot; user files were rolled back."
   fi
 
-  if ! migrate_legacy_speedcrunch_hyprland "$repo_dir" "$target_home"; then
+  if ! migrate_qalc_hyprland "$repo_dir" "$target_home"; then
     rollback_quickshell_update
-    die "Could not migrate preserved SpeedCrunch window rules; user files were rolled back."
+    die "Could not migrate preserved Qalc calculator settings; user files were rolled back."
   fi
 
   log "Refreshing Awtarchy PolicyKit integration..."
