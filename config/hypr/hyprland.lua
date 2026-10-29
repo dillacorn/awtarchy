@@ -534,7 +534,7 @@ local launch = "~/.config/hypr/scripts/launch_handler.sh"
 local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"
 local web_browser = "python3 ~/.config/hypr/scripts/default_applications.py launch browser"
 local file_manager = "python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
-local default_apps = "~/.config/hypr/scripts/default_applications.sh"
+local default_apps = "bash ~/.config/hypr/scripts/default_applications.sh"
 local calculator = "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"
 local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
