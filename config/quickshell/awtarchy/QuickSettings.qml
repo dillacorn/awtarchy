@@ -681,7 +681,7 @@ Singleton {
     }
 
     function openDefaultApplications() {
-        Quickshell.execDetached([defaultAppsLauncher]);
+        Quickshell.execDetached(["bash", defaultAppsLauncher]);
         close();
     }
 
