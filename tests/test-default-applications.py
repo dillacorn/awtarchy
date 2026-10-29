@@ -37,7 +37,8 @@ assert 'default_applications.py launch file-manager' in LUA
 assert LUA.count('class = "^awtarchy-default-apps$"') == 3
 assert "SUPER+ALT+A                  Default applications" in TIPS
 assert "openDefaultApplications()" in QUICKSETTINGS
-assert '"awtarchy-default-apps"' in QUICKSETTINGS
+assert "default_applications.sh" in QUICKSETTINGS
+assert (ROOT / "config/hypr/scripts/default_applications.sh").exists()
 assert "default_applications.py" in BASHRC
 assert "VISUAL" in BASHRC
 
