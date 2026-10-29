@@ -9,7 +9,8 @@ from pathlib import Path
 import sys
 
 OLD_CALC = 'local calculator = "speedcrunch"'
-NEW_CALC = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s \'autocalc on\'"'
+PREVIOUS_QALC = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s \'autocalc on\'"'
+NEW_CALC = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"'
 OLD_CLASS = r'class = "^org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)$"'
 NEW_CLASS = 'class = "^awtarchy-qalc$"'
 OPACITY_ENTRY = r'|org\\.speedcrunch\\.(speedcrunch|SpeedCrunch)'
@@ -42,9 +43,10 @@ def migrate(live, staged, output):
     if set(rules) != set(KINDS):
         raise ValueError("staged Qalc float/size/center rules are missing")
 
-    if original.count(OLD_CALC) > 1:
-        raise ValueError("ambiguous SpeedCrunch command")
+    if original.count(OLD_CALC) + original.count(PREVIOUS_QALC) > 1:
+        raise ValueError("ambiguous calculator command")
     text = original.replace(OLD_CALC, NEW_CALC, 1)
+    text = text.replace(PREVIOUS_QALC, NEW_CALC, 1)
     migrated = []
     for line in text.splitlines(keepends=True):
         stripped = line.strip()
