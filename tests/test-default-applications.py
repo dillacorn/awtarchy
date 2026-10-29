@@ -122,9 +122,10 @@ class FakeScreen:
 
 screen = FakeScreen()
 browser_options = [(f"browser{i}", f"Browser {i}") for i in range(12)]
-with mock.patch.object(apps, "installed", return_value=browser_options):
-    apps.draw(screen, {key: apps.DEFAULTS[key] for key in apps.CATALOG},
-              {}, 1, 11, "choose", "")
+with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
+    with mock.patch.object(apps, "installed", return_value=browser_options):
+        apps.draw(screen, {key: apps.DEFAULTS[key] for key in apps.CATALOG},
+                  {}, 1, 11, "choose", "")
 assert any("Browser 11" in text and 0 < row < 20 for row, text in screen.rows)
 assert not any("Browser 0" in text for row, text in screen.rows)
 assert any("12/12" in text for row, text in screen.rows)
