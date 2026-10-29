@@ -15,7 +15,6 @@ HYPR_LUA="$CONFIG_HOME/hypr/hyprland.lua"
 HYPR_CONF="$CONFIG_HOME/hypr/hyprland.conf"
 MICRO_SETTINGS="$CONFIG_HOME/micro/settings.json"
 FOOT_CONF="$CONFIG_HOME/foot/foot.ini"
-SPEEDCRUNCH_INI="$CONFIG_HOME/SpeedCrunch/SpeedCrunch.ini"
 
 [[ -f "$THEME" ]] || exit 1
 
@@ -35,7 +34,6 @@ text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
 kind = sys.argv[2]
 patterns = {
     "micro": r'"colorscheme"\s*:\s*"([^"]+)"',
-    "speedcrunch": r'Display\\ColorSchemeName=([^|\047"\n]+)',
 }
 match = re.search(patterns[kind], text)
 print(match.group(1).strip() if match else "")
@@ -62,7 +60,6 @@ fi
 
 micro_scheme="$(theme_value MICRO_COLORSCHEME 'geany')"
 
-speedcrunch_scheme="$(theme_value SPEEDCRUNCH_COLORSCHEME "$name")"
 
 if [[ -f "$HYPR_LUA" ]]; then
     python3 - "$HYPR_LUA" "$active_border" "$inactive_border" <<'PY'
@@ -169,20 +166,6 @@ FOOT_LIVE_THEME="$CONFIG_HOME/hypr/scripts/foot_theme_live.py"
 if [[ -f "$FOOT_CONF" && -f "$FOOT_LIVE_THEME" ]]; then
     python3 "$FOOT_LIVE_THEME" "$FOOT_CONF" || \
         printf '%s\n' 'Foot live recoloring failed; new Foot windows still use the updated theme.' >&2
-fi
-
-if [[ -n "$speedcrunch_scheme" && -f "$SPEEDCRUNCH_INI" ]]; then
-    python3 - "$SPEEDCRUNCH_INI" "$speedcrunch_scheme" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-path = Path(sys.argv[1])
-text = path.read_text(encoding="utf-8")
-text, count = re.subn(r'(?m)^Display\\ColorSchemeName=.*$', f'Display\\\\ColorSchemeName={sys.argv[2]}', text)
-if count:
-    path.write_text(text, encoding="utf-8")
-PY
 fi
 
 mkdir -p "$(dirname "$QS_THEME")" "$STATE_DIR"
