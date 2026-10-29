@@ -142,8 +142,8 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert not any("Browser 0" in text for y, text in visible)
         assert not any("PCManFM-Qt" in text for y, text in visible)
         assert (16, "Choice 24/24") in visible
-        assert (19, "Up/Dn/Pg/Home/End/Wheel Move") in visible
-        assert (20, "Enter/Space/Right  Left/B/Q/Esc Back") in visible
+        assert (19, "Up/Dn/Pg/Home/End/Wheel: Move") in visible
+        assert (20, "Enter/Space/Right: Open  Left/B/Q/Esc: Back") in visible
         assert all(y < 18 for y, text in visible if "Browser " in text)
 
         # Drawing the main menu again restores the category view.
@@ -153,8 +153,8 @@ with mock.patch.object(apps.curses, "ACS_HLINE", ord("-"), create=True):
         assert any("Terminal" in text for y, text in visible)
         assert any("File Manager" in text for y, text in visible)
         assert not any("Browser 23" in text for y, text in visible)
-        assert (19, "Up/Dn/Pg/Home/End/Wheel Move") in visible
-        assert (20, "Enter/Space/Right  Left/B/Q/Esc Back") in visible
+        assert (19, "Up/Dn/Pg/Home/End/Wheel: Move") in visible
+        assert (20, "Enter/Space/Right: Open  Left/B/Q/Esc: Back") in visible
 
         # A too-small viewport displays the resize prompt instead of clipping.
         small = FakeScreen(15, 34)
@@ -346,6 +346,16 @@ search_input = run_navigation([
     ord("/"), ord("b"), ord(" "), ord("q"), 10, 27])
 assert any(mode == "main" and query == "b q" and searching
            for mode, _, _, query, searching, _ in search_input)
+
+# Search mode keeps normal typing for b and Space, but Right accepts the
+# query and Left cancels it, returning control to menu navigation.
+search_arrows = run_navigation([
+    ord("/"), ord("b"), ord(" "), apps.curses.KEY_LEFT,
+    ord("/"), ord("e"), apps.curses.KEY_RIGHT, ord("b")])
+assert any(searching and query == "b "
+           for _, _, _, query, searching, _ in search_arrows)
+assert any(not searching and query == "e"
+           for _, _, _, query, searching, _ in search_arrows)
 
 # UI contract: the selected entry and save confirmation both exist.
 code = SCRIPT.read_text(encoding="utf-8")
