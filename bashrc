@@ -17,8 +17,16 @@ alias flatpak='flatpak --user'
 alias hypr='XDG_SESSION_TYPE=wayland exec start-hyprland'
 
 # --- Environment Variables ---
-# Default editor for command line text editing
-export EDITOR=/usr/bin/micro
+# Default editor for command-line editing. Read Awtarchy preferences if available.
+_awtarchy_default_apps="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/default_applications.py"
+if [[ -r "$_awtarchy_default_apps" ]] && command -v python3 >/dev/null 2>&1; then
+  _awtarchy_editor="$(python3 "$_awtarchy_default_apps" get editor 2>/dev/null)"
+  export EDITOR="${_awtarchy_editor:-micro}"
+else
+  export EDITOR=/usr/bin/micro
+fi
+export VISUAL="${VISUAL:-$EDITOR}"
+unset _awtarchy_default_apps _awtarchy_editor
 
 # GTK theme for graphical apps
 export GTK_THEME=Materia-dark
