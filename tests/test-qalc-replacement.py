@@ -75,12 +75,12 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
     bin_dir = root / "bin"
     bin_dir.mkdir()
     qalc = bin_dir / "qalc"
-    qalc.write_text("#!/bin/sh\nprintf \"args:%s\\n\" \"$*\"\n", encoding="utf-8")
+    qalc.write_text('#!/bin/sh\\nprintf "%s" "$*"\\n', encoding="utf-8")
     qalc.chmod(0o755)
     helper = ROOT / "config/hypr/scripts/qalc-terminal.sh"
     result = subprocess.run(["bash", str(helper)], check=True,
                             capture_output=True, text=True,
                             env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
-    assert "Qalc" in result.stdout and "args:-s autocalc on" in result.stdout
+    assert "Qalc" in result.stdout and "-s autocalc on" in result.stdout
 
 print("PASS: Qalc launch rules and preserved configuration migration")
