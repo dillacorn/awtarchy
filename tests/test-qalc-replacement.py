@@ -4,6 +4,7 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import os
 
 ROOT = Path(__file__).resolve().parents[1]
 LUA = ROOT / "config/hypr/hyprland.lua"
@@ -11,7 +12,7 @@ RUNTIME = ROOT / "local/share/awtarchy/awtarchy-runtime.sh"
 MIGRATOR = ROOT / "local/share/awtarchy/migrate-qalc-hyprland.py"
 lua = LUA.read_text(encoding="utf-8")
 runtime = RUNTIME.read_text(encoding="utf-8")
-new_command = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s \'autocalc on\'"'
+new_command = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"'
 
 assert new_command in lua
 assert lua.count('"ALT + SHIFT + C", calculator') == 2
@@ -59,5 +60,27 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
     subprocess.run(["python3", str(MIGRATOR), str(live), str(LUA), str(output)],
                    check=True, capture_output=True, text=True)
     assert 'local calculator = "custom-calc"' in output.read_text()
+
+    # Systems which already tested this branch must migrate the original
+    # direct Qalc launcher to the headed launcher without a reset.
+    previous = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s \\'autocalc on\\'"'
+    live.write_text(lua.replace(new_command, previous), encoding="utf-8")
+    output.unlink()
+    subprocess.run(["python3", str(MIGRATOR), str(live), str(LUA), str(output)],
+                   check=True, capture_output=True, text=True)
+    assert new_command in output.read_text()
+
+    # Mock the executable, verifying the heading and native live flag
+    # without depending on an actual Qalc installation on the CI host.
+    bin_dir = root / "bin"
+    bin_dir.mkdir()
+    qalc = bin_dir / "qalc"
+    qalc.write_text('#!/bin/sh\\nprintf "args:%s\\\\n" "$*"\\n', encoding="utf-8")
+    qalc.chmod(0o755)
+    helper = ROOT / "config/hypr/scripts/qalc-terminal.sh"
+    result = subprocess.run(["bash", str(helper)], check=True,
+                            capture_output=True, text=True,
+                            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
+    assert "Qalc" in result.stdout and "args:-s autocalc on" in result.stdout
 
 print("PASS: Qalc launch rules and preserved configuration migration")
