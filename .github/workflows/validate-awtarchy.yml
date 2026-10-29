@@ -335,13 +335,14 @@ jobs:
           desktop-file-validate \
             local/share/applications/quickshell_bar_flip.desktop \
             local/share/applications/quickshell_bar_rotate.desktop \
-            local/share/applications/quickshell_bar_toggle.desktop
+            local/share/applications/quickshell_bar_toggle.desktop \
+            local/share/applications/qalc-calculator.desktop
       - name: CachyOS installation safety regressions
         run: python3 tests/test-cachyos-compatibility.py
       - name: CachyOS Fish greeting regressions
         run: python3 tests/test-cachyos-fish-greeting.py
-      - name: SpeedCrunch theme and window rules
-        run: python3 tests/test-speedcrunch-compatibility.py
+      - name: Qalc live calculator and safe migration
+        run: python3 tests/test-qalc-replacement.py
       - name: Command and updater integration tests
         run: |
           no_sudo_bin="$(mktemp -d)"

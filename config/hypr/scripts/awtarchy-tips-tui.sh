@@ -451,6 +451,7 @@ Core launchers
   SUPER+RETURN                 Terminal
   SUPER+B                      Web browser
   SUPER+E                      PCManFM-Qt
+  ALT+SHIFT+C / SUPER+SHIFT+C   Qalc live calculator
   SUPER+SHIFT+E                Yazi
   SUPER+CTRL+M                 Monitor configuration
   SUPER+P                      Power menu

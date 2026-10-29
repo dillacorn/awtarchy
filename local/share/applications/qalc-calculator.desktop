@@ -1,0 +1,15 @@
+# Awtarchy Qalc launcher
+# Installed to ~/.local/share/applications/qalc-calculator.desktop
+
+[Desktop Entry]
+Type=Application
+Name=Qalc Calculator
+GenericName=Calculator
+Comment=Live calculator with input at the bottom
+Exec=sh -c "exec foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"
+TryExec=foot
+Icon=accessories-calculator
+Terminal=false
+StartupNotify=false
+Categories=Utility;Calculator;
+Keywords=calculator;calc;qalc;qalculate;math;arithmetic;
