@@ -63,7 +63,7 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
 
     # Systems which already tested this branch must migrate the original
     # direct Qalc launcher to the headed launcher without a reset.
-    previous = 'local calculator = "foot --app-id awtarchy-qalc --title Qalc qalc -s \\'autocalc on\\'"'
+    previous = new_command.replace('bash ~/.config/hypr/scripts/qalc-terminal.sh', "qalc -s 'autocalc on'")
     live.write_text(lua.replace(new_command, previous), encoding="utf-8")
     output.unlink()
     subprocess.run(["python3", str(MIGRATOR), str(live), str(LUA), str(output)],
@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
     bin_dir = root / "bin"
     bin_dir.mkdir()
     qalc = bin_dir / "qalc"
-    qalc.write_text('#!/bin/sh\\nprintf "args:%s\\\\n" "$*"\\n', encoding="utf-8")
+    qalc.write_text("#!/bin/sh\nprintf \"args:%s\\n\" \"$*\"\n", encoding="utf-8")
     qalc.chmod(0o755)
     helper = ROOT / "config/hypr/scripts/qalc-terminal.sh"
     result = subprocess.run(["bash", str(helper)], check=True,
