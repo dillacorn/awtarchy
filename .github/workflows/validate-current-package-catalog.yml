@@ -10,6 +10,12 @@ on:
       - local/share/awtarchy/awtarchy-package-reconcile.sh
       - tests/test-current-package-catalog.sh
       - tests/test-qalc-replacement.py
+      - tests/test-default-applications.py
+      - config/hypr/scripts/default_applications.py
+      - config/hypr/scripts/default_applications.sh
+      - config/quickshell/awtarchy/QuickSettings.qml
+      - bashrc
+      - local/share/applications/awtarchy-default-applications.desktop
       - local/share/applications/qalc-calculator.desktop
       - tests/test-qalc-bottom.py
       - config/hypr/scripts/qalc-bottom.py
@@ -46,6 +52,11 @@ jobs:
           python3 -m py_compile local/share/awtarchy/migrate-qalc-hyprland.py tests/test-qalc-replacement.py tests/test-qalc-bottom.py config/hypr/scripts/qalc-bottom.py
           python3 tests/test-qalc-replacement.py
           python3 tests/test-qalc-bottom.py
+      - name: Default applications selector regression
+        run: |
+          python3 -m py_compile config/hypr/scripts/default_applications.py tests/test-default-applications.py
+          bash -n config/hypr/scripts/default_applications.sh
+          python3 tests/test-default-applications.py
       - name: Cheese replacement regression
         run: bash tests/test-cheese-snapshot-migration.sh
       - name: Update package preflight regression

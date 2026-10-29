@@ -531,8 +531,10 @@ local hypr_scripts = "~/.config/hypr/scripts"
 local launch = "~/.config/hypr/scripts/launch_handler.sh"
 
 -- Core apps (define before anything that uses them)
-local terminal = "foot"
-local web_browser = "firefox"
+local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"
+local web_browser = "python3 ~/.config/hypr/scripts/default_applications.py launch browser"
+local file_manager = "python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
+local default_apps = "bash ~/.config/hypr/scripts/default_applications.sh"
 local calculator = "foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"
 local yazi = "foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi"
 
@@ -820,6 +822,7 @@ for _, bind in ipairs({
     { "ALT + SHIFT + B", btop },
     { "SUPER + SHIFT + B", btop },
     { "SUPER + B", web_browser },
+    { "SUPER + ALT + A", default_apps },
     { "ALT + SHIFT + C", calculator },
     { "SUPER + SHIFT + C", calculator },
     { "ALT + SHIFT + M", maccel },
@@ -874,7 +877,7 @@ hl.bind("SUPER + ALT + CTRL + bracketleft", hl.dsp.exec_cmd(hyprsunset_ctl .. " 
 hl.bind("SUPER + ALT + CTRL + N", hl.dsp.exec_cmd(hyprsunset_ctl .. " toggle"), {})
 
 -- File managers / system
-hl.bind("SUPER + E", hl.dsp.exec_cmd("pcmanfm-qt"), {})
+hl.bind("SUPER + E", hl.dsp.exec_cmd(file_manager), {})
 hl.bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(yazi), {})
 hl.bind("SUPER + I", hl.dsp.exec_cmd(hyprpicker), {})
 hl.bind("SUPER + P", function()
@@ -1095,6 +1098,7 @@ hl.define_submap("noalt", function()
         { "ALT + SHIFT + B", btop },
         { "SUPER + SHIFT + B", btop },
         { "SUPER + B", web_browser },
+        { "SUPER + ALT + A", default_apps },
         { "ALT + SHIFT + C", calculator },
         { "SUPER + SHIFT + C", calculator },
         { "ALT + SHIFT + M", maccel },
@@ -1149,7 +1153,7 @@ hl.define_submap("noalt", function()
     hl.bind("SUPER + ALT + CTRL + N", hl.dsp.exec_cmd(hyprsunset_ctl .. " toggle"), {})
 
     -- File managers / system in "noalt"
-    hl.bind("SUPER + E", hl.dsp.exec_cmd("pcmanfm-qt"), {})
+    hl.bind("SUPER + E", hl.dsp.exec_cmd(file_manager), {})
     hl.bind("SUPER + SHIFT + E", hl.dsp.exec_cmd(yazi), {})
         hl.bind("SUPER + I", hl.dsp.exec_cmd(hyprpicker), {})
     hl.bind("SUPER + P", function()
@@ -1327,6 +1331,7 @@ hl.define_submap("vm", function()
         { "SUPER + ALT + Q", hl.dsp.window.close(), {} },
         { "SUPER + ALT + F", hl.dsp.window.float({ action = "toggle" }), {} },
         { "SUPER + ALT + P", hl.dsp.exec_cmd(app_launcher), {} },
+        { "SUPER + ALT + A", hl.dsp.exec_cmd(default_apps), {} },
         { "SUPER + ALT + C", hl.dsp.exec_cmd(calculator), {} },
         { "SUPER + ALT + CTRL + V", hl.dsp.exec_cmd(wiremix), {} },
         { "SUPER + ALT + CTRL + S", hl.dsp.exec_cmd(qr_scan), {} },
@@ -1460,6 +1465,10 @@ hl.window_rule({ match = { class = "^(hypr_quicksettings)$" }, center = true })
 hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, float = true })
 hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, size = { "(monitor_w*0.50)", "(monitor_h*0.50)" } })
 hl.window_rule({ match = { class = "^(awtarchy-tips-tui)$" }, center = true })
+
+hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, float = true })
+hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, size = { 540, 460 } })
+hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, center = true })
 
 hl.window_rule({ match = { class = "^(maccel)$" }, float = true })
 hl.window_rule({ match = { class = "^(maccel)$" }, size = { "(monitor_w*0.90)", "(monitor_h*0.96)" } })
