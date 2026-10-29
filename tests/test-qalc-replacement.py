@@ -80,7 +80,8 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
     helper = ROOT / "config/hypr/scripts/qalc-terminal.sh"
     result = subprocess.run(["bash", str(helper)], check=True,
                             capture_output=True, text=True,
-                            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
+                            env={**os.environ, "AWTARCHY_QALC_NATIVE": "1",
+                                 "PATH": f"{bin_dir}:{os.environ['PATH']}"})
     assert "Qalc" in result.stdout and "-s autocalc on" in result.stdout
 
 print("PASS: Qalc launch rules and preserved configuration migration")
