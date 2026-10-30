@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import configparser
+import hashlib
 import shlex
 import subprocess
 import tempfile
@@ -101,6 +102,9 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
     assert "qalc-bottom.py" not in source
     assert "AWTARCHY_QALC_NATIVE" not in source
     assert "exec qalc -s 'autocalc on'" in source
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    history = (ROOT / "local/share/awtarchy/quickshell-managed-history.sha256").read_text()
+    assert f"{digest}\t.config/hypr/scripts/qalc-terminal.sh" in history.splitlines()
     result = subprocess.run(["bash", str(helper)], check=True,
                             capture_output=True, text=True,
                             env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
