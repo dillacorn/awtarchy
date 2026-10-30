@@ -15,7 +15,8 @@ bash -n "$RECONCILER"
 # Load exactly the production functions, without sourcing the live updater.
 for name in hyprland_pending_upgrade hyprland_installed_version \
   maybe_upgrade_hyprland_before_config hyprland_running_version \
-  hyprland_session_needs_restart warn_hyprland_session_restart; do
+  hyprland_session_needs_restart warn_hyprland_session_restart \
+  reload_quickshell_update_hyprland validate_live; do
   sed -n "/^${name}() {/,/^}/p" "$RUNTIME" >>"$TMP/helpers.sh"
 done
 # shellcheck source=/dev/null
@@ -63,8 +64,17 @@ checkupdates() {
   esac
 }
 hyprctl() {
-  [[ "$1" == -j && "$2" == version ]] || fail "unexpected hyprctl call"
-  printf '{"tag":"v%s"}\n' "$SESSION_VERSION"
+  if [[ "$1" == -j && "$2" == version ]]; then
+    printf '{"tag":"v%s"}\n' "$SESSION_VERSION"
+  elif [[ "$1" == configerrors ]]; then
+    printf '%s\n' "${CONFIG_ERROR:-no errors}"
+  else
+    fail "unexpected hyprctl call: $*"
+  fi
+}
+run_target() {
+  printf '%s\n' "$*" >>"$TMP/hyprland-reload-calls"
+  return 0
 }
 
 # Mock only this subprocess. The production reconciler is checked statically
@@ -113,9 +123,29 @@ message="$(warn_hyprland_session_restart 2>&1)"
 [[ $message == *"Log out of Hyprland and log back in"* ]] || fail "missing restart advisory"
 HYPRLAND_PACKAGE_UPGRADED=0
 [[ "$(hyprland_running_version)" == 0.56.0 ]] || fail "running compositor version parse failed"
+# New compositor binaries must not reload Lua configuration in an old session.
+HYPRLAND_PACKAGE_UPGRADED=1
+CHANGED=()
+reload_quickshell_update_hyprland >/dev/null ||
+  fail "new session reload deferral failed"
+[[ ! -s $TMP/hyprland-reload-calls ]] || fail "upgraded compositor reloaded before fresh login"
+validate_live >/dev/null 2>&1 ||
+  fail "deferred validation incorrectly vetoed a staged config"
+HYPRLAND_PACKAGE_UPGRADED=0
 hyprland_session_needs_restart || fail "installed/running version mismatch ignored"
 
 SESSION_VERSION=0.57.0
+CONFIG_ERROR='bad active config'
+if validate_live >/dev/null 2>&1; then
+  fail "genuine live Hyprland config errors were silently ignored"
+fi
+CONFIG_ERROR='no errors'
+validate_live >/dev/null 2>&1 ||
+  fail "valid active compositor config was incorrectly rejected"
+reload_quickshell_update_hyprland >/dev/null ||
+  fail "matched compositor failed to reload"
+grep -Fxq 'hyprctl reload' "$TMP/hyprland-reload-calls" ||
+  fail "matched compositor did not reload"
 if hyprland_session_needs_restart; then
   fail "matching installed/running versions incorrectly require restart"
 fi
@@ -153,6 +183,7 @@ assert runtime.index('  warn_hyprland_session_restart\n  log "Done."') > apply
 assert '  if ! validate_live; then\n    rollback_quickshell_update' in runtime
 assert '    warn_hyprland_session_restart\n    die "Live validation failed.' in runtime
 assert 'bash "$reconciler" --hyprland-upgrade' in runtime
+assert 'confirmation_text="Update applied. Hyprland config validation is deferred' in runtime
 assert 'local reconciler="${data_home}/awtarchy/awtarchy-package-reconcile.sh"' in runtime
 mode = reconciler[reconciler.index('if (( HYPRLAND_UPGRADE_ONLY == 1 )); then'):]
 stop = mode.index('\nif (( NVIDIA_ROLLBACK_ONLY == 1 )); then')
