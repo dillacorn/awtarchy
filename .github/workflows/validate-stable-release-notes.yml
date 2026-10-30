@@ -39,3 +39,80 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v414-qalc-once:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.head.ref == 'release-bridge-v4.1.4-qalc-20261030' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.sha == '17b20ab4ae1e58b3572ce7663413a35a3ac6645f' &&
+      github.event.pull_request.title == 'one-use-publish-v4.1.4-qalc-20261030'
+    needs: release-notes-contract
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify exact stable target and validate release notes before publishing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          expected='17b20ab4ae1e58b3572ce7663413a35a3ac6645f'
+          title='Awtarchy v4.1.4 Qalc'
+          current="$(gh api "repos/${GITHUB_REPOSITORY}/branches/main" --jq '.commit.sha')"
+          [[ "$current" == "$expected" ]] || { printf 'ERROR: main changed since approval (%s != %s)\n' "$current" "$expected" >&2; false; }
+          [[ -f .github/release-notes-v4.1.4.md ]] || { printf 'ERROR: Missing release notes.\n' >&2; false; }
+          if gh release view v4.1.4 >/dev/null 2>&1; then
+            printf 'ERROR: v4.1.4 release already exists. Refusing to replace it.\n' >&2
+            false
+          fi
+          if gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v4.1.4" >/dev/null 2>&1; then
+            printf 'ERROR: v4.1.4 tag already exists. Refusing to move it.\n' >&2
+            false
+          fi
+          gh release view v4.1.3 --json body --jq '.body' > /tmp/awtarchy-v4.1.3-previous.md
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v4.1.4 \
+            --title "$title" \
+            --notes .github/release-notes-v4.1.4.md \
+            --previous /tmp/awtarchy-v4.1.3-previous.md
+          printf 'PASS: target SHA, previous notes, new version, and release-note contract verified.\n'
+      - name: Publish v4.1.4 and verify immutable tag and published body
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          expected='17b20ab4ae1e58b3572ce7663413a35a3ac6645f'
+          title='Awtarchy v4.1.4 Qalc'
+          gh release create v4.1.4 --target "$expected" --title "$title" \
+            --notes-file .github/release-notes-v4.1.4.md --latest
+          gh release view v4.1.4 --json name,tagName,isDraft,isPrerelease,targetCommitish,body \
+            > /tmp/awtarchy-v4.1.4-published.json
+          gh api "repos/${GITHUB_REPOSITORY}/git/ref/tags/v4.1.4" \
+            --jq '.object.sha' > /tmp/awtarchy-v4.1.4-tag-sha
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          data = json.loads(Path("/tmp/awtarchy-v4.1.4-published.json").read_text())
+          expected = "17b20ab4ae1e58b3572ce7663413a35a3ac6645f"
+          intended = Path(".github/release-notes-v4.1.4.md").read_text()
+          assert data["name"] == "Awtarchy v4.1.4 Qalc", data["name"]
+          assert data["tagName"] == "v4.1.4", data["tagName"]
+          assert data["targetCommitish"] == expected, data["targetCommitish"]
+          assert not data["isDraft"] and not data["isPrerelease"], data
+          assert data["body"].strip() == intended.strip(), "Published body differs"
+          actual_sha = Path("/tmp/awtarchy-v4.1.4-tag-sha").read_text().strip()
+          assert actual_sha == expected, "Published tag does not point at approved main commit"
+          Path("/tmp/awtarchy-v4.1.4-published.md").write_text(data["body"])
+          print("PASS: stable release title, target SHA, immutable tag, and exact release body verified")
+          PY
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v4.1.4 \
+            --title "$title" \
+            --notes /tmp/awtarchy-v4.1.4-published.md \
+            --previous /tmp/awtarchy-v4.1.3-previous.md
