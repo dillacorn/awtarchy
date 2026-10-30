@@ -10221,6 +10221,17 @@ main() {
 
   maybe_upgrade_hyprland_before_config "$repo_dir"
 
+  # Hyprland auto-reloads its Lua configuration when the file changes.
+  # Even if we skip explicit hyprctl reload, applying new configs to an old
+  # running compositor is unsafe after a package upgrade. Leave every
+  # managed config untouched until the next login, then retry the update.
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && hyprland_session_needs_restart; then
+    warn "Managed Awtarchy config changes are deferred because the running Hyprland session does not match the installed version."
+    warn "Log out of Hyprland, log back in, then run 'awtarchy update' again."
+    warn_hyprland_session_restart
+    return 21
+  fi
+
   log "Update approved. Preparing required dependencies..."
   ensure_yazi_application_for_target "$target_home"
   ensure_yazi_fd_dependency_for_target "$target_home"
