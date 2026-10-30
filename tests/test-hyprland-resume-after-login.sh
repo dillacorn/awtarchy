@@ -27,12 +27,6 @@ STATE_HOME="$TARGET_HOME/.local/state"
 STATE_DIR="$STATE_HOME/awtarchy"
 GIT_TEST_STATE_FILE="$STATE_DIR/git-testing"
 mkdir -p "$STATE_DIR" "$TARGET_HOME/.local/bin" "$TARGET_HOME/.config/hypr" "$TMP/bin"
-# The currently installed user configuration must actually contain the
-# startup hook; an immutable old release must not promise auto-resume.
-stage_hyprland_resume_update v4.1.3
-[[ ! -e "$STATE_DIR/hyprland-update-resume-pending" ]] ||
-  fail "missing installed hook incorrectly scheduled auto-resume"
-cp -- "$HYPR_LUA" "$TARGET_HOME/.config/hypr/hyprland.lua"
 : >"$TARGET_HOME/.local/bin/awtarchy"
 chmod 0755 "$TARGET_HOME/.local/bin/awtarchy"
 export PATH="$TMP/bin:$PATH"
@@ -52,6 +46,11 @@ foot() {
   printf '%s\n' "$*" >>"$TMP/foot-invocations"
 }
 TESTING_COMMIT=""
+# An immutable older release without the startup hook cannot auto-resume.
+stage_hyprland_resume_update v4.1.3
+[[ ! -e "$STATE_DIR/hyprland-update-resume-pending" ]] ||
+  fail "missing installed hook incorrectly scheduled auto-resume"
+cp -- "$HYPR_LUA" "$TARGET_HOME/.config/hypr/hyprland.lua"
 marker="$(deferred_resume_marker)"
 [[ $marker == "$STATE_DIR/hyprland-update-resume-pending" ]] ||
   fail "launcher and runtime disagree about marker location"
