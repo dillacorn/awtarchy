@@ -1527,6 +1527,9 @@ maintenance_menu() {
             20)
               log "Update was rolled back by the user; skipping post-update UI reconciliation."
               ;;
+            21)
+              log "Hyprland config apply deferred until fresh login; no UI reconciliation performed."
+              ;;
             *)
               rc="$update_rc"
               ;;
@@ -1735,6 +1738,10 @@ main() {
           ;;
         20)
           log "Update was rolled back by the user; skipping post-update UI reconciliation."
+          return 0
+          ;;
+        21)
+          log "Hyprland config apply deferred until fresh login; no UI reconciliation performed."
           return 0
           ;;
         *)
