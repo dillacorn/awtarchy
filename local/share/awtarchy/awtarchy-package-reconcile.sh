@@ -22,6 +22,7 @@ PACMAN_MIRROR_REPORT_PACKAGE=""
 PACMAN_MIRROR_REPAIR_ONLY=0
 PACMAN_MIRROR_REPAIR_REPO=""
 NVIDIA_ROLLBACK_ONLY=0
+HYPRLAND_UPGRADE_ONLY=0
 NVIDIA_ROLLBACK_PICK=0
 NVIDIA_ROLLBACK_LIST=0
 NVIDIA_ROLLBACK_VERSION=""
@@ -108,6 +109,7 @@ usage() {
 Usage:
   awtarchy packages
   awtarchy packages --review
+  awtarchy packages --hyprland-upgrade  # internal, approved update path
   awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
 
 Without options, opens an installer-style package reconciliation UI.
@@ -150,6 +152,9 @@ while (( $# )); do
       ;;
     --nvidia-rollback)
       NVIDIA_ROLLBACK_ONLY=1
+      ;;
+    --hyprland-upgrade)
+      HYPRLAND_UPGRADE_ONLY=1
       ;;
     --pick)
       NVIDIA_ROLLBACK_PICK=1
@@ -2577,6 +2582,32 @@ package_reconciliation_needs_action() {
   (( ${#RETIRED_MANAGED[@]} > 0 )) && return 0
   return 1
 }
+
+# Only the updater invokes this explicit, already-approved full-upgrade mode.
+# Keep the same NVIDIA/kernel rollback policy used by package reconciliation.
+if (( HYPRLAND_UPGRADE_ONLY == 1 )); then
+  (( NVIDIA_ROLLBACK_ONLY == 0 && REVIEW_ONLY == 0 && NEEDS_ACTION_ONLY == 0
+    && MIGRATE_REPLACEMENTS_ONLY == 0 && MIGRATE_LOCKSCREEN_RETIREMENT_ONLY == 0
+    && PACMAN_RECOVERY_CHECK_ONLY == 0 && PACMAN_RECOVERY_RUN_ONLY == 0
+    && PACMAN_MIRROR_CHECK_ONLY == 0 && PACMAN_MIRROR_REPORT_ONLY == 0
+    && PACMAN_MIRROR_REPAIR_ONLY == 0 )) ||
+    die "--hyprland-upgrade cannot be combined with other package actions."
+  [[ -r /dev/tty && -w /dev/tty && -t 0 && -t 1 ]] ||
+    die "Hyprland full system upgrade requires an interactive terminal."
+  pacman -Qq hyprland >/dev/null 2>&1 ||
+    die "Cannot upgrade a missing or custom Hyprland package."
+  recover_package_disk_headroom
+  confirm_nvidia_system_upgrade || exit 1
+  log "Upgrading installed packages with pacman -Syu (including Hyprland if available)..."
+  if ! pacman_install_with_recovery -Syu --noconfirm; then
+    cleanup_nvidia_pending_snapshot
+    NVIDIA_ROLLBACK_PENDING=""
+    die "Full system upgrade failed; resolve the pacman error before applying new managed configs."
+  fi
+  local_nvidia_rc=0
+  offer_nvidia_post_upgrade_choice || local_nvidia_rc=$?
+  exit "$local_nvidia_rc"
+fi
 
 if (( NVIDIA_ROLLBACK_ONLY == 1 )); then
   if (( NVIDIA_ROLLBACK_LIST == 1 )); then
