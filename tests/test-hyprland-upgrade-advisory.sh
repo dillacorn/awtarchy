@@ -73,6 +73,7 @@ hyprctl() {
   fi
 }
 run_target() {
+  local IFS=" "
   printf '%s\n' "$*" >>"$TMP/hyprland-reload-calls"
   return 0
 }
