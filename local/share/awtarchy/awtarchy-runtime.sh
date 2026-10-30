@@ -9526,7 +9526,7 @@ maybe_upgrade_hyprland_before_config() {
   if [[ $upgraded != "$installed" ]]; then
     HYPRLAND_PACKAGE_UPGRADED=1
   else
-    warn "The full system upgrade did not change Hyprland; check IgnorePkg and package sources."
+    die "Hyprland remained at ${installed} after the full system upgrade. Check IgnorePkg and package sources before applying Awtarchy configuration. No managed configs changed."
   fi
 }
 
