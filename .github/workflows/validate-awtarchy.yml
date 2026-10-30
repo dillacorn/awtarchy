@@ -19,7 +19,7 @@ jobs:
           bash -n local/bin/awtarchy
           bash -n local/share/awtarchy/awtarchy-runtime.sh
           bash -n tests/test-hyprland-resume-after-login.sh
-          bash -x tests/test-hyprland-resume-after-login.sh
+          bash tests/test-hyprland-resume-after-login.sh
 
   hyprland-upgrade-advisory:
     runs-on: ubuntu-latest
@@ -32,7 +32,7 @@ jobs:
           bash -n tests/test-hyprland-upgrade-advisory.sh
           bash -n tests/test-hyprland-upgrade-flow.sh
           bash tests/test-hyprland-upgrade-advisory.sh
-          bash -x tests/test-hyprland-resume-after-login.sh
+          bash tests/test-hyprland-resume-after-login.sh
           bash tests/test-hyprland-upgrade-flow.sh
 
   validate:
