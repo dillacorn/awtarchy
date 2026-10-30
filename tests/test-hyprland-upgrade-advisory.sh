@@ -29,6 +29,7 @@ CACHED_UPGRADE=1
 ABSENT=0
 CHOICE=n
 UPGRADE_RC=0
+UPGRADE_NO_CHANGE=0
 UPGRADE_CALLS=0
 HYPRLAND_INSTANCE_SIGNATURE=test-hyprland-instance
 
@@ -89,7 +90,7 @@ bash() {
   [[ "$2" == --hyprland-upgrade ]] || fail "unexpected reconciler mode"
   UPGRADE_CALLS=$((UPGRADE_CALLS + 1))
   (( UPGRADE_RC == 0 )) || return "$UPGRADE_RC"
-  PACKAGE_VERSION=0.57.0-1
+  (( UPGRADE_NO_CHANGE == 1 )) || PACKAGE_VERSION=0.57.0-1
 }
 
 HOME_DIR="$TMP/home"
@@ -152,9 +153,11 @@ if hyprland_session_needs_restart; then
 fi
 HYPRLAND_INSTANCE_SIGNATURE=""
 HYPRLAND_PACKAGE_UPGRADED=1
-if hyprland_session_needs_restart; then
-  fail "headless update incorrectly requests a Hyprland session restart"
-fi
+hyprland_session_needs_restart ||
+  fail "headless upgrade should advise starting a fresh Hyprland session"
+headless_warning="$(warn_hyprland_session_restart 2>&1)"
+[[ $headless_warning == *"Start a fresh Hyprland session"* ]] ||
+  fail "headless upgrade did not report the fresh-login requirement"
 
 # Approved upgrade failure must stop *before* managed config apply.
 HYPRLAND_INSTANCE_SIGNATURE=test-hyprland-instance
@@ -164,6 +167,11 @@ if (maybe_upgrade_hyprland_before_config "$TMP/repo" >/dev/null 2>&1); then
   fail "failed system upgrade incorrectly allowed configuration changes"
 fi
 UPGRADE_RC=0
+UPGRADE_NO_CHANGE=1
+if (maybe_upgrade_hyprland_before_config "$TMP/repo" >/dev/null 2>&1); then
+  fail "unchanged Hyprland was accepted after a requested package upgrade"
+fi
+UPGRADE_NO_CHANGE=0
 ABSENT=1
 maybe_upgrade_hyprland_before_config "$TMP/repo" >/dev/null 2>&1 ||
   fail "custom Hyprland installation was treated as a forced replacement"
