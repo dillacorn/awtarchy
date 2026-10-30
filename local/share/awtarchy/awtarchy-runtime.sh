@@ -9547,8 +9547,8 @@ hyprland_running_version() {
 
 hyprland_session_needs_restart() {
   local installed="" running=""
-  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 1
   (( ${HYPRLAND_PACKAGE_UPGRADED:-0} == 1 )) && return 0
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 1
   installed="$(hyprland_installed_version)" || return 1
   running="$(hyprland_running_version)" || return 1
   if [[ $installed =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
@@ -9560,8 +9560,12 @@ hyprland_session_needs_restart() {
 
 warn_hyprland_session_restart() {
   hyprland_session_needs_restart || return 0
-  warn "Hyprland session restart recommended: your current session may still use the older compositor."
-  warn "Log out of Hyprland and log back in to load the installed version."
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+    warn "Hyprland session restart recommended: your current session may still use the older compositor."
+    warn "Log out of Hyprland and log back in to load the installed version."
+  else
+    warn "Hyprland was upgraded. Start a fresh Hyprland session to load the installed version."
+  fi
   warn "A full reboot is only needed if a kernel/driver upgrade requires it. Restarting cannot repair invalid configs."
 }
 
