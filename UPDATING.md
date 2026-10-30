@@ -10,6 +10,10 @@ awtarchy update
 
 Stable update/reset/review operations target published Awtarchy releases. The maintenance command/runtime itself can refresh from `main` independently so updater-only fixes do not require a new configuration release. Changes to release-managed configuration are available to normal stable updates only after a new published stable release includes them; editing release notes does not change the configuration payload users receive. Optional package choices remain separate.
 
+When a Hyprland package upgrade is detected after you approve the config update, Awtarchy offers a **separate, optional full system upgrade** before changing managed files. It never installs Hyprland alone or upgrades the system without an interactive yes/no response. This uses Awtarchy's existing NVIDIA/kernel rollback safeguards, but a managed-config rollback does not reverse a system package upgrade. For a fresh, read-only upgrade check, install `pacman-contrib` (which provides `checkupdates`); otherwise Awtarchy consults the local pacman database, which might be stale. On Arch and CachyOS, use full system upgrades instead of partial package upgrades.
+
+If Hyprland's installed version differs from the running session after the package upgrade, Awtarchy leaves managed config files untouched and stops that update safely. **Log out of Hyprland, log back in, and run `awtarchy update` again** to apply the managed configs in the new compositor session. This avoids Hyprland's automatic Lua-config reload in an older session. A full reboot may be needed separately for kernel or graphics-driver changes. Genuine Hyprland configuration errors still trigger the usual managed-file rollback; restarting cannot fix an invalid config.
+
 ## Review changes before applying them
 
 ```bash

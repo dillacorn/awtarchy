@@ -8126,6 +8126,14 @@ validate_live() {
     validate_candidate "$file" "$rel" || return 1
   done
 
+  # A freshly upgraded compositor is not running until the user logs in again.
+  # Reloading or validating its new Lua config inside an older live compositor
+  # can produce false errors or destabilize the session.
+  if hyprland_session_needs_restart; then
+    warn "Hyprland was upgraded or differs from the running session; deferring compositor config validation until a fresh login."
+    return 0
+  fi
+
   if command -v hyprctl >/dev/null 2>&1 && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
     local errors
     errors="$(hyprctl configerrors 2>&1 || true)"
@@ -9434,6 +9442,135 @@ repair_scxctl_update_helper() {
   log "Trusted sched-ext helper installed."
 }
 
+# Check Hyprland without changing the host's pacman sync databases.
+# checkupdates uses an isolated sync database; pacman -Qu is a stale-cache fallback.
+hyprland_pending_upgrade() {
+  local line="" query="" rc=0
+  pacman -Qq hyprland >/dev/null 2>&1 || return 1
+  if command -v checkupdates >/dev/null 2>&1; then
+    query="$(checkupdates --nocolor 2>/dev/null)" || rc=$?
+    if (( rc == 0 || rc == 2 )); then
+      while IFS= read -r line; do
+        [[ $line == hyprland[[:space:]]* ]] || continue
+        printf '%s\n' "$line"
+        return 0
+      done <<<"$query"
+      return 1
+    fi
+    warn "Fresh Hyprland update check failed; checking cached pacman databases."
+  fi
+
+  query="$(pacman -Qu hyprland 2>/dev/null)" || return 1
+  while IFS= read -r line; do
+    [[ $line == hyprland[[:space:]]* ]] || continue
+    printf '%s\n' "$line"
+    return 0
+  done <<<"$query"
+  return 1
+}
+
+hyprland_installed_version() {
+  local result="" name="" version="" rest=""
+  result="$(pacman -Q hyprland 2>/dev/null)" || return 1
+  IFS=" " read -r name version rest <<<"$result"
+  [[ $name == hyprland && -n $version ]] || return 1
+  printf '%s\n' "$version"
+}
+
+# Package upgrades are delegated to the reconciler, which owns the full
+# transaction, NVIDIA snapshot, and NVIDIA recovery/rollback controls.
+maybe_upgrade_hyprland_before_config() {
+  local repo_dir="$1" available="" installed="" upgraded="" rc=0
+  # Stable config tags are immutable, but the installed updater/reconciler
+  # refresh from main. Git testing uses the staged revision's reconciler.
+  local data_home="${XDG_DATA_HOME:-${HOME_DIR}/.local/share}"
+  [[ $data_home == /* ]] || data_home="${HOME_DIR}/.local/share"
+  local reconciler="${data_home}/awtarchy/awtarchy-package-reconcile.sh"
+  if [[ -n ${TESTING_COMMIT:-} ]]; then
+    reconciler="${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh"
+  fi
+  HYPRLAND_PACKAGE_UPGRADED=0
+
+  if ! installed="$(hyprland_installed_version)"; then
+    warn "The pacman hyprland package is missing; custom compositor installations are not modified."
+    return 0
+  fi
+  log "Installed Hyprland package: ${installed}"
+  if ! available="$(hyprland_pending_upgrade)"; then
+    log "No Hyprland upgrade detected (local databases may be stale without checkupdates)."
+    return 0
+  fi
+
+  log "Hyprland package upgrade available: ${available}"
+  warn "Updating Hyprland requires a full Arch/CachyOS system upgrade, potentially including kernel and NVIDIA packages."
+  warn "Awtarchy can restore managed configs, but cannot automatically undo a full system upgrade."
+  if ! ask_optional_yes_no "Upgrade Hyprland and the system before applying Awtarchy configs?"; then
+    warn "Hyprland upgrade declined; proceeding with the installed version."
+    return 0
+  fi
+
+  [[ -f $reconciler && ! -L $reconciler ]] ||
+    die "Release package reconciler is unavailable; no managed configs changed."
+  bash -n "$reconciler" ||
+    die "Release package reconciler failed syntax validation; no managed configs changed."
+  bash "$reconciler" --hyprland-upgrade || rc=$?
+  case "$rc" in
+    0) ;;
+    20) die "Hyprland upgrade was rolled back through NVIDIA recovery; no managed configs changed." ;;
+    *) die "System upgrade failed or was canceled; no managed configs changed." ;;
+  esac
+
+  upgraded="$(hyprland_installed_version)" ||
+    die "Hyprland is missing after the system upgrade; no managed configs changed."
+  log "Hyprland package after upgrade: ${upgraded}"
+  if [[ $upgraded != "$installed" ]]; then
+    HYPRLAND_PACKAGE_UPGRADED=1
+  else
+    die "Hyprland remained at ${installed} after the full system upgrade. Check IgnorePkg and package sources before applying Awtarchy configuration. No managed configs changed."
+  fi
+}
+
+# Compare the running compositor with the installed package without guessing
+# from the version of the hyprctl executable on disk.
+hyprland_running_version() {
+  local json="" tag=""
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 1
+  command -v hyprctl >/dev/null 2>&1 || return 1
+  json="$(hyprctl -j version 2>/dev/null)" || return 1
+  tag="$(python3 -c 'import json,sys; d=json.load(sys.stdin); print(d.get("tag") or d.get("version") or "")' <<<"$json" 2>/dev/null)" || return 1
+  if [[ $tag =~ v?([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    printf '%s\n' "${BASH_REMATCH[1]}"
+    return 0
+  fi
+  return 1
+}
+
+hyprland_session_needs_restart() {
+  local installed="" running=""
+  (( ${HYPRLAND_PACKAGE_UPGRADED:-0} == 1 )) && return 0
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 1
+  installed="$(hyprland_installed_version)" || return 1
+  # If the running compositor cannot be queried, avoid reloading a possibly
+  # older instance with an upgraded on-disk Hyprland client.
+  running="$(hyprland_running_version)" || return 0
+  if [[ $installed =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    [[ ${BASH_REMATCH[1]} != "$running" ]]
+    return
+  fi
+  return 1
+}
+
+warn_hyprland_session_restart() {
+  hyprland_session_needs_restart || return 0
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]]; then
+    warn "Hyprland session restart recommended: your current session may still use the older compositor."
+    warn "Log out of Hyprland and log back in to load the installed version."
+  else
+    warn "Hyprland was upgraded. Start a fresh Hyprland session to load the installed version."
+  fi
+  warn "A full reboot is only needed if a kernel/driver upgrade requires it. Restarting cannot repair invalid configs."
+}
+
 ensure_quickshell_update_prerequisites() {
   command -v pacman >/dev/null 2>&1 \
     || die "pacman is required for the Quickshell migration"
@@ -9563,6 +9700,10 @@ remove_quickshell_update_legacy_files() {
 reload_quickshell_update_hyprland() {
   command -v hyprctl >/dev/null 2>&1 || return 0
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
+  if hyprland_session_needs_restart; then
+    log "Deferring Hyprland config reload until the upgraded compositor session starts."
+    return 0
+  fi
   run_target hyprctl reload >/dev/null 2>&1
 }
 
@@ -9855,9 +9996,12 @@ confirm_live_update_result() {
     return 0
   fi
 
-  local choice=""
+  local choice="" confirmation_text="Update applied and live validation passed."
+  if hyprland_session_needs_restart; then
+    confirmation_text="Update applied. Hyprland config validation is deferred until a fresh compositor login."
+  fi
   choice="$(single_select_menu \
-    "Update applied and live validation passed.
+    "${confirmation_text}
 
 Check the desktop before Awtarchy finalizes the update.
 If anything looks wrong, choose rollback now." \
@@ -10075,6 +10219,19 @@ main() {
     die "Update canceled. No managed files were changed."
   fi
 
+  maybe_upgrade_hyprland_before_config "$repo_dir"
+
+  # Hyprland auto-reloads its Lua configuration when the file changes.
+  # Even if we skip explicit hyprctl reload, applying new configs to an old
+  # running compositor is unsafe after a package upgrade. Leave every
+  # managed config untouched until the next login, then retry the update.
+  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && hyprland_session_needs_restart; then
+    warn "Managed Awtarchy config changes are deferred because the running Hyprland session does not match the installed version."
+    warn "Log out of Hyprland, log back in, then run 'awtarchy update' again."
+    warn_hyprland_session_restart
+    return 21
+  fi
+
   log "Update approved. Preparing required dependencies..."
   ensure_yazi_application_for_target "$target_home"
   ensure_yazi_fd_dependency_for_target "$target_home"
@@ -10171,11 +10328,13 @@ main() {
   log "Reloading Hyprland and validating the updated configuration..."
   if ! reload_quickshell_update_hyprland; then
     rollback_quickshell_update
+    warn_hyprland_session_restart
     die "Hyprland reload failed. User files were rolled back."
   fi
 
   if ! validate_live; then
     rollback_quickshell_update
+    warn_hyprland_session_restart
     die "Live validation failed. User files were rolled back."
   fi
 
@@ -10270,7 +10429,7 @@ main() {
     fi
   fi
 
-  command -v hyprctl >/dev/null 2>&1 && run_target hyprctl reload >/dev/null 2>&1 || true
+  reload_quickshell_update_hyprland || true
   reapply_cursor_theme_after_update
   restart_hypridle_after_update
   if (( ${#BACKUPS[@]} )); then
@@ -10285,6 +10444,7 @@ main() {
     log "Yazi configuration was updated. Restart any open Yazi sessions to load the new configuration."
   fi
   log "Audit log: ${AUDIT_LOG}"
+  warn_hyprland_session_restart
   log "Done."
 }
 
