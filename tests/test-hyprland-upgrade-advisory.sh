@@ -153,7 +153,7 @@ assert runtime.index('  warn_hyprland_session_restart\n  log "Done."') > apply
 assert '  if ! validate_live; then\n    rollback_quickshell_update' in runtime
 assert '    warn_hyprland_session_restart\n    die "Live validation failed.' in runtime
 assert 'bash "$reconciler" --hyprland-upgrade' in runtime
-assert 'local reconciler="${HOME_DIR}/.local/share/awtarchy/awtarchy-package-reconcile.sh"' in runtime
+assert 'local reconciler="${data_home}/awtarchy/awtarchy-package-reconcile.sh"' in runtime
 mode = reconciler[reconciler.index('if (( HYPRLAND_UPGRADE_ONLY == 1 )); then'):]
 stop = mode.index('\nif (( NVIDIA_ROLLBACK_ONLY == 1 )); then')
 mode = mode[:stop]
