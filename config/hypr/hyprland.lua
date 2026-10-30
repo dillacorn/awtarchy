@@ -106,6 +106,8 @@ hl.on("hyprland.start", function()
     -- hl.exec_cmd("~/.config/hypr/scripts/last_to_load_recorder.sh &")
     hl.exec_cmd("~/.config/hypr/scripts/quickshell.sh start &")
     hl.exec_cmd("~/.config/hypr/scripts/quickshell_ready_sound.sh &")
+    -- One-time resume only when an approved Hyprland upgrade deferred configs.
+    hl.exec_cmd("sh -lc 'if [ -f \"$HOME/.local/state/awtarchy/hyprland-update-resume-pending\" ]; then sleep 4; \"$HOME/.local/bin/awtarchy\" resume-update; fi' &")
 
     hl.exec_cmd("hyprsunset &")
     hl.exec_cmd("nwg-look -a &")

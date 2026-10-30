@@ -9444,6 +9444,40 @@ repair_scxctl_update_helper() {
 
 # Check Hyprland without changing the host's pacman sync databases.
 # checkupdates uses an isolated sync database; pacman -Qu is a stale-cache fallback.
+# Record an already-approved stable config update for one later login.
+stage_hyprland_resume_update() {
+  local target_tag="$1" marker="${STATE_DIR}/hyprland-update-resume-pending" tmp=""
+  [[ -z ${TESTING_COMMIT:-} ]] || {
+    warn "Git-testing updates require manual continuation after logging back in."
+    return 0
+  }
+  [[ $target_tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || {
+    warn "Cannot schedule automatic continuation for an unrecognized release tag."
+    return 0
+  }
+  [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && ! -L $marker ]] || return 0
+  local hypr_file="${HOME_DIR}/.config/hypr/hyprland.lua"
+  if [[ ! -f $hypr_file || -L $hypr_file ]] ||
+     ! grep -Fq 'hyprland-update-resume-pending' "$hypr_file" ||
+     ! grep -Fq 'resume-update' "$hypr_file"; then
+    warn "This installed Hyprland config lacks Awtarchy's next-login resume hook."
+    warn "No automatic continuation scheduled; run 'awtarchy update' manually after logging back in."
+    return 0
+  fi
+  tmp="$(mktemp "${STATE_DIR}/.hyprland-resume.XXXXXXXX")" || {
+    warn "Could not create the pending Hyprland update marker."
+    return 0
+  }
+  chmod 0600 -- "$tmp"
+  if ! printf '%s\n%s\n' "$target_tag" "$HYPRLAND_INSTANCE_SIGNATURE" >"$tmp" ||
+     ! mv -f -- "$tmp" "$marker"; then
+    rm -f -- "$tmp"
+    warn "Could not persist pending Hyprland update; run awtarchy update manually after login."
+    return 0
+  fi
+  log "Scheduled one-time Awtarchy update continuation for the next Hyprland login (release ${target_tag})."
+}
+
 hyprland_pending_upgrade() {
   local line="" query="" rc=0
   pacman -Qq hyprland >/dev/null 2>&1 || return 1
@@ -10227,7 +10261,8 @@ main() {
   # managed config untouched until the next login, then retry the update.
   if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && hyprland_session_needs_restart; then
     warn "Managed Awtarchy config changes are deferred because the running Hyprland session does not match the installed version."
-    warn "Log out of Hyprland, log back in, then run 'awtarchy update' again."
+    stage_hyprland_resume_update "$tag"
+    warn "Log out of Hyprland and log back in. If the one-time startup hook is installed, Foot opens the pending update; otherwise run 'awtarchy update' manually."
     warn_hyprland_session_restart
     return 21
   fi

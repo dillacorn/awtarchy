@@ -100,6 +100,65 @@ drop_launcher_privileges() {
     "$launcher_path" "$@"
 }
 
+# Resume only the stable release approved before a Hyprland package upgrade.
+# This is called from the Hyprland session-start hook, not on every CLI update.
+deferred_resume_marker() {
+  printf '%s\n' "${TARGET_HOME}/.local/state/awtarchy/hyprland-update-resume-pending"
+}
+
+clear_deferred_resume_marker() {
+  local marker=""
+  marker="$(deferred_resume_marker)"
+  [[ -f $marker && ! -L $marker && -O $marker ]] || return 0
+  rm -f -- "$marker"
+}
+
+resume_deferred_hyprland_update() {
+  (
+  local marker="" lock="" tag="" previous_session="" installed="" running="" version_json=""
+  local -a marker_lines=()
+  local lock_fd=""
+  marker="$(deferred_resume_marker)"
+  [[ -f $marker && ! -L $marker && -O $marker ]] || return 0
+  [[ ${EUID} -ne 0 && -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] || return 0
+  [[ ! -s $GIT_TEST_STATE_FILE ]] || return 0
+  have foot && have hyprctl && have pacman && have python3 || return 0
+  [[ "$(stat -c '%h' -- "$marker" 2>/dev/null || true)" == 1 ]] || return 0
+  have flock || return 0
+
+  lock="${marker}.lock"
+  [[ ! -L $lock ]] || return 0
+  # Serialized single-use claim prevents duplicate Foot windows on login.
+  exec {lock_fd}>"$lock" || return 0
+  flock -n "$lock_fd" || return 0
+  [[ -f $marker && ! -L $marker && -O $marker ]] || return 0
+  mapfile -t marker_lines <"$marker" || return 0
+  (( ${#marker_lines[@]} == 2 )) || return 0
+  tag="${marker_lines[0]}"
+  previous_session="${marker_lines[1]}"
+  [[ $tag =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 0
+  [[ -n $previous_session && ${#previous_session} -le 256 ]] || return 0
+  [[ $previous_session != "$HYPRLAND_INSTANCE_SIGNATURE" ]] || return 0
+
+  installed="$(pacman -Q hyprland 2>/dev/null)" || return 0
+  if [[ $installed =~ ^hyprland[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+) ]]; then
+    installed="${BASH_REMATCH[1]}"
+  else
+    return 0
+  fi
+  version_json="$(hyprctl -j version 2>/dev/null)" || return 0
+  running="$(python3 -c 'import json,re,sys; d=json.load(sys.stdin); m=re.search(r"v?([0-9]+\.[0-9]+\.[0-9]+)",str(d.get("tag") or d.get("version") or "")); print(m.group(1) if m else "")' <<<"$version_json" 2>/dev/null)" || return 0
+  [[ -n $running && $running == "$installed" ]] || return 0
+
+  # Consume before opening Foot: declining the interactive review cannot
+  # cause the same update to reopen on the following login.
+  rm -f -- "$marker" || return 0
+  log "Opening one-time deferred Awtarchy config update for ${tag}."
+  foot --hold --app-id awtarchy-update-resume --title "Awtarchy Update Resume" \
+    "${TARGET_HOME}/.local/bin/awtarchy" update --tag "$tag"
+  )
+}
+
 init_target() {
   if [[ ${EUID} -eq 0 && -n ${SUDO_USER:-} && ${SUDO_USER} != root ]]; then
     TARGET_USER="$SUDO_USER"
@@ -1523,6 +1582,7 @@ maintenance_menu() {
           case "$update_rc" in
             0)
               reconcile_quickshell_ui_after_update
+              clear_deferred_resume_marker
               ;;
             20)
               log "Update was rolled back by the user; skipping post-update UI reconciliation."
@@ -1656,6 +1716,12 @@ main() {
       run_failure_reports
       return 0
       ;;
+    resume-update)
+      shift
+      (( $# == 0 )) || die "resume-update does not accept options."
+      resume_deferred_hyprland_update
+      return 0
+      ;;
     version)
       print_version_status
       return 0
@@ -1735,6 +1801,7 @@ main() {
       case "$update_rc" in
         0)
           reconcile_quickshell_ui_after_update
+          clear_deferred_resume_marker
           ;;
         20)
           log "Update was rolled back by the user; skipping post-update UI reconciliation."
