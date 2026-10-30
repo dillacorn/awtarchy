@@ -1616,6 +1616,7 @@ baa9ddb4454a0e9d32cbabb43b11290be5cab63df3cce42f4d6671e32ceaecdd	.config/hypr/hy
 3e1ccd841781e3eac8ad378163d5f1760e8785980f992d2e0e66dfbfe3bceee6	.config/hypr/hyprland.lua
 1d829369c93db780cb67b72d432e0dcd0fdeb8ed0b95fb22629654faef2e09d7	.config/hypr/scripts/qalc-terminal.sh
 5b27f10dea28f46dd3894c6083751425ae076a654e7c01f820b63deed6adcc71	.config/hypr/scripts/qalc-terminal.sh
+0a6be0da0b784ab68dee2751fde1de8c5fd45557583c026d0b9bf75d7ff6b303	.config/hypr/scripts/qalc-terminal.sh
 ba0d84104f420d7b6f009e35e94e8984eef411db19379e45a33e99ba6214ce92	.config/hypr/scripts/qalc-bottom.py
 a6672a2f0ab49af6f6309a586cbfff84cc4e26e08627e05b2eaa87f940cb5ecf	.config/hypr/scripts/qalc-bottom.py
 6e80bb68e20ef59b75ac8958041294828fb8f9f2a8dea960d03927a7ce60700e	.config/hypr/hyprland.lua
@@ -1640,6 +1641,3 @@ fd1ab5237597d336134e61a47270f5006705d828fae1d9a62105539f5083f89e	.config/hypr/sc
 # Hyprland 0.57 opt-in Lua visual/input examples (inactive by default).
 b22a77171ac1ccda1933ed301d1a48afa1c6873c0092abda5ab46e7f997c5810	.config/hypr/hyprland.lua
 61d335356fea9590261fd27bc1d178fe1ef98eb52bd1d1233696dce2939b8f6b	.config/hypr/hyprland.lua
-
-# Native Qalc terminal launcher with normal Foot scrollback.
-0a6be0da0b784ab68dee2751fde1de8c5fd45557583c026d0b9bf75d7ff6b303	.config/hypr/scripts/qalc-terminal.sh
