@@ -9448,7 +9448,7 @@ hyprland_pending_upgrade() {
   local line="" query="" rc=0
   pacman -Qq hyprland >/dev/null 2>&1 || return 1
   if command -v checkupdates >/dev/null 2>&1; then
-    query="$(checkupdates 2>/dev/null)" || rc=$?
+    query="$(checkupdates --nocolor 2>/dev/null)" || rc=$?
     if (( rc == 0 || rc == 2 )); then
       while IFS= read -r line; do
         [[ $line == hyprland[[:space:]]* ]] || continue
