@@ -5,7 +5,7 @@
 Type=Application
 Name=Qalc Calculator
 GenericName=Calculator
-Comment=Live calculator with input at the bottom
+Comment=Native Qalc terminal calculator with scrollback
 Exec=sh -c "exec foot --app-id awtarchy-qalc --title Qalc bash ~/.config/hypr/scripts/qalc-terminal.sh"
 TryExec=foot
 Icon=accessories-calculator

@@ -3,6 +3,7 @@
 
 from pathlib import Path
 import configparser
+import hashlib
 import shlex
 import subprocess
 import tempfile
@@ -89,18 +90,24 @@ with tempfile.TemporaryDirectory(prefix="qalc-test-") as tmp:
                    check=True, capture_output=True, text=True)
     assert new_command in output.read_text()
 
-    # Mock the executable, verifying the heading and native live flag
-    # without depending on an actual Qalc installation on the CI host.
+    # Mock Qalc and verify that ordinary launches use the native Qalc CLI
+    # without the retired Python curses frontend or environment overrides.
     bin_dir = root / "bin"
     bin_dir.mkdir()
     qalc = bin_dir / "qalc"
     qalc.write_text('#!/bin/sh\nprintf "%s" "$*"\n', encoding="utf-8")
     qalc.chmod(0o755)
     helper = ROOT / "config/hypr/scripts/qalc-terminal.sh"
+    source = helper.read_text(encoding="utf-8")
+    assert "qalc-bottom.py" not in source
+    assert "AWTARCHY_QALC_NATIVE" not in source
+    assert "exec qalc -s 'autocalc on'" in source
+    digest = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    history = (ROOT / "local/share/awtarchy/quickshell-managed-history.sha256").read_text()
+    assert f"{digest}\t.config/hypr/scripts/qalc-terminal.sh" in history.splitlines()
     result = subprocess.run(["bash", str(helper)], check=True,
                             capture_output=True, text=True,
-                            env={**os.environ, "AWTARCHY_QALC_NATIVE": "1",
-                                 "PATH": f"{bin_dir}:{os.environ['PATH']}"})
-    assert "Qalc" in result.stdout and "-s autocalc on" in result.stdout
+                            env={**os.environ, "PATH": f"{bin_dir}:{os.environ['PATH']}"})
+    assert result.stdout == "-s autocalc on"
 
 print("PASS: Qalc launch rules and preserved configuration migration")
