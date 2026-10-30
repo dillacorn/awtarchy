@@ -103,7 +103,7 @@ drop_launcher_privileges() {
 # Resume only the stable release approved before a Hyprland package upgrade.
 # This is called from the Hyprland session-start hook, not on every CLI update.
 deferred_resume_marker() {
-  printf '%s\n' "${TARGET_HOME}/.local/state/awtarchy/hyprland-update-resume-pending"
+  printf '%s\n' "${STATE_HOME}/awtarchy/hyprland-update-resume-pending"
 }
 
 clear_deferred_resume_marker() {
@@ -120,7 +120,7 @@ resume_deferred_hyprland_update() {
   marker="$(deferred_resume_marker)"
   [[ -f $marker && ! -L $marker && -O $marker ]] || return 0
   [[ ${EUID} -ne 0 && -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && -n ${WAYLAND_DISPLAY:-} ]] || return 0
-  [[ ! -e $GIT_TEST_STATE_FILE ]] || return 0
+  [[ ! -s $GIT_TEST_STATE_FILE ]] || return 0
   have foot && have hyprctl && have pacman && have python3 || return 0
   [[ "$(stat -c '%h' -- "$marker" 2>/dev/null || true)" == 1 ]] || return 0
   have flock || return 0
