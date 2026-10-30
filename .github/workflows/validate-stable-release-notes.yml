@@ -39,3 +39,92 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  publish-v4-1-3:
+    if: >-
+      github.event_name == 'pull_request' &&
+      (github.event.action == 'opened' || github.event.action == 'synchronize') &&
+      github.head_ref == 'release/v4.1.3-oneuse-20261030' &&
+      github.event.pull_request.title == 'Awtarchy v4.1.3 one-use release publisher' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    concurrency:
+      group: awtarchy-v4-1-3-one-use-publisher
+      cancel-in-progress: false
+    steps:
+      - name: Checkout immutable merged release target
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 71fc4d2d1170b38acd2bceb51051c02bd3f8e7ef
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate and publish Awtarchy v4.1.3
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="v4.1.3"
+          expected="71fc4d2d1170b38acd2bceb51051c02bd3f8e7ef"
+          title="Awtarchy v4.1.3 Hyprland 0.57"
+          main_sha="$(gh api "repos/$GH_REPO/branches/main" --jq '.commit.sha')"
+          [[ "$main_sha" == "$expected" ]] || { echo "ERROR: main changed; refusing release" >&2; false; }
+          if gh api "repos/$GH_REPO/git/ref/tags/$version" >/dev/null 2>&1; then
+            echo "ERROR: requested version tag already exists; refusing release" >&2
+            false
+          fi
+          if gh release view "$version" --repo "$GH_REPO" >/dev/null 2>&1; then
+            echo "ERROR: requested GitHub Release already exists; refusing release" >&2
+            false
+          fi
+          mkdir -p "$RUNNER_TEMP/awtarchy-release-v4.1.3"
+          notes="$RUNNER_TEMP/awtarchy-release-v4.1.3/notes.md"
+          previous="$RUNNER_TEMP/awtarchy-release-v4.1.3/previous.md"
+          published="$RUNNER_TEMP/awtarchy-release-v4.1.3/published.md"
+          gh release view v4.1.2 --repo "$GH_REPO" --json body --jq '.body' > "$previous"
+          [[ -s "$previous" ]] || { echo "ERROR: missing previous stable release body" >&2; false; }
+          cat > "$notes" <<'AWTARCHY_RELEASE_BODY'
+          # Awtarchy v4.1.3 Hyprland 0.57
+          
+          Adds Hyprland 0.57 configuration examples as optional enhancements without changing Awtarchy desktop defaults.
+          
+          ## Install and update
+          
+          - [Installation guide](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Updating guide](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)
+          - Existing installations: `awtarchy update`.
+          
+          ## Hyprland 0.57
+          
+          - Eight manually enabled examples in `hyprland.lua`: wobbly windows, motion blur, inner glow, alternative blur variants, proportional blur, cursor warping between monitors, focus-click swallowing, and tablet disabling.
+          - All new options are commented out. Users can individually uncomment the effects they want.
+          - Hyprland 0.57 removed legacy compositor `.conf` configuration support; Awtarchy already uses Lua.
+          - The deprecated `dwindle.special_scale_factor = 0.9` remains unchanged to preserve scratchpad presentation pending a verified replacement. Deprecation notices may still appear.
+          - Version-sensitive `hyprpm` plugins may require compatible rebuilds after a Hyprland package upgrade.
+          
+          ## Validation
+          
+          - PR #316 merged to main; the exact merged source and managed-history checksum were checked.
+          - 25 of 26 pull-request workflows passed. The main validator fails on existing ShellCheck SC2329 warnings in `tests/test-usb-refresh-security.sh`, unrelated to the changed files.
+          - Optional features remain disabled by default. Hyprland 0.57 on-device graphical/runtime compatibility was not tested in CI.
+          AWTARCHY_RELEASE_BODY
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" --notes "$notes" --previous "$previous"
+          gh release create "$version" --repo "$GH_REPO" --target "$expected" \
+            --title "$title" --notes-file "$notes"
+          meta="$(gh release view "$version" --repo "$GH_REPO" --json name,tagName,isDraft,isPrerelease,targetCommitish)"
+          printf '%s\n' "$meta" | jq -e \
+            --arg version "$version" --arg title "$title" --arg expected "$expected" \
+            '.name == $title and .tagName == $version and (.isDraft == false) and (.isPrerelease == false) and .targetCommitish == $expected' >/dev/null
+          git fetch --no-tags origin "refs/tags/$version:refs/tags/$version"
+          tag_commit="$(git rev-parse "$version^{commit}")"
+          [[ "$tag_commit" == "$expected" ]] || { echo "ERROR: tag points to unexpected commit" >&2; false; }
+          gh release view "$version" --repo "$GH_REPO" --json body --jq '.body' > "$published"
+          [[ "$(cat "$published")" == "$(cat "$notes")" ]] || { echo "ERROR: published release body changed" >&2; false; }
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" --notes "$published" --previous "$previous"
+          echo "PASS: $version release published and validated at $expected"
