@@ -41,6 +41,7 @@ hyprctl() {
   printf '{"tag":"v%s"}\n' "${MOCK_COMPOSITOR_VERSION:-0.57.0}"
 }
 foot() {
+  local IFS=" "
   printf '%s\n' "$*" >>"$TMP/foot-invocations"
 }
 TESTING_COMMIT=""
