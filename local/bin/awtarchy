@@ -103,7 +103,7 @@ drop_launcher_privileges() {
 # Resume only the stable release approved before a Hyprland package upgrade.
 # This is called from the Hyprland session-start hook, not on every CLI update.
 deferred_resume_marker() {
-  printf '%s\n' "${STATE_HOME}/awtarchy/hyprland-update-resume-pending"
+  printf '%s\n' "${TARGET_HOME}/.local/state/awtarchy/hyprland-update-resume-pending"
 }
 
 clear_deferred_resume_marker() {
