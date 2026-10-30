@@ -15,7 +15,8 @@ assert spec and spec.loader
 calc = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(calc)
 
-assert "qalc-bottom.py" in LAUNCHER.read_text()
+# Retained frontend is no longer selected; Foot scrollback belongs to native Qalc.
+assert "qalc-bottom.py" not in LAUNCHER.read_text()
 assert calc.qalc_command("-4 + 5")[-2:] == ["--", "-4 + 5"]
 assert not calc.is_calculable("10+")
 assert calc.is_calculable("-4+5")
