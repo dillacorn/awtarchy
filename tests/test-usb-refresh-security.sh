@@ -56,11 +56,12 @@ normalized_args="${TMPD}/normalized-args"
 (
   # shellcheck source=/dev/null
   source "$USB_HELPER"
-  # shellcheck disable=SC2317
+  # These stubs are invoked indirectly by main() in the sourced USB helper.
+  # shellcheck disable=SC2317,SC2329
   enter_privileged_helper() {
     printf '%s\n' "$@" >"$normalized_args"
   }
-  # shellcheck disable=SC2317
+  # shellcheck disable=SC2317,SC2329
   run_with_refresh_lock() { :; }
   main
 )
