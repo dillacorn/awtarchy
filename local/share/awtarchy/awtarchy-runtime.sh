@@ -9473,7 +9473,12 @@ hyprland_installed_version() {
 # transaction, NVIDIA snapshot, and NVIDIA recovery/rollback controls.
 maybe_upgrade_hyprland_before_config() {
   local repo_dir="$1" available="" installed="" upgraded="" rc=0
-  local reconciler="${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh"
+  # Stable config tags are immutable, but the installed updater/reconciler
+  # refresh from main. Git testing uses the staged revision's reconciler.
+  local reconciler="${HOME_DIR}/.local/share/awtarchy/awtarchy-package-reconcile.sh"
+  if [[ -n ${TESTING_COMMIT:-} ]]; then
+    reconciler="${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh"
+  fi
   HYPRLAND_PACKAGE_UPGRADED=0
 
   if ! installed="$(hyprland_installed_version)"; then
