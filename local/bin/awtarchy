@@ -114,6 +114,7 @@ clear_deferred_resume_marker() {
 }
 
 resume_deferred_hyprland_update() {
+  (
   local marker="" lock="" tag="" previous_session="" installed="" running="" version_json=""
   local -a marker_lines=()
   local lock_fd=""
@@ -155,6 +156,7 @@ resume_deferred_hyprland_update() {
   log "Opening one-time deferred Awtarchy config update for ${tag}."
   foot --hold --app-id awtarchy-update-resume --title "Awtarchy Update Resume" \
     "${TARGET_HOME}/.local/bin/awtarchy" update --tag "$tag"
+  )
 }
 
 init_target() {
