@@ -9475,7 +9475,9 @@ maybe_upgrade_hyprland_before_config() {
   local repo_dir="$1" available="" installed="" upgraded="" rc=0
   # Stable config tags are immutable, but the installed updater/reconciler
   # refresh from main. Git testing uses the staged revision's reconciler.
-  local reconciler="${HOME_DIR}/.local/share/awtarchy/awtarchy-package-reconcile.sh"
+  local data_home="${XDG_DATA_HOME:-${HOME_DIR}/.local/share}"
+  [[ $data_home == /* ]] || data_home="${HOME_DIR}/.local/share"
+  local reconciler="${data_home}/awtarchy/awtarchy-package-reconcile.sh"
   if [[ -n ${TESTING_COMMIT:-} ]]; then
     reconciler="${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh"
   fi
