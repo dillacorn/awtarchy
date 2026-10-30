@@ -1411,7 +1411,7 @@ end)
 -- Hyprland 0.57: workspace gaps replace deprecated dwindle.special_scale_factor.
 -- 54px vertical / 96px horizontal approximates the old 0.9 scale at 1920x1080.
 -- Unlike proportional scaling, these gaps are fixed pixels on other monitor sizes.
-hl.workspace_rule({ workspace = "special:magic", gaps_out = "54 96 54 96" })
+hl.workspace_rule({ workspace = "special:magic", gaps_out = { top = 54, right = 96, bottom = 54, left = 96 } })
 
 local awtarchy_floating_windows = false -- AWTARCHY_FLOATING_WINDOWS
 
