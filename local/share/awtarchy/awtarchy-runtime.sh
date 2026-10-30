@@ -8126,6 +8126,14 @@ validate_live() {
     validate_candidate "$file" "$rel" || return 1
   done
 
+  # A freshly upgraded compositor is not running until the user logs in again.
+  # Reloading or validating its new Lua config inside an older live compositor
+  # can produce false errors or destabilize the session.
+  if hyprland_session_needs_restart; then
+    warn "Hyprland was upgraded or differs from the running session; deferring compositor config validation until a fresh login."
+    return 0
+  fi
+
   if command -v hyprctl >/dev/null 2>&1 && [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
     local errors
     errors="$(hyprctl configerrors 2>&1 || true)"
@@ -9686,6 +9694,10 @@ remove_quickshell_update_legacy_files() {
 reload_quickshell_update_hyprland() {
   command -v hyprctl >/dev/null 2>&1 || return 0
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
+  if hyprland_session_needs_restart; then
+    log "Deferring Hyprland config reload until the upgraded compositor session starts."
+    return 0
+  fi
   run_target hyprctl reload >/dev/null 2>&1
 }
 
@@ -9978,9 +9990,12 @@ confirm_live_update_result() {
     return 0
   fi
 
-  local choice=""
+  local choice="" confirmation_text="Update applied and live validation passed."
+  if hyprland_session_needs_restart; then
+    confirmation_text="Update applied. Hyprland config validation is deferred until a fresh compositor login."
+  fi
   choice="$(single_select_menu \
-    "Update applied and live validation passed.
+    "${confirmation_text}
 
 Check the desktop before Awtarchy finalizes the update.
 If anything looks wrong, choose rollback now." \
@@ -10397,7 +10412,7 @@ main() {
     fi
   fi
 
-  command -v hyprctl >/dev/null 2>&1 && run_target hyprctl reload >/dev/null 2>&1 || true
+  reload_quickshell_update_hyprland || true
   reapply_cursor_theme_after_update
   restart_hypridle_after_update
   if (( ${#BACKUPS[@]} )); then
