@@ -9456,6 +9456,14 @@ stage_hyprland_resume_update() {
     return 0
   }
   [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} && ! -L $marker ]] || return 0
+  local hypr_file="${HOME_DIR}/.config/hypr/hyprland.lua"
+  if [[ ! -f $hypr_file || -L $hypr_file ]] ||
+     ! grep -Fq 'hyprland-update-resume-pending' "$hypr_file" ||
+     ! grep -Fq 'resume-update' "$hypr_file"; then
+    warn "This installed Hyprland config lacks Awtarchy's next-login resume hook."
+    warn "No automatic continuation scheduled; run 'awtarchy update' manually after logging back in."
+    return 0
+  fi
   tmp="$(mktemp "${STATE_DIR}/.hyprland-resume.XXXXXXXX")" || {
     warn "Could not create the pending Hyprland update marker."
     return 0
