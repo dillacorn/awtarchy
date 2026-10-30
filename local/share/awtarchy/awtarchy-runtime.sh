@@ -9464,7 +9464,7 @@ hyprland_pending_upgrade() {
 hyprland_installed_version() {
   local result="" name="" version="" rest=""
   result="$(pacman -Q hyprland 2>/dev/null)" || return 1
-  read -r name version rest <<<"$result"
+  IFS=" " read -r name version rest <<<"$result"
   [[ $name == hyprland && -n $version ]] || return 1
   printf '%s\n' "$version"
 }
