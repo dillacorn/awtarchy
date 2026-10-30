@@ -187,17 +187,23 @@ maybe_upgrade_hyprland_before_config "$TMP/repo" >/dev/null 2>&1 ||
   fail "custom Hyprland installation was treated as a forced replacement"
 
 # Production integration and ordering guarantees.
-python3 - "$RUNTIME" "$RECONCILER" <<'PY'
+python3 - "$RUNTIME" "$RECONCILER" "$ROOT/local/bin/awtarchy" <<'PY'
 from pathlib import Path
 import sys
 
 runtime = Path(sys.argv[1]).read_text(encoding="utf-8")
 reconciler = Path(sys.argv[2]).read_text(encoding="utf-8")
+launcher = Path(sys.argv[3]).read_text(encoding="utf-8")
+assert launcher.count('Hyprland config apply deferred until fresh login') == 2
+assert launcher.count('        21)') == 1
+assert launcher.count('            21)') == 1
 
 approve = runtime.index('if ! review_plan "$plan_file" update; then')
 check = runtime.index('  maybe_upgrade_hyprland_before_config "$repo_dir"', approve)
+defer = runtime.index('  if [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] && hyprland_session_needs_restart; then', check)
 apply = runtime.index('  apply_plan "$plan_file"', approve)
-assert approve < check < apply, "Hyprland package update must follow review approval and precede config writes"
+assert approve < check < defer < apply, "Hyprland upgrade and session gate must precede managed-file writes"
+assert '    return 21\n  fi' in runtime[defer:apply], "active old compositor must defer config apply"
 assert runtime.index('  warn_hyprland_session_restart\n  log "Done."') > apply
 assert '  if ! validate_live; then\n    rollback_quickshell_update' in runtime
 assert '    warn_hyprland_session_restart\n    die "Live validation failed.' in runtime
