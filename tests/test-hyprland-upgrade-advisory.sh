@@ -195,8 +195,8 @@ runtime = Path(sys.argv[1]).read_text(encoding="utf-8")
 reconciler = Path(sys.argv[2]).read_text(encoding="utf-8")
 launcher = Path(sys.argv[3]).read_text(encoding="utf-8")
 assert launcher.count('Hyprland config apply deferred until fresh login') == 2
-assert launcher.count('\\n        21)\\n') == 1
-assert launcher.count('\\n            21)\\n') == 1
+assert launcher.count('\n        21)\n') == 1
+assert launcher.count('\n            21)\n') == 1
 
 approve = runtime.index('if ! review_plan "$plan_file" update; then')
 check = runtime.index('  maybe_upgrade_hyprland_before_config "$repo_dir"', approve)
