@@ -216,7 +216,7 @@ hl.config({
     dwindle = {
         preserve_split = true,
         force_split = 0,
-        special_scale_factor = 0.9,
+        special_scale_factor = 0.9, -- Deprecated in Hyprland 0.57; retain the current behavior until an equivalent workspace rule is validated.
         -- smart_split = true,
         -- single_window_aspect_ratio = "1 0.6852",
     },
@@ -261,6 +261,44 @@ hl.config({
         force_zero_scaling = true,
     },
 })
+
+-- ───────────────────────────────────────────────────────────────────────────────
+-- HYPRLAND 0.57+ OPTIONAL EFFECTS AND INPUT
+-- ───────────────────────────────────────────────────────────────────────────────
+--
+-- All examples are comments and change nothing until manually uncommented.
+-- Requires Hyprland 0.57 or newer. Enable one feature at a time, then reload.
+-- Effects can increase GPU load; keep them off for latency-sensitive gaming.
+--
+-- Wobbly windows while dragging/resizing (Compiz-style).
+-- Tune stiffness/damping/mass/intensity to taste; these are upstream defaults.
+-- hl.config({ decoration = { wobble = { enabled = true, mesh = 12, stiffness = 200, damping = 12, mass = 1, intensity = 0.2 } } })
+--
+-- Motion blur on moving/resizing windows (samples 1-64; more costs more).
+-- hl.config({ decoration = { motion_blur = { enabled = true, samples = 7 } } })
+--
+-- Optional inner glow on windows.
+-- hl.config({ decoration = { glow = { enabled = true, range = 10, render_power = 3 } } })
+--
+-- Alternative background blur algorithms. Pick ONE variant instead of kawase.
+-- Options: acrylic, aurora, drops, fluid_jar, frost, haze, heat_shimmer,
+-- prism, ripple, water. Some variants are animated and GPU-intensive.
+-- hl.config({ decoration = { blur = { variant = "frost" } } })
+--
+-- Proportional blur, experimental. Requires shader blur blending and may
+-- produce rendering artifacts; leave it disabled unless intentionally testing.
+-- hl.config({ render = { use_shader_blur_blend = true }, decoration = { blur = { proportional = true } } })
+--
+-- Move pointer to the last focused window on another monitor when changing
+-- monitor focus (0 = off, 1 = on, 2 = force; default -1 follows workspace warp).
+-- hl.config({ cursor = { warp_on_monitor_change = 1 } })
+--
+-- Consume the first click used to focus a window. Only useful when
+-- input.follow_mouse = 0 or 2; Awtarchy currently uses follow_mouse = 1.
+-- hl.config({ input = { swallow_focus_click = true } })
+--
+-- Disable tablet input globally, if a tablet is misbehaving or unwanted.
+-- hl.config({ input = { tablet = { enabled = false } } })
 
 -- Shaders (uncomment only one)
 -- hl.config({ decoration = { screen_shader = "/home/dillacorn/.config/hypr/shaders/vibrance" } })
