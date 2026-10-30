@@ -66,6 +66,7 @@ checkupdates() {
 }
 hyprctl() {
   if [[ "$1" == -j && "$2" == version ]]; then
+    [[ ${VERSION_CHECK_UNAVAILABLE:-0} != 1 ]] || return 1
     printf '{"tag":"v%s"}\n' "$SESSION_VERSION"
   elif [[ "$1" == configerrors ]]; then
     printf '%s\n' "${CONFIG_ERROR:-no errors}"
@@ -148,6 +149,15 @@ reload_quickshell_update_hyprland >/dev/null ||
   fail "matched compositor failed to reload"
 grep -Fxq 'hyprctl reload' "$TMP/hyprland-reload-calls" ||
   fail "matched compositor did not reload"
+VERSION_CHECK_UNAVAILABLE=1
+hyprland_session_needs_restart ||
+  fail "unreadable compositor version incorrectly allowed a potentially unsafe reload"
+before="$(wc -l <"$TMP/hyprland-reload-calls")"
+reload_quickshell_update_hyprland >/dev/null ||
+  fail "unreadable compositor version guard failed"
+after="$(wc -l <"$TMP/hyprland-reload-calls")"
+[[ $before == "$after" ]] || fail "unreadable session version was reloaded"
+VERSION_CHECK_UNAVAILABLE=0
 if hyprland_session_needs_restart; then
   fail "matching installed/running versions incorrectly require restart"
 fi
