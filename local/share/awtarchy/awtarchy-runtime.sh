@@ -9550,7 +9550,9 @@ hyprland_session_needs_restart() {
   (( ${HYPRLAND_PACKAGE_UPGRADED:-0} == 1 )) && return 0
   [[ -n ${HYPRLAND_INSTANCE_SIGNATURE:-} ]] || return 1
   installed="$(hyprland_installed_version)" || return 1
-  running="$(hyprland_running_version)" || return 1
+  # If the running compositor cannot be queried, avoid reloading a possibly
+  # older instance with an upgraded on-disk Hyprland client.
+  running="$(hyprland_running_version)" || return 0
   if [[ $installed =~ ^([0-9]+\.[0-9]+\.[0-9]+) ]]; then
     [[ ${BASH_REMATCH[1]} != "$running" ]]
     return
