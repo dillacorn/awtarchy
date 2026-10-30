@@ -10,6 +10,17 @@ permissions:
   contents: read
 
 jobs:
+  hyprland-upgrade-advisory:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Hyprland upgrade safety and restart advisory regressions
+        run: |
+          bash -n local/share/awtarchy/awtarchy-runtime.sh
+          bash -n local/share/awtarchy/awtarchy-package-reconcile.sh
+          bash -n tests/test-hyprland-upgrade-advisory.sh
+          bash tests/test-hyprland-upgrade-advisory.sh
+
   validate:
     runs-on: ubuntu-latest
     steps:
