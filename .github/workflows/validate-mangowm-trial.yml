@@ -70,7 +70,20 @@ jobs:
       - name: Validate with Arch packaged MangoWM parser
         run: |
           docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
-            pacman -Sy --noconfirm mangowm
+            pacman -Sy --noconfirm mangowm qt6-declarative python
             mango -c /repo/trials/mangowm/config.conf -p
             mango -c /repo/config/mango/config.conf -p
+
+            # Parse the actual generated Mango Quickshell profile instead
+            # of relying on substring checks that cannot catch QML syntax.
+            staging="$(mktemp -d)"
+            trap '''rm -rf -- "$staging"''' EXIT
+            python3 /repo/trials/mangowm/render-quickshell.py \
+              --source /repo/config/quickshell/awtarchy \
+              --dest "$staging/awtarchy-mango" \
+              --bridge-dir /repo/trials/mangowm
+            for file in "$staging"/awtarchy-mango/*.qml \
+                /repo/config/quickshell/awtarchy-lock/*.qml; do
+              /usr/lib/qt6/bin/qmlformat --ignore-settings "$file" >/dev/null
+            done
           '
