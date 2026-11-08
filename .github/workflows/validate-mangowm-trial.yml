@@ -1,0 +1,26 @@
+name: Validate MangoWM Trial
+on:
+  push:
+    branches: [MangoWM_Migration_Trial_Investigation]
+    paths:
+      - 'trials/mangowm/**'
+      - 'tests/test-mangowm-trial.sh'
+      - '.github/workflows/validate-mangowm-trial.yml'
+  pull_request:
+    paths:
+      - 'trials/mangowm/**'
+      - 'tests/test-mangowm-trial.sh'
+      - '.github/workflows/validate-mangowm-trial.yml'
+permissions:
+  contents: read
+jobs:
+  static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Install ShellCheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+      - name: Static checks
+        run: |
+          bash tests/test-mangowm-trial.sh
+          shellcheck -S warning trials/mangowm/*.sh
