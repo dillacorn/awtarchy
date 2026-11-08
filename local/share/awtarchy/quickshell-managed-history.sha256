@@ -1645,3 +1645,6 @@ b22a77171ac1ccda1933ed301d1a48afa1c6873c0092abda5ab46e7f997c5810	.config/hypr/hy
 
 # One-time Hyprland config-update resume startup hook.
 ef5b8127ec25d8b505a8005c4e0f52abe33d997f07acdfd025e2b9bed6c47b60	.config/hypr/hyprland.lua
+
+# Mango trial: shared launcher state script learns to route to the Mango session.
+3ba93a4db677fe033ccc67832fb208bcfc5152710715ee7bcf967209190661fa	.config/hypr/scripts/quickshell_application_state.sh
