@@ -33,6 +33,19 @@ class CursorTests(unittest.TestCase):
         self.assertIn("cursor_theme=Bibata-Modern-Classic-Right", self.config.read_text())
         self.assertEqual(self.config.stat().st_mode & 0o777, 0o640)
 
+    def test_actual_mango_config_accepts_saved_cursor_choice(self):
+        # Regression for duplicated compositor and environment cursor keys.
+        sample = (ROOT / "config/mango/config.conf").read_text(encoding="utf-8")
+        self.config.write_text(sample, encoding="utf-8")
+        self.state.write_text(json.dumps({"cursor_variant": "amber-sharp"}), encoding="utf-8")
+        self.assertTrue(cursor.update_config(
+            self.config, cursor.requested_theme(self.state), True))
+        updated = self.config.read_text(encoding="utf-8")
+        self.assertEqual(updated.count("cursor_theme=Bibata-Original-Amber"), 1)
+        self.assertEqual(updated.count("env=XCURSOR_THEME,Bibata-Original-Amber"), 1)
+        self.assertEqual(updated.count("cursor_size=24"), 1)
+        self.assertEqual(updated.count("env=XCURSOR_SIZE,24"), 1)
+
     def test_state_missing_defaults_to_ice(self):
         self.assertEqual(cursor.requested_theme(self.state), "Bibata-Modern-Ice")
         self.assertFalse(cursor.update_config(self.config, cursor.THEMES["ice"], True))
