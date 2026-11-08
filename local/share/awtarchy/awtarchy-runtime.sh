@@ -3754,7 +3754,8 @@ awtarchy_polkit_recover_session_environment() {
     export DBUS_SESSION_BUS_ADDRESS="unix:path=${runtime_dir}/bus"
   fi
 
-  if [[ -n "${WAYLAND_DISPLAY:-}" && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -n "${XDG_SESSION_ID:-}" ]]; then
+  if [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_SESSION_ID:-}" \
+      && ( -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" || -n "${MANGO_INSTANCE_SIGNATURE:-}" ) ]]; then
     return 0
   fi
 
@@ -3771,6 +3772,9 @@ awtarchy_polkit_recover_session_environment() {
       HYPRLAND_INSTANCE_SIGNATURE)
         [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || export HYPRLAND_INSTANCE_SIGNATURE="$value"
         ;;
+      MANGO_INSTANCE_SIGNATURE)
+        [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]] || export MANGO_INSTANCE_SIGNATURE="$value"
+        ;;
       XDG_SESSION_ID)
         [[ -n "${XDG_SESSION_ID:-}" ]] || export XDG_SESSION_ID="$value"
         ;;
@@ -3786,7 +3790,8 @@ awtarchy_polkit_recover_session_environment() {
     esac
   done < <(awtarchy_polkit_user_command /usr/bin/systemctl --user show-environment 2>/dev/null || true)
 
-  [[ -n "${WAYLAND_DISPLAY:-}" && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -n "${XDG_SESSION_ID:-}" ]]
+  [[ -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_SESSION_ID:-}" \
+      && ( -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" || -n "${MANGO_INSTANCE_SIGNATURE:-}" ) ]]
 }
 
 awtarchy_polkit_get_gnome_pids() {
@@ -3826,6 +3831,7 @@ restore_legacy_polkit_gnome() {
     runuser -u "$TARGET_USER" -- /usr/bin/env HOME="$HOME_DIR" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
       XDG_RUNTIME_DIR="$runtime_dir" DBUS_SESSION_BUS_ADDRESS="unix:path=${runtime_dir}/bus" \
       WAYLAND_DISPLAY="${WAYLAND_DISPLAY:-}" HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+      MANGO_INSTANCE_SIGNATURE="${MANGO_INSTANCE_SIGNATURE:-}" \
       /usr/bin/nohup "$AWTARCHY_GNOME_POLKIT_BIN" </dev/null >/dev/null 2>&1 &
   else
     /usr/bin/nohup "$AWTARCHY_GNOME_POLKIT_BIN" </dev/null >/dev/null 2>&1 &
@@ -3891,17 +3897,23 @@ activate_awtarchy_polkit_agent() {
   runtime_dir="/run/user/${target_uid}"
 
   awtarchy_polkit_recover_session_environment || return 2
-  [[ -S "${runtime_dir}/bus" && -n "${WAYLAND_DISPLAY:-}" && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -n "${XDG_SESSION_ID:-}" ]] || return 2
+  [[ -S "${runtime_dir}/bus" && -n "${WAYLAND_DISPLAY:-}" && -n "${XDG_SESSION_ID:-}" ]] || return 2
+  if [[ "${XDG_CURRENT_DESKTOP:-}" == mango ]]; then
+    mango_trial_session_active || return 2
+  else
+    [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 2
+  fi
   awtarchy_polkit_verify_runtime || return 1
 
   awtarchy_polkit_user_command /usr/bin/env \
     WAYLAND_DISPLAY="$WAYLAND_DISPLAY" \
-    HYPRLAND_INSTANCE_SIGNATURE="$HYPRLAND_INSTANCE_SIGNATURE" \
+    HYPRLAND_INSTANCE_SIGNATURE="${HYPRLAND_INSTANCE_SIGNATURE:-}" \
+    MANGO_INSTANCE_SIGNATURE="${MANGO_INSTANCE_SIGNATURE:-}" \
     XDG_SESSION_ID="$XDG_SESSION_ID" \
     XDG_CURRENT_DESKTOP="${XDG_CURRENT_DESKTOP:-Hyprland}" \
     XDG_SESSION_TYPE="${XDG_SESSION_TYPE:-wayland}" \
     /usr/bin/systemctl --user import-environment \
-    WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE XDG_SESSION_ID XDG_CURRENT_DESKTOP XDG_SESSION_TYPE >/dev/null || return 1
+    WAYLAND_DISPLAY HYPRLAND_INSTANCE_SIGNATURE MANGO_INSTANCE_SIGNATURE XDG_SESSION_ID XDG_CURRENT_DESKTOP XDG_SESSION_TYPE >/dev/null || return 1
 
   awtarchy_polkit_user_command /usr/bin/systemctl --user daemon-reload || return 1
   awtarchy_polkit_user_command /usr/bin/systemctl --user disable "$AWTARCHY_POLKIT_SERVICE_NAME" >/dev/null 2>&1 || true
