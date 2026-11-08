@@ -28,6 +28,20 @@ fi
 APP_NAME="$1"
 LAUNCH_STR="$2"
 
+# Mango uses its own exact-window-ID IPC. Leave the Hyprland path unchanged.
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+  if [[ "${XDG_CURRENT_DESKTOP:-}" != mango ]]; then
+    printf 'Mango launch handler: session identity mismatch.\n' >&2
+    false
+  fi
+  mango_handler="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts/launch-handler.py"
+  [[ -f "$mango_handler" && ! -L "$mango_handler" ]] || {
+    printf 'Mango launch handler: expected managed helper is unavailable.\n' >&2
+    false
+  }
+  exec python3 "$mango_handler" "$@"
+fi
+
 # -------- match hints --------
 APP_CLASS="${APP_CLASS_OVERRIDE:-$APP_NAME}"
 APP_TITLE="${APP_TITLE_OVERRIDE:-$APP_NAME}"
