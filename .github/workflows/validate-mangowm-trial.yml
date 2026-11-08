@@ -77,7 +77,6 @@ jobs:
             # Parse the actual generated Mango Quickshell profile instead
             # of relying on substring checks that cannot catch QML syntax.
             staging="$(mktemp -d)"
-            trap '''rm -rf -- "$staging"''' EXIT
             python3 /repo/trials/mangowm/render-quickshell.py \
               --source /repo/config/quickshell/awtarchy \
               --dest "$staging/awtarchy-mango" \
