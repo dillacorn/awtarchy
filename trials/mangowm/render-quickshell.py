@@ -49,8 +49,9 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     # Mango does not expose Hyprland's capslock device event.
                     # Use the kernel LED state as a best-effort fallback.
                     text = text.replace('["hyprctl", "devices", "-j"]',
-                                        '["python3", "' +
-                                        '~/.config/mango/scripts/keyboard-state.py' + '"]')
+                                        '["python3", (Quickshell.env("XDG_CONFIG_HOME") || ' +
+                                        '(Quickshell.env("HOME") + "/.config")) ' +
+                                        '+ "/mango/scripts/keyboard-state.py"]')
                 if file.name == "Bar.qml":
                     # A tag is not a Hyprland workspace. Rebind only the
                     # identical view operations; do not translate workspace
