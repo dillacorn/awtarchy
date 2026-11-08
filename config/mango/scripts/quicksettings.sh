@@ -73,8 +73,7 @@ action() {
     local name="${1:-}" monitor="${2:-}" value="${3:-}"
     shift || true
     case "$name" in
-        brightness-adjust|brightness-percent|scheduler-start|scheduler-stop|
-        scheduler-profile|scheduler-args|scheduler-autopower|scheduler-reset|wallpaper)
+        brightness-adjust|brightness-percent|scheduler-start|scheduler-stop|scheduler-profile|scheduler-args|scheduler-autopower|scheduler-reset|wallpaper)
             # These operations do not require Hyprland IPC.
             bash "$original" --action "$name" "$@"
             ;;
