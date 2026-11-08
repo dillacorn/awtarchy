@@ -43,9 +43,11 @@ if [[ "$mode" == --check ]]; then
     exit 0
 fi
 # Preserve permissions on directories that already exist.
+# Create only missing children with restrictive modes.
+mkdir -p -- "$home"
 for directory in "$mango_dir" "$trial_dir" "$portal_dir"; do
     if [[ ! -d "$directory" ]]; then
-        mkdir -p -m 0700 -- "$directory"
+        mkdir -m 0700 -- "$directory"
     fi
 done
 for i in "${!sources[@]}"; do
