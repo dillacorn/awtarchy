@@ -49,6 +49,7 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                 # component, not only the root shell: BarSettingsSection,
                 # PowerModeCard, and the flyout settings own additional calls.
                 for old, new in (
+                    ("/hypr/scripts/hypr_quicksettings.sh", "/mango/scripts/quicksettings.sh"),
                     ("/hypr/scripts/quickshell_cursor_theme.sh", "/mango/scripts/cursor-theme.sh"),
                     ("/hypr/scripts/quickshell.sh", "/mango/scripts/quickshell.sh"),
                     ("/hypr/scripts/quickshell_runtime_rules.sh", "/mango/scripts/runtime-rules.sh"),
