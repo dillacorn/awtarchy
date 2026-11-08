@@ -22,6 +22,11 @@ python3 trials/mangowm/render-quickshell.py \
 test -f "$tmp/awtarchy-mango/shell.qml"
 test -f "$tmp/awtarchy-mango/MangoBridge.qml"
 test -f "$tmp/awtarchy-mango/MangoFocusGrab.qml"
+grep -Fq '/mango/scripts/lock.sh' "$tmp/awtarchy-mango/PowerMenu.qml"
+if grep -qF 'wait-secure' "$tmp/awtarchy-mango/PowerMenu.qml"; then
+    printf 'ERROR: Mango Power Menu still relies on the Hyprland lock readiness helper\n' >&2
+    false
+fi
 grep -Fq 'awtarchy-mango' "$tmp/awtarchy-mango/shell.qml"
 if grep -RFnE 'import Quickshell.Hyprland|HyprlandFocusGrab|\bhyprctl\b|hl\.dispatch\(' "$tmp/awtarchy-mango" --include='*.qml'; then
   printf 'ERROR: unported Hyprland QML references in Mango profile\n' >&2
