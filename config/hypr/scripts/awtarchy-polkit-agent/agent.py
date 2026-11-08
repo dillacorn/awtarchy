@@ -290,6 +290,7 @@ class AwtarchyPolkitAgent:
             "DBUS_SESSION_BUS_ADDRESS",
             "WAYLAND_DISPLAY",
             "HYPRLAND_INSTANCE_SIGNATURE",
+            "MANGO_INSTANCE_SIGNATURE",
             "XDG_SESSION_ID",
             "XDG_CURRENT_DESKTOP",
             "XDG_SESSION_DESKTOP",

@@ -20,6 +20,7 @@ APP_ID = "awtarchy-polkit-agent"
 WINDOW_WIDTH = 900
 WINDOW_HEIGHT = 520
 HYPRCTL = "/usr/bin/hyprctl"
+MMSG = "/usr/bin/mmsg"
 SYSTEMD_CAT = "/usr/bin/systemd-cat"
 MAX_PACKET_BYTES = 65536
 SPINNER_INTERVAL = 0.09
@@ -294,7 +295,60 @@ class TerminalUI:
             raise RuntimeError(f"hyprctl failed: {' '.join(args)}")
         return result.stdout if capture else ""
 
+    def _mango(self, *args: str) -> dict:
+        """Query trusted Mango IPC without shell expansion."""
+        result = subprocess.run(
+            [MMSG, *args],
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            check=False,
+            timeout=2.0,
+        )
+        if result.returncode != 0:
+            raise RuntimeError("Mango compositor IPC failed")
+        try:
+            response = json.loads(result.stdout)
+        except (ValueError, TypeError) as exc:
+            raise RuntimeError("Malformed Mango IPC reply") from exc
+        if not isinstance(response, dict) or response.get("error"):
+            raise RuntimeError("Mango IPC refused command")
+        return response
+
+    @staticmethod
+    def _mango_session() -> bool:
+        return (
+            os.environ.get("XDG_CURRENT_DESKTOP") == "mango"
+            and bool(os.environ.get("MANGO_INSTANCE_SIGNATURE"))
+        )
+
+    def _mango_window(self) -> Optional[dict]:
+        """Only control the exact Foot parent of our trusted TUI."""
+        parent_pid = os.getppid()
+        try:
+            parent_exe = os.readlink(f"/proc/{parent_pid}/exe").removesuffix(" (deleted)")
+        except OSError:
+            return None
+        if os.path.basename(parent_exe) != "foot":
+            return None
+        clients = self._mango("get", "all-clients").get("clients")
+        if not isinstance(clients, list):
+            raise RuntimeError("Malformed Mango client list")
+        matches = [
+            client for client in clients
+            if isinstance(client, dict)
+            and client.get("appid") == APP_ID
+            and client.get("pid") == parent_pid
+            and type(client.get("id")) is int and client["id"] > 0
+        ]
+        if len(matches) != 1:
+            return None
+        return matches[0]
+
     def _window(self) -> Optional[dict]:
+        if self._mango_session():
+            return self._mango_window()
         try:
             clients = json.loads(self._hypr("-j", "clients", capture=True))
         except (RuntimeError, json.JSONDecodeError):
@@ -327,6 +381,21 @@ class TerminalUI:
         raise RuntimeError("Awtarchy PolicyKit terminal window did not appear")
 
     def _active_workspace(self) -> str:
+        if self._mango_session():
+            monitors = self._mango("get", "all-monitors").get("monitors")
+            if not isinstance(monitors, list):
+                raise RuntimeError("Malformed Mango monitor list")
+            focused = next((m for m in monitors if isinstance(m, dict)
+                            and m.get("active") is True), None)
+            if focused is None:
+                raise RuntimeError("Mango has no active monitor")
+            tags = focused.get("active_tags")
+            if not isinstance(tags, list) or not tags:
+                raise RuntimeError("Mango has no active tag")
+            tag = tags[0]
+            if type(tag) is not int or not 1 <= tag <= 31:
+                raise RuntimeError("Mango active tag is invalid")
+            return str(tag)
         try:
             payload = json.loads(self._hypr("-j", "activeworkspace", capture=True))
         except (RuntimeError, json.JSONDecodeError):
@@ -349,6 +418,22 @@ class TerminalUI:
         client = self._window()
         if client is None:
             raise RuntimeError("Awtarchy PolicyKit terminal window not found")
+        if self._mango_session():
+            cid = client["id"]
+            if type(cid) is not int or cid < 1:
+                raise RuntimeError("Invalid PolicyKit Mango window ID")
+            if not workspace.isdecimal() or not 1 <= int(workspace) <= 31:
+                raise RuntimeError("Invalid PolicyKit Mango target tag")
+            target = f"client,{cid}"
+            if int(workspace) not in client.get("tags", []):
+                self._mango("dispatch", f"tag,{workspace}", target)
+            if focus:
+                if client.get("is_floating") is not True:
+                    self._mango("dispatch", "togglefloating", target)
+                self._mango("dispatch", f"resizewin,{WINDOW_WIDTH},{WINDOW_HEIGHT}", target)
+                self._mango("dispatch", "centerwin", target)
+                self._mango("dispatch", "focusid", target)
+            return
         address = str(client["address"])
         selector = self._lua_string(f"address:{address}")
         workspace_value = self._lua_string(workspace)
