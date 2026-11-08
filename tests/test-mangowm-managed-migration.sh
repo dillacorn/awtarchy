@@ -5,6 +5,9 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 bash -n local/share/awtarchy/awtarchy-runtime.sh
 bash -n local/share/awtarchy/awtarchy-package-reconcile.sh
 bash -n local/bin/awtarchy
+test -s config/xdg-desktop-portal/mango-portals.conf
+grep -Fqx 'org.freedesktop.impl.portal.ScreenCast=wlr' config/xdg-desktop-portal/mango-portals.conf
+grep -Fqx 'org.freedesktop.impl.portal.Screenshot=wlr' config/xdg-desktop-portal/mango-portals.conf
 for script in config/mango/scripts/*.sh; do bash -n "$script"; done
 python3 -m py_compile trials/mangowm/render-quickshell.py config/mango/scripts/snapshot.py
 

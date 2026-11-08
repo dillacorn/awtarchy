@@ -5,6 +5,38 @@ Branch: **MangoWM_Migration_Trial_Investigation**. Targeted Mango version: **0.1
 **Status: isolated gameplay/desktop trial, NOT a complete Awtarchy migration.**
 Hyprland remains the supported desktop until the missing integration is ported.
 
+## Managed-migration branch (under development)
+
+The current branch also stages `config/mango/` and a separate
+`~/.config/quickshell/awtarchy-mango/` through `awtarchy git`.
+This is not the older Waybar smoke-test configuration below.
+
+Do **not** run `trials/mangowm/setup.sh --install` after applying the
+managed branch: that old script deliberately refuses to overwrite the
+new `~/.config/mango/config.conf`. Keep Hyprland installed so returning
+to the **Hyprland** login session remains possible.
+
+Static review from the installed Awtarchy command:
+
+~~~bash
+awtarchy git review --branch MangoWM_Migration_Trial_Investigation
+~~~
+
+Managed application (only after the migration has passed its readiness checks):
+
+~~~bash
+awtarchy git update --branch MangoWM_Migration_Trial_Investigation
+~~~
+
+Return to the Hyprland login session before restoring a stable Awtarchy release
+with `awtarchy update`. A normal stable release update is **not** a way to
+advance the Mango trial; it will select the stable release instead.
+
+### Older standalone smoke test
+
+The following separate test path intentionally uses Waybar, Fuzzel and Mako.
+It is maintained only for regression comparisons, not for the managed migration.
+
 ## Setup on Arch
 
 Checkout the named branch, then install the trial's new dependencies:
