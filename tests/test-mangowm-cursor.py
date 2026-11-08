@@ -19,7 +19,7 @@ class CursorTests(unittest.TestCase):
         base = pathlib.Path(self.tmp.name)
         self.config = base / "config.conf"
         self.state = base / "state.json"
-        self.content = "tag_num=10\nenv=XCURSOR_THEME,Bibata-Modern-Ice\nenv=XCURSOR_SIZE,24\n"
+        self.content = "tag_num=10\nenv=XCURSOR_THEME,Bibata-Modern-Ice\nenv=XCURSOR_SIZE,24\ncursor_size=24\ncursor_theme=Bibata-Modern-Ice\n"
         self.config.write_text(self.content, encoding="utf-8")
         self.config.chmod(0o640)
 
@@ -30,6 +30,7 @@ class CursorTests(unittest.TestCase):
         self.assertTrue(cursor.update_config(self.config, chosen, True))
         self.assertFalse(cursor.update_config(self.config, chosen, True))
         self.assertIn("env=XCURSOR_THEME,Bibata-Modern-Classic-Right", self.config.read_text())
+        self.assertIn("cursor_theme=Bibata-Modern-Classic-Right", self.config.read_text())
         self.assertEqual(self.config.stat().st_mode & 0o777, 0o640)
 
     def test_state_missing_defaults_to_ice(self):

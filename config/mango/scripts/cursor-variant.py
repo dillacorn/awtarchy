@@ -53,13 +53,17 @@ def update_config(config_path: Path, theme: str, apply: bool):
         raise ValueError("Mango configuration is unexpectedly large")
     theme_lines = re.findall(r"^env=XCURSOR_THEME,.*$", before, flags=re.M)
     size_lines = re.findall(r"^env=XCURSOR_SIZE,.*$", before, flags=re.M)
-    if len(theme_lines) != 1 or len(size_lines) != 1:
-        raise ValueError("Expected one managed Mango XCursor theme and size line")
+    compositor_theme = re.findall(r"^cursor_theme=.*$", before, flags=re.M)
+    compositor_size = re.findall(r"^cursor_size=.*$", before, flags=re.M)
+    if any(len(values) != 1 for values in (
+            theme_lines, size_lines, compositor_theme, compositor_size)):
+        raise ValueError("Expected single Mango cursor environment and compositor settings")
     if not re.fullmatch(r"Bibata-[A-Za-z0-9-]+", theme):
         raise ValueError("Invalid cursor theme")
-    if size_lines[0] != "env=XCURSOR_SIZE,24":
+    if size_lines[0] != "env=XCURSOR_SIZE,24" or compositor_size[0] != "cursor_size=24":
         raise ValueError("Unexpected Mango cursor size; preserving user customizations")
     after = before.replace(theme_lines[0], f"env=XCURSOR_THEME,{theme}", 1)
+    after = after.replace(compositor_theme[0], f"cursor_theme={theme}", 1)
     if before == after:
         return False
     if not apply:
