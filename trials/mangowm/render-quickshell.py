@@ -45,6 +45,15 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     text = text.replace(
                         'configHome + "/hypr/scripts/quickshell_runtime_rules.sh"',
                         'configHome + "/mango/scripts/runtime-rules.sh"')
+                # Reuse the original Quickshell components, but send all
+                # geometry changes through Mango's client-ID-targeted IPC.
+                for old, new in (
+                    ("quickshell_launcher_position.sh", "launcher_position.sh"),
+                    ("quickshell_flyout_position.sh", "flyout_position.sh"),
+                    ("quickshell_flyout_prepare.sh", "flyout_prepare.sh"),
+                ):
+                    text = text.replace('/hypr/scripts/' + old,
+                                        '/mango/scripts/' + new)
                 if file.name == "NumlockSessionTweak.qml":
                     text = text.replace(
                         '"hyprctl", "eval",',
