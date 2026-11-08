@@ -10,6 +10,8 @@ on:
       - 'tests/test-mangowm-cursor.py'
       - 'tests/test-mangowm-shared-shell.sh'
       - 'tests/test-mangowm-lock.sh'
+      - 'tests/test-polkit-agent-mango.py'
+      - 'config/hypr/scripts/awtarchy-polkit-agent/**'
       - 'config/hypr/scripts/quickshell_*.sh'
       - 'config/mango/**'
       - 'local/share/awtarchy/awtarchy-runtime.sh'
@@ -37,6 +39,12 @@ jobs:
           python3 tests/test-mangowm-cursor.py
           bash tests/test-mangowm-shared-shell.sh
           bash tests/test-mangowm-lock.sh
+          python3 tests/test-polkit-agent-mango.py
+          python3 tests/test-polkit-agent-tui.py
+          bash tests/test-polkit-agent-hypr-dispatch.sh
+          bash tests/test-polkit-agent-session-binding.sh
+          bash tests/test-polkit-agent-secure.sh
+          bash -n config/hypr/scripts/awtarchy-polkit-agent/launcher.sh
           shellcheck -S warning trials/mangowm/*.sh
       - name: Validate with Arch packaged MangoWM parser
         run: |
