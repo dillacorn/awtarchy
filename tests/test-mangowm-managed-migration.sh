@@ -9,7 +9,7 @@ test -s config/xdg-desktop-portal/mango-portals.conf
 grep -Fqx 'org.freedesktop.impl.portal.ScreenCast=wlr' config/xdg-desktop-portal/mango-portals.conf
 grep -Fqx 'org.freedesktop.impl.portal.Screenshot=wlr' config/xdg-desktop-portal/mango-portals.conf
 for script in config/mango/scripts/*.sh; do bash -n "$script"; done
-python3 -m py_compile trials/mangowm/render-quickshell.py config/mango/scripts/snapshot.py
+python3 -m py_compile trials/mangowm/render-quickshell.py config/mango/scripts/snapshot.py config/mango/scripts/cursor-variant.py
 
 # Separate generated Quickshell profile must be completely read-only with
 # respect to the Hyprland source tree and remain within temp target root.
