@@ -24,3 +24,9 @@ jobs:
         run: |
           bash tests/test-mangowm-trial.sh
           shellcheck -S warning trials/mangowm/*.sh
+      - name: Validate with Arch packaged MangoWM parser
+        run: |
+          docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
+            pacman -Sy --noconfirm mangowm
+            mango -c /repo/trials/mangowm/config.conf -p
+          '
