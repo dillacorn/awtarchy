@@ -16,6 +16,7 @@ Singleton {
     property var activeToplevel: null
     property string focusName: ""
     property string activeWindowTitle: ""
+    property string tagFingerprint: ""
     signal rawEvent(var event)
 
     readonly property string snapshotScript:
@@ -109,8 +110,17 @@ Singleton {
             emitEvent("activewindow", [focusedWindow
                 ? String(focusedWindow.lastIpcObject.class) : "", title]);
         }
-        // Consumers require refreshes after tag/view changes, not just focus.
-        emitEvent("workspace", []);
+        // Send workspace changes only when the active tagset changes. A
+        // periodic event would close every open Awtarchy floating flyout.
+        const signature = JSON.stringify(monitors.map(mon => ({
+            name: mon.name,
+            active: mon.active,
+            active_tags: mon.active_tags
+        })));
+        if (root.tagFingerprint !== signature) {
+            root.tagFingerprint = signature;
+            emitEvent("workspace", []);
+        }
     }
 
     function refreshMonitors() {

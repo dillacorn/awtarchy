@@ -46,15 +46,30 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                         'configHome + "/hypr/scripts/quickshell_runtime_rules.sh"',
                         'configHome + "/mango/scripts/runtime-rules.sh"')
                 if file.name == "Bar.qml":
-                    text = text.replace(
-                        '''Quickshell.execDetached([
-            "hyprctl",
-            "eval",
-            "hl.dispatch(hl.dsp.focus({ workspace = \\"" + selector + "\\" }))"
-        ]);''',
-                        '''const action = selector === "e-1" ? "viewtoleft"
+                    # A tag is not a Hyprland workspace. Rebind only the
+                    # identical view operations; do not translate workspace
+                    # moves into a different (window move) dispatcher.
+                    start = text.index("    function focusWorkspace(selector) {")
+                    stop = text.index("    }", start) + len("    }")
+                    text = text[:start] + '''    function focusWorkspace(selector) {
+        const action = selector === "e-1" ? "viewtoleft"
             : selector === "e+1" ? "viewtoright" : "view," + selector;
-        Quickshell.execDetached(["mmsg", "dispatch", action]);''')
+        Quickshell.execDetached(["mmsg", "dispatch", action]);
+    }''' + text[stop:]
+                    for slot in ("arrowSlot", "arrowSlotVertical"):
+                        matches = [line for line in text.splitlines()
+                                   if "onClicked: Quickshell.execDetached" in line
+                                   and "hyprctl" in line
+                                   and slot + ".modelData.dir" in line]
+                        if len(matches) != 1:
+                            raise ValueError("Mango unsupported monitor arrow action")
+                        # Deliberately leave workspace-transfer UI disabled,
+                        # instead of moving a single window as a fake match.
+                        text = text.replace(matches[0],
+                            matches[0].split("onClicked:")[0] +
+                            'enabled: false // Mango has no equivalent to move whole workspace')
+                if '"hyprctl"' in text or "hl.dispatch(" in text:
+                    raise ValueError("Unported direct Hyprland QML dispatch in " + file.name)
                 text = text.replace('text: "MangoBridge Submap"',
                                     'text: "Mango Key Mode"')
             (dest / file.name).write_text(text, encoding="utf-8")
