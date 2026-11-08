@@ -39,3 +39,105 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  # One-use release bridge. This helper branch/PR is never merged into main.
+  publish-v4-1-5:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'opened' &&
+      github.event.pull_request.title == 'Release bridge: Awtarchy v4.1.5 Default Applications' &&
+      github.event.pull_request.head.ref == 'release-bridge/v4.1.5-default-apps' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.sha == '4b118bac9fb7a2634fc206433ccc835b685b1ff4'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 4b118bac9fb7a2634fc206433ccc835b685b1ff4
+          fetch-depth: 0
+      - name: Validate and publish exact v4.1.5 release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: dillacorn/awtarchy
+        run: |
+          set -euo pipefail
+
+          version='v4.1.5'
+          title='Awtarchy v4.1.5 Default Applications'
+          target='4b118bac9fb7a2634fc206433ccc835b685b1ff4'
+          notes="${RUNNER_TEMP}/proposed-v4.1.5.md"
+          previous="${RUNNER_TEMP}/previous-v4.1.4.md"
+          published="${RUNNER_TEMP}/published-v4.1.5.md"
+
+          [[ "$(git rev-parse HEAD)" == "$target" ]] || {
+            printf 'Unexpected release checkout commit\n' >&2
+            false
+          }
+          [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$target" ]] || {
+            printf 'main moved after release authorization; refusing publication\n' >&2
+            false
+          }
+          [[ -z "$(git ls-remote --tags origin "refs/tags/${version}")" ]] || {
+            printf 'Release tag already exists; refusing publication\n' >&2
+            false
+          }
+          if gh release view "$version" >/dev/null 2>&1; then
+            printf 'Release already exists; refusing publication\n' >&2
+            false
+          fi
+
+          gh release view v4.1.4 --json body --jq '.body' > "$previous"
+          cat > "$notes" <<'AWTARCHY_RELEASE_NOTES'
+          # Awtarchy v4.1.5 Default Applications
+
+          Restores the Default Applications shortcut and floating selector in personalized Hyprland configurations preserved across Awtarchy updates.
+
+          ## Install and update
+
+          - [Installation guide](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)
+          - [Updating guide](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)
+          - Existing installations: `awtarchy update`.
+
+          ## Default Applications
+
+          - Restores the missing `Super+Alt+A` shortcut and floating, centered selector in preserved Hyprland configurations.
+          - Keeps user-customized bindings and window rules, with backup and rollback support.
+
+          ## Validation
+
+          - Confirmed working in a live Hyprland session on the affected gaming PC.
+          - Default Applications regression tests, update atomicity tests, and syntax checks passed.
+          - Two unrelated broad CI checks still fail: a legacy Foot assertion and a Quickshell process-helper test.
+          AWTARCHY_RELEASE_NOTES
+
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" \
+            --notes "$notes" --previous "$previous"
+          bash tests/test-stable-release-notes-validator.sh
+          bash tests/test-install-update-docs.sh
+          bash -n local/share/awtarchy/awtarchy-runtime.sh
+          python3 -m py_compile local/share/awtarchy/migrate-default-apps-hyprland.py
+          python3 tests/test-default-applications.py
+          git diff --check v4.1.4 HEAD
+
+          gh release create "$version" --target "$target" --title "$title" --notes-file "$notes"
+
+          gh release view "$version" --json tagName,name,isDraft,isPrerelease,targetCommitish,url \
+            --jq '{tagName,name,isDraft,isPrerelease,targetCommitish,url}' > "${RUNNER_TEMP}/released.json"
+          jq -e --arg version "$version" --arg title "$title" --arg target "$target" \
+            '.tagName == $version and .name == $title and .isDraft == false and .isPrerelease == false and .targetCommitish == $target' \
+            "${RUNNER_TEMP}/released.json"
+          gh release view "$version" --json body --jq '.body' > "$published"
+          cmp -- "$notes" "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" \
+            --notes "$published" --previous "$previous"
+          git fetch --no-tags origin "refs/tags/${version}:refs/tags/${version}"
+          [[ "$(git rev-parse "refs/tags/${version}^{commit}")" == "$target" ]] || {
+            printf 'Published tag does not point to expected commit\n' >&2
+            false
+          }
+          printf 'PASS: %s published, notes and target commit verified\n' "$version"
