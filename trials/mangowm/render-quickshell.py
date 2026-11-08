@@ -45,6 +45,15 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     text = text.replace(
                         'configHome + "/hypr/scripts/quickshell_runtime_rules.sh"',
                         'configHome + "/mango/scripts/runtime-rules.sh"')
+                # Retarget lifecycle calls and rule updates for every UI
+                # component, not only the root shell: BarSettingsSection,
+                # PowerModeCard, and the flyout settings own additional calls.
+                for old, new in (
+                    ("/hypr/scripts/quickshell.sh", "/mango/scripts/quickshell.sh"),
+                    ("/hypr/scripts/quickshell_runtime_rules.sh", "/mango/scripts/runtime-rules.sh"),
+                    ("/hypr/scripts/quickshell_bar_drag_runtime.sh", "/mango/scripts/bar-drag-runtime.sh"),
+                ):
+                    text = text.replace(old, new)
                 # Reuse the original Quickshell components, but send all
                 # geometry changes through Mango's client-ID-targeted IPC.
                 for old, new in (
