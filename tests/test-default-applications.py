@@ -366,6 +366,80 @@ assert "curses.wrapper(tui)" in code
 assert (ROOT / "config/hypr/scripts/launch_handler.sh").exists()
 assert (ROOT / "local/share/applications/awtarchy-default-applications.desktop").exists()
 
+# Preserve-mode repair restores only missing Awtarchy Default Applications
+# controls; it must not overwrite a personalized Hyprland Lua configuration.
+MIGRATOR = ROOT / "local/share/awtarchy/migrate-default-apps-hyprland.py"
+migrator_spec = importlib.util.spec_from_file_location("default_apps_migrator", MIGRATOR)
+assert migrator_spec and migrator_spec.loader
+migrator = importlib.util.module_from_spec(migrator_spec)
+migrator_spec.loader.exec_module(migrator)
+runtime = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text(encoding="utf-8")
+assert 'migrate_default_apps_hyprland "$repo_dir" "$target_home"' in runtime
+assert "snapshot_for_rollback" in runtime
+assert "make_persistent_backup" in runtime
+assert "Migrated Default Applications Hyprland candidate failed validation." in runtime
+
+with tempfile.TemporaryDirectory(prefix="awtarchy-default-apps-migrate-") as directory:
+    work = Path(directory)
+    live = work / "hyprland.lua"
+    staged = ROOT / "config/hypr/hyprland.lua"
+    output = work / "candidate.lua"
+    old = (
+        "-- User-owned Hyprland customizations remain untouched.\n"
+        'hl.window_rule({ match = { class = "^custom-app$" }, float = true })\n'
+        'hl.bind("SUPER + B", hl.dsp.exec_cmd("user-browser"), {})\n'
+        'hl.define_submap("noalt", function()\n'
+        '    hl.bind("SUPER + E", hl.dsp.exec_cmd("user-files"), {})\n'
+        'end)\n'
+        'hl.define_submap("vm", function()\n'
+        '    hl.bind("SUPER + X", hl.dsp.exec_cmd("user-vm"), {})\n'
+        'end)\n'
+    )
+    live.write_text(old, encoding="utf-8")
+    migrator.migrate(live, staged, output)
+    changed = output.read_text(encoding="utf-8")
+    assert all(line in changed for line in old.splitlines())
+    assert changed.count('hl.bind("SUPER + ALT + A"') == 3
+    assert changed.count('class = "^awtarchy-default-apps$"') == 3
+    assert "size = { 540, 460 }" in changed
+    for submap in ("noalt", "vm"):
+        body = changed.split(f'hl.define_submap("{submap}", function()', 1)[1].split("end)", 1)[0]
+        assert 'hl.bind("SUPER + ALT + A"' in body
+    assert changed.count('hl.bind("SUPER + B"') == 1
+
+    # Idempotent across future updates.
+    live.write_text(changed, encoding="utf-8")
+    output.unlink()
+    migrator.migrate(live, staged, output)
+    assert not output.exists()
+
+    # Preserve a custom shortcut and a custom size rule, even when the
+    # floating and centering rules are still missing.
+    custom = (
+        old
+        + 'hl.bind("SUPER + ALT + A", hl.dsp.exec_cmd("custom-launcher"), {})\n'
+        + 'hl.window_rule({ match = { class = "^awtarchy-default-apps$" }, size = { 600, 400 } })\n'
+    )
+    live.write_text(custom, encoding="utf-8")
+    migrator.migrate(live, staged, output)
+    changed = output.read_text(encoding="utf-8")
+    assert changed.count('hl.bind("SUPER + ALT + A"') == 1
+    assert "custom-launcher" in changed
+    assert 'size = { 600, 400 }' in changed
+    assert 'size = { 540, 460 }' not in changed
+    assert changed.count('class = "^awtarchy-default-apps$"') == 3
+    assert custom in changed
+
+    # An unrelated input must be rejected rather than modified.
+    live.write_text('print("not Awtarchy Hyprland")\n', encoding="utf-8")
+    output.unlink()
+    try:
+        migrator.migrate(live, staged, output)
+        raise AssertionError("Unrecognized Hyprland Lua was modified")
+    except ValueError:
+        pass
+    assert not output.exists()
+
 # Ensure the Python file compiles.
-subprocess.run(["python3", "-m", "py_compile", str(SCRIPT)], check=True)
+subprocess.run(["python3", "-m", "py_compile", str(SCRIPT), str(MIGRATOR)], check=True)
 print("PASS: default applications save immediately on selection")

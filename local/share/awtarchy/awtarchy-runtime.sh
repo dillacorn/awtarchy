@@ -3590,6 +3590,44 @@ migrate_qalc_hyprland() {
   log "Updated preserved Qalc calculator launcher and window rules without replacing personal Hyprland settings."
 }
 
+# Restore the Default Applications hotkey/geometry to personalized Hyprland
+# configurations that predate the chooser. Only missing stock entries are added.
+migrate_default_apps_hyprland() {
+  local repo_dir="$1" target_home="$2"
+  local rel=".config/hypr/hyprland.lua"
+  local live="${HOME_DIR}/${rel}" target="${target_home}/${rel}"
+  local migrator="${repo_dir}/local/share/awtarchy/migrate-default-apps-hyprland.py"
+  local candidate="${TMPD}/migrate-default-apps-hyprland.lua"
+  local item already_changed=0
+
+  [[ "$UPDATE_MODE" == "preserve" ]] || return 0
+  [[ -f "$live" && ! -L "$live" ]] || return 0
+  [[ -f "$target" && ! -L "$target" ]] || return 1
+  [[ -f "$migrator" && ! -L "$migrator" ]] || return 1
+
+  rm -f -- "$candidate"
+  python3 "$migrator" "$live" "$target" "$candidate" || return 1
+  [[ -f "$candidate" ]] || return 0
+
+  if ! validate_candidate "$candidate" "$rel"; then
+    warn "Migrated Default Applications Hyprland candidate failed validation."
+    return 1
+  fi
+  chmod --reference="$live" "$candidate" || return 1
+
+  for item in "${ROLLBACK_PATHS[@]:-}"; do
+    [[ "$item" == "$rel" ]] && already_changed=1
+  done
+  if (( already_changed == 0 )); then
+    snapshot_for_rollback "$rel" "$live"
+    ROLLBACK_PATHS+=("$rel")
+    make_persistent_backup "$live"
+    CHANGED+=("$rel")
+  fi
+  atomic_copy "$candidate" "$live" || return 1
+  log "Restored missing Default Applications shortcut and floating rules in preserved Hyprland settings."
+}
+
 migrate_legacy_foot_hyprland() {
   local repo_dir="$1" target_home="$2"
   local rel=".config/hypr/hyprland.lua"
@@ -10319,6 +10357,11 @@ main() {
   if ! migrate_qalc_hyprland "$repo_dir" "$target_home"; then
     rollback_quickshell_update
     die "Could not migrate preserved Qalc calculator settings; user files were rolled back."
+  fi
+
+  if ! migrate_default_apps_hyprland "$repo_dir" "$target_home"; then
+    rollback_quickshell_update
+    die "Could not migrate preserved Default Applications settings; user files were rolled back."
   fi
 
   log "Refreshing Awtarchy PolicyKit integration..."
