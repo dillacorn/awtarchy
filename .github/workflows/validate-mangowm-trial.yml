@@ -8,6 +8,9 @@ on:
       - 'tests/test-mangowm-managed-migration.sh'
       - 'tests/test-mangowm-position.py'
       - 'tests/test-mangowm-cursor.py'
+      - 'tests/test-mangowm-idle.py'
+      - 'tests/test-default-applications.py'
+      - 'local/share/awtarchy/migrate-default-apps-hyprland.py'
       - 'tests/test-mangowm-shared-shell.sh'
       - 'tests/test-mangowm-lock.sh'
       - 'tests/test-polkit-agent-mango.py'
@@ -37,6 +40,8 @@ jobs:
           bash tests/test-mangowm-managed-migration.sh
           python3 tests/test-mangowm-position.py
           python3 tests/test-mangowm-cursor.py
+          python3 tests/test-mangowm-idle.py
+          python3 tests/test-default-applications.py
           bash tests/test-mangowm-shared-shell.sh
           bash tests/test-mangowm-lock.sh
           python3 tests/test-polkit-agent-mango.py
