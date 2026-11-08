@@ -58,7 +58,7 @@ def migrate(live: Path, staged: Path, output: Path) -> None:
         # Awtarchy modes without touching the user's existing keybindings.
         for mode in SUBMAPS:
             pattern = re.compile(
-                rf'(?m)^(?P<indent>[ \t]*)hl\.define_submap\("{mode}",\s*function\(\)\)\s*$'
+                rf'(?m)^(?P<indent>[ \t]*)hl\.define_submap\("{mode}",\s*function\(\)\s*$'
             )
             matches = list(pattern.finditer(text))
             if len(matches) > 1:
