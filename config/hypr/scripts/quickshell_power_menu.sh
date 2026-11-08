@@ -4,6 +4,9 @@
 set -euo pipefail
 
 SCRIPTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts"
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+    SCRIPTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts"
+fi
 QS_BIN="${QS_BIN:-qs}"
 RETURN_SUBMAP="${1:-reset}"
 case "$RETURN_SUBMAP" in
@@ -18,7 +21,11 @@ restore_input_submap() {
         return 0
     fi
     submap_restored=1
+    if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+        mmsg dispatch setkeymode,default >/dev/null 2>&1 || true
+    else
     hyprctl dispatch "hl.dsp.submap(\"${RETURN_SUBMAP}\")" >/dev/null 2>&1 || true
+    fi
 }
 
 trap restore_input_submap EXIT
@@ -28,7 +35,7 @@ main() {
 
     # Hot path: the running shell can open/close the menu directly. Keep the
     # manager startup and retry loop only for a cold or recovering Quickshell.
-    opened="$("$QS_BIN" -c awtarchy ipc call powermenu begin 2>/dev/null | tail -n1 || true)"
+    opened="$("$QS_BIN" -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call powermenu begin 2>/dev/null | tail -n1 || true)"
     if [[ "$opened" == true || "$opened" == false ]]; then
         restore_input_submap
         return 0
@@ -40,7 +47,7 @@ main() {
     # while Quickshell starts. Secure capture is intentionally deferred until
     # the Lock action itself so the Power Menu can appear immediately.
     for _ in {1..20}; do
-        opened="$("$QS_BIN" -c awtarchy ipc call powermenu begin 2>/dev/null | tail -n1 || true)"
+        opened="$("$QS_BIN" -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call powermenu begin 2>/dev/null | tail -n1 || true)"
         if [[ "$opened" == true || "$opened" == false ]]; then
             break
         fi

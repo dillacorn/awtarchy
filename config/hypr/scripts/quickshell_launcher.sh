@@ -4,12 +4,15 @@
 set -euo pipefail
 
 SCRIPTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts"
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+    SCRIPTS_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts"
+fi
 
 # Hot path: when the running Awtarchy shell already owns launcher IPC, toggle it
 # directly. Avoid re-registering runtime rules and normalizing shell state on
 # every keyboard shortcut invocation.
-if ! qs -c awtarchy ipc call launcher toggle >/dev/null 2>&1; then
+if ! qs -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call launcher toggle >/dev/null 2>&1; then
     "$SCRIPTS_DIR/quickshell_runtime_rules.sh" >/dev/null 2>&1 || true
     "$SCRIPTS_DIR/quickshell.sh" start >/dev/null
-    exec qs -c awtarchy ipc call launcher toggle
+    exec qs -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call launcher toggle
 fi

@@ -7,6 +7,9 @@ CACHE_HOME="${XDG_CACHE_HOME:-$HOME/.cache}"
 STATE_FILE="${CACHE_HOME}/awtarchy/quickshell-state.json"
 STATE_LOCK_FILE="${STATE_FILE}.lock"
 QUICKSHELL_SCRIPT="${HYPR_QUICKSHELL_SCRIPT:-${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/quickshell.sh}"
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+    QUICKSHELL_SCRIPT="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts/quickshell.sh"
+fi
 
 MIN_WIDTH=1
 MAX_WIDTH=16384
