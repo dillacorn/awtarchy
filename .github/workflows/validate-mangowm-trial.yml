@@ -61,6 +61,7 @@ jobs:
           python3 tests/test-polkit-agent-transient-frontend.py
           bash -n config/hypr/scripts/awtarchy-polkit-agent/launcher.sh
           shellcheck -S warning trials/mangowm/*.sh
+          shellcheck -S warning config/mango/scripts/*.sh
       - name: Validate with Arch packaged MangoWM parser
         run: |
           docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
