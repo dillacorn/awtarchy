@@ -2,8 +2,10 @@
 
 Branch: **MangoWM_Migration_Trial_Investigation**. Targeted Mango version: **0.18.5** (2026-11-04).
 
-**Status: isolated gameplay/desktop trial, NOT a complete Awtarchy migration.**
-Hyprland remains the supported desktop until the missing integration is ported.
+**Status: actively developed, branch-only managed desktop migration.**
+CI now checks Mango's real configuration parser and the generated Qt QML syntax.
+Neither a live Mango login nor reversible stable-release restoration is proven.
+Hyprland remains installed and supported.
 
 ## Managed-migration branch (under development)
 
@@ -15,15 +17,31 @@ repair, with its original migration tests. The Quickshell shell, initial
 PolicyKit IPC handling, wallpaper restore, and guarded idle actions are
 implemented but have **not** been verified in a real Mango desktop session.
 
-The native Quickshell lockscreen and exact protected-idle behavior are still
-unported: the managed Mango branch currently uses secure Swaylock as a
-temporary fallback, and screen-sharing privacy rules are fixed to Awtarchy's
-default-protected applications. The dynamic Screen Share Guard controls cannot
-yet change those rules. **Do not depend on them for custom capture exemptions.**
+Managed Mango implementation in this branch:
+- Isolated Mango Quickshell profile, bridge, bar, launcher, clipboard,
+  notifications, focus/positioning helpers, persisted UI preferences and theme.
+- Original Quickshell session-lock UI is attempted through Mango's native
+  Wayland session-lock protocol. A secure Swaylock fallback remains; the
+  Hyprland-only frozen-frame transition is intentionally disabled in Mango.
+- The existing trusted PolicyKit terminal agent has a Mango window-ID backend
+  with regression tests; actual authentication must still be tested live.
+- The original 60/120/180/240/540/14400-second idle cadence is wired through
+  Swayidle and Awtarchy guards. Mango's compositor-native idle inhibitors can
+  suppress callbacks before Awtarchy's selective logic sees them.
+- Mango Quick Settings shares Awtarchy's brightness, scheduler, wallpaper,
+  and Quickshell bar state. Mango display inventory is sourced from `mmsg`.
+  Night-light, vibrance and non-default key mode actions currently fail with
+  an explicit error rather than pretending to change settings.
+- Default Applications (including v4.1.5 preserved-configuration repair),
+  Qalc and other floating utility toggles have native Mango IPC backends.
+- The existing static screen-sharing privacy rules apply by default. The
+  dynamic Screen Share Guard controls **do not** update those rules.
+- GPU package management and Hyprland configuration stay intact for reversal.
 
-Swayidle receives compositor-managed idle notifications. Mango's native idle
-inhibitors can suppress callbacks before Awtarchy's selective guard runs;
-behavior is not yet identical to Hyprland's ignore-inhibitor configuration.
+Live blockers include verifying shell focus and window behavior, real
+PolicyKit authentication, screen sharing, multi-monitor scaling, Mango idle
+inhibition, suspend/lock/unlock, and the stable-release restoration path.
+Do not rely on static CI to prove any of these. Do not uninstall Hyprland.
 
 
 Do **not** run `trials/mangowm/setup.sh --install` after applying the
@@ -43,9 +61,12 @@ Managed application (only after the migration has passed its readiness checks):
 awtarchy git update --branch MangoWM_Migration_Trial_Investigation
 ~~~
 
-Return to the Hyprland login session before restoring a stable Awtarchy release
-with `awtarchy update`. A normal stable release update is **not** a way to
-advance the Mango trial; it will select the stable release instead.
+To reverse the *running desktop*, select **Hyprland** from the login manager.
+This does not require deleting Mango packages or modifying the saved Quickshell
+state. A stable `awtarchy update` selects the published release, **not** the
+unreleased Mango branch. Full managed-file cleanup/restoration after a Mango
+trial is **not yet verified**; do not assume a stable update reverses every
+file or package change.
 
 ### Older standalone smoke test
 
