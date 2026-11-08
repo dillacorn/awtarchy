@@ -5,6 +5,18 @@ cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 bash -n local/share/awtarchy/awtarchy-runtime.sh
 bash -n local/share/awtarchy/awtarchy-package-reconcile.sh
 bash -n local/bin/awtarchy
+# Both stages of the updater's plan validation must accept the Mango
+# managed namespace. A shell-only allowlist is insufficient.
+python3 - <<'PY'
+from pathlib import Path
+runtime = Path("local/share/awtarchy/awtarchy-runtime.sh").read_text()
+shell_validator = runtime.split("validate_managed_relative_path() {", 1)[1].split("\n}", 1)[0]
+python_plan = runtime.split("build_plan() {", 1)[1].split("\ndef valid_rel(raw):", 1)[0]
+assert ".config/mango/*" in shell_validator
+assert '"mango"' in python_plan.split("CONFIG_ROOTS = {", 1)[1].split("}", 1)[0]
+assert 'render_mango_quickshell_target "$repo_dir" "$target_home"' in runtime
+print("PASS: Mango managed namespace admitted by plan and apply validators")
+PY
 
 test -s config/xdg-desktop-portal/mango-portals.conf
 grep -Fqx 'org.freedesktop.impl.portal.ScreenCast=wlr' config/xdg-desktop-portal/mango-portals.conf

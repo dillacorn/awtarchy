@@ -7546,7 +7546,7 @@ import json, os, re, stat, sys
 home, target, baseline, manifest, out = map(Path, sys.argv[1:])
 
 CONFIG_ROOTS = {
-    "hypr", "quickshell", "alacritty", "foot", "gtk-3.0", "Kvantum",
+    "hypr", "mango", "quickshell", "alacritty", "foot", "gtk-3.0", "Kvantum",
     "SpeedCrunch", "fastfetch", "pcmanfm-qt", "yazi",
     "xdg-desktop-portal", "qt5ct", "qt6ct", "lsfg-vk", "wiremix",
     "cava", "micro", "ddcutil", "waybar", "fuzzel", "mako",
