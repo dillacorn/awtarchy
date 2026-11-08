@@ -41,6 +41,9 @@ jobs:
           bash tests/test-mangowm-trial.sh
           bash tests/test-mangowm-trial-mocks.sh
           bash tests/test-mangowm-managed-migration.sh
+          bash tests/test-quickshell-update-atomicity.sh
+          bash tests/test-quickshell-update-interrupt-recovery.sh
+          bash tests/test-awtarchy-git-mode.sh
           python3 tests/test-mangowm-position.py
           python3 tests/test-mangowm-cursor.py
           python3 tests/test-mangowm-idle.py
