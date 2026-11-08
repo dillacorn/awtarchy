@@ -45,6 +45,16 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     text = text.replace(
                         'configHome + "/hypr/scripts/quickshell_runtime_rules.sh"',
                         'configHome + "/mango/scripts/runtime-rules.sh"')
+                if file.name == "NumlockSessionTweak.qml":
+                    text = text.replace(
+                        '["hyprctl", "eval",',
+                        '["mmsg", "dispatch",')
+                    text = text.replace(
+                        '"hl.config({ input = { numlock_by_default = true } })"',
+                        '"setoption,numlock_on,1"')
+                    text = text.replace(
+                        '"hl.config({ input = { numlock_by_default = false } })"',
+                        '"setoption,numlock_on,0"')
                 if file.name == "KeyboardLockState.qml":
                     # Mango does not expose Hyprland's capslock device event.
                     # Use the kernel LED state as a best-effort fallback.
