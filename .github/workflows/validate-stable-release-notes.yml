@@ -141,3 +141,49 @@ jobs:
             false
           }
           printf 'PASS: %s published, notes and target commit verified\n' "$version"
+
+  verify-published-v4-1-5:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.action == 'synchronize' &&
+      github.event.pull_request.title == 'Release bridge: Awtarchy v4.1.5 Default Applications' &&
+      github.event.pull_request.head.ref == 'release-bridge/v4.1.5-default-apps' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.base.sha == '4b118bac9fb7a2634fc206433ccc835b685b1ff4'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 4b118bac9fb7a2634fc206433ccc835b685b1ff4
+          fetch-depth: 0
+      - name: Validate published v4.1.5 metadata, tag and release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: dillacorn/awtarchy
+        run: |
+          set -euo pipefail
+          version='v4.1.5'
+          title='Awtarchy v4.1.5 Default Applications'
+          target='4b118bac9fb7a2634fc206433ccc835b685b1ff4'
+          previous="${RUNNER_TEMP}/previous-v4.1.4.md"
+          published="${RUNNER_TEMP}/published-v4.1.5.md"
+
+          [[ "$(git rev-parse HEAD)" == "$target" ]]
+          [[ "$(git ls-remote origin refs/heads/main | cut -f1)" == "$target" ]]
+          [[ "$(git ls-remote --tags origin refs/tags/v4.1.5 | cut -f1)" == "$target" ]]
+
+          gh release view v4.1.4 --json body --jq '.body' > "$previous"
+          gh release view v4.1.5 --json body --jq '.body' > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version "$version" --title "$title" \
+            --notes "$published" --previous "$previous"
+
+          gh release view "$version" --json tagName,name,isDraft,isPrerelease,targetCommitish \
+            --jq '{tagName,name,isDraft,isPrerelease,targetCommitish}' > "${RUNNER_TEMP}/release-metadata.json"
+          jq -e --arg version "$version" --arg title "$title" --arg target "$target" \
+            '.tagName == $version and .name == $title and .isDraft == false and .isPrerelease == false and .targetCommitish == $target' \
+            "${RUNNER_TEMP}/release-metadata.json"
+          printf 'PASS: published %s body, name, tag and target validated\n' "$version"
