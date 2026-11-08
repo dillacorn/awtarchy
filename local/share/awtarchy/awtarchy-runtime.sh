@@ -4371,6 +4371,12 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  if [[ -f "${REPO_DIR}/config/mango/scripts/cursor-variant.py" ]]; then
+    run_as_target python3 "${REPO_DIR}/config/mango/scripts/cursor-variant.py" \
+      --config "${HOME_DIR}/.config/mango/config.conf" \
+      --state "${HOME_DIR}/.cache/awtarchy/quickshell-state.json" \
+      --apply || die "Could not preserve the current Mango cursor choice during installation."
+  fi
   if [[ -f "${REPO_DIR}/trials/mangowm/render-quickshell.py" ]]; then
     render_mango_quickshell_install_stage \
       || die "Could not install the separate Mango Quickshell profile."
@@ -10317,6 +10323,15 @@ main() {
   fi
 
   prepare_quickshell_update_target "$target_home"
+  # Stage the saved cursor choice before the branch review/backup plan.
+  # Dynamic user preferences must not be reset to the stock Ice default.
+  local mango_cursor_sync="${target_home}/.config/mango/scripts/cursor-variant.py"
+  if [[ -f "$mango_cursor_sync" && ! -L "$mango_cursor_sync" ]]; then
+    python3 "$mango_cursor_sync" \
+      --config "${target_home}/.config/mango/config.conf" \
+      --state "${XDG_CACHE_HOME:-${HOME_DIR}/.cache}/awtarchy/quickshell-state.json" \
+      --apply || die "Could not preserve the Mango cursor preference in staging."
+  fi
   # Render only AFTER themes and shell migrations have been applied.
   render_mango_quickshell_target "$repo_dir" "$target_home" \
     || die "Mango Quickshell profile generation failed; no live files were changed."

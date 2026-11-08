@@ -15,7 +15,7 @@ START_LOCK_FILE="${STATE_DIR}/quickshell-start.lock"
 LEGACY_STATE_FILE="${CACHE_HOME}/waybar/state.json"
 LOG_FILE="${STATE_DIR}/quickshell.log"
 REPORT_SCRIPT="${AWTARCHY_REPORT_SCRIPT:-${CONFIG_HOME}/hypr/scripts/awtarchy_report_failure.sh}"
-CURSOR_THEME_SCRIPT="${AWTARCHY_CURSOR_THEME_SCRIPT:-${CONFIG_HOME}/hypr/scripts/quickshell_cursor_theme.sh}"
+CURSOR_THEME_SCRIPT="${AWTARCHY_CURSOR_THEME_SCRIPT:-${CONFIG_HOME}/mango/scripts/cursor-theme.sh}"
 PROC_ROOT="/proc"
 if [[ ${AWTARCHY_TEST_MODE:-0} == 1 && -n ${AWTARCHY_TEST_PROC_ROOT:-} ]]; then
     PROC_ROOT="${AWTARCHY_TEST_PROC_ROOT}"
