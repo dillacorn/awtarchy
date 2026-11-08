@@ -9,6 +9,8 @@ on:
       - 'tests/test-mangowm-position.py'
       - 'tests/test-mangowm-cursor.py'
       - 'tests/test-mangowm-idle.py'
+      - 'tests/test-mangowm-launch-handler.py'
+      - 'config/hypr/scripts/launch_handler.sh'
       - 'tests/test-default-applications.py'
       - 'local/share/awtarchy/migrate-default-apps-hyprland.py'
       - 'tests/test-mangowm-shared-shell.sh'
@@ -42,6 +44,7 @@ jobs:
           python3 tests/test-mangowm-position.py
           python3 tests/test-mangowm-cursor.py
           python3 tests/test-mangowm-idle.py
+          python3 tests/test-mangowm-launch-handler.py
           python3 tests/test-default-applications.py
           bash tests/test-mangowm-shared-shell.sh
           bash tests/test-mangowm-lock.sh
