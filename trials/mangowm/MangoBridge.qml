@@ -6,7 +6,7 @@ import Quickshell.Io
 import Quickshell.Wayland
 
 // Recreates only the Hyprland QML properties used by Awtarchy's shell,
-// using Mango's documented 0.18.5 IPC. Never invoke hyprctl in this process.
+// using Mango's documented 0.18.5 IPC without another compositor's tooling.
 Singleton {
     id: root
 
