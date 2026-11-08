@@ -91,7 +91,7 @@ def prepare(args):
     if placement not in EDGES or placement == "clamp":
         raise ValueError("unsupported preparation placement")
     for value in (width, height, bar, sw, sh):
-        if not value.isdecimal() or int(value) <= 0 and value not in (bar,):
+        if not value.isdecimal() or (int(value) <= 0 and value in (width, height, sw, sh)):
             raise ValueError("invalid preparation dimension")
     int(anchor)
     PREPARED.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -142,8 +142,10 @@ def find_monitor(name):
     monitors = query("all-monitors").get("monitors", [])
     for mon in monitors:
         if mon.get("name") == name:
-            values = [positive_int(mon.get(k), -1) if k in ("width", "height")
-                      else int(mon.get(k, 0)) for k in ("x", "y", "width", "height")]
+            try:
+                values = [int(mon.get(k, 0)) for k in ("x", "y", "width", "height")]
+            except (TypeError, ValueError):
+                raise RuntimeError("Mango monitor geometry is malformed") from None
             if values[2] <= 0 or values[3] <= 0:
                 raise RuntimeError("Monitor has invalid geometry")
             return tuple(values)
@@ -151,7 +153,7 @@ def find_monitor(name):
 
 
 def saved_dims(surface, monitor, mw, mh, obj, clamp):
-    title, key, default_w, default_h, min_w, min_h, _ = WINDOWS[surface]
+    _, key, default_w, default_h, min_w, min_h, _ = WINDOWS[surface]
     factor = min(mw / 1920, mh / 1080)
     width = round(default_w * factor)
     height = round(default_h * factor)
@@ -177,7 +179,7 @@ def reposition(surface, monitor, placement, action, requested_w=None, requested_
     if action == "spawn" and (override := prepared_target(surface)):
         monitor, placement = override
 
-    title, _, default_w, default_h, min_w, min_h, layout = WINDOWS[surface]
+    title, _, _, _, min_w, min_h, layout = WINDOWS[surface]
     mx, my, mw, mh = find_monitor(monitor)
     client = find_client(title, monitor)
     cid = client["id"]
@@ -197,7 +199,10 @@ def reposition(surface, monitor, placement, action, requested_w=None, requested_
         win_w = max(min(min_w, mw-20), min(mw-20, win_w))
         win_h = max(min(min_h, mh-20), min(mh-20, win_h))
 
-    bar = obj.get("monitors", {}).get(monitor, {})
+    monitors_state = obj.get("monitors", {})
+    if not isinstance(monitors_state, dict):
+        monitors_state = {}
+    bar = monitors_state.get(monitor, {})
     bs = positive_int(bar.get("bar_size")) if isinstance(bar, dict) else 0
     horizontal = bs if 20 <= bs <= 80 else 28
     vertical = bs if 20 <= bs <= 80 else 36
