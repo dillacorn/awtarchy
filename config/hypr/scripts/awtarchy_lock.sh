@@ -92,6 +92,13 @@ start_lock() {
 
     mkdir -p -- "$LOG_DIR"
 
+    # Mango supports the native Wayland session-lock protocol, but not the
+    # Hyprland-only frame-capture helper. Suppress captures only for an
+    # explicit Mango launcher request, preserving Hyprland behavior.
+    if [[ "${AWTARCHY_LOCK_NO_CAPTURE:-0}" == 1 && -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+        capture_helper=""
+    fi
+
     if [[ -f "$capture_helper" ]]; then
         case "$capture_mode" in
             fresh)
