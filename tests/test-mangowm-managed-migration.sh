@@ -9,7 +9,7 @@ test -s config/xdg-desktop-portal/mango-portals.conf
 grep -Fqx 'org.freedesktop.impl.portal.ScreenCast=wlr' config/xdg-desktop-portal/mango-portals.conf
 grep -Fqx 'org.freedesktop.impl.portal.Screenshot=wlr' config/xdg-desktop-portal/mango-portals.conf
 grep -Fq 'shield_when_capture:1,app_id:' config/mango/config.conf
-grep -Fq 'dev\\.vencord\\.Vesktop' config/mango/config.conf
+grep -Fq 'dev\.vencord\.Vesktop' config/mango/config.conf
 for script in config/mango/scripts/*.sh; do bash -n "$script"; done
 python3 -m py_compile trials/mangowm/render-quickshell.py config/mango/scripts/snapshot.py config/mango/scripts/cursor-variant.py
 
