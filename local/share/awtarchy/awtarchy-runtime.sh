@@ -5658,6 +5658,9 @@ restore_quickshell_update_shell_on_exit() {
 
   local manager="${HOME_DIR}/.config/hypr/scripts/quickshell.sh"
   local status=""
+  if mango_trial_session_active; then
+    manager="${HOME_DIR}/.config/mango/scripts/quickshell.sh"
+  fi
   [[ -f "$manager" && ! -L "$manager" ]] || {
     warn "Could not restore Quickshell after interrupted update: manager is unavailable."
     return 1
@@ -5745,6 +5748,8 @@ start_update_aur_sudo_keepalive() {
 }
 
 reapply_cursor_theme_after_update() {
+  # Mango applies the user cursor preference through its own session config.
+  mango_trial_session_active && return 0
   local helper="${HOME_DIR}/.config/hypr/scripts/quickshell_cursor_theme.sh"
   [[ -f "$helper" && ! -L "$helper" ]] || return 0
 
@@ -5761,6 +5766,7 @@ reapply_cursor_theme_after_update() {
 }
 
 restart_hypridle_after_update() {
+  mango_trial_session_active && return 0
   local helper="${HOME_DIR}/.config/hypr/scripts/hypridle_restart.sh"
   local target_uid=""
 
@@ -8140,6 +8146,14 @@ validate_live() {
     validate_candidate "$file" "$rel" || return 1
   done
 
+  if mango_trial_session_active; then
+    local config="${HOME_DIR}/.config/mango/config.conf"
+    [[ -f "$config" && ! -L "$config" ]] || return 1
+    mango -c "$config" -p >/dev/null 2>&1 || return 1
+    mmsg get all-monitors | jq -e '.monitors | type == "array"' >/dev/null 2>&1 || return 1
+    return 0
+  fi
+
   # A freshly upgraded compositor is not running until the user logs in again.
   # Reloading or validating its new Lua config inside an older live compositor
   # can produce false errors or destabilize the session.
@@ -9625,6 +9639,9 @@ ensure_quickshell_update_prerequisites() {
 
   local pkg
   local -a required=(quickshell foot upower playerctl hyprland-qt-support polkit python-gobject) missing=()
+  if mango_trial_session_active || [[ "${TESTING_BRANCH:-}" == "MangoWM_Migration_Trial_Investigation" ]]; then
+    required+=(mangowm swayidle xdg-desktop-portal-wlr)
+  fi
   for pkg in "${required[@]}"; do
     pacman -Q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")
   done
@@ -9745,7 +9762,20 @@ remove_quickshell_update_legacy_files() {
   prune_removed_quickshell_paths_from_preserved
 }
 
+mango_trial_session_active() {
+  [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" && -n "${WAYLAND_DISPLAY:-}" ]] || return 1
+  command -v mmsg >/dev/null 2>&1 || return 1
+  mmsg get version >/dev/null 2>&1
+}
+
 reload_quickshell_update_hyprland() {
+  if mango_trial_session_active; then
+    local config="${HOME_DIR}/.config/mango/config.conf"
+    [[ -f "$config" && ! -L "$config" ]] || return 1
+    mango -c "$config" -p >/dev/null 2>&1 || return 1
+    run_target mmsg dispatch reload_config >/dev/null 2>&1
+    return $?
+  fi
   command -v hyprctl >/dev/null 2>&1 || return 0
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
   if hyprland_session_needs_restart; then
@@ -9991,12 +10021,34 @@ report_quickshell_update_failure() {
 }
 
 stop_quickshell_update_shell() {
+  if mango_trial_session_active; then
+    local manager="${HOME_DIR}/.config/mango/scripts/quickshell.sh"
+    [[ -f "$manager" && ! -L "$manager" ]] || return 1
+    QUICKSHELL_UPDATE_RESTORE_ON_EXIT=1
+    if [[ -n "${QUICKSHELL_UPDATE_RECOVERY_MARKER:-}" ]]; then
+      [[ ! -L "$QUICKSHELL_UPDATE_RECOVERY_MARKER" ]] || return 1
+      : >"$QUICKSHELL_UPDATE_RECOVERY_MARKER"
+    fi
+    run_target bash "$manager" stop 9>&-
+    return $?
+  fi
   command -v hyprctl >/dev/null 2>&1 || return 0
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
   stop_quickshell_update_instances
 }
 
 start_quickshell_update_shell() {
+  if mango_trial_session_active; then
+    local mango_manager="${HOME_DIR}/.config/mango/scripts/quickshell.sh"
+    [[ -f "$mango_manager" && ! -L "$mango_manager" ]] || return 1
+    AWTARCHY_REPORT_SUPPRESS_QUICKSHELL=1 run_target bash "$mango_manager" restart 9>&- || return 1
+    [[ "$(run_target bash "$mango_manager" status 9>&- 2>/dev/null || true)" == "running" ]] || return 1
+    QUICKSHELL_UPDATE_RESTORE_ON_EXIT=0
+    if [[ -n "${QUICKSHELL_UPDATE_RECOVERY_MARKER:-}" && ! -L "$QUICKSHELL_UPDATE_RECOVERY_MARKER" ]]; then
+      rm -f -- "$QUICKSHELL_UPDATE_RECOVERY_MARKER"
+    fi
+    return 0
+  fi
   command -v hyprctl >/dev/null 2>&1 || return 0
   [[ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]] || return 0
 
@@ -10027,6 +10079,9 @@ start_quickshell_update_shell() {
 
 rollback_quickshell_update() {
   local manager="${HOME_DIR}/.config/hypr/scripts/quickshell.sh"
+  if mango_trial_session_active; then
+    manager="${HOME_DIR}/.config/mango/scripts/quickshell.sh"
+  fi
   if [[ -f "$manager" ]]; then
     run_target bash "$manager" stop 9>&- >/dev/null 2>&1 || true
   fi
@@ -10071,6 +10126,10 @@ If anything looks wrong, choose rollback now." \
 }
 
 remove_quickshell_update_legacy_packages() {
+  # Keep alternatives and the Hyprland recovery environment during the trial.
+  if mango_trial_session_active || [[ "${TESTING_BRANCH:-}" == "MangoWM_Migration_Trial_Investigation" ]]; then
+    return 0
+  fi
   local marker="${STATE_DIR}/quickshell-connectivity-migration-complete"
   local managed_file="${AWTARCHY_MANAGED_PACKAGES_FILE:-/var/lib/awtarchy/managed-packages}"
   local pkg process tmp installed_names installed_list
