@@ -13,6 +13,7 @@ LAUNCHER="${RUNTIME_DIR}/launcher"
 FOOT="/usr/bin/foot"
 PYTHON="/usr/bin/python3"
 HYPRCTL="/usr/bin/hyprctl"
+MMSG="/usr/bin/mmsg"
 SYSTEMD_CAT="/usr/bin/systemd-cat"
 APP_ID="awtarchy-polkit-agent"
 
@@ -128,13 +129,19 @@ main() {
     local account_info account home_dir expected_runtime appearance_text option
     local wayland_display="${WAYLAND_DISPLAY:-}"
     local hypr_signature="${HYPRLAND_INSTANCE_SIGNATURE:-}"
+    local mango_signature="${MANGO_INSTANCE_SIGNATURE:-}" desktop="Hyprland"
     local session_id="${XDG_SESSION_ID:-}"
     local runtime_from_env="${XDG_RUNTIME_DIR:-}"
     local lang_value="${LANG:-C.UTF-8}"
 
     verify_system_binary "$FOOT" || return 1
     verify_system_binary "$PYTHON" || return 1
-    verify_system_binary "$HYPRCTL" || return 1
+    if [[ "${XDG_CURRENT_DESKTOP:-}" == mango ]]; then
+        verify_system_binary "$MMSG" || return 1
+        desktop=mango
+    else
+        verify_system_binary "$HYPRCTL" || return 1
+    fi
     verify_system_binary "$SYSTEMD_CAT" || return 1
 
     verify_root_owned_directory "$RUNTIME_DIR" || return 1
@@ -153,8 +160,17 @@ main() {
         || fail 'the current user D-Bus session is unavailable' || return 1
     [[ -n $wayland_display && $wayland_display != */* && $wayland_display != *$'\n'* ]] \
         || fail 'WAYLAND_DISPLAY is unavailable or invalid' || return 1
+    if [[ "$desktop" == mango ]]; then
+        # The Mango signature is a Unix socket path under this user runtime.
+        [[ $mango_signature == "${expected_runtime}/"* && $mango_signature != *$'\n'* \
+            && -S $mango_signature && ! -L $mango_signature ]] \
+            || fail 'MANGO_INSTANCE_SIGNATURE is unavailable or unsafe' || return 1
+        [[ "$(/usr/bin/stat -Lc '%u' -- "$mango_signature")" == "$EUID" ]] \
+            || fail 'Mango IPC socket is not owned by this desktop user' || return 1
+    else
     [[ -n $hypr_signature && $hypr_signature != */* && $hypr_signature != *$'\n'* ]] \
         || fail 'HYPRLAND_INSTANCE_SIGNATURE is unavailable or invalid' || return 1
+    fi
     [[ $session_id =~ ^[A-Za-z0-9_.:-]{1,128}$ ]] \
         || fail 'XDG_SESSION_ID is unavailable or invalid' || return 1
 
@@ -192,9 +208,10 @@ main() {
         DBUS_SESSION_BUS_ADDRESS="unix:path=${expected_runtime}/bus" \
         WAYLAND_DISPLAY="$wayland_display" \
         HYPRLAND_INSTANCE_SIGNATURE="$hypr_signature" \
+        MANGO_INSTANCE_SIGNATURE="$mango_signature" \
         XDG_SESSION_ID="$session_id" \
-        XDG_CURRENT_DESKTOP=Hyprland \
-        XDG_SESSION_DESKTOP=Hyprland \
+        XDG_CURRENT_DESKTOP="$desktop" \
+        XDG_SESSION_DESKTOP="$desktop" \
         XDG_SESSION_TYPE=wayland \
         AWTARCHY_POLKIT_FOOT_OPTIONS="$appearance_text" \
         "$PYTHON" -I "$AGENT"
