@@ -47,8 +47,8 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                         'configHome + "/mango/scripts/runtime-rules.sh"')
                 if file.name == "NumlockSessionTweak.qml":
                     text = text.replace(
-                        '["hyprctl", "eval",',
-                        '["mmsg", "dispatch",')
+                        '"hyprctl", "eval",',
+                        '"mmsg", "dispatch",')
                     text = text.replace(
                         '"hl.config({ input = { numlock_by_default = true } })"',
                         '"setoption,numlock_on,1"')
