@@ -49,6 +49,16 @@ jobs:
           bash tests/test-polkit-agent-hypr-dispatch.sh
           bash tests/test-polkit-agent-session-binding.sh
           bash tests/test-polkit-agent-secure.sh
+          bash tests/test-polkit-agent-foot-appearance.sh
+          bash tests/test-polkit-agent-glib-watch.sh
+          bash tests/test-polkit-agent-headless-idle.sh
+          bash tests/test-polkit-agent-internal-window-ui.sh
+          bash tests/test-polkit-agent-password-retry.sh
+          bash tests/test-polkit-agent-production-integration.sh
+          bash tests/test-polkit-agent-runtime-rebuild.sh
+          bash tests/test-polkit-agent-startup-diagnostics.sh
+          python3 tests/test-polkit-agent-auth-feedback.py
+          python3 tests/test-polkit-agent-transient-frontend.py
           bash -n config/hypr/scripts/awtarchy-polkit-agent/launcher.sh
           shellcheck -S warning trials/mangowm/*.sh
       - name: Validate with Arch packaged MangoWM parser
