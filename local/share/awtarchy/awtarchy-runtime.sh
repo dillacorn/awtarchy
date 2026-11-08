@@ -6228,19 +6228,6 @@ build_target_home() {
     cp -a --no-preserve=ownership -- "${config_dir}/." "${target_home}/.config/${d}/"
   done < <(find "${repo_dir}/config" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
 
-  # Render a separate Mango Quickshell profile in the staged update target.
-  # The Hyprland shell, state and user customizations remain untouched.
-  local renderer="${repo_dir}/trials/mangowm/render-quickshell.py"
-  if [[ -f "$renderer" && ! -L "$renderer" \
-      && -f "${repo_dir}/trials/mangowm/MangoBridge.qml" \
-      && -f "${target_home}/.config/quickshell/awtarchy/shell.qml" ]]; then
-    python3 "$renderer" \
-      --source "${target_home}/.config/quickshell/awtarchy" \
-      --dest "${target_home}/.config/quickshell/awtarchy-mango" \
-      --bridge-dir "${repo_dir}/trials/mangowm" \
-      || die "Could not render the separate Mango Quickshell profile."
-  fi
-
   copy_target "${repo_dir}/local/share/nwg-look/gsettings" \
     "${target_home}/.local/share/nwg-look/gsettings"
 
@@ -6258,6 +6245,20 @@ build_target_home() {
   # Normalize staging so comparison, installation, and saved baselines all use
   # the executable modes expected by Awtarchy.
   normalize_managed_executables "$target_home"
+}
+
+render_mango_quickshell_target() {
+  local repo_dir="$1" target_home="$2"
+  local renderer="${repo_dir}/trials/mangowm/render-quickshell.py"
+  [[ -f "$renderer" && ! -L "$renderer" ]] || return 0
+  [[ -f "${repo_dir}/trials/mangowm/MangoBridge.qml" ]] || return 1
+  [[ -f "${target_home}/.config/quickshell/awtarchy/shell.qml" ]] || return 1
+  [[ ! -e "${target_home}/.config/quickshell/awtarchy-mango" ]] || return 1
+  python3 "$renderer" \
+    --source "${target_home}/.config/quickshell/awtarchy" \
+    --dest "${target_home}/.config/quickshell/awtarchy-mango" \
+    --bridge-dir "${repo_dir}/trials/mangowm" || return 1
+  return 0
 }
 
 valid_theme_name() {
@@ -10280,6 +10281,10 @@ main() {
   fi
 
   prepare_quickshell_update_target "$target_home"
+  # Render only AFTER themes and shell migrations have been applied.
+  render_mango_quickshell_target "$repo_dir" "$target_home" \
+    || die "Mango Quickshell profile generation failed; no live files were changed."
+  normalize_managed_executables "$target_home"
   repair_v342_mouse_submap_target "$target_home" "$tag"
   repair_v342_workspace_focus_target "$target_home" "$tag"
   repair_v343_transient_task_icons_target "$target_home" "$tag"
