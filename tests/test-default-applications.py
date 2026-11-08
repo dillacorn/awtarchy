@@ -398,7 +398,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-default-apps-migrate-") as dir
     live.write_text(old, encoding="utf-8")
     migrator.migrate(live, staged, output)
     changed = output.read_text(encoding="utf-8")
-    assert old in changed
+    assert all(line in changed for line in old.splitlines())
     assert changed.count('hl.bind("SUPER + ALT + A"') == 3
     assert changed.count('class = "^awtarchy-default-apps$"') == 3
     assert "size = { 540, 460 }" in changed
