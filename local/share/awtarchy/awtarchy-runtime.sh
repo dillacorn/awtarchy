@@ -29,7 +29,7 @@ have() { command -v "$1" >/dev/null 2>&1; }
 # Package defaults
 # ──────────────────────────────────────────────────────────────────────────────
 declare -a PKG_GROUPS=(
-  "Window Management:hyprland hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk libnotify nwg-look"
+  "Window Management:hyprland mangowm swayidle swaylock xdg-desktop-portal-wlr wlsunset wlr-randr hyprpaper hypridle hyprpicker hyprsunset quickshell qt6-multimedia qt6-multimedia-ffmpeg grim satty slurp wl-clipboard cliphist zbar wf-recorder zenity qt5ct qt5-wayland kvantum-qt5 qt6ct qt6-wayland xdg-desktop-portal-hyprland xdg-desktop-portal-gtk libnotify nwg-look"
   "Fonts:woff2-font-awesome otf-font-awesome ttf-dejavu ttf-liberation ttf-noto-nerd ttf-jetbrains-mono-nerd noto-fonts-emoji"
   "Themes:papirus-icon-theme materia-gtk-theme kvantum-theme-materia"
   "Terminal Apps:foot nano micro yazi fastfetch btop htop curl passt devtools wget git fd ripgrep dos2unix brightnessctl ipcalc cmatrix asciiquarium figlet espeak-ng cava man-db man-pages unzip 7zip xarchiver ncdu ddcutil scx-scheds scx-tools"
@@ -4022,7 +4022,7 @@ copy_awtarchy_configs_stage() {
     retry_command run_as_target chmod 0644 "$dest"
   done
 
-  local -a config_dirs=(hypr quickshell foot gtk-3.0 Kvantum fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
+  local -a config_dirs=(hypr mango quickshell foot gtk-3.0 Kvantum fastfetch pcmanfm-qt yazi xdg-desktop-portal qt5ct qt6ct lsfg-vk wiremix cava micro ddcutil)
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
@@ -6194,6 +6194,7 @@ normalize_managed_executables() {
   for rel in \
     .config/hypr/scripts \
     .config/hypr/themes \
+    .config/mango/scripts \
     .config/waybar/scripts
   do
     dir="${root}/${rel}"
@@ -6220,6 +6221,19 @@ build_target_home() {
     mkdir -p -- "${target_home}/.config/${d}"
     cp -a --no-preserve=ownership -- "${config_dir}/." "${target_home}/.config/${d}/"
   done < <(find "${repo_dir}/config" -mindepth 1 -maxdepth 1 -type d -print0 | sort -z)
+
+  # Render a separate Mango Quickshell profile in the staged update target.
+  # The Hyprland shell, state and user customizations remain untouched.
+  local renderer="${repo_dir}/trials/mangowm/render-quickshell.py"
+  if [[ -f "$renderer" && ! -L "$renderer" \
+      && -f "${repo_dir}/trials/mangowm/MangoBridge.qml" \
+      && -f "${target_home}/.config/quickshell/awtarchy/shell.qml" ]]; then
+    python3 "$renderer" \
+      --source "${target_home}/.config/quickshell/awtarchy" \
+      --dest "${target_home}/.config/quickshell/awtarchy-mango" \
+      --bridge-dir "${repo_dir}/trials/mangowm" \
+      || die "Could not render the separate Mango Quickshell profile."
+  fi
 
   copy_target "${repo_dir}/local/share/nwg-look/gsettings" \
     "${target_home}/.local/share/nwg-look/gsettings"
@@ -7401,7 +7415,7 @@ validate_managed_relative_path() {
     .bashrc|.bash_profile|.Xresources|.config/mimeapps.list|.config/gamemode.ini)
       return 0
       ;;
-    .config/hypr/*|.config/quickshell/*|.config/alacritty/*|.config/foot/*|.config/gtk-3.0/*|\
+    .config/hypr/*|.config/mango/*|.config/quickshell/*|.config/alacritty/*|.config/foot/*|.config/gtk-3.0/*|\
     .config/Kvantum/*|.config/SpeedCrunch/*|.config/fastfetch/*|\
     .config/pcmanfm-qt/*|.config/yazi/*|.config/xdg-desktop-portal/*|\
     .config/qt5ct/*|.config/qt6ct/*|.config/lsfg-vk/*|.config/wiremix/*|\
