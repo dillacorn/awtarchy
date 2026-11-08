@@ -8,7 +8,7 @@ for script in trials/mangowm/setup.sh trials/mangowm/session.sh \
 done
 python3 -m json.tool trials/mangowm/waybar.json >/dev/null
 grep -Fxq 'allow_tearing=2' trials/mangowm/config.conf
-grep -Fxq 'tag_num=9' trials/mangowm/config.conf
+grep -Fxq 'tag_num=10' trials/mangowm/config.conf
 grep -Fq 'custom/mango-tags' trials/mangowm/waybar.json
 if grep -Fq 'mango/workspaces' trials/mangowm/waybar.json; then
     printf 'Trial must run on stock Waybar, without git-only Mango modules\n' >&2

@@ -45,7 +45,7 @@ before setting resolution, refresh rate, location, scaling and VRR.
 ## Current trial features
 
 - Native Mango bindings (ALT/SUPER), basic tiling/floating/fullscreen, special
-  tag, 9 tags, dim-free rendering, disabled cosmetic effects.
+  tag, 10 tags, dim-free rendering, disabled cosmetic effects.
 - A minimal stock Arch Waybar using an mmsg/jq tag adapter, Fuzzel, Mako.
 - Swaybg, Swayidle/Swaylock, Mango's ScreenCast/Screenshot portal, screenshots,
   power menu; existing Awtarchy standalone default-app, Qalc, Yazi, Btop tools.
@@ -62,7 +62,6 @@ before setting resolution, refresh rate, location, scaling and VRR.
   policy, desktop updater-managed configuration.
 - Monitor profiles/Hyprmoncfg, custom zoom, workspace mixer, vibrance shader,
   Hyprbars, wallpaper restoration/picker and night-light controls.
-- Tenth workspace: Mango documents tag masks 1-9. Needs independent testing.
 - Screen capture of a specific window and historical clipboard controls.
 
 **Do not delete Hyprland packages or switch Awtarchy's default desktop based on
