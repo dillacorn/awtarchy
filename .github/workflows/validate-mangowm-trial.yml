@@ -5,6 +5,9 @@ on:
     paths:
       - 'trials/mangowm/**'
       - 'tests/test-mangowm-trial.sh'
+      - 'tests/test-mangowm-managed-migration.sh'
+      - 'config/mango/**'
+      - 'local/share/awtarchy/awtarchy-runtime.sh'
       - '.github/workflows/validate-mangowm-trial.yml'
   pull_request:
     paths:
@@ -24,10 +27,12 @@ jobs:
         run: |
           bash tests/test-mangowm-trial.sh
           bash tests/test-mangowm-trial-mocks.sh
+          bash tests/test-mangowm-managed-migration.sh
           shellcheck -S warning trials/mangowm/*.sh
       - name: Validate with Arch packaged MangoWM parser
         run: |
           docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
             pacman -Sy --noconfirm mangowm
             mango -c /repo/trials/mangowm/config.conf -p
+            mango -c /repo/config/mango/config.conf -p
           '
