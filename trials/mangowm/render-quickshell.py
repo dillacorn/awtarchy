@@ -45,6 +45,12 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     text = text.replace(
                         'configHome + "/hypr/scripts/quickshell_runtime_rules.sh"',
                         'configHome + "/mango/scripts/runtime-rules.sh"')
+                if file.name == "KeyboardLockState.qml":
+                    # Mango does not expose Hyprland's capslock device event.
+                    # Use the kernel LED state as a best-effort fallback.
+                    text = text.replace('["hyprctl", "devices", "-j"]',
+                                        '["python3", "' +
+                                        '~/.config/mango/scripts/keyboard-state.py' + '"]')
                 if file.name == "Bar.qml":
                     # A tag is not a Hyprland workspace. Rebind only the
                     # identical view operations; do not translate workspace
