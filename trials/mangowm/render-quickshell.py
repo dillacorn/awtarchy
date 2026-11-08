@@ -79,8 +79,16 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     # Until Quickshell ext-session-lock is proven on Mango,
                     # prefer the compositor-confirmed swaylock -f fallback.
                     text = text.replace(
+                        "~/.config/hypr/scripts/awtarchy_lock.sh lock-prepared && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5",
+                        "~/.config/mango/scripts/lock.sh lock")
+                    text = text.replace(
+                        "~/.config/hypr/scripts/awtarchy_lock.sh lock && ~/.config/hypr/scripts/awtarchy_lock.sh wait-secure 5",
+                        "~/.config/mango/scripts/lock.sh lock")
+                    text = text.replace(
                         "/hypr/scripts/awtarchy_lock.sh",
                         "/mango/scripts/lock.sh")
+                    if "wait-secure" in text:
+                        raise ValueError("Unported Mango lock readiness command")
                     text = text.replace(
                         "/hypr/scripts/quickshell_lockscreen_capture.sh",
                         "/mango/scripts/lock-capture.sh")

@@ -8,23 +8,9 @@ lock_screen() {
         printf 'Mango lock requires swaylock.\n' >&2
         return 127
     }
-    if pgrep -u "$(id -u)" -x swaylock >/dev/null 2>&1; then
-        return 0
-    fi
+    # Never trust the PID of a lock on another graphical session.
     # --daemonize returns only after ext-session-lock-v1 acquisition.
     swaylock -f -c 10151c
-}
-
-wait_secure() {
-    local seconds="${1:-5}" count
-    [[ "$seconds" =~ ^[1-9][0-9]*$ && "$seconds" -le 30 ]] || return 2
-    for ((count=0; count<seconds*10; count++)); do
-        if pgrep -u "$(id -u)" -x swaylock >/dev/null 2>&1; then
-            return 0
-        fi
-        sleep 0.1
-    done
-    return 1
 }
 
 case "${1:-}" in
@@ -33,19 +19,19 @@ case "${1:-}" in
         lock_screen
         ;;
     wait-secure)
-        [[ $# -le 2 ]] || { printf 'wait-secure [seconds]\n' >&2; false; }
-        wait_secure "${2:-5}"
+        printf 'Mango lock -f itself confirms security. No separate readiness query exists.\n' >&2
+        false
         ;;
     status)
         if pgrep -u "$(id -u)" -x swaylock >/dev/null 2>&1; then
-            printf 'secure\n'
+            printf 'running\n'
         else
             printf 'unlocked\n'
         fi
         ;;
     hibernate|suspend)
         action="$1"
-        lock_screen && wait_secure 5 || {
+        lock_screen || {
             printf 'Mango lock was not confirmed; refusing %s.\n' "$action" >&2
             false
         }
@@ -56,7 +42,7 @@ case "${1:-}" in
         fi
         ;;
     *)
-        printf 'usage: lock.sh {lock|lock-prepared|wait-secure [seconds]|status|suspend|hibernate}\n' >&2
+        printf 'usage: lock.sh {lock|lock-prepared|status|suspend|hibernate}\n' >&2
         false
         ;;
 esac
