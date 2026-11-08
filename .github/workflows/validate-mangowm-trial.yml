@@ -6,6 +6,7 @@ on:
       - 'trials/mangowm/**'
       - 'tests/test-mangowm-trial.sh'
       - 'tests/test-mangowm-managed-migration.sh'
+      - 'tests/test-mangowm-position.py'
       - 'config/mango/**'
       - 'local/share/awtarchy/awtarchy-runtime.sh'
       - '.github/workflows/validate-mangowm-trial.yml'
@@ -28,6 +29,7 @@ jobs:
           bash tests/test-mangowm-trial.sh
           bash tests/test-mangowm-trial-mocks.sh
           bash tests/test-mangowm-managed-migration.sh
+          python3 tests/test-mangowm-position.py
           shellcheck -S warning trials/mangowm/*.sh
       - name: Validate with Arch packaged MangoWM parser
         run: |
