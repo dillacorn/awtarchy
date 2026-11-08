@@ -90,7 +90,7 @@ action() {
             bash "$manager" setpos "$monitor" "$value"
             ;;
         submap)
-            [[ $# == 2 && "$monitor" == reset ]] || {
+            [[ $# == 1 && "$monitor" == reset ]] || {
                 printf 'Mango key modes for noalt/mouse/vm are not yet configured.\n' >&2
                 return 2
             }

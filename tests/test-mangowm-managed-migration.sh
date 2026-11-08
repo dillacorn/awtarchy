@@ -34,7 +34,7 @@ if grep -qF 'wait-secure' "$tmp/awtarchy-mango/PowerMenu.qml"; then
     false
 fi
 grep -Fq 'awtarchy-mango' "$tmp/awtarchy-mango/shell.qml"
-if grep -RFnE 'import Quickshell.Hyprland|HyprlandFocusGrab|\bhyprctl\b|hl\.dispatch\(' "$tmp/awtarchy-mango" --include='*.qml'; then
+if grep -RnE 'import Quickshell.Hyprland|HyprlandFocusGrab|\bhyprctl\b|hl\.dispatch\(' "$tmp/awtarchy-mango" --include='*.qml'; then
   printf 'ERROR: unported Hyprland QML references in Mango profile\n' >&2
   false
 fi
