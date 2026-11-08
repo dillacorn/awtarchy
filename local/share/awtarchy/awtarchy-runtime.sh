@@ -4110,6 +4110,9 @@ EOF
   if [[ -d "${HOME_DIR}/.config/hypr/scripts" ]]; then
     run_as_target find "${HOME_DIR}/.config/hypr/scripts" -type f -exec chmod +x {} + 2>/dev/null || true
   fi
+  if [[ -d "${HOME_DIR}/.config/mango/scripts" ]]; then
+    run_as_target find "${HOME_DIR}/.config/mango/scripts" -type f -exec chmod +x {} + 2>/dev/null || true
+  fi
   if [[ -d "${HOME_DIR}/.config/hypr/themes" ]]; then
     run_as_target find "${HOME_DIR}/.config/hypr/themes" -type f -exec chmod +x {} + 2>/dev/null || true
   fi
@@ -4117,6 +4120,10 @@ EOF
 
 
 remove_legacy_shell_packages_stage() {
+  # Reversible Mango trial retains fallback shell packages.
+  if [[ -f "${REPO_DIR}/trials/mangowm/render-quickshell.py" ]]; then
+    return 0
+  fi
   local managed_file="${AWTARCHY_MANAGED_PACKAGES_FILE:-/var/lib/awtarchy/managed-packages}"
   local marker="${HOME_DIR}/.local/state/awtarchy/quickshell-connectivity-migration-complete"
   local pkg tmp installed_names remaining_names cleanup_ok=1
@@ -4364,6 +4371,10 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  if [[ -f "${REPO_DIR}/trials/mangowm/render-quickshell.py" ]]; then
+    render_mango_quickshell_install_stage \
+      || die "Could not install the separate Mango Quickshell profile."
+  fi
   # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
   # The installer checkout may be root-owned; pass the trusted helper via stdin.
   local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"
@@ -6245,6 +6256,30 @@ build_target_home() {
   # Normalize staging so comparison, installation, and saved baselines all use
   # the executable modes expected by Awtarchy.
   normalize_managed_executables "$target_home"
+}
+
+render_mango_quickshell_install_stage() {
+  local renderer="${REPO_DIR}/trials/mangowm/render-quickshell.py"
+  local source="${HOME_DIR}/.config/quickshell/awtarchy"
+  local target="${HOME_DIR}/.config/quickshell/awtarchy-mango"
+  local scratch="" rc=0
+  [[ -f "$renderer" && ! -L "$renderer" ]] || return 1
+  [[ -d "$source" && ! -L "$source" ]] || return 1
+  # Installer may be run on an existing machine. Preserve any Mango profile.
+  [[ ! -e "$target" && ! -L "$target" ]] || return 0
+  scratch="$(mktemp -d)" || return 1
+  python3 "$renderer" --source "$source" \
+    --dest "${scratch}/awtarchy-mango" \
+    --bridge-dir "${REPO_DIR}/trials/mangowm" || rc=$?
+  if (( rc == 0 )); then
+    cp -a --no-preserve=ownership -- "${scratch}/awtarchy-mango" \
+      "${HOME_DIR}/.config/quickshell/" || rc=$?
+  fi
+  if (( rc == 0 )); then
+    chown -R "${TARGET_USER}:${TARGET_USER}" "$target" || rc=$?
+  fi
+  rm -rf -- "$scratch"
+  return "$rc"
 }
 
 render_mango_quickshell_target() {
