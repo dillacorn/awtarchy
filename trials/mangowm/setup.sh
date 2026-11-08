@@ -42,7 +42,12 @@ if [[ "$mode" == --check ]]; then
     printf 'PASS: prerequisites, destination conflicts, mango -p\n'
     exit 0
 fi
-install -d -m 0700 -- "$mango_dir" "$trial_dir" "$portal_dir"
+# Preserve permissions on directories that already exist.
+for directory in "$mango_dir" "$trial_dir" "$portal_dir"; do
+    if [[ ! -d "$directory" ]]; then
+        mkdir -p -m 0700 -- "$directory"
+    fi
+done
 for i in "${!sources[@]}"; do
     b="${targets[$i]}"
     if [[ ! -e "$b" ]]; then
