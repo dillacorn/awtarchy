@@ -51,6 +51,7 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     ("quickshell_launcher_position.sh", "launcher_position.sh"),
                     ("quickshell_flyout_position.sh", "flyout_position.sh"),
                     ("quickshell_flyout_prepare.sh", "flyout_prepare.sh"),
+                    ("quickshell_cursor_theme.sh", "quickshell_cursor_theme.sh"),
                 ):
                     text = text.replace('/hypr/scripts/' + old,
                                         '/mango/scripts/' + new)

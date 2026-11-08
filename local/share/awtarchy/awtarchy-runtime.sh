@@ -5759,9 +5759,10 @@ start_update_aur_sudo_keepalive() {
 }
 
 reapply_cursor_theme_after_update() {
-  # Mango applies the user cursor preference through its own session config.
-  mango_trial_session_active && return 0
   local helper="${HOME_DIR}/.config/hypr/scripts/quickshell_cursor_theme.sh"
+  if mango_trial_session_active; then
+    helper="${HOME_DIR}/.config/mango/scripts/quickshell_cursor_theme.sh"
+  fi
   [[ -f "$helper" && ! -L "$helper" ]] || return 0
 
   log "Applying saved Bibata cursor theme to the current session..."
@@ -5772,7 +5773,7 @@ reapply_cursor_theme_after_update() {
     "XDG_CACHE_HOME=${HOME_DIR}/.cache" \
     "XDG_DATA_HOME=${HOME_DIR}/.local/share" \
     bash "$helper" reapply; then
-    warn "Bibata cursor settings were saved, but the current Hyprland session could not be switched live."
+    warn "Bibata cursor settings were saved, but the current session cursor could not be switched live."
   fi
 }
 
