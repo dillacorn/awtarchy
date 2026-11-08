@@ -14,6 +14,19 @@ config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts"
 # Keep the original Awtwall persisted wallpaper backend where available.
 bash "$config_dir/wallpaper.sh" >/dev/null 2>&1 &
 
+# Register the isolated, root-owned authentication agent only after Mango
+# provides a real Wayland/logind user session. Never globally enable it.
+if [[ -n "${XDG_SESSION_ID:-}" && -n "${XDG_RUNTIME_DIR:-}" \
+    && -S "${XDG_RUNTIME_DIR}/bus" ]] && command -v systemctl >/dev/null 2>&1; then
+    if ! systemctl --user import-environment \
+        WAYLAND_DISPLAY MANGO_INSTANCE_SIGNATURE XDG_SESSION_ID \
+        XDG_CURRENT_DESKTOP XDG_SESSION_TYPE; then
+        printf 'Mango could not import the PolicyKit session environment.\n' >&2
+    elif ! systemctl --user restart awtarchy-polkit-agent.service; then
+        printf 'Mango terminal PolicyKit agent failed; GUI authentication may be unavailable.\n' >&2
+    fi
+fi
+
 # A shell failure must not suppress idle-lock safety or terminate the session.
 if ! bash "$config_dir/quickshell.sh" start; then
     printf 'Mango Quickshell startup failed; using the compositor session without the shell.\n' >&2
