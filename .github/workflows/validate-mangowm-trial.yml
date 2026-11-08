@@ -13,6 +13,7 @@ on:
       - 'local/share/awtarchy/migrate-default-apps-hyprland.py'
       - 'tests/test-mangowm-shared-shell.sh'
       - 'tests/test-mangowm-lock.sh'
+      - 'tests/test-mangowm-quicksettings.sh'
       - 'tests/test-polkit-agent-mango.py'
       - 'config/hypr/scripts/awtarchy-polkit-agent/**'
       - 'config/hypr/scripts/quickshell_*.sh'
@@ -44,6 +45,7 @@ jobs:
           python3 tests/test-default-applications.py
           bash tests/test-mangowm-shared-shell.sh
           bash tests/test-mangowm-lock.sh
+          bash tests/test-mangowm-quicksettings.sh
           python3 tests/test-polkit-agent-mango.py
           python3 tests/test-polkit-agent-tui.py
           bash tests/test-polkit-agent-hypr-dispatch.sh

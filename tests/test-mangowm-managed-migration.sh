@@ -28,6 +28,7 @@ test -f "$tmp/awtarchy-mango/shell.qml"
 test -f "$tmp/awtarchy-mango/MangoBridge.qml"
 test -f "$tmp/awtarchy-mango/MangoFocusGrab.qml"
 grep -Fq '/mango/scripts/lock.sh' "$tmp/awtarchy-mango/PowerMenu.qml"
+grep -Fq '/mango/scripts/quicksettings.sh' "$tmp/awtarchy-mango/QuickSettings.qml"
 if grep -qF 'wait-secure' "$tmp/awtarchy-mango/PowerMenu.qml"; then
     printf 'ERROR: Mango Power Menu still relies on the Hyprland lock readiness helper\n' >&2
     false
