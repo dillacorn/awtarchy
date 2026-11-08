@@ -1,0 +1,60 @@
+{
+  "layer": "top",
+  "position": "top",
+  "height": 30,
+  "spacing": 6,
+  "modules-left": [
+    "custom/launcher",
+    "mango/workspaces",
+    "mango/layout"
+  ],
+  "modules-center": [
+    "mango/window"
+  ],
+  "modules-right": [
+    "tray",
+    "pulseaudio",
+    "network",
+    "cpu",
+    "memory",
+    "clock"
+  ],
+  "custom/launcher": {
+    "format": "Apps",
+    "on-click": "fuzzel",
+    "tooltip": false
+  },
+  "mango/workspaces": {
+    "format": "{icon}",
+    "on-click": "activate",
+    "hide-empty": false
+  },
+  "mango/layout": {
+    "format": "{}"
+  },
+  "mango/window": {
+    "format": "{}",
+    "max-length": 60
+  },
+  "tray": {
+    "spacing": 6
+  },
+  "pulseaudio": {
+    "format": "Vol {volume}%",
+    "format-muted": "Muted"
+  },
+  "network": {
+    "format-wifi": "Wi-Fi {signalStrength}%",
+    "format-ethernet": "Ethernet",
+    "format-disconnected": "Offline"
+  },
+  "cpu": {
+    "format": "CPU {usage}%"
+  },
+  "memory": {
+    "format": "RAM {percentage}%"
+  },
+  "clock": {
+    "format": "{:%a %b %d  %H:%M}"
+  }
+}
