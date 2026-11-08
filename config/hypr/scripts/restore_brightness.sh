@@ -31,7 +31,11 @@ if [[ ! -f "$DIM_MARKER" ]]; then
     exit 0
 fi
 
-hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })' >/dev/null 2>&1 || true
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+    python3 "${CONF}/mango/scripts/idle-ipc-compat.py" dispatch 'hl.dsp.dpms({ action = "enable" })' >/dev/null 2>&1 || true
+else
+    hyprctl dispatch 'hl.dsp.dpms({ action = "enable" })' >/dev/null 2>&1 || true
+fi
 sleep 0.6
 
 if [[ -r "$BR_FILE" ]]; then

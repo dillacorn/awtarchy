@@ -38,7 +38,20 @@ if ! command -v swayidle >/dev/null 2>&1; then
     printf 'Mango session has no swayidle; automatic lock is unavailable.\n' >&2
     false
 fi
+# Preserve Awtarchy's 60/120/180/240/540-second idle cadence and
+# four-hour protected-session safety. The original guarded policy evaluates
+# games, visible video, Teams, OBS, manual Keep Awake and productive jobs.
 swayidle -w \
-    timeout 600 "bash '$config_dir/lock.sh' lock" \
+    timeout 60 "bash '$config_dir/idle.sh' bar-hide" \
+        resume "bash '$config_dir/idle.sh' bar-restore" \
+    timeout 120 "bash '$config_dir/idle.sh' dim" \
+        resume "bash '$config_dir/idle.sh' brightness-restore" \
+    timeout 180 "bash '$config_dir/idle.sh' lock" \
+    timeout 240 "bash '$config_dir/idle.sh' dpms-off" \
+        resume "bash '$config_dir/idle.sh' dpms-on" \
+    timeout 540 "bash '$config_dir/idle.sh' suspend" \
+        resume "bash '$config_dir/idle.sh' cancel-suspend" \
+    timeout 14400 "bash '$config_dir/idle.sh' protected" \
+        resume "bash '$config_dir/idle.sh' dpms-on" \
     before-sleep "bash '$config_dir/lock.sh' lock" &
 wait

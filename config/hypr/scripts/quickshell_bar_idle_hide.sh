@@ -22,7 +22,7 @@ fi
 printf '1\n' >"$IDLE_STATE"
 
 if command -v qs >/dev/null 2>&1; then
-    qs -c awtarchy ipc call barstate setIdleHidden true >/dev/null 2>&1 ||
-        qs -c awtarchy ipc call barstate refreshIdle >/dev/null 2>&1 ||
+    qs -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call barstate setIdleHidden true >/dev/null 2>&1 ||
+        qs -c "${QUICKSHELL_CONFIG_NAME:-awtarchy}" ipc call barstate refreshIdle >/dev/null 2>&1 ||
         true
 fi

@@ -932,6 +932,7 @@ start_suspend_watch() {
         XDG_CACHE_HOME \
         XDG_RUNTIME_DIR \
         HYPRLAND_INSTANCE_SIGNATURE \
+        MANGO_INSTANCE_SIGNATURE \
         WAYLAND_DISPLAY \
         DBUS_SESSION_BUS_ADDRESS \
         INHIBITOR_SH \
