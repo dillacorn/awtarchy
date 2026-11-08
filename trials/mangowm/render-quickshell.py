@@ -75,6 +75,15 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                     text = text.replace(
                         '"hl.config({ input = { numlock_by_default = false } })"',
                         '"setoption,numlock_on,0"')
+                if file.name == "PowerMenu.qml":
+                    # Until Quickshell ext-session-lock is proven on Mango,
+                    # prefer the compositor-confirmed swaylock -f fallback.
+                    text = text.replace(
+                        "/hypr/scripts/awtarchy_lock.sh",
+                        "/mango/scripts/lock.sh")
+                    text = text.replace(
+                        "/hypr/scripts/quickshell_lockscreen_capture.sh",
+                        "/mango/scripts/lock-capture.sh")
                 if file.name == "KeyboardLockState.qml":
                     # Mango does not expose Hyprland's capslock device event.
                     # Use the kernel LED state as a best-effort fallback.

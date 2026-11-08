@@ -9683,7 +9683,7 @@ ensure_quickshell_update_prerequisites() {
   local pkg
   local -a required=(quickshell foot upower playerctl hyprland-qt-support polkit python-gobject) missing=()
   if mango_trial_session_active || [[ "${TESTING_BRANCH:-}" == "MangoWM_Migration_Trial_Investigation" ]]; then
-    required+=(mangowm swayidle xdg-desktop-portal-wlr)
+    required+=(mangowm swayidle swaylock xdg-desktop-portal-wlr slurp)
   fi
   for pkg in "${required[@]}"; do
     pacman -Q "$pkg" >/dev/null 2>&1 || missing+=("$pkg")

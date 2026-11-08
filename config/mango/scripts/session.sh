@@ -1,43 +1,31 @@
 #!/usr/bin/env bash
-# Mango startup without any Hyprland compositor IPC.
+# Independent Mango session. Keep Hyprland services/configs untouched.
 set -euo pipefail
-[[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]] || {
-    printf 'Not in MangoWM\n' >&2
-    return 1 2>/dev/null || false
+[[ -n "${MANGO_INSTANCE_SIGNATURE:-}" && -n "${WAYLAND_DISPLAY:-}" ]] || {
+    printf 'Mango session signature or Wayland display missing.\n' >&2
+    false
 }
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts"
-home_config="${XDG_CONFIG_HOME:-$HOME/.config}"
-export QUICKSHELL_CONFIG_NAME=awtarchy-mango
-export XDG_CURRENT_DESKTOP=mango
-export XDG_SESSION_DESKTOP=mango
-export XDG_SESSION_TYPE=wayland
+[[ -d "$config_dir" && ! -L "$config_dir" ]] || {
+    printf 'Mango scripts directory missing or linked.\n' >&2
+    false
+}
 
-if command -v dbus-update-activation-environment >/dev/null 2>&1; then
-    dbus-update-activation-environment --systemd WAYLAND_DISPLAY XDG_CURRENT_DESKTOP \
-        XDG_SESSION_DESKTOP XDG_SESSION_TYPE MANGO_INSTANCE_SIGNATURE >/dev/null 2>&1 || true
+# Keep the original Awtwall persisted wallpaper backend where available.
+bash "$config_dir/wallpaper.sh" >/dev/null 2>&1 &
+
+# A shell failure must not suppress idle-lock safety or terminate the session.
+if ! bash "$config_dir/quickshell.sh" start; then
+    printf 'Mango Quickshell startup failed; using the compositor session without the shell.\n' >&2
 fi
 
-# Restore clipboard history used by Awtarchy's Quickshell clipboard menu.
-if command -v wl-paste >/dev/null 2>&1 && command -v cliphist >/dev/null 2>&1; then
-    wl-paste --type text --watch cliphist store &
-    wl-paste --type image --watch cliphist store &
+# Temporary secure locker. Awtarchy's custom protected-idle policy remains
+# a migration blocker. swaylock -f returns after the compositor has locked.
+if ! command -v swayidle >/dev/null 2>&1; then
+    printf 'Mango session has no swayidle; automatic lock is unavailable.\n' >&2
+    false
 fi
-
-if command -v awww-daemon >/dev/null 2>&1; then
-    awww-daemon >/dev/null 2>&1 &
-fi
-if command -v awtwall >/dev/null 2>&1 && [[ -s "$home_config/awtwall/backend_state.tsv" ]]; then
-    awtwall --restore >/dev/null 2>&1 || true
-elif command -v awww >/dev/null 2>&1; then
-    awww img "$HOME/Pictures/wallpapers/awtarchy_geology.png" >/dev/null 2>&1 || true
-fi
-
-if command -v nwg-look >/dev/null 2>&1; then
-    nwg-look -a >/dev/null 2>&1 &
-fi
-bash "$config_dir/quickshell.sh" start
-
-# Keep Awtarchy's existing WlSessionLock implementation.
-swayidle -w timeout 600 'bash ~/.config/hypr/scripts/awtarchy_lock.sh lock' \
-    before-sleep 'bash ~/.config/hypr/scripts/awtarchy_lock.sh lock' &
+swayidle -w \
+    timeout 600 "bash '$config_dir/lock.sh' lock" \
+    before-sleep "bash '$config_dir/lock.sh' lock" &
 wait
