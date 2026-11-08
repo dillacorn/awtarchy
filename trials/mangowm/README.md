@@ -10,7 +10,7 @@ Hyprland remains the supported desktop until the missing integration is ported.
 Checkout the named branch, then install the trial's new dependencies:
 
 ~~~bash
-sudo pacman -S --needed mangowm waybar fuzzel mako swaybg swayidle swaylock xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim slurp wlr-randr
+sudo pacman -S --needed mangowm waybar fuzzel mako swaybg swayidle swaylock xdg-desktop-portal-wlr xdg-desktop-portal-gtk grim slurp wlr-randr jq
 bash trials/mangowm/setup.sh --check
 bash trials/mangowm/setup.sh --install
 ~~~
@@ -38,14 +38,15 @@ settings. Inspect: visual freezes, audio continuing, workspace recovery, mouse
 confinement, input latency, frametimes, alt-tab, screen capture, sharing,
 multi-monitor focus, VRR, suspend/resume and reconnect.
 
-No monitor rules were guessed. Use mmsg get all-monitors to identify outputs
+Stock Waybar 0.15 does not include mango/* modules; this trial uses a
+portable custom module instead. No monitor rules were guessed. Use mmsg get all-monitors to identify outputs
 before setting resolution, refresh rate, location, scaling and VRR.
 
 ## Current trial features
 
 - Native Mango bindings (ALT/SUPER), basic tiling/floating/fullscreen, special
   tag, 9 tags, dim-free rendering, disabled cosmetic effects.
-- Mango IPC-powered workspaces/layout/window in a minimal Waybar, Fuzzel, Mako.
+- A minimal stock Arch Waybar using an mmsg/jq tag adapter, Fuzzel, Mako.
 - Swaybg, Swayidle/Swaylock, Mango's ScreenCast/Screenshot portal, screenshots,
   power menu; existing Awtarchy standalone default-app, Qalc, Yazi, Btop tools.
 - Mango fullscreen-only tearing (allow_tearing=2), syncobj enabled. This is

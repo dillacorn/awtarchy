@@ -5,11 +5,10 @@
   "spacing": 6,
   "modules-left": [
     "custom/launcher",
-    "mango/workspaces",
-    "mango/layout"
+    "custom/mango-tags"
   ],
   "modules-center": [
-    "mango/window"
+    "wlr/taskbar"
   ],
   "modules-right": [
     "tray",
@@ -23,18 +22,6 @@
     "format": "Apps",
     "on-click": "fuzzel",
     "tooltip": false
-  },
-  "mango/workspaces": {
-    "format": "{icon}",
-    "on-click": "activate",
-    "hide-empty": false
-  },
-  "mango/layout": {
-    "format": "{}"
-  },
-  "mango/window": {
-    "format": "{}",
-    "max-length": 60
   },
   "tray": {
     "spacing": 6
@@ -56,5 +43,16 @@
   },
   "clock": {
     "format": "{:%a %b %d  %H:%M}"
+  },
+  "custom/mango-tags": {
+    "exec": "bash $HOME/.config/mango/awtarchy-trial/status-tags.sh",
+    "return-type": "json",
+    "interval": 2,
+    "tooltip": true
+  },
+  "wlr/taskbar": {
+    "format": "{name}",
+    "icon-size": 16,
+    "on-click": "activate"
   }
 }

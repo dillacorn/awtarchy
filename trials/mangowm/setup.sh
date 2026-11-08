@@ -14,10 +14,10 @@ portal_dir="$home/xdg-desktop-portal"
 [[ ! -L "$mango_dir" && ! -L "$portal_dir" && ! -L "$trial_dir" ]] || {
     printf 'Refusing linked config directory\n' >&2; exit 1;
 }
-sources=(config.conf session.sh power.sh capture.sh waybar.json waybar.css mango-portals.conf)
+sources=(config.conf session.sh power.sh capture.sh waybar.json waybar.css status-tags.sh mango-portals.conf)
 targets=("$mango_dir/config.conf" "$trial_dir/session.sh" "$trial_dir/power.sh"
     "$trial_dir/capture.sh" "$trial_dir/waybar.json" "$trial_dir/waybar.css"
-    "$portal_dir/mango-portals.conf")
+    "$trial_dir/status-tags.sh" "$portal_dir/mango-portals.conf")
 # Check ALL conflicts before first write.
 for i in "${!sources[@]}"; do
     a="$src/${sources[$i]}"
@@ -29,7 +29,7 @@ for i in "${!sources[@]}"; do
         }
     fi
 done
-required=(mango mmsg waybar fuzzel mako swaybg swayidle swaylock grim slurp)
+required=(mango mmsg waybar fuzzel mako swaybg swayidle swaylock grim slurp jq)
 missing=()
 for binary in "${required[@]}"; do
     command -v "$binary" >/dev/null 2>&1 || missing+=("$binary")

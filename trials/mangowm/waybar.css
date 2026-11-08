@@ -1,5 +1,5 @@
 * { font-family: "JetBrainsMono Nerd Font Mono", monospace; font-size: 11px; border: 0; }
 window#waybar { background: #10151c; color: #e4eaf0; }
-#workspaces button { padding: 0 7px; color: #aeb7c4; background: transparent; }
-#workspaces button.active { color: #ffffff; background: #253649; }
-#custom-launcher, #layout, #window, #clock, #pulseaudio, #network, #cpu, #memory, #tray { padding: 0 8px; }
+#custom-mango-tags { padding: 0 7px; color: #aeb7c4; background: transparent; }
+#custom-mango-tags { color: #ffffff; }
+#custom-launcher, #taskbar, #clock, #pulseaudio, #network, #cpu, #memory, #tray { padding: 0 8px; }
