@@ -10,11 +10,21 @@ Hyprland remains the supported desktop until the missing integration is ported.
 The current branch also stages `config/mango/` and a separate
 `~/.config/quickshell/awtarchy-mango/` through `awtarchy git`.
 This is not the older Waybar smoke-test configuration below.
-The native Quickshell lockscreen and protected-idle behavior are still
+The managed updater also contains the **v4.1.5 preserved Default Applications**
+repair, with its original migration tests. The Quickshell shell, initial
+PolicyKit IPC handling, wallpaper restore, and guarded idle actions are
+implemented but have **not** been verified in a real Mango desktop session.
+
+The native Quickshell lockscreen and exact protected-idle behavior are still
 unported: the managed Mango branch currently uses secure Swaylock as a
 temporary fallback, and screen-sharing privacy rules are fixed to Awtarchy's
 default-protected applications. The dynamic Screen Share Guard controls cannot
 yet change those rules. **Do not depend on them for custom capture exemptions.**
+
+Swayidle receives compositor-managed idle notifications. Mango's native idle
+inhibitors can suppress callbacks before Awtarchy's selective guard runs;
+behavior is not yet identical to Hyprland's ignore-inhibitor configuration.
+
 
 Do **not** run `trials/mangowm/setup.sh --install` after applying the
 managed branch: that old script deliberately refuses to overwrite the
@@ -89,7 +99,7 @@ before setting resolution, refresh rate, location, scaling and VRR.
 - Mango fullscreen-only tearing (allow_tearing=2), syncobj enabled. This is
   **not** Hyprland direct_scanout=2 (auto).
 
-## Not yet migrated
+## Not yet migrated in the older standalone smoke test
 
 - Main Awtarchy Quickshell bar/flyouts, launcher, clipboard, notifications,
   quick settings, theme picker, screenshare guard and related custom scripts.
