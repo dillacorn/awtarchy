@@ -24,6 +24,7 @@ on:
       - 'tests/test-mangowm-color-picker.py'
       - 'tests/test-mangowm-wallpicker.sh'
       - 'tests/test-mangowm-wallpaper-restore.sh'
+      - 'tests/test-mangowm-animations.sh'
       - 'config/hypr/scripts/hypr-ddc-brightness.sh'
       - 'tests/test-polkit-agent-mango.py'
       - 'config/hypr/scripts/awtarchy-polkit-agent/**'
@@ -69,6 +70,7 @@ jobs:
           python3 tests/test-mangowm-color-picker.py
           bash tests/test-mangowm-wallpicker.sh
           bash tests/test-mangowm-wallpaper-restore.sh
+          bash tests/test-mangowm-animations.sh
           python3 tests/test-polkit-agent-mango.py
           python3 tests/test-polkit-agent-tui.py
           bash tests/test-polkit-agent-hypr-dispatch.sh
