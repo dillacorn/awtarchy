@@ -18,6 +18,7 @@ on:
       - 'tests/test-mangowm-lock.sh'
       - 'tests/test-mangowm-quicksettings.sh'
       - 'tests/test-mangowm-keymode.sh'
+      - 'tests/test-mangowm-keybind-parity.py'
       - 'tests/test-polkit-agent-mango.py'
       - 'config/hypr/scripts/awtarchy-polkit-agent/**'
       - 'config/hypr/scripts/quickshell_*.sh'
@@ -56,6 +57,7 @@ jobs:
           bash tests/test-mangowm-lock.sh
           bash tests/test-mangowm-quicksettings.sh
           bash tests/test-mangowm-keymode.sh
+          python3 tests/test-mangowm-keybind-parity.py
           python3 tests/test-polkit-agent-mango.py
           python3 tests/test-polkit-agent-tui.py
           bash tests/test-polkit-agent-hypr-dispatch.sh
