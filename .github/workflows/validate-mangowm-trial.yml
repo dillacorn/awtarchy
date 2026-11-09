@@ -6,6 +6,7 @@ on:
       - 'trials/mangowm/**'
       - 'tests/test-mangowm-trial.sh'
       - 'tests/test-mangowm-managed-migration.sh'
+      - 'tests/test-mangowm-stable-restore.sh'
       - 'tests/test-mangowm-position.py'
       - 'tests/test-mangowm-cursor.py'
       - 'tests/test-mangowm-idle.py'
@@ -41,6 +42,7 @@ jobs:
           bash tests/test-mangowm-trial.sh
           bash tests/test-mangowm-trial-mocks.sh
           bash tests/test-mangowm-managed-migration.sh
+          bash tests/test-mangowm-stable-restore.sh
           bash tests/test-quickshell-update-atomicity.sh
           bash tests/test-quickshell-update-interrupt-recovery.sh
           bash tests/test-awtarchy-git-mode.sh
