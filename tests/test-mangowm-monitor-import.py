@@ -37,7 +37,16 @@ class MangoMonitorImportTests(unittest.TestCase):
         self.assertIn("name:^DP-1$,width:1920,height:1080,refresh:400,x:0,y:1080,scale:1,vrr:0,primary:1", output)
         self.assertNotIn("y:-", output)
         self.assertNotIn("DP-6", output)
-        self.assertEqual(PROFILE.read_text().splitlines()[-2:], output.splitlines()[-2:])
+        self.assertEqual(PROFILE.read_text().splitlines()[-2:], [
+            "monitor_rule=name:^DP-3$,width:1920,height:1080,"
+            "refresh:239.761002,x:0,y:0,scale:1,vrr:0",
+            "monitor_rule=name:^DP-1$,width:1920,height:1080,"
+            "refresh:400.002014,x:0,y:1080,scale:1,vrr:0,primary:1",
+        ])
+        # Generic Lua import remains literal (240/400); hardware-specific
+        # profile uses the exact EDID modes observed in the live Mango trial.
+        self.assertNotEqual(PROFILE.read_text().splitlines()[-2:],
+                            output.splitlines()[-2:])
 
     def test_no_guessing_or_dynamic_lua(self):
         for source in (
