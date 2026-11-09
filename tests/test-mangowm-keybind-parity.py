@@ -86,6 +86,37 @@ for key, fragment in [("P", "launcher.sh"), ("A", "default_applications.sh"),
                       ("Return", "default_applications.py launch terminal")]:
     expect("vm", "SUPER+ALT", key, fragment)
 
+# No compositor-specific shrinking or pointer jump when ALT/SUPER dragging
+# tiled/floating windows. Mango 0.18.5 otherwise shrinks tiled drags to
+# 300x300 and warps pointer to a resize corner.
+expected_drag_options = {
+    "drag_tile_to_tile": "1",
+    "drag_tile_small": "0",
+    "drag_warp_cursor": "0",
+}
+drag_options = {}
+for raw in mango.splitlines():
+    line = raw.strip()
+    if not line or line.startswith("#") or "=" not in line:
+        continue
+    key, value = line.split("=", 1)
+    if key in expected_drag_options:
+        assert key not in drag_options, f"Duplicate Mango drag option {key}"
+        drag_options[key] = value
+assert drag_options == expected_drag_options, drag_options
+
+for mode in ("default", "noalt"):
+    for mod in ("SUPER",) if mode == "noalt" else ("SUPER", "ALT"):
+        for button, action in (("btn_left", "moveresize,curmove"),
+                               ("btn_right", "moveresize,curresize")):
+            assert ("mousebind", mod, button) in binds[mode], (
+                mode, mod, button)
+            assert action in binds[mode][("mousebind", mod, button)], (
+                mode, mod, button)
+for button, action in (("btn_left", "moveresize,curmove"),
+                       ("btn_right", "moveresize,curresize")):
+    assert action in binds["mouse"][("mousebind", "SUPER", button)]
+
 # One-to-one viewport workspaces; no overview shadowing the original
 # SUPER+SPACE notification-dismiss action.
 assert not any("toggleoverview" in line for group in binds.values()
@@ -98,4 +129,4 @@ assert '["mmsg", "watch", "all-clients"]' in bridge
 assert "interval: 750" not in bridge
 assert len(binds["default"]) >= 150, len(binds["default"])
 assert len(binds["noalt"]) >= 95, len(binds["noalt"])
-print("PASS: Mango Awtarchy keyboard parity, mode isolation, native event streaming")
+print("PASS: Mango keybind parity, Hypr-like drag defaults, native event streaming")
