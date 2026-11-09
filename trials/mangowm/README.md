@@ -75,12 +75,34 @@ Managed application (only after the migration has passed its readiness checks):
 awtarchy git update --branch MangoWM_Migration_Trial_Investigation
 ~~~
 
-To reverse the *running desktop*, select **Hyprland** from the login manager.
-This does not require deleting Mango packages or modifying the saved Quickshell
-state. A stable `awtarchy update` selects the published release, **not** the
-unreleased Mango branch. Full managed-file cleanup/restoration after a Mango
-trial is **not yet verified**; do not assume a stable update reverses every
-file or package change.
+### Return to the recorded stable release
+
+1. Log out of Mango and select **Hyprland** at the login manager. This is the
+   immediate recovery path even if the Mango shell fails to load. Do not remove
+   Hyprland or its configuration.
+2. In a **clean Git checkout of the exact revision installed by**
+   `awtarchy git update`, use the following safe review first. The checkout must
+   match the `revision=` recorded in `~/.local/state/awtarchy/git-testing`.
+3. Review the managed-file plan, then run the interactive restore. It uses the
+   recorded `stable_release=` (not an assumed latest release) and the **trial's
+   Mango-aware runtime**, because the current stable/main updater does not
+   recognize the Mango-managed baseline namespace.
+
+~~~bash
+bash "$HOME/awtarchy-mango-trial/trials/mangowm/restore-stable.sh" --review
+bash "$HOME/awtarchy-mango-trial/trials/mangowm/restore-stable.sh" --restore
+~~~
+
+The helper refuses execution outside a responsive Hyprland session, if the
+checkout has modifications, if HEAD differs from the installed trial revision,
+or if the recorded stable release is inconsistent. It does not accept a
+caller-supplied release tag. The normal Awtarchy updater can be used again
+**after** the stable managed baseline has been restored successfully.
+
+This workflow has mock/static coverage but **has not been proven in a live
+Mango-to-Hyprland round trip**. A stable config restore does not necessarily
+remove all trial-installed packages or undo system-level package upgrades.
+The separate Quickshell state remains user-owned and is not discarded.
 
 ### Older standalone smoke test
 
