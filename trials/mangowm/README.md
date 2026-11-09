@@ -198,14 +198,14 @@ features. Preserve Hyprland as the working rollback session.
   EDID-advertised `1920x1080@400.002014Hz` through `wlr-randr --mode`;
   the active output reported 400.002014 Hz, scale 1, VRR off. Selecting
   400 Hz through wdisplays instead produced a black screen.
-- **DP-3 ViewSonic XG2431** reported 1920x1080 @ 60.000000 Hz, at
-  (1920,0), scale 1 and VRR off, **but exhibited severe visible
-  artifacting even at 60 Hz**. It works at 240 Hz in the user's Hyprland
-  session. Its cause is unconfirmed. Do not prescribe a 240 Hz
-  startup override as an artifacting fix. Historical upstream
-  [Mango issue #212](https://github.com/mangowm/mango/issues/212)
-  involves a different AMD multi-monitor rendering problem, not a proven
-  diagnosis for this monitor.
+- **DP-3 ViewSonic XG2431** initially artifacted severely in Mango
+  at its preferred 60 Hz mode. In the subsequent trial the user reported
+  that the ViewSonic looked normal after correcting the display modes
+  and vertical arrangement (DP-3 above DP-1). The confirmed EDID modes
+  are 239.761002 Hz for DP-3 and 400.002014 Hz for DP-1; their exact
+  active rates on the later screenshot were not independently captured.
+  Historical upstream [Mango issue #212](https://github.com/mangowm/mango/issues/212)
+  is not evidence that this was the same bug.
 - No `~/.config/mango/monitors-local.conf` was present in that session.
   The updater deliberately does not install hardware-specific monitor rules.
 - Native `noalt` mode correctly suppresses normal ALT window/workspace
@@ -214,8 +214,18 @@ features. Preserve Hyprland as the working rollback session.
   `mmsg watch keymode` events rather than watching Hyprland's state file.
   Other mode controls and mouse/VM bindings still need separate live checks.
 - Mango's default 500/400/300 ms animations were noticeably slow.
-  Shorter motion times are now configured, with instantaneous tag switching
-  and animations still off by default.
+  The trial now explicitly uses a centered 87% zoom on window open and
+  close, matching the *type* of Hyprland's popin animation, with short
+  durations and instant tag changes. Animations remain off by default;
+  live visual equivalence has not been confirmed.
+- Mango's Quickshell launcher previously accepted stale prewarm placement
+  even after the bar moved. The Mango-only positioning backend now
+  checks the current per-output bar edge and rejects outdated prepared
+  targets. The correction passed automated tests; live test remains.
+- Mango tags are monitor-local. Two monitors can each show tag 1.
+  Upstream has cross-monitor client/tag actions but no atomic
+  whole-workspace transfer or globally unique Hyprland-style workspace
+  ownership. Do not present disabled workspace-transfer arrows as working.
 - App-specific floating rules were missing. They now cover the existing
   Hyprland utility and dialog classes, preserving fractional sizes and
   default centering. These changes require a fresh installation/live test.
