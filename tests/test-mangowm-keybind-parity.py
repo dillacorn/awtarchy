@@ -126,6 +126,7 @@ assert (root / "config/mango/scripts/monitor-info.sh").is_file()
 expected_drag_options = {
     "drag_tile_to_tile": "1",
     "drag_tile_small": "0",
+    "drop_color": "0x00000000",
     "drag_warp_cursor": "0",
 }
 drag_options = {}
