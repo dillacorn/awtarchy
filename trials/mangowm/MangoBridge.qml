@@ -17,6 +17,8 @@ Singleton {
     property string focusName: ""
     property string activeWindowTitle: ""
     property string tagFingerprint: ""
+    // Native Mango mode, not Hyprland's obsolete submap file.
+    property string keyMode: "default"
     signal rawEvent(var event)
 
     readonly property string snapshotScript:
@@ -152,6 +154,17 @@ Singleton {
         }
     }
 
+    function acceptKeyMode(line) {
+        try {
+            const value = JSON.parse(String(line)).keymode;
+            if (["default", "noalt", "mouse", "vm"].indexOf(value) === -1)
+                throw new Error("Unexpected Mango key mode");
+            root.keyMode = value;
+        } catch (error) {
+            console.warn("MangoBridge: invalid keymode watch response:", error);
+        }
+    }
+
     function queueRefresh() {
         refreshSoon.restart();
     }
@@ -215,6 +228,15 @@ Singleton {
         }
     }
 
+    property Process keymodeEvents: Process {
+        running: true
+        command: ["mmsg", "watch", "keymode"]
+        stdout: SplitParser {
+            onRead: data => root.acceptKeyMode(data)
+        }
+        onExited: root.watchReconnect.restart()
+    }
+
     property Timer watchReconnect: Timer {
         interval: 1000
         repeat: false
@@ -224,6 +246,8 @@ Singleton {
                 monitorEvents.running = true;
             if (!clientEvents.running)
                 clientEvents.running = true;
+            if (!keymodeEvents.running)
+                keymodeEvents.running = true;
         }
     }
 
