@@ -98,19 +98,49 @@ inside Hyprland**, not through sudo, and keep a second clean checkout for
 the new trial. Do not run the older standalone `setup.sh --install`.
 
 ~~~bash
-git clone --branch MangoWM_Migration_Trial_Investigation --single-branch \
-  https://github.com/dillacorn/awtarchy.git \
-  "$HOME/awtarchy-mango-next"
-revision="$(git -C "$HOME/awtarchy-mango-next" rev-parse HEAD)"
-git -C "$HOME/awtarchy-mango-next" switch --detach "$revision"
-awtarchy git review --branch MangoWM_Migration_Trial_Investigation --commit "$revision"
-awtarchy git update --branch MangoWM_Migration_Trial_Investigation --commit "$revision"
+(
+  set -euo pipefail
+  branch=MangoWM_Migration_Trial_Investigation
+  repo="$HOME/awtarchy-mango-next"
+  origin=https://github.com/dillacorn/awtarchy.git
+
+  if [[ -e "$repo" || -L "$repo" ]]; then
+    [[ -d "$repo" && ! -L "$repo" ]] || {
+      printf 'Refusing non-directory or linked checkout: %s\n' "$repo" >&2
+      false
+    }
+    [[ "$(git -C "$repo" rev-parse --show-toplevel 2>/dev/null)" == "$repo" ]] || {
+      printf 'Refusing unexpected checkout: %s\n' "$repo" >&2
+      false
+    }
+    [[ -z "$(git -C "$repo" status --porcelain --untracked-files=all)" ]] || {
+      printf 'Refusing modified checkout: %s\n' "$repo" >&2
+      false
+    }
+  else
+    git clone --branch "$branch" --single-branch "$origin" "$repo"
+  fi
+
+  case "$(git -C "$repo" remote get-url origin)" in
+    https://github.com/dillacorn/awtarchy|\
+    https://github.com/dillacorn/awtarchy.git|\
+    git@github.com:dillacorn/awtarchy.git) ;;
+    *) printf 'Refusing untrusted checkout origin\n' >&2; false ;;
+  esac
+
+  git -C "$repo" fetch --no-tags origin "$branch"
+  revision="$(git -C "$repo" rev-parse FETCH_HEAD)"
+  git -C "$repo" switch --detach "$revision"
+  awtarchy git review --branch "$branch" --commit "$revision"
+  awtarchy git update --branch "$branch" --commit "$revision"
+)
 ~~~
 
-The branch updater and recovery checkout must use the **same full commit SHA**.
-The clone is refused if that directory already exists; do not overwrite an
-existing checkout. The live session should be selected only after review and
-successful installation. Do not force-reset a checkout containing changes.
+The update uses the **same full commit SHA** as the clean recovery checkout.
+An existing checkout is reused only when its repository identity and clean
+state have been verified; there is no deletion or force-reset. If it has
+modifications, stop and investigate instead of overwriting them. The live
+session should be selected only after review and successful installation.
 
 After approval and successful installation, check that the Arch package
 provides its standard session entry before attempting to log into Mango:
