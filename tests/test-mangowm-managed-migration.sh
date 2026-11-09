@@ -49,6 +49,12 @@ test -f "$tmp/awtarchy-mango/MangoFocusGrab.qml"
 grep -Fq '/mango/scripts/lock.sh' "$tmp/awtarchy-mango/PowerMenu.qml"
 grep -Fq '/mango/scripts/quicksettings.sh' "$tmp/awtarchy-mango/QuickSettings.qml"
 grep -Fq 'awtarchy-mango' "$tmp/awtarchy-mango/shell.qml"
+grep -Fq 'static capture shielding' "$tmp/awtarchy-mango/ScreenShareGuardCard.qml"
+if grep -Eq 'screenshare_guard.sh|onClicked:|actionRunner|statusReader' \
+    "$tmp/awtarchy-mango/ScreenShareGuardCard.qml"; then
+    printf 'ERROR: Mango Screen Share Guard still exposes an unsafe Hyprland-only action\n' >&2
+    false
+fi
 
 if grep -qF 'wait-secure' "$tmp/awtarchy-mango/PowerMenu.qml"; then
     printf 'ERROR: Mango Power Menu still relies on the Hyprland lock readiness helper\n' >&2
