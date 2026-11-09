@@ -52,6 +52,11 @@ for mode in ("default", "noalt"):
         ("ALT+SHIFT", "C", "/hypr/scripts/qalc-terminal.sh"),
         ("ALT+SHIFT", "B", "launch_handler.sh btop"),
         ("SUPER", "W", "awtwall --resume"),
+        ("SUPER+CTRL", "M", "wdisplays"),
+        ("SUPER", "I", "/mango/scripts/color-picker.py"),
+        ("SUPER+ALT", "Q", "killclient,force"),
+        ("SUPER+ALT", "equal", "hypr-ddc-brightness.sh up 5"),
+        ("SUPER+ALT", "minus", "hypr-ddc-brightness.sh down 5"),
         ("SUPER+SHIFT", "W", "awtwall --random-current"),
         ("SUPER+CTRL", "W", "awtwall --random-all"),
         ("SUPER+ALT", "W", "awtwall --random-all-different"),
@@ -66,6 +71,7 @@ for mode in ("default", "noalt"):
         ("SUPER", "S", "qr_scan.sh"),
         ("SUPER+SHIFT", "G", "gif_capture.sh"),
         ("SUPER+SHIFT", "F", "/mango/scripts/capture.sh output"),
+        ("SUPER+SHIFT", "S", "/mango/scripts/capture.sh window"),
         ("SUPER", "X", "toggle_special_tag"),
         ("SUPER+CTRL", "X", "tag_special_tag"),
     ]:
@@ -85,6 +91,34 @@ for mods, key, command in [
 for key, fragment in [("P", "launcher.sh"), ("A", "default_applications.sh"),
                       ("Return", "default_applications.py launch terminal")]:
     expect("vm", "SUPER+ALT", key, fragment)
+expect("vm", "SUPER+ALT", "S", "capture.sh window")
+expect("vm", "SUPER+ALT+CTRL", "S", "qr_scan.sh")
+for mods, key, fragment in [
+    ("SUPER+ALT", "btn_left", "moveresize,curmove"),
+    ("SUPER+ALT", "btn_right", "moveresize,curresize"),
+    ("SUPER+ALT", "btn_middle", "togglefloating"),
+]:
+    identity = ("mousebind", mods, key)
+    assert identity in binds["vm"], identity
+    assert fragment in binds["vm"][identity], identity
+
+# Mango's resizewin dispatcher requires explicit +0 instead of bare 0:
+# bare 0 makes an absolute zero dimension for floating windows.
+resize_count = 0
+for mode in ("default", "noalt"):
+    for entry in binds[mode].values():
+        if ",resizewin," not in entry:
+            continue
+        delta = entry.split(",resizewin,", 1)[1].split(",")
+        assert len(delta) == 2 and all(
+            part.startswith(("+", "-")) and part[1:].isdigit()
+            for part in delta
+        ), (mode, entry)
+        resize_count += 1
+assert resize_count >= 25, resize_count
+
+assert "wdisplays" in (root / "local/share/awtarchy/awtarchy-runtime.sh").read_text()
+assert (root / "config/mango/scripts/monitor-info.sh").is_file()
 
 # No compositor-specific shrinking or pointer jump when ALT/SUPER dragging
 # tiled/floating windows. Mango 0.18.5 otherwise shrinks tiled drags to
