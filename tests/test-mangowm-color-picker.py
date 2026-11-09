@@ -20,7 +20,7 @@ class PixelPickerTests(unittest.TestCase):
         self.assertEqual(picker.ppm_color(ppm), "#0114ff")
         # A pixel starting with whitespace or a hash is binary image data,
         # not another header token.
-        self.assertEqual(picker.ppm_color(b"P6\n1 1\n255\n\n  #"), "#0a2023")
+        self.assertEqual(picker.ppm_color(b"P6\n1 1\n255\n\n #"), "#0a2023")
 
     def test_comments_and_malformed_files(self):
         self.assertEqual(picker.ppm_color(
