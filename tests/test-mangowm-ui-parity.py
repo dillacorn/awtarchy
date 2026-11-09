@@ -49,14 +49,18 @@ class MangoUIParityTests(unittest.TestCase):
         targets = {
             "animations": 0,
             "animation_duration_move": 110,
-            "animation_duration_open": 120,
+            "animation_duration_open": 200,
             "animation_duration_tag": 0,
-            "animation_duration_close": 90,
+            "animation_duration_close": 150,
             "animation_duration_focus": 0,
         }
         for key, target in targets.items():
             with self.subTest(key=key):
                 self.assertEqual(conf[key], [str(target)])
+        self.assertEqual(conf["animation_type_open"], ["zoom"])
+        self.assertEqual(conf["animation_type_close"], ["zoom"])
+        self.assertEqual(conf["zoom_initial_ratio"], ["0.87"])
+        self.assertEqual(conf["zoom_end_ratio"], ["0.87"])
         self.assertEqual(conf["drop_color"], ["0x00000000"])
         self.assertEqual(conf["drag_tile_to_tile"], ["1"])
         self.assertEqual(conf["drag_tile_small"], ["0"])
