@@ -57,7 +57,11 @@ printf 'DP-99\thyprpaper\t%s\nDP-1\thyprpaper\t%s\n' \
     "$HOME/Pictures/wallpapers/a.png" "$HOME/Pictures/wallpapers/b.jpg" \
     >"$HOME/.config/awtwall/backend_state.tsv"
 bash "$script"
-[[ "$(wc -l <"$tmp/actions")" == 1 ]]
+if [[ "$(wc -l <"$tmp/actions")" != 1 ]]; then
+    printf 'Unexpected saved-output restore actions:\\n' >&2
+    sed -n '1,8p' "$tmp/actions" >&2
+    false
+fi
 grep -Fq 'DP-1' "$tmp/actions"
 
 # A linked state file is not trusted; seed wallpaper is used only in Mango.
