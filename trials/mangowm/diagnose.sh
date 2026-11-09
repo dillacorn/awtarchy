@@ -63,6 +63,22 @@ check_file 'Mango Quickshell profile' "$config/quickshell/awtarchy-mango/shell.q
 check_file 'Original Hyprland config' "$config/hypr/hyprland.lua"
 check_file 'Original Quickshell profile' "$config/quickshell/awtarchy/shell.qml"
 
+# The first trial reported PASS despite missing basic bindings. Make the
+# installed config itself part of runtime diagnostics, not just file presence.
+if [[ -f "$config/mango/config.conf" && ! -L "$config/mango/config.conf" ]] &&
+    grep -Fq 'bind=ALT+SHIFT,Return,spawn_shell,python3' "$config/mango/config.conf" &&
+    grep -Fq 'bind=SUPER,W,spawn_shell,' "$config/mango/config.conf" &&
+    grep -Fq 'bind=SUPER+ALT,A,spawn_shell,' "$config/mango/config.conf" &&
+    grep -Fq 'bind=SUPER+ALT,N,spawn_shell,' "$config/mango/config.conf"; then
+    record 'Core Mango shortcut parity' PASS
+else
+    record 'Core Mango shortcut parity' MISSING
+fi
+check_file 'Mango display manager' "$config/mango/scripts/monitor-info.sh"
+check_binary 'Binary: AwtWall' awtwall
+check_binary 'Binary: wdisplays' wdisplays
+
+
 if command -v mmsg >/dev/null 2>&1 &&
     mmsg get version >/dev/null 2>&1; then
     record 'Mango IPC version' PASS
