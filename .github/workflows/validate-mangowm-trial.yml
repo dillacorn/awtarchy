@@ -91,6 +91,7 @@ jobs:
             pacman -Sy --noconfirm mangowm qt6-declarative python
             mango -c /repo/trials/mangowm/config.conf -p
             mango -c /repo/config/mango/config.conf -p
+            mango -c /repo/trials/mangowm/monitor-profiles/gaming-dual-1080p.conf -p
 
             # Parse the actual generated Mango Quickshell profile instead
             # of relying on substring checks that cannot catch QML syntax.
