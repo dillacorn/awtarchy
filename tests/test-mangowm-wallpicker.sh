@@ -23,17 +23,23 @@ export AWTARCHY_MOCK_AWTWALL="$tmp/awtwall.log"
 helper="config/mango/scripts/wallpicker.sh"
 bash -n "$helper"
 bash "$helper"
+bash "$helper" random-all
+bash "$helper" random-all-different
 grep -Fxq -- '--backend swww --resume' "$AWTARCHY_MOCK_AWTWALL"
+grep -Fxq -- '--backend swww --random-all' "$AWTARCHY_MOCK_AWTWALL"
+grep -Fxq -- '--backend swww --random-all-different' "$AWTARCHY_MOCK_AWTWALL"
 
 if XDG_CURRENT_DESKTOP=Hyprland bash "$helper" >/dev/null 2>&1; then
     printf 'ERROR: Mango wallpicker acted outside Mango\n' >&2
     false
 fi
-[[ $(wc -l <"$AWTARCHY_MOCK_AWTWALL") == 1 ]]
+[[ $(wc -l <"$AWTARCHY_MOCK_AWTWALL") == 3 ]]
 python3 - <<'PY'
 from pathlib import Path
 cfg = Path("config/mango/config.conf").read_text()
 assert cfg.count("wallpicker 'foot --app-id wallpicker bash ~/.config/mango/scripts/wallpicker.sh'") == 2
 assert "awtwall --resume" not in cfg
+assert cfg.count("wallpicker.sh random-all\n") == 2
+assert cfg.count("wallpicker.sh random-all-different\n") == 2
 PY
 printf 'PASS: Mango AwtWall launcher selects independent backend and preserves Hyprland path\n'
