@@ -20,6 +20,8 @@ on:
       - 'tests/test-mangowm-keymode.sh'
       - 'tests/test-mangowm-keybind-parity.py'
       - 'tests/test-mangowm-monitor-import.py'
+      - 'tests/test-mangowm-monitor-info.sh'
+      - 'config/hypr/scripts/hypr-ddc-brightness.sh'
       - 'tests/test-polkit-agent-mango.py'
       - 'config/hypr/scripts/awtarchy-polkit-agent/**'
       - 'config/hypr/scripts/quickshell_*.sh'
@@ -60,6 +62,7 @@ jobs:
           bash tests/test-mangowm-keymode.sh
           python3 tests/test-mangowm-keybind-parity.py
           python3 tests/test-mangowm-monitor-import.py
+          bash tests/test-mangowm-monitor-info.sh
           python3 tests/test-polkit-agent-mango.py
           python3 tests/test-polkit-agent-tui.py
           bash tests/test-polkit-agent-hypr-dispatch.sh
