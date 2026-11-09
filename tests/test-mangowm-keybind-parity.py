@@ -51,7 +51,7 @@ for mode in ("default", "noalt"):
         ("SUPER+ALT", "A", "/hypr/scripts/default_applications.sh"),
         ("ALT+SHIFT", "C", "/hypr/scripts/qalc-terminal.sh"),
         ("ALT+SHIFT", "B", "launch_handler.sh btop"),
-        ("SUPER", "W", "awtwall --resume"),
+        ("SUPER", "W", "/mango/scripts/wallpicker.sh"),
         ("SUPER+CTRL", "M", "wdisplays"),
         ("SUPER", "I", "/mango/scripts/color-picker.py"),
         ("SUPER+ALT", "Q", "killclient,force"),
