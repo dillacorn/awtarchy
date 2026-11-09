@@ -38,6 +38,11 @@ Managed Mango implementation in this branch:
 - Original Quickshell session-lock UI is attempted through Mango's native
   Wayland session-lock protocol. A secure Swaylock fallback remains; the
   Hyprland-only frozen-frame transition is intentionally disabled in Mango.
+- ALT/SUPER left-drag retains the window's actual tiled size instead of
+  Mango's default 300x300 drag thumbnail. Pointer warping on floating-window
+  corner resize is disabled; tiled drop/rearrangement remains available.
+  These are supported Mango 0.18.5 settings, not a promise of pixel-identical
+  Hyprland drag/drop visuals. Validate the feel when returning to Mango.
 - The existing trusted PolicyKit terminal agent has a Mango window-ID backend
   with regression tests; actual authentication must still be tested live.
 - The original 60/120/180/240/540/14400-second idle cadence is wired through
