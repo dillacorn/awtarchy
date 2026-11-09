@@ -94,7 +94,7 @@ class PositionTests(unittest.TestCase):
         with mock.patch.object(position, "prepared_target",
                              return_value=("DP-2", "top-center")):
             position.reposition("launcher", "DP-1", "bottom-center", "spawn")
-        self.assertIn(("dispatch", "movewin,750,470", "client,143"),
+        self.assertIn(("dispatch", "movewin,710,452", "client,143"),
                       self.actions)
         self.assertFalse(any(args[1].startswith("tagmon,")
                              for args in self.actions))
