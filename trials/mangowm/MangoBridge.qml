@@ -123,11 +123,34 @@ Singleton {
         }
     }
 
-    // Mango's native event stream replaces the old 750ms blind poll.
-    // The event contains only part of the data needed for all Awtarchy UI
-    // properties, so refresh a consistent monitor/client snapshot after a
-    // short coalescing delay. Keep a slow fallback for disconnected watchers.
+    // Mango's native event streams carry complete JSON monitor/client
+    // snapshots. Reconcile them directly instead of launching Python and
+    // two new mmsg processes for every workspace/window change.
+    // A slow independent snapshot remains for missed events/disconnections.
     property bool refreshQueued: false
+    property var watchedMonitors: null
+    property var watchedClients: null
+
+    function acceptWatch(kind, line) {
+        try {
+            const response = JSON.parse(String(line));
+            if (kind === "monitors") {
+                if (!Array.isArray(response.monitors))
+                    throw new Error("No monitor list");
+                root.watchedMonitors = response.monitors;
+            } else {
+                if (!Array.isArray(response.clients))
+                    throw new Error("No client list");
+                root.watchedClients = response.clients;
+            }
+            if (root.watchedMonitors !== null && root.watchedClients !== null)
+                root.reconcile({monitors: root.watchedMonitors,
+                    clients: root.watchedClients});
+        } catch (error) {
+            console.warn("MangoBridge: invalid IPC watch snapshot:", error);
+            root.refreshMonitors();
+        }
+    }
 
     function queueRefresh() {
         refreshSoon.restart();
@@ -170,22 +193,42 @@ Singleton {
         running: true
         command: ["mmsg", "watch", "all-monitors"]
         stdout: SplitParser {
-            onRead: data => root.queueRefresh()
+            onRead: data => root.acceptWatch("monitors", data)
         }
-        onExited: root.queueRefresh()
+        onExited: {
+            root.watchedMonitors = null;
+            root.queueRefresh();
+            root.watchReconnect.restart();
+        }
     }
 
     property Process clientEvents: Process {
         running: true
         command: ["mmsg", "watch", "all-clients"]
         stdout: SplitParser {
-            onRead: data => root.queueRefresh()
+            onRead: data => root.acceptWatch("clients", data)
         }
-        onExited: root.queueRefresh()
+        onExited: {
+            root.watchedClients = null;
+            root.queueRefresh();
+            root.watchReconnect.restart();
+        }
+    }
+
+    property Timer watchReconnect: Timer {
+        interval: 1000
+        repeat: false
+        running: false
+        onTriggered: {
+            if (!monitorEvents.running)
+                monitorEvents.running = true;
+            if (!clientEvents.running)
+                clientEvents.running = true;
+        }
     }
 
     property Timer refreshTimer: Timer {
-        interval: 3000
+        interval: 15000
         repeat: true
         running: true
         onTriggered: root.refreshMonitors()
