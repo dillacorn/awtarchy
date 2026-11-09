@@ -21,12 +21,17 @@ def render(source: Path, dest: Path, bridge_dir: Path):
     if any(p.is_symlink() or not p.is_file() for p in source_files):
         raise ValueError("Unexpected Quickshell source item")
     if not all((bridge_dir / x).is_file() and not (bridge_dir / x).is_symlink()
-               for x in ("MangoBridge.qml", "MangoFocusGrab.qml")):
+               for x in ("MangoBridge.qml", "MangoFocusGrab.qml", "ScreenShareGuardCard.qml")):
         raise ValueError("Missing Mango Quickshell adapter")
 
     dest.mkdir(parents=True)
     try:
         for file in source_files:
+            # Mango has no verified live capture-rule toggle API. The
+            # Hyprland card would write inert settings and mislead users.
+            if file.name == "ScreenShareGuardCard.qml":
+                shutil.copyfile(bridge_dir / file.name, dest / file.name)
+                continue
             text = file.read_text(encoding="utf-8")
             if file.suffix == ".qml":
                 text = text.replace("import Quickshell.Hyprland\n",
