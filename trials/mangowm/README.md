@@ -192,6 +192,48 @@ Do not assume feature parity for the unsupported Mango night-light, vibrance,
 dynamic capture rules, Hyprmoncfg, Hyprland screen shaders, or window transfer
 features. Preserve Hyprland as the working rollback session.
 
+### November 9 live trial findings (not yet resolved)
+
+- In a real Mango 0.18.5 session, **DP-1 BenQ XL2566X+** accepted the
+  EDID-advertised `1920x1080@400.002014Hz` through `wlr-randr --mode`;
+  the active output reported 400.002014 Hz, scale 1, VRR off. Selecting
+  400 Hz through wdisplays instead produced a black screen.
+- **DP-3 ViewSonic XG2431** reported 1920x1080 @ 60.000000 Hz, at
+  (1920,0), scale 1 and VRR off, **but exhibited severe visible
+  artifacting even at 60 Hz**. It works at 240 Hz in the user's Hyprland
+  session. Its cause is unconfirmed. Do not prescribe a 240 Hz
+  startup override as an artifacting fix. Historical upstream
+  [Mango issue #212](https://github.com/mangowm/mango/issues/212)
+  involves a different AMD multi-monitor rendering problem, not a proven
+  diagnosis for this monitor.
+- No `~/.config/mango/monitors-local.conf` was present in that session.
+  The updater deliberately does not install hardware-specific monitor rules.
+- Native `noalt` mode correctly suppresses normal ALT window/workspace
+  shortcuts; the **bar label was wrong** because it still watched the
+  Hyprland submap state file. The trial now renders the Mango bar from
+  `mmsg watch keymode` instead, including click-to-reset controls.
+- Mango's default 500/400/300 ms animations were noticeably slow.
+  Shorter motion times are now configured, with instantaneous tag switching
+  and animations still off by default.
+- App-specific floating rules were missing. They now cover the existing
+  Hyprland utility and dialog classes, preserving fractional sizes and
+  default centering. These changes require a fresh installation/live test.
+
+The proposed future installer choice (Hyprland primary, optional Mango
+desktop) is **not yet implemented or approved for stable/main**. Preserve
+both Ly sessions during investigation.
+
+### Optional BenQ-only persistent mode
+
+The separate `monitor-profiles/benq-400-only.conf` requests only the
+live-confirmed DP-1 400.002014 Hz mode. It leaves DP-3 completely
+unconfigured until the artifacting has been understood. It can be installed
+as user-owned `~/.config/mango/monitors-local.conf` **only after confirming**
+there is no existing profile at that path. Do not automatically enable
+`gaming-dual-1080p.conf` on this machine while the ViewSonic issue persists.
+Mango's source command is optional and continues to fall back to its
+default output configuration.
+
 ### Optional gaming-PC monitor profile
 
 The generic installer does not assume your display connectors or preferences.
