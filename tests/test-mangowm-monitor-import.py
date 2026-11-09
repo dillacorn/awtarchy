@@ -11,6 +11,7 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 IMPORTER = ROOT / "config/mango/scripts/import-hypr-monitors.py"
 PROFILE = ROOT / "trials/mangowm/monitor-profiles/gaming-dual-1080p.conf"
+BENQ_ONLY = ROOT / "trials/mangowm/monitor-profiles/benq-400-only.conf"
 CONFIG = ROOT / "config/mango/config.conf"
 spec = importlib.util.spec_from_file_location("mango_monitor_importer", IMPORTER)
 importer = importlib.util.module_from_spec(spec)
@@ -95,6 +96,15 @@ class MangoMonitorImportTests(unittest.TestCase):
                 capture_output=True, text=True, check=True)
             self.assertEqual(dst.read_text(), preview.stdout)
             self.assertIn("Created:", created.stderr)
+
+    def test_single_output_profile_leaves_artifacting_viewsonic_untouched(self):
+        rules = [line for line in BENQ_ONLY.read_text().splitlines()
+                 if line.startswith("monitor_rule=")]
+        self.assertEqual(rules, [
+            "monitor_rule=name:^DP-1$,width:1920,height:1080,"
+            "refresh:400.002014,x:0,y:0,scale:1,vrr:0,primary:1"])
+        self.assertNotIn("DP-3", rules[0])
+        self.assertNotIn("240", rules[0])
 
     def test_optional_source_is_not_global_managed_overwrite(self):
         lines = CONFIG.read_text().splitlines()
