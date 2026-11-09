@@ -62,8 +62,9 @@ set_mode() {
     save_mode "$mode"
 }
 
-require_session || return 1
-case "${1:-}" in
+main() {
+    require_session || return 1
+    case "${1:-}" in
     current)
         [[ $# -eq 1 ]] || usage
         current
@@ -84,4 +85,7 @@ case "${1:-}" in
         set_mode "$mode"
         ;;
     *) usage ;;
-esac
+    esac
+}
+
+main "$@"
