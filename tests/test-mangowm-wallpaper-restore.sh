@@ -2,6 +2,7 @@
 # Never touch the desktop during this test: all compositor and wallpaper
 # commands are synthetic and the HOME points to a temporary directory.
 set -euo pipefail
+trap 'printf "FAIL: Mango wallpaper restore test line %s: %s\\n" "$LINENO" "$BASH_COMMAND" >&2' ERR
 cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.."
 
 tmp="$(mktemp -d)"
