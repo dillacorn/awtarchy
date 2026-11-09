@@ -18,4 +18,17 @@ if ! { { command -v awww >/dev/null && command -v awww-daemon >/dev/null; } ||
     printf 'Mango wallpicker requires awww/awww-daemon or swww/swww-daemon\n' >&2
     exit 1
 fi
-exec awtwall --backend swww --resume
+case "${1:-picker}" in
+    picker)
+        exec awtwall --backend swww --resume
+        ;;
+    random-all|random-all-different)
+        # These two operations use AwtWall's saved wallpaper preferences and
+        # do not need a compositor-specific focused-output IPC.
+        exec awtwall --backend swww "--$1"
+        ;;
+    *)
+        printf 'Mango wallpicker: unsupported action. Use picker, random-all, or random-all-different.\n' >&2
+        exit 2
+        ;;
+esac
