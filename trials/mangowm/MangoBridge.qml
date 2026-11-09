@@ -123,9 +123,22 @@ Singleton {
         }
     }
 
+    // Mango's native event stream replaces the old 750ms blind poll.
+    // The event contains only part of the data needed for all Awtarchy UI
+    // properties, so refresh a consistent monitor/client snapshot after a
+    // short coalescing delay. Keep a slow fallback for disconnected watchers.
+    property bool refreshQueued: false
+
+    function queueRefresh() {
+        refreshSoon.restart();
+    }
+
     function refreshMonitors() {
-        if (!snapshotProcess.running)
-            snapshotProcess.exec(["python3", root.snapshotScript]);
+        if (snapshotProcess.running) {
+            refreshQueued = true;
+            return;
+        }
+        snapshotProcess.exec(["python3", root.snapshotScript]);
     }
 
     property Process snapshotProcess: Process {
@@ -138,10 +151,41 @@ Singleton {
                 }
             }
         }
+        onExited: {
+            if (root.refreshQueued) {
+                root.refreshQueued = false;
+                Qt.callLater(root.refreshMonitors);
+            }
+        }
+    }
+
+    property Timer refreshSoon: Timer {
+        interval: 24
+        repeat: false
+        running: false
+        onTriggered: root.refreshMonitors()
+    }
+
+    property Process monitorEvents: Process {
+        running: true
+        command: ["mmsg", "watch", "all-monitors"]
+        stdout: SplitParser {
+            onRead: data => root.queueRefresh()
+        }
+        onExited: root.queueRefresh()
+    }
+
+    property Process clientEvents: Process {
+        running: true
+        command: ["mmsg", "watch", "all-clients"]
+        stdout: SplitParser {
+            onRead: data => root.queueRefresh()
+        }
+        onExited: root.queueRefresh()
     }
 
     property Timer refreshTimer: Timer {
-        interval: 750
+        interval: 3000
         repeat: true
         running: true
         onTriggered: root.refreshMonitors()
