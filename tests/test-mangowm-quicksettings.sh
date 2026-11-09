@@ -40,16 +40,22 @@ case "$*" in
         printf '%s\n' '{"monitors":[{"name":"DP-1","active":true,"width":1920,"height":1080}]}'
         ;;
     'get keymode')
-        printf '%s\n' '{"keymode":"default"}'
+        jq -cn --arg mode "$(cat "$AWTARCHY_QS_MODE_FILE")" '{keymode:$mode}'
         ;;
-    'dispatch setkeymode,default')
-        printf '%s\n' '{}' >>"$AWTARCHY_QS_IPC_LOG"
+    'dispatch setkeymode,'*)
+        printf '%s\n' "$*" >>"$AWTARCHY_QS_IPC_LOG"
+        printf '%s\n' "${2#setkeymode,}" >"$AWTARCHY_QS_MODE_FILE"
         ;;
     *) false ;;
 esac
 MMSG
+cp config/mango/scripts/keymode.sh "$tmp/config/mango/scripts/keymode.sh"
 chmod +x "$tmp/bin/mmsg" "$tmp/config/"*/scripts/*.sh
-export PATH="$tmp/bin:$PATH" XDG_CONFIG_HOME="$tmp/config"
+mkdir -p "$tmp/state"
+printf 'default\n' >"$tmp/mode"
+export PATH="$tmp/bin:$PATH" XDG_CONFIG_HOME="$tmp/config" XDG_STATE_HOME="$tmp/state"
+export MANGO_INSTANCE_SIGNATURE=mock-session WAYLAND_DISPLAY=wayland-1 XDG_CURRENT_DESKTOP=mango
+export AWTARCHY_QS_MODE_FILE="$tmp/mode"
 export AWTARCHY_QS_ORIGINAL_LOG="$tmp/original.log"
 export AWTARCHY_QS_MANAGER_LOG="$tmp/manager.log"
 export AWTARCHY_QS_IPC_LOG="$tmp/ipc.log"
@@ -68,6 +74,12 @@ bash "$backend" --action brightness-percent DP-1 75
 bash "$backend" --action bar-enabled DP-1 false
 bash "$backend" --action bar-position DP-1 left
 bash "$backend" --action submap reset
+bash "$backend" --action submap noalt
+[[ "$(cat "$AWTARCHY_QS_MODE_FILE")" == noalt ]]
+[[ "$(cat "$tmp/state/awtarchy/mango-keymode")" == noalt ]]
+status="$(bash "$backend" --status-json DP-1 DP-1)"
+jq -e '.submap == "noalt"' <<<"$status" >/dev/null
+bash "$backend" --action submap reset
 bash "$backend" --restore-scheduler
 grep -Fxq -- '--action brightness-percent DP-1 75' "$AWTARCHY_QS_ORIGINAL_LOG"
 grep -Fxq -- '--restore-scheduler' "$AWTARCHY_QS_ORIGINAL_LOG"
@@ -75,16 +87,15 @@ grep -Fxq -- 'setenabled DP-1 false' "$AWTARCHY_QS_MANAGER_LOG"
 grep -Fxq -- 'setpos DP-1 left' "$AWTARCHY_QS_MANAGER_LOG"
 grep -Fxq -- '{}' "$AWTARCHY_QS_IPC_LOG"
 
-for unsupported in night-light vibrance submap; do
-    if [[ "$unsupported" == submap ]]; then
-        args=(--action submap noalt)
-    else
-        args=(--action "$unsupported" toggle)
-    fi
-    if bash "$backend" "${args[@]}" >/dev/null 2>&1; then
+for unsupported in night-light vibrance; do
+    if bash "$backend" --action "$unsupported" toggle >/dev/null 2>&1; then
         printf 'ERROR: unsupported Mango setting succeeded: %s\n' "$unsupported" >&2
         false
     fi
 done
-[[ $(wc -l <"$AWTARCHY_QS_IPC_LOG") == 1 ]]
-printf 'PASS: Mango Quick Settings status, shared operations, and unsupported-action guard\n'
+if bash "$backend" --action submap not-a-mode >/dev/null 2>&1; then
+    printf 'ERROR: invalid Mango mode was accepted\n' >&2
+    false
+fi
+[[ $(wc -l <"$AWTARCHY_QS_IPC_LOG") == 3 ]]
+printf 'PASS: Mango Quick Settings status, native key modes, shared operations and guarded actions\n'
