@@ -171,19 +171,40 @@ def saved_dims(surface, monitor, mw, mh, obj, clamp):
     return max(min(min_w, mw-20), min(mw-20, width)), max(min(min_h, mh-20), min(mh-20, height))
 
 
+def launcher_edge_from_state(monitor, placement, obj):
+    """Ignore a stale edge after the visible per-monitor bar moved."""
+    if placement == "center":
+        return placement
+    monitors = obj.get("monitors", {})
+    bar = monitors.get(monitor, {}) if isinstance(monitors, dict) else {}
+    edge = bar.get("position") if isinstance(bar, dict) else None
+    if edge not in ("top", "bottom", "left", "right"):
+        return placement
+    # Preserve whether the caller asked for the Apps-button corner or the
+    # keyboard shortcut's centered-along-edge launcher.
+    return edge + ("-center" if placement.endswith("-center") else "")
+
+
 def reposition(surface, monitor, placement, action, requested_w=None, requested_h=None, anchor="-1"):
     if surface not in WINDOWS or placement not in EDGES:
         raise ValueError("unknown surface or placement")
     if action not in {"spawn", "resize", "resize-compact", "clamp"}:
         raise ValueError("unknown positioning action")
-    if action == "spawn" and (override := prepared_target(surface)):
-        monitor, placement = override
+    obj = state()
+    if action == "spawn":
+        override = prepared_target(surface)
+        # Preparation can be left behind after a bar move or a different
+        # monitor's launcher open. Never let that stale value override a
+        # newer explicit target. Other flyouts retain their matching prepare.
+        if override and override[0] == monitor and override[1] == placement:
+            monitor, placement = override
+        if surface == "launcher":
+            placement = launcher_edge_from_state(monitor, placement, obj)
 
     title, _, _, _, min_w, min_h, layout = WINDOWS[surface]
     mx, my, mw, mh = find_monitor(monitor)
     client = find_client(title, monitor)
     cid = client["id"]
-    obj = state()
     win_w = positive_int(client.get("width"), 1)
     win_h = positive_int(client.get("height"), 1)
     if action == "spawn":
