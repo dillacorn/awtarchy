@@ -61,6 +61,18 @@ Managed Mango implementation in this branch:
   Screen Share Guard panel is intentionally **read-only**: it does not expose
   toggles that cannot affect Mango capture shielding. Verify real capture
   behavior before sharing sensitive content.
+- The Mango keybinding profile includes the restored ALT+SHIFT+RETURN,
+  Default Applications, AwtWall picker, native DDC brightness, color picker,
+  exact-window capture, workspace keys, VM-mode mouse/QR actions, and
+  relative resize dispatchers. Native Mango input watchers replace the old
+  750 ms Quickshell workspace poll.
+- `SUPER+CTRL+M` opens **wdisplays** (Wayland-native display settings) in
+  Mango instead of Hyprmoncfg. Monitor positioning and refresh are persisted
+  through an opt-in `monitors-local.conf`, not by guessing global defaults.
+- Mango's AwtWall picker runs with a compatible swww/awww backend; the
+  all-display random shortcuts also use this backend. AwtWall's current-monitor
+  random shortcut still depends on upstream non-Mango focus detection and
+  needs a native upstream adapter to be equivalent.
 - GPU package management and Hyprland configuration stay intact for reversal.
 
 Live blockers include verifying shell focus and window behavior, real
@@ -143,6 +155,43 @@ mmsg dispatch setkeymode,default
 Do not assume feature parity for the unsupported Mango night-light, vibrance,
 dynamic capture rules, Hyprmoncfg, Hyprland screen shaders, or window transfer
 features. Preserve Hyprland as the working rollback session.
+
+### Optional gaming-PC monitor profile
+
+The generic installer does not assume your display connectors or preferences.
+Once the managed Mango branch is installed, this trial provides an explicit
+profile for the **DP-3 ViewSonic 1080p/240 Hz above the DP-1 BenQ
+1080p/400 Hz** configuration, scale 1, VRR off. XWayland coordinates are
+normalized to nonnegative positions, with the BenQ as the X11 primary.
+
+A conservative alternative is to preview and import literal monitor rules
+from your **installed** Hyprland Lua configuration:
+
+~~~bash
+python3 "$HOME/awtarchy-mango-next/config/mango/scripts/import-hypr-monitors.py" \
+  --primary DP-1
+
+# Only after reviewing the preview; refuses an existing destination:
+python3 "$HOME/awtarchy-mango-next/config/mango/scripts/import-hypr-monitors.py" \
+  --primary DP-1 --apply
+~~~
+
+Do not install both profiles, overwrite an existing
+`~/.config/mango/monitors-local.conf`, or change the monitor geometry while
+testing a game. The saved Mango profile is separate from the original
+Hyprland settings. Confirm actual refresh and output layout with `wlr-randr`
+after the next Mango login.
+
+### Still non-equivalent
+
+Mango has no drop-in equivalents for the original Hyprland shader zoom,
+vibrance shader, Hyprbars, workspace-mix implementation, dynamic screen-share
+privacy toggles, night-light controls, or whole-workspace monitor-transfer
+shortcuts. Those are intentionally not replaced with similarly named but
+different dispatchers. AwtWall's `--random-current` focus detection and
+Hyprland's fast Power Menu submap also remain runtime verification items.
+Do not call this 1:1 behavior until those are addressed or accepted as
+Mango-specific limitations.
 
 ### Return to the recorded stable release
 
