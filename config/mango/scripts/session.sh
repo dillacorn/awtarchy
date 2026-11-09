@@ -27,6 +27,12 @@ if [[ -n "${XDG_SESSION_ID:-}" && -n "${XDG_RUNTIME_DIR:-}" \
     fi
 fi
 
+# Restore Mango's own selected key mode without changing Hyprland's state.
+# On the first trial only, the saved Hyprland submap is a read-only default.
+if ! bash "$config_dir/keymode.sh" restore; then
+    printf 'Mango key mode restore failed; compositor default remains available.\n' >&2
+fi
+
 # A shell failure must not suppress idle-lock safety or terminate the session.
 if ! bash "$config_dir/quickshell.sh" start; then
     printf 'Mango Quickshell startup failed; using the compositor session without the shell.\n' >&2
