@@ -17,7 +17,7 @@ printf '%s\n' '{"monitors":[{"name":"DP-3"},{"name":"DP-1"}]}'
 MOCK
 cat >"$tmp/bin/awww" <<'MOCK'
 #!/usr/bin/env bash
-if [[ "$1" == query ]]; then return 0; fi
+if [[ "$1" == query ]]; then exit 0; fi
 printf '%s\n' "$*" >>"$AWTARCHY_MOCK_WALLPAPER_ACTIONS"
 MOCK
 cat >"$tmp/bin/awww-daemon" <<'MOCK'
