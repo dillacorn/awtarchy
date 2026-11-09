@@ -2,10 +2,11 @@
 
 Branch: **MangoWM_Migration_Trial_Investigation**. Targeted Mango version: **0.18.5** (2026-11-04).
 
-**Status: actively developed, branch-only managed desktop migration.**
-CI now checks Mango's real configuration parser and the generated Qt QML syntax.
-Neither a live Mango login nor reversible stable-release restoration is proven.
-Hyprland remains installed and supported.
+**Status: branch-only first-login trial candidate, not a stable release.**
+CI checks Mango's configuration parser, generated QML, key-mode persistence,
+PolicyKit simulation, and managed rollback safeguards. A live Mango login,
+actual display/Proton behavior, and a full stable-release restoration remain
+unverified. Hyprland remains installed and supported.
 
 ## Managed-migration branch (under development)
 
@@ -44,12 +45,17 @@ Managed Mango implementation in this branch:
   suppress callbacks before Awtarchy's selective logic sees them.
 - Mango Quick Settings shares Awtarchy's brightness, scheduler, wallpaper,
   and Quickshell bar state. Mango display inventory is sourced from `mmsg`.
-  Night-light, vibrance and non-default key mode actions currently fail with
-  an explicit error rather than pretending to change settings.
+  The `noalt`, `mouse` and `vm` key modes now switch through Mango's native
+  `setkeymode` dispatcher with independent persistence. Mouse mode requires
+  SUPER for drag/resize: Mango does not allow unmodified primary-button drags
+  in ordinary client windows. Night-light and vibrance remain unsupported and
+  report an explicit error instead of pretending to work.
 - Default Applications (including v4.1.5 preserved-configuration repair),
   Qalc and other floating utility toggles have native Mango IPC backends.
-- The existing static screen-sharing privacy rules apply by default. The
-  dynamic Screen Share Guard controls **do not** update those rules.
+- The existing static screen-sharing privacy rules apply by default. Mango's
+  Screen Share Guard panel is intentionally **read-only**: it does not expose
+  toggles that cannot affect Mango capture shielding. Verify real capture
+  behavior before sharing sensitive content.
 - GPU package management and Hyprland configuration stay intact for reversal.
 
 Live blockers include verifying shell focus and window behavior, real
@@ -63,17 +69,58 @@ managed branch: that old script deliberately refuses to overwrite the
 new `~/.config/mango/config.conf`. Keep Hyprland installed so returning
 to the **Hyprland** login session remains possible.
 
-Static review from the installed Awtarchy command:
+### Controlled first-login trial
+
+Before installing the branch, preserve a checkout of the same migration source
+for diagnostics and later stable restoration. Run these commands as your
+**normal user in Hyprland**, not through sudo. Do not run the older standalone
+`setup.sh --install` after a managed update.
 
 ~~~bash
+git clone --branch MangoWM_Migration_Trial_Investigation --single-branch \
+  https://github.com/dillacorn/awtarchy.git \
+  "$HOME/awtarchy-mango-trial"
 awtarchy git review --branch MangoWM_Migration_Trial_Investigation
-~~~
-
-Managed application (only after the migration has passed its readiness checks):
-
-~~~bash
 awtarchy git update --branch MangoWM_Migration_Trial_Investigation
 ~~~
+
+The managed Git update selects the exact remote branch revision. If it advances
+after cloning, check the recorded revision in
+`~/.local/state/awtarchy/git-testing` and use a clean checkout at that **exact**
+revision for stable recovery. Do not force-reset a checkout containing changes.
+
+After approval and successful installation, **log out of Hyprland** and select
+the packaged **Mango** session at login. Within Mango:
+
+~~~bash
+bash "$HOME/awtarchy-mango-trial/trials/mangowm/diagnose.sh"
+mmsg get keymode
+mmsg get all-monitors
+mango -c "$HOME/.config/mango/config.conf" -p
+~~~
+
+A zero-error diagnostic covers only startup probes. It does not prove real
+window/focus geometry, gaming, secure locking, or capture. Before depending
+on the trial, inspect the Quickshell bar, flyouts, notifications, launcher,
+clipboard, retained preferences, Foot/PolicyKit authentication, multiple
+monitors, brightness, mouse and VM key modes, and wallpaper. Then test
+lock/unlock and a deliberate suspend/resume with the Hyprland login fallback
+available. Screen sharing must be tested with a **non-sensitive** sample
+window before relying on its shielding. Finally compare a known Proton game
+against the same game settings under Hyprland (VRR, cursor confinement,
+fullscreen, alt-tab, frametimes and Gamescope).
+
+Toggle key modes with SUPER+ALT+N (noalt), SUPER+ALT+M (mouse), or
+SUPER+ALT+V (VM). Repeating the active toggle returns to default.
+If a mode becomes inconvenient, use the Mango IPC recovery command:
+
+~~~bash
+mmsg dispatch setkeymode,default
+~~~
+
+Do not assume feature parity for the unsupported Mango night-light, vibrance,
+dynamic capture rules, Hyprmoncfg, Hyprland screen shaders, or window transfer
+features. Preserve Hyprland as the working rollback session.
 
 ### Return to the recorded stable release
 
