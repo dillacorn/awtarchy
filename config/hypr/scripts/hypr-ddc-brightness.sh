@@ -81,6 +81,13 @@ need_cmd() {
 }
 
 get_focused_monitor_tsv() {
+  if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+    [[ "${XDG_CURRENT_DESKTOP:-}" == mango ]] || return 1
+    local helper="${XDG_CONFIG_HOME:-$HOME/.config}/mango/scripts/monitor-info.sh"
+    [[ -f "$helper" && ! -L "$helper" ]] || return 1
+    bash "$helper" "${TARGET_CONN:-}"
+    return
+  fi
   if [[ -n "${TARGET_CONN:-}" ]]; then
     hyprctl -j monitors 2>/dev/null | jq -r --arg conn "$TARGET_CONN" '
       .[] | select(.name == $conn) |
@@ -165,7 +172,16 @@ EOF
     ;;
 esac
 
-need_cmd hyprctl
+if [[ -n "${MANGO_INSTANCE_SIGNATURE:-}" ]]; then
+  [[ "${XDG_CURRENT_DESKTOP:-}" == mango ]] || {
+    echo "hypr-ddc-brightness: compositor identity mismatch" >&2
+    exit 1
+  }
+  need_cmd mmsg
+  need_cmd wlr-randr
+else
+  need_cmd hyprctl
+fi
 need_cmd jq
 need_cmd timeout
 
