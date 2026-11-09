@@ -89,8 +89,25 @@ after cloning, check the recorded revision in
 `~/.local/state/awtarchy/git-testing` and use a clean checkout at that **exact**
 revision for stable recovery. Do not force-reset a checkout containing changes.
 
-After approval and successful installation, **log out of Hyprland** and select
-the packaged **Mango** session at login. Within Mango:
+After approval and successful installation, check that the Arch package
+provides its standard session entry before attempting to log into Mango:
+
+~~~bash
+pacman -Q mangowm
+pacman -Qkk mangowm
+test -f /usr/share/wayland-sessions/mango.desktop
+~~~
+
+**Ly does not refresh its session menu automatically.** If the Mango package
+and session entry are present but Ly does not offer Mango after logging out,
+**reboot** to restart Ly and refresh its cached list. Do not run
+`systemctl restart ly` from an active Hyprland session: doing so can terminate
+the graphical session. If Mango is still absent, inspect Ly's configured
+`waylandsessions` directory in `/etc/ly/config.ini` or `/etc/ly/config.lua`,
+rather than creating an unowned duplicate desktop entry.
+
+After restarting the display manager, select the packaged **Mango** session
+at login. Within Mango:
 
 ~~~bash
 bash "$HOME/awtarchy-mango-trial/trials/mangowm/diagnose.sh"
