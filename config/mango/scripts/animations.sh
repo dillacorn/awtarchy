@@ -21,8 +21,9 @@ runtime="${XDG_RUNTIME_DIR:-}"
 key="$(printf '%s' "$MANGO_INSTANCE_SIGNATURE" | sha256sum)"
 key="${key%% *}"
 file="$runtime/awtarchy-mango-animations-${key:0:16}"
-[[ ! -L "$file" ]] || {
-    printf 'Mango animations: refusing linked state\n' >&2
+[[ ! -e "$file" && ! -L "$file" ||
+    ( -f "$file" && ! -L "$file" && -O "$file" ) ]] || {
+    printf 'Mango animations: refusing unsafe session state\n' >&2
     exit 1
 }
 state=0
