@@ -85,7 +85,8 @@ grep -Fxq -- '--action brightness-percent DP-1 75' "$AWTARCHY_QS_ORIGINAL_LOG"
 grep -Fxq -- '--restore-scheduler' "$AWTARCHY_QS_ORIGINAL_LOG"
 grep -Fxq -- 'setenabled DP-1 false' "$AWTARCHY_QS_MANAGER_LOG"
 grep -Fxq -- 'setpos DP-1 left' "$AWTARCHY_QS_MANAGER_LOG"
-grep -Fxq -- '{}' "$AWTARCHY_QS_IPC_LOG"
+grep -Fxq -- 'dispatch setkeymode,default' "$AWTARCHY_QS_IPC_LOG"
+grep -Fxq -- 'dispatch setkeymode,noalt' "$AWTARCHY_QS_IPC_LOG"
 
 for unsupported in night-light vibrance; do
     if bash "$backend" --action "$unsupported" toggle >/dev/null 2>&1; then
