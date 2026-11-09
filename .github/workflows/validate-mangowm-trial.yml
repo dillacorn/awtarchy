@@ -20,6 +20,7 @@ on:
       - 'tests/test-mangowm-keymode.sh'
       - 'tests/test-mangowm-keybind-parity.py'
       - 'tests/test-mangowm-source-bind-audit.py'
+      - 'tests/test-mangowm-ui-parity.py'
       - 'tests/test-mangowm-monitor-import.py'
       - 'tests/test-mangowm-monitor-info.sh'
       - 'tests/test-mangowm-color-picker.py'
@@ -67,6 +68,7 @@ jobs:
           bash tests/test-mangowm-keymode.sh
           python3 tests/test-mangowm-keybind-parity.py
           python3 tests/test-mangowm-source-bind-audit.py
+          python3 tests/test-mangowm-ui-parity.py
           python3 tests/test-mangowm-monitor-import.py
           bash tests/test-mangowm-monitor-info.sh
           python3 tests/test-mangowm-color-picker.py
