@@ -53,11 +53,13 @@ def parse_monitors(lua: str):
             raise ProfileError("Invalid monitor connector: " + repr(output))
         m = MODE.fullmatch(args.get("mode", ""))
         p = POSITION.fullmatch(args.get("position", ""))
-        if not (m and p):
+        if not p and args.get("position") == "auto":
             # A virtual monitor with an 'auto' position has no exact physical
             # placement to preserve; do not fabricate one.
             skipped.append(output)
             continue
+        if not p or not m:
+            raise ProfileError(f"Unsupported explicit mode/position for {output}")
         width, height = map(int, m.group(1, 2))
         refresh = Decimal(m.group(3))
         try:
@@ -65,7 +67,7 @@ def parse_monitors(lua: str):
         except InvalidOperation as exc:
             raise ProfileError(f"Invalid scale for {output}") from exc
         if not (320 <= width <= 9999 and 240 <= height <= 9999 and
-                Decimal("1") <= refresh <= Decimal("999") and
+                Decimal("20") <= refresh <= Decimal("999") and
                 Decimal("0.5") <= scale <= Decimal("4")):
             raise ProfileError(f"Unsafe mode/scale for {output}")
         vrr = str(args.get("vrr", "0"))
@@ -96,7 +98,7 @@ def rule_lines(screens, primary):
         "# and Mango chooses the nearest EDID-advertised mode at this size.",
     ]
     for screen in screens:
-        name = re.escape(screen["name"])
+        name = screen["name"].replace(".", r"\.")  # hyphens are already regex literals
         fields = [
             f"name:^{name}$",
             f"width:{screen['width']}",
