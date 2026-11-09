@@ -53,6 +53,11 @@ read_saved() {
 set_mode() {
     local mode="$1" actual=""
     valid_mode "$mode" || return 2
+    # Refuse unsafe persistence before changing the live compositor mode.
+    [[ ! -L "$state_dir" && ! -L "$state_file" ]] || {
+        printf 'Refusing linked Mango key-mode state\n' >&2
+        return 1
+    }
     mmsg dispatch "setkeymode,$mode" >/dev/null || return 1
     actual="$(current)" || return 1
     [[ "$actual" == "$mode" ]] || {
