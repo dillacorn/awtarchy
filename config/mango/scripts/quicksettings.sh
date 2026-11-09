@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Mango-facing backend for Awtarchy's Quickshell Quick Settings.
 # Retain the existing brightness, scheduler and bar settings implementation;
-# reject Hyprland-specific actions until their Mango equivalents exist.
+# fail closed for actions with no correct Mango equivalent.
 set -euo pipefail
 
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
@@ -90,11 +90,17 @@ action() {
             bash "$manager" setpos "$monitor" "$value"
             ;;
         submap)
-            [[ $# == 1 && "$monitor" == reset ]] || {
-                printf 'Mango key modes for noalt/mouse/vm are not yet configured.\n' >&2
-                return 2
+            [[ $# == 1 && "$monitor" =~ ^(reset|noalt|mouse|vm)$ ]] || return 2
+            local helper="$config_home/mango/scripts/keymode.sh"
+            [[ -f "$helper" && ! -L "$helper" ]] || {
+                printf 'Mango key mode helper is unavailable.\n' >&2
+                return 1
             }
-            mmsg dispatch setkeymode,default >/dev/null
+            if [[ "$monitor" == reset ]]; then
+                bash "$helper" set default
+            else
+                bash "$helper" set "$monitor"
+            fi
             ;;
         night-light|night-light-schedule|vibrance)
             printf 'Mango Quick Settings: %s has no equivalent backend yet.\n' "$name" >&2
