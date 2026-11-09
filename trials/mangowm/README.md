@@ -9,6 +9,20 @@ Hyprland remains installed and supported.
 
 ## Managed-migration branch (under development)
 
+Once the managed configuration is installed and **Mango** is selected in the
+login manager, run the read-only startup diagnostic:
+
+~~~bash
+bash "$HOME/awtarchy-mango-trial/trials/mangowm/diagnose.sh"
+~~~
+
+The diagnostic reports only PASS/MISSING/INACTIVE conditions, not process
+command lines, clipboard contents, open-window titles or authentication data.
+A clean diagnostic does not prove locking, game rendering, video capture or
+power transitions. Return to the **Hyprland** login session to abandon a
+failed Mango session; do not remove your Hyprland configuration.
+
+
 The current branch also stages `config/mango/` and a separate
 `~/.config/quickshell/awtarchy-mango/` through `awtarchy git`.
 This is not the older Waybar smoke-test configuration below.
