@@ -2,11 +2,11 @@
 
 Branch: **MangoWM_Migration_Trial_Investigation**. Targeted Mango version: **0.18.5** (2026-11-04).
 
-**Status: branch-only first-login trial candidate, not a stable release.**
-CI checks Mango's configuration parser, generated QML, key-mode persistence,
-PolicyKit simulation, and managed rollback safeguards. A live Mango login,
-actual display/Proton behavior, and a full stable-release restoration remain
-unverified. Hyprland remains installed and supported.
+**Status: branch-only second-login trial candidate, not a stable release.**
+The first live Mango session booted, but its bindings, output rates and drag
+behavior did not meet the Hyprland baseline. Those paths have since been
+reworked and automatically validated, but no revised live session or
+stable-release restoration has been verified. Keep Hyprland installed.
 
 ## Managed-migration branch (under development)
 
@@ -28,9 +28,9 @@ The current branch also stages `config/mango/` and a separate
 `~/.config/quickshell/awtarchy-mango/` through `awtarchy git`.
 This is not the older Waybar smoke-test configuration below.
 The managed updater also contains the **v4.1.5 preserved Default Applications**
-repair, with its original migration tests. The Quickshell shell, initial
-PolicyKit IPC handling, wallpaper restore, and guarded idle actions are
-implemented but have **not** been verified in a real Mango desktop session.
+repair, with its original migration tests. The revised Quickshell bridge, PolicyKit IPC, compositor-native wallpaper
+restore, and guarded idle actions have automated coverage but have **not**
+been verified in a second live Mango desktop session.
 
 Managed Mango implementation in this branch:
 - Isolated Mango Quickshell profile, bridge, bar, launcher, clipboard,
@@ -64,15 +64,19 @@ Managed Mango implementation in this branch:
 - The Mango keybinding profile includes the restored ALT+SHIFT+RETURN,
   Default Applications, AwtWall picker, native DDC brightness, color picker,
   exact-window capture, workspace keys, VM-mode mouse/QR actions, and
-  relative resize dispatchers. Native Mango input watchers replace the old
-  750 ms Quickshell workspace poll.
+  relative resize dispatchers. Native Mango input watchers now
+  apply JSON monitor/client updates directly, without re-querying the
+  compositor on every event. A slower independent recovery poll remains.
 - `SUPER+CTRL+M` opens **wdisplays** (Wayland-native display settings) in
   Mango instead of Hyprmoncfg. Monitor positioning and refresh are persisted
   through an opt-in `monitors-local.conf`, not by guessing global defaults.
-- Mango's AwtWall picker runs with a compatible swww/awww backend; the
-  all-display random shortcuts also use this backend. AwtWall's current-monitor
-  random shortcut still depends on upstream non-Mango focus detection and
-  needs a native upstream adapter to be equivalent.
+- Mango's AwtWall picker runs with a compatible swww/awww backend. Startup
+  restores the saved images directly through Mango's image backend instead
+  of invoking Hyprpaper. The all-display random shortcuts use that backend.
+  AwtWall's current-monitor random shortcut still depends on upstream
+  non-Mango focus detection and needs a native adapter to be equivalent.
+- `SUPER+A` uses Mango's native temporary `setoption` dispatcher to toggle
+  compositor animations. The session defaults to animations off.
 - GPU package management and Hyprland configuration stay intact for reversal.
 
 Live blockers include verifying shell focus and window behavior, real
@@ -88,23 +92,25 @@ to the **Hyprland** login session remains possible.
 
 ### Controlled first-login trial
 
-Before installing the branch, preserve a checkout of the same migration source
-for diagnostics and later stable restoration. Run these commands as your
-**normal user in Hyprland**, not through sudo. Do not run the older standalone
-`setup.sh --install` after a managed update.
+Keep the original `$HOME/awtarchy-mango-trial` checkout from the
+first trial unchanged for recovery. Run these commands as your **normal user
+inside Hyprland**, not through sudo, and keep a second clean checkout for
+the new trial. Do not run the older standalone `setup.sh --install`.
 
 ~~~bash
 git clone --branch MangoWM_Migration_Trial_Investigation --single-branch \
   https://github.com/dillacorn/awtarchy.git \
-  "$HOME/awtarchy-mango-trial"
-awtarchy git review --branch MangoWM_Migration_Trial_Investigation
-awtarchy git update --branch MangoWM_Migration_Trial_Investigation
+  "$HOME/awtarchy-mango-next"
+revision="$(git -C "$HOME/awtarchy-mango-next" rev-parse HEAD)"
+git -C "$HOME/awtarchy-mango-next" switch --detach "$revision"
+awtarchy git review --branch MangoWM_Migration_Trial_Investigation --commit "$revision"
+awtarchy git update --branch MangoWM_Migration_Trial_Investigation --commit "$revision"
 ~~~
 
-The managed Git update selects the exact remote branch revision. If it advances
-after cloning, check the recorded revision in
-`~/.local/state/awtarchy/git-testing` and use a clean checkout at that **exact**
-revision for stable recovery. Do not force-reset a checkout containing changes.
+The branch updater and recovery checkout must use the **same full commit SHA**.
+The clone is refused if that directory already exists; do not overwrite an
+existing checkout. The live session should be selected only after review and
+successful installation. Do not force-reset a checkout containing changes.
 
 After approval and successful installation, check that the Arch package
 provides its standard session entry before attempting to log into Mango:
@@ -207,8 +213,8 @@ Mango-specific limitations.
    recognize the Mango-managed baseline namespace.
 
 ~~~bash
-bash "$HOME/awtarchy-mango-trial/trials/mangowm/restore-stable.sh" --review
-bash "$HOME/awtarchy-mango-trial/trials/mangowm/restore-stable.sh" --restore
+bash "$HOME/awtarchy-mango-next/trials/mangowm/restore-stable.sh" --review
+bash "$HOME/awtarchy-mango-next/trials/mangowm/restore-stable.sh" --restore
 ~~~
 
 The helper refuses execution outside a responsive Hyprland session, if the
