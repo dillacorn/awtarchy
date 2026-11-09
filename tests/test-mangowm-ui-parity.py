@@ -80,7 +80,7 @@ class MangoUIParityTests(unittest.TestCase):
                                   app)
                 ]
                 self.assertTrue(matched, f"No Mango floating rule for {app}")
-                self.assertIn(app.replace(".", r"\."), HYPR)
+                self.assertTrue(app in HYPR or app.replace(".", r"\\.") in HYPR)
         for pattern in ("Open File", "Select a File", "Choose wallpaper",
                         "Open Folder", "Save As", "Library", "File Upload"):
             self.assertTrue(any("is_floating:1" in rule
