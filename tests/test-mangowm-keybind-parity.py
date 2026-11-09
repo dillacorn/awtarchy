@@ -160,6 +160,13 @@ assert all("hyprctl" not in line for group in binds.values()
 # A valid config without native event updates is too slow for this UI.
 assert '["mmsg", "watch", "all-monitors"]' in bridge
 assert '["mmsg", "watch", "all-clients"]' in bridge
+assert 'onRead: data => root.acceptWatch("monitors", data)' in bridge
+assert 'onRead: data => root.acceptWatch("clients", data)' in bridge
+assert "function acceptWatch(kind, line)" in bridge
+assert "root.reconcile({monitors: root.watchedMonitors," in bridge
+assert "root.watchReconnect.restart()" in bridge
+assert "interval: 15000" in bridge
+assert "onRead: data => root.queueRefresh()" not in bridge
 assert "interval: 750" not in bridge
 assert len(binds["default"]) >= 150, len(binds["default"])
 assert len(binds["noalt"]) >= 95, len(binds["noalt"])
