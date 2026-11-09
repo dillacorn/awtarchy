@@ -209,9 +209,10 @@ features. Preserve Hyprland as the working rollback session.
 - No `~/.config/mango/monitors-local.conf` was present in that session.
   The updater deliberately does not install hardware-specific monitor rules.
 - Native `noalt` mode correctly suppresses normal ALT window/workspace
-  shortcuts; the **bar label was wrong** because it still watched the
-  Hyprland submap state file. The trial now renders the Mango bar from
-  `mmsg watch keymode` instead, including click-to-reset controls.
+  shortcuts. **Live verified by the user after the revised trial update:**
+  the Quickshell bar now displays the active Mango key mode. The bar receives
+  `mmsg watch keymode` events rather than watching Hyprland's state file.
+  Other mode controls and mouse/VM bindings still need separate live checks.
 - Mango's default 500/400/300 ms animations were noticeably slow.
   Shorter motion times are now configured, with instantaneous tag switching
   and animations still off by default.
