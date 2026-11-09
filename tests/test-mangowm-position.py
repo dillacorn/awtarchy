@@ -66,6 +66,39 @@ class PositionTests(unittest.TestCase):
         self.assertIn(("dispatch", "tagmon,DP-2,1", "client,143"), self.actions)
         self.assertIn(("dispatch", "togglefloating", "client,143"), self.actions)
 
+    def test_launcher_tracks_bottom_bar_after_stale_top_prewarm(self):
+        self.monitors[0]["y"] = 1080
+        with mock.patch.object(position, "state", return_value={
+            "monitors": {"DP-1": {"position": "bottom", "bar_size": 28}},
+        }), mock.patch.object(position, "prepared_target",
+                             return_value=("DP-1", "top-center")):
+            position.reposition("launcher", "DP-1", "top-center", "spawn")
+        # 1080+1080 - 28px bar - 582px launcher = 1550.
+        self.assertIn(("dispatch", "movewin,750,1550", "client,143"),
+                      self.actions)
+        self.assertFalse(any("movewin,750,1108" in str(value)
+                             for value in self.actions))
+
+    def test_launcher_honors_current_edge_and_requested_center(self):
+        config = {"monitors": {"DP-1": {"position": "bottom"}}}
+        self.assertEqual(position.launcher_edge_from_state(
+            "DP-1", "top-center", config), "bottom-center")
+        self.assertEqual(position.launcher_edge_from_state(
+            "DP-1", "top", config), "bottom")
+        self.assertEqual(position.launcher_edge_from_state(
+            "DP-1", "center", config), "center")
+        self.assertEqual(position.launcher_edge_from_state(
+            "DP-2", "top-center", config), "top-center")
+
+    def test_launcher_ignores_prepared_target_from_other_output(self):
+        with mock.patch.object(position, "prepared_target",
+                             return_value=("DP-2", "top-center")):
+            position.reposition("launcher", "DP-1", "bottom-center", "spawn")
+        self.assertIn(("dispatch", "movewin,750,470", "client,143"),
+                      self.actions)
+        self.assertFalse(any(args[1].startswith("tagmon,")
+                             for args in self.actions))
+
     def test_invalid_action_fails_without_dispatch(self):
         with self.assertRaises(ValueError):
             position.reposition("launcher", "DP-1", "center", "bogus")
