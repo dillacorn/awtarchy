@@ -10,7 +10,6 @@ set -euo pipefail
     exit 1
 }
 
-config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 saved="$HOME/.config/awtwall/backend_state.tsv"
 seed="$HOME/Pictures/wallpapers/awtarchy_geology.png"
 provider="" daemon=""
