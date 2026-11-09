@@ -106,6 +106,54 @@ def render(source: Path, dest: Path, bridge_dir: Path):
                                         '(Quickshell.env("HOME") + "/.config")) ' +
                                         '+ "/mango/scripts/keyboard-state.py"]')
                 if file.name == "Bar.qml":
+                    # The original bar watches Hyprland's submap state file.
+                    # Render a Mango-only UI using compositor IPC keymode
+                    # events instead of polling that unrelated file.
+                    old_path = ('readonly property string submapStatePath: '
+                                'Quickshell.env("HYPR_SUBMAP_STATE_FILE") || '
+                                '(runtimeHome + "/awtarchy-hypr-submap")')
+                    new_mode = ('readonly property string mangoModeLabel: '
+                                'MangoBridge.keyMode === "default" ? "" '
+                                ': MangoBridge.keyMode')
+                    if text.count(old_path) != 1:
+                        raise ValueError("Mango bar submap state binding changed")
+                    text = text.replace(old_path, new_mode)
+                    old_mouse = ('configHome + '
+                                 '"/hypr/scripts/toggle_mouse_submap.sh"')
+                    if text.count(old_mouse) != 1:
+                        raise ValueError("Mango mouse mode toggle target changed")
+                    text = text.replace(old_mouse,
+                                        'configHome + "/mango/scripts/keymode.sh"')
+                    old_submap_reader = '''    FileView {
+        id: submapFile
+        path: bar.submapStatePath
+        blockLoading: false
+        watchChanges: true
+        printErrors: false
+        onFileChanged: reload()
+    }
+
+    Timer {
+        interval: 1000
+        repeat: true
+        running: true
+        onTriggered: submapFile.reload()
+    }
+'''
+                    if text.count(old_submap_reader) != 1:
+                        raise ValueError("Mango bar submap file reader changed")
+                    text = text.replace(old_submap_reader, "")
+                    text = text.replace('submapFile.text().trim()',
+                                        'bar.mangoModeLabel')
+                    text = text.replace('Current submap:', 'Mango key mode:')
+                    text = text.replace(
+                        'Quickshell.execDetached([bar.mouseSubmapScript, "toggle"])',
+                        'Quickshell.execDetached(["bash", bar.mouseSubmapScript, "toggle", "mouse"])')
+                    text = text.replace(
+                        'Quickshell.execDetached([bar.mouseSubmapScript, "reset"])',
+                        'Quickshell.execDetached(["bash", bar.mouseSubmapScript, "set", "default"])')
+                    if "submapFile" in text or "awtarchy-hypr-submap" in text:
+                        raise ValueError("Unported Mango submap file reader")
                     # A tag is not a Hyprland workspace. Rebind only the
                     # identical view operations; do not translate workspace
                     # moves into a different (window move) dispatcher.
