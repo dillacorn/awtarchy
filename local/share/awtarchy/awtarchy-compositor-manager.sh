@@ -185,11 +185,22 @@ else
       drop_pkg "$pkg"
     done
   fi
-  if [[ "$target" == jay ]] && ! installed jay &&
-     [[ -f "$session_file" && ! -L "$session_file" ]] &&
-     cmp -s "$repo/trials/jay/jay.desktop" "$session_file"; then
-    sudo rm -- "$session_file"
-    printf 'Removed exact trial Ly entry.\n'
+  if [[ "$target" == jay ]] && ! installed jay; then
+    # Remove only exact unmanaged fallback descriptors from this trial.
+    # A descriptor still owned by any package must be left to pacman.
+    for descriptor in "jay.desktop:$session_file" \
+        "jay.portal:/usr/share/xdg-desktop-portal/portals/jay.portal"; do
+      source_descriptor="${descriptor%%:*}"
+      installed_descriptor="${descriptor#*:}"
+      if [[ -f "$installed_descriptor" && ! -L "$installed_descriptor" ]] &&
+          [[ -f "$repo/trials/jay/$source_descriptor" &&
+             ! -L "$repo/trials/jay/$source_descriptor" ]] &&
+          cmp -s "$repo/trials/jay/$source_descriptor" "$installed_descriptor" &&
+          ! pacman -Qo -- "$installed_descriptor" >/dev/null 2>&1; then
+        sudo rm -- "$installed_descriptor"
+        printf 'Removed exact unowned Jay session descriptor: %s\n' "$installed_descriptor"
+      fi
+    done
   fi
 fi
 if [[ "$operation" == update-jay ]]; then
