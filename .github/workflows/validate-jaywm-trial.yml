@@ -59,9 +59,15 @@ jobs:
             --source config/quickshell/awtarchy \
             --dest "$output" --bridge-dir trials/jay
           count=0
+          fail=0
           while IFS= read -r -d '' file; do
-            /usr/lib/qt6/bin/qmlformat --ignore-settings "$file" >/dev/null
+            if ! /usr/lib/qt6/bin/qmlformat --ignore-settings "$file" >/dev/null; then
+              printf 'ERROR: Qt6 could not parse %s\n' "$file" >&2
+              /usr/lib/qt6/bin/qmlformat --ignore-settings "$file" 2>&1 | tail -n 16 >&2 || true
+              fail=1
+            fi
             count=$((count + 1))
           done < <(find "$output" -maxdepth 1 -type f -name '*.qml' -print0)
           (( count >= 55 ))
+          (( fail == 0 ))
           printf 'PASS: Qt6 parsed %s Jay Quickshell QML components\n' "$count"
