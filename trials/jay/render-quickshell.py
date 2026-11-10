@@ -109,7 +109,7 @@ def render(source: Path, destination: Path, trial: Path):
                         '["foot", "--app-id", "Wiremix", "--title", "Wiremix", '
                         '"wiremix", "-p", "auto", "-f", "30"])')
                     text = text.replace(
-                        'readonly property string wiremixScript: configHome + "/hypr/scripts/wiremix-toggle.sh"\\n',
+                        'readonly property string wiremixScript: configHome + "/hypr/scripts/wiremix-toggle.sh"\n',
                         '')
                     text = text.replace(
                         '/hypr/scripts/toggle_mouse_submap.sh',
@@ -142,7 +142,7 @@ def render(source: Path, destination: Path, trial: Path):
                 if path.name == "shell.qml":
                     text = text.replace(
                         'function ping(): string { return "ok"; }',
-                        'function ping(): string { return "ok"; }\\n'
+                        'function ping(): string { return "ok"; }\n'
                         '        function toggleDefaultApps(): void {\\n'
                         '            JayBridge.toggleUtility("awtarchy-default-apps", '
                         '["foot", "--app-id", "awtarchy-default-apps", '
@@ -173,7 +173,6 @@ Qs.Singleton {
                     text = text.replace(
                         '/hypr/scripts/default_applications.sh',
                         '/jay/awtarchy-trial/default-apps.sh')
-                    text = text.replace(
                     # Preserve supported bar + audio state. Do not offer
                     # nonfunctional night-light, vibrance or input-mode toggles.
                     text = text.replace(
