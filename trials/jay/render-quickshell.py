@@ -54,6 +54,14 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace("awtarchy-quickshell", "awtarchy-jay-quickshell")
                 if path.name == "Bar.qml":
                     text = text.replace(
+                        'onRightClicked: Quickshell.execDetached([bar.wiremixScript])',
+                        'onRightClicked: JayBridge.toggleUtility("Wiremix", '
+                        '["foot", "--app-id", "Wiremix", "--title", "Wiremix", '
+                        '"wiremix", "-p", "auto", "-f", "30"])')
+                    text = text.replace(
+                        'readonly property string wiremixScript: configHome + "/hypr/scripts/wiremix-toggle.sh"\\n',
+                        '')
+                    text = text.replace(
                         '/hypr/scripts/toggle_mouse_submap.sh',
                         '/jay/awtarchy-trial/mode-help.sh')
                     text = text.replace(
@@ -81,6 +89,18 @@ def render(source: Path, destination: Path, trial: Path):
                     text = re.sub(
                         r'Quickshell\.execDetached\(\["hyprctl", "eval", "hl\.dispatch\(hl\.dsp\.workspace\.move\(\{ monitor = \\"" \+ (\w+)\.modelData\.dir \+ "\\" \}\)\)"\]\)',
                         r'JayBridge.moveWorkspace(\1.modelData.dir)', text)
+                if path.name == "shell.qml":
+                    text = text.replace(
+                        'function ping(): string { return "ok"; }',
+                        'function ping(): string { return "ok"; }\\n'
+                        '        function toggleDefaultApps(): void {\\n'
+                        '            JayBridge.toggleUtility("awtarchy-default-apps", '
+                        '["foot", "--app-id", "awtarchy-default-apps", '
+                        '"--title", "awtarchy-default-apps", "python3", '
+                        '(Quickshell.env("XDG_CONFIG_HOME") || '
+                        '(Quickshell.env("HOME") + "/.config")) '
+                        '+ "/hypr/scripts/default_applications.py", "tui"]);\\n'
+                        '        }')
                 if path.name == "KeyboardLockState.qml":
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
@@ -100,6 +120,10 @@ Qs.Singleton {
                     (destination / path.name).write_text(text, encoding="utf-8")
                     continue
                 if path.name == "QuickSettings.qml":
+                    text = text.replace(
+                        '/hypr/scripts/default_applications.sh',
+                        '/jay/awtarchy-trial/default-apps.sh')
+                    text = text.replace(
                     # Preserve supported bar + audio state. Do not offer
                     # nonfunctional night-light, vibrance or input-mode toggles.
                     text = text.replace(

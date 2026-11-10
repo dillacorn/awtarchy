@@ -109,6 +109,21 @@ Singleton {
         return true;
     }
 
+    function toggleUtility(appId, command) {
+        // Do not kill arbitrary processes. This targets only a window whose
+        // Wayland appId exactly matches the selected Awtarchy utility.
+        const matches = (ToplevelManager.toplevels.values || []).filter(
+            window => String(window.appId || "") === String(appId));
+        if (matches.length > 0) {
+            const active = matches.find(window => window.activated);
+            if (active) active.close();
+            else matches[0].activate();
+            return true;
+        }
+        Quickshell.execDetached(command);
+        return true;
+    }
+
     function refreshMonitors() {
         const nativeToplevels = ToplevelManager.toplevels.values || [];
         const active = ToplevelManager.activeToplevel;

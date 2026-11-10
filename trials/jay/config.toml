@@ -72,7 +72,7 @@ alt-shift-c = { type = "exec", exec = { shell = "foot --app-id awtarchy-qalc --t
 alt-shift-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
 alt-v = { type = "exec", exec = ["foot", "--app-id", "Wiremix", "wiremix"] }
 logo-a = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\""] }
-logo-alt-a = { type = "exec", exec = { shell = "foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 \"$HOME/.config/hypr/scripts/default_applications.py\" tui" } }
+logo-alt-a = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/default-apps.sh\"" } }
 logo-alt-w = { type = "exec", exec = ["awtwall", "--random-all-different"] }
 logo-b = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch browser" } }
 logo-c = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/clipboard.sh\""] }

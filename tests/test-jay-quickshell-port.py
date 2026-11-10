@@ -37,6 +37,10 @@ def check():
         assert "readonly property bool enabled: false" in numlock
         assert "hyprctl" not in numlock and '"false"' not in numlock
         assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
+        assert "toggleDefaultApps(): void" in (target / "shell.qml").read_text()
+        assert "/jay/awtarchy-trial/default-apps.sh" in (target / "QuickSettings.qml").read_text()
+        assert 'JayBridge.toggleUtility("Wiremix"' in (target / "Bar.qml").read_text()
+        assert "wiremix-toggle.sh" not in (target / "Bar.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()
         assert "import Quickshell.Hyprland" not in "\n".join(p.read_text() for p in files)
         for p in files:
