@@ -23,6 +23,12 @@ def check():
         assert "not available" in (target / "ScreenShareGuardCard.qml").read_text().lower()
         assert "screenshare_guard.sh" not in (target / "ScreenShareGuardCard.qml").read_text()
         assert "JayBridge.activateWorkspace" in (target / "Bar.qml").read_text()
+        bar = (target / "Bar.qml").read_text()
+        assert "/jay/awtarchy-trial/mode-help.sh" in bar
+        assert "toggle_mouse_submap.sh" not in bar
+        assert 'JayBridge.moveWorkspace(arrowSlot.modelData.dir)' in bar
+        assert 'JayBridge.moveWorkspace(arrowSlotVertical.modelData.dir)' in bar
+        assert 'names = { u: "up", d: "down", l: "left", r: "right" }' in (target / "JayBridge.qml").read_text()
         quick = (target / "QuickSettings.qml").read_text()
         assert 'visible: root.quickSettingsSectionVisible("display-effects")' not in quick
         assert 'visible: root.quickSettingsSectionVisible("submap")' not in quick

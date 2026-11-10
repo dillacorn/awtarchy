@@ -75,6 +75,9 @@ Singleton {
     }
 
     function moveWorkspace(direction) {
+        // Shared bar uses compact u/d/l/r codes; Jay Wayland uses full names.
+        const names = { u: "up", d: "down", l: "left", r: "right" };
+        direction = names[String(direction)] || String(direction);
         const origin = root.focusedMonitor ? String(root.focusedMonitor.name) : "";
         const screens = Quickshell.screens || [];
         const current = screens.find(s => s && String(s.name) === origin);

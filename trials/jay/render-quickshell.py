@@ -54,6 +54,21 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace("awtarchy-quickshell", "awtarchy-jay-quickshell")
                 if path.name == "Bar.qml":
                     text = text.replace(
+                        '/hypr/scripts/toggle_mouse_submap.sh',
+                        '/jay/awtarchy-trial/mode-help.sh')
+                    text = text.replace(
+                        'tooltip: "Toggle mouse submap"',
+                        'tooltip: "Jay: press SUPER+ALT+M to toggle mouse mode"')
+                    text = text.replace(
+                        'tooltip: "Current submap: " + submapFile.text().trim() + " (click to reset)"',
+                        'tooltip: "Jay mode: " + submapFile.text().trim() + " (press SUPER+ALT+N/M/V to toggle)"')
+                    text = text.replace(
+                        '[bar.mouseSubmapScript, "reset"]',
+                        '[bar.mouseSubmapScript, "help"]')
+                    text = text.replace(
+                        '[bar.mouseSubmapScript, "toggle"]',
+                        '[bar.mouseSubmapScript, "help"]')
+                    text = text.replace(
                         'Quickshell.env("HYPR_SUBMAP_STATE_FILE") || (runtimeHome + "/awtarchy-hypr-submap")',
                         '(runtimeHome + "/awtarchy-jay-submap")')
                     start = text.index("    function focusWorkspace(selector) {")
