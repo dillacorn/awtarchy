@@ -4078,6 +4078,20 @@ install_awtarchy_command_stage() {
 
   retry_command run_as_target install -m 0755 "$runtime_src" "${install_dir}/awtarchy-runtime.sh"
   retry_command run_as_target install -m 0755 "$launcher_src" "${bin_dir}/awtarchy"
+  # A fresh Jay trial installation also receives the compositor menu.
+  local compositor_helper="$REPO_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local installed_helper="$install_dir/awtarchy-compositor-manager.sh"
+  local compositor_branch=""
+  if [[ -f "$compositor_helper" && ! -L "$compositor_helper" ]] && have git; then
+    compositor_branch="$(run_as_target git -C "$REPO_DIR" branch --show-current 2>/dev/null || true)"
+    if [[ "$compositor_branch" == JayWM_Migration_Trial_Investigation ]]; then
+      bash -n "$compositor_helper" || die "Jay compositor manager failed syntax validation."
+      retry_command run_as_target install -m 0755 "$compositor_helper" "$installed_helper"
+      printf '%s\n' "$REPO_DIR" |
+        run_as_target tee "$state_dir/compositor-trial-source" >/dev/null
+      run_as_target chmod 0644 "$state_dir/compositor-trial-source"
+    fi
+  fi
 
   tag="$(detect_installed_release_tag)"
   if have git && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
