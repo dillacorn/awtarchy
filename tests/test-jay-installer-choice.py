@@ -55,5 +55,5 @@ assert 'bash "${source}/setup.sh" --check' in fn("install_jay_session_stage")
 assert 'bash "${source}/setup.sh" --install' in fn("install_jay_session_stage")
 assert 'if compositor_has_hyprland && [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then' in text
 assert 'if [[ "$dir" == hypr ]] && ! compositor_has_hyprland; then' in fn("copy_awtarchy_configs_stage")
-assert "install_jay_session_stage" in fn("install_main")
+assert "install_jay_session_stage" in fn("run_install")
 print("PASS: compositor menu, package selection, Jay staging and Hyprland preservation")
