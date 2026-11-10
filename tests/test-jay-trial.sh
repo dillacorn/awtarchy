@@ -24,5 +24,7 @@ assert "# AWTARCHY-JAY-OUTPUTS-BEGIN" in config
 assert "# AWTARCHY-JAY-OUTPUTS-END" in config
 assert "aur-scan install jay --noconfirm" in (base / "setup.sh").read_text()
 assert "hyprctl" not in (base / "session.sh").read_text()
+for item in base.glob("*.py"):
+    compile(item.read_bytes(), str(item), "exec")
 print("PASS: Jay trial syntax and invariants")
 PY

@@ -5,6 +5,7 @@ on:
     paths:
       - 'trials/jay/**'
       - 'tests/test-jay-trial.sh'
+      - 'tests/test-jay-monitor-profile.py'
       - '.github/workflows/validate-jaywm-trial.yml'
   pull_request:
     paths:
@@ -18,4 +19,6 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Check shell and TOML
-        run: bash tests/test-jay-trial.sh
+        run: |
+          bash tests/test-jay-trial.sh
+          python3 tests/test-jay-monitor-profile.py
