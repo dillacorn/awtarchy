@@ -98,10 +98,10 @@ done
 for i in "${!sources[@]}"; do
     [[ -e "${targets[$i]}" ]] || {
         case "${sources[$i]}" in
-            *.sh) mode=0755 ;;
-            *) mode=0644 ;;
+            *.sh) file_mode=0755 ;;
+            *) file_mode=0644 ;;
         esac
-        install -m "$mode" -- "$src/${sources[$i]}" "${targets[$i]}"
+        install -m "$file_mode" -- "$src/${sources[$i]}" "${targets[$i]}"
     }
 done
 [[ -e "$manager_target" ]] || install -m 0755 -- "$temp/quickshell.sh" "$manager_target"
