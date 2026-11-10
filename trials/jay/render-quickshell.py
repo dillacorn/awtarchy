@@ -70,6 +70,20 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
                         '["python3", (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/jay/awtarchy-trial/keyboard-state.py"]')
+                if path.name == "NumlockSessionTweak.qml":
+                    # Jay does not have a verified equivalent to Hyprland's
+                    # numlock_by_default mutation. Do not run synthetic commands
+                    # or imply that a saved preference was actually applied.
+                    text = """pragma Singleton
+import QtQuick
+import Quickshell as Qs
+Qs.Singleton {
+    readonly property bool enabled: false
+    function enforce() { return false; }
+}
+"""
+                    (destination / path.name).write_text(text, encoding="utf-8")
+                    continue
                 if path.name == "QuickSettings.qml":
                     # Preserve supported bar + audio state. Do not offer
                     # nonfunctional night-light, vibrance or input-mode toggles.
@@ -78,6 +92,9 @@ def render(source: Path, destination: Path, trial: Path):
                         'visible: false')
                     text = text.replace(
                         'visible: root.quickSettingsSectionVisible("submap")',
+                        'visible: false')
+                    text = text.replace(
+                        'visible: root.quickSettingsSectionVisible("numlock")',
                         'visible: false')
                     text = text.replace(
                         'text: "JayBridge Submap"',
@@ -94,12 +111,6 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         "/hypr/scripts/quickshell_lockscreen_capture.sh",
                         "/jay/awtarchy-trial/lock-capture.sh")
-                if path.name == "NumlockSessionTweak.qml":
-                    # No verified Jay numlock configuration command. Do not
-                    # execute the Hyprland dispatcher in the other session.
-                    text = text.replace('"hyprctl", "eval",', '"false",')
-                    text = text.replace('"hl.config({ input = { numlock_by_default = true } })"', '""')
-                    text = text.replace('"hl.config({ input = { numlock_by_default = false } })"', '""')
                 if '"hyprctl"' in text or "hl.dispatch(" in text:
                     raise ValueError("Unported Hyprland QML dispatch: " + path.name)
             (destination / path.name).write_text(text, encoding="utf-8")
