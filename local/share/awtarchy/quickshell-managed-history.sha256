@@ -1645,3 +1645,6 @@ b22a77171ac1ccda1933ed301d1a48afa1c6873c0092abda5ab46e7f997c5810	.config/hypr/hy
 
 # One-time Hyprland config-update resume startup hook.
 ef5b8127ec25d8b505a8005c4e0f52abe33d997f07acdfd025e2b9bed6c47b60	.config/hypr/hyprland.lua
+
+# Hyprland 0.57 safer default: tearing disabled; direct scanout retained.
+bed5893bc2547586d9afae1349f1e8b4bb1e178c26a3fe1d1ac440598f861c92	.config/hypr/hyprland.lua
