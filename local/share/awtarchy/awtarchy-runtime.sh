@@ -2629,7 +2629,7 @@ reconcile_power_profile_backend() {
 install_jay_repo_dependencies_stage() {
   compositor_has_jay || return 0
   local package
-  for package in quickshell foot fuzzel mako swaylock grim slurp wl-clipboard cliphist \
+  for package in quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel mako swaylock grim slurp wl-clipboard cliphist \
       xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl; do
     pacman_install_one "$package" || die "Jay required Arch package failed: $package"
   done

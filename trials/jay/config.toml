@@ -272,7 +272,7 @@ logo-alt-shift-0 = { type = "move-to-workspace", name = "10" }
 # Jay denies workspace and foreign-toplevel management by default.
 [[clients]]
 match.tag = "awtarchy-jay-shell"
-capabilities = ["layer-shell", "foreign-toplevel-list", "foreign-toplevel-manager", "workspace-manager"]
+capabilities = ["layer-shell", "foreign-toplevel-list", "foreign-toplevel-manager", "workspace-manager", "screencopy"]
 
 # Clipboard observers need data-control on Jay. Do not grant it to all apps.
 [[clients]]

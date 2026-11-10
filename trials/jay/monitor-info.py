@@ -34,7 +34,8 @@ def outputs():
             "x": output.get("x", 0), "y": output.get("y", 0),
             "width": mode.get("width", output.get("width", 0)),
             "height": mode.get("height", output.get("height", 0)),
-            "scale": output.get("scale", 1.0)
+            "scale": output.get("scale", 1.0),
+            "refresh_rate": (mode.get("refresh_rate_millihz", 0) / 1000.0)
         })
     active = [e for e in entries if not e["disabled"]]
     if active:

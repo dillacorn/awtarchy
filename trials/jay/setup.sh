@@ -20,7 +20,7 @@ if [[ "$mode" == --packages ]]; then
     command -v aur-scan >/dev/null 2>&1 || fail 'aur-scan is required'
     command -v sudo >/dev/null 2>&1 || fail 'sudo is required'
     aur-scan install jay --noconfirm
-    sudo pacman -S --needed --noconfirm quickshell foot fuzzel mako swaylock grim slurp wl-clipboard cliphist xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl
+    sudo pacman -S --needed --noconfirm quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel mako swaylock grim slurp wl-clipboard cliphist xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl
     printf 'Packages installed; run --check next.\n'
     exit 0
 fi
