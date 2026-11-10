@@ -608,6 +608,12 @@ cat >"${fakebin}/sleep" <<'EOF'
 /bin/sleep 0.001
 EOF
 
+# Keep this Quickshell migration fixture independent of the Qalc prerequisite.
+cat >"${fakebin}/qalc" <<'EOF'
+#!/usr/bin/env bash
+exit 0
+EOF
+
 chmod 0755 "${fakebin}/"*
 
 cat >"${fakebin}/makoctl" <<'EOF'
@@ -763,7 +769,7 @@ EOF
 write_old_package_state() {
   printf '%s\n' \
     waybar-git fuzzel wlogout mako wofi network-manager-applet blueman \
-    networkmanager bluez bluez-utils jq ripdrag alacritty-graphics \
+    networkmanager bluez bluez-utils jq ripdrag alacritty-graphics libqalculate \
     >"$1"
 }
 
