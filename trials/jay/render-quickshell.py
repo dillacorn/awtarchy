@@ -11,6 +11,53 @@ import shutil
 import sys
 
 BRIDGE_FILES = ("JayBridge.qml", "JayFocusGrab.qml", "ScreenShareGuardCard.qml")
+# The shared Awtarchy UI has per-flyout capture exclusion controls.
+# Jay does not provide a verified equivalent to Hyprland's capture rules.
+# Never advertise those controls as effective, or corrupt shared Hyprland
+# capture preferences while a Jay user saves other appearance settings.
+CAPTURE_SURFACES = {
+    "Launcher.qml": "launcher",
+    "ClipboardMenu.qml": "clipboard",
+    "Notifications.qml": "notifications",
+    "NetworkMenu.qml": "network",
+    "QuickSettings.qml": "quick_settings",
+    "BluetoothMenu.qml": "bluetooth",
+    "BatteryMenu.qml": "battery",
+}
+
+def disable_unavailable_capture_controls(text: str, surface: str) -> str:
+    expr = (
+        r'readonly property bool captureAllowed: captureAllowedOverride >= 0'
+        r'\n[ \t]*\? captureAllowedOverride === 1 : '
+        r'BarState\.captureAllowedFor\("' + re.escape(surface) + r'"\)'
+    )
+    text, replaced = re.subn(expr, 'readonly property bool captureAllowed: true', text)
+    if replaced != 1:
+        raise ValueError("Capture state changed in " + surface + "; refusing unsafe UI rewrite")
+    fn = re.compile(
+        r'(?m)^    function toggleCaptureAllowed\(\) \{.*?^    \}',
+        flags=re.DOTALL
+    )
+    replacement = (
+        '    function toggleCaptureAllowed() {\n'
+        '        settingsMessage = "Jay: capture exclusion is unavailable; '
+        'this surface is visible in screen shares.";\n'
+        '    }'
+    )
+    text, replaced = fn.subn(lambda _: replacement, text)
+    if replaced != 1:
+        raise ValueError("Capture toggle changed in " + surface + "; refusing unsafe UI rewrite")
+    # Keep the user's Hyprland privacy preferences unchanged when saving
+    # otherwise compatible flyout/launcher visual options from Jay.
+    capture_arg = 'captureAllowed ? "true" : "false"'
+    if text.count(capture_arg) != 1:
+        raise ValueError("Capture save argument changed in " + surface)
+    text = text.replace(
+        capture_arg,
+        'BarState.captureAllowedFor("' + surface + '") ? "true" : "false"'
+    )
+    return text
+
 TRANSLATIONS = {
     "/hypr/scripts/quickshell.sh": "/jay/awtarchy-trial/quickshell.sh",
     "/hypr/scripts/quickshell_runtime_rules.sh": "/jay/awtarchy-trial/runtime-rules.sh",
@@ -47,6 +94,9 @@ def render(source: Path, destination: Path, trial: Path):
                 text = text.replace("import Quickshell.Hyprland\n", "import Quickshell.Wayland\n")
                 text = text.replace("HyprlandFocusGrab", "JayFocusGrab")
                 text = re.sub(r"\bHyprland\b", "JayBridge", text)
+                if path.name in CAPTURE_SURFACES:
+                    text = disable_unavailable_capture_controls(
+                        text, CAPTURE_SURFACES[path.name])
                 for old, new in TRANSLATIONS.items():
                     text = text.replace(old, new)
                 if path.name == "shell.qml":
