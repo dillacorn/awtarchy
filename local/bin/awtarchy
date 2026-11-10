@@ -827,7 +827,7 @@ ensure_latest_updater() {
 
 refresh_menu_updater_if_available() {
   if compositor_trial_installed; then
-    printf 'Jay trial maintenance command retained; choose stable self-update to leave the trial.\n'
+    printf 'Unreleased Jay branch updater retained. Use self-update explicitly to return to stable main.\n'
     return 0
   fi
   [[ ${AWTARCHY_SKIP_UPDATE_CHECK:-0} == 1 ]] && return 0
@@ -1553,7 +1553,7 @@ check_package_mirrors_once() {
   AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --mirror-check || true
 }
 
-# This menu is enabled only by the explicitly installed Jay trial source.
+# Branch-only compositor management, installed by the Jay trial installer.
 compositor_trial_installed() {
   [[ -f "$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh" &&
      ! -L "$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh" &&
@@ -1562,24 +1562,24 @@ compositor_trial_installed() {
 run_compositor_manager() {
   local helper="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh"
   [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] ||
-    die "Trial manager not installed. Refresh from the Jay branch awtarchy-install.sh without --reinstall."
+    die "Compositor manager not staged. Refresh from the Jay trial branch (without --reinstall)."
   bash "$helper" "$@"
 }
 compositor_menu() {
   local choice rc
   while true; do
     choice="$(single_select_menu "Awtarchy Compositors: Hyprland / Jay Trial" 0 \
-      "Installed compositor and GPU status" \
-      "Preview installing Jay" \
-      "Install Jay and keep Hyprland" \
-      "Preview installing Hyprland" \
-      "Install Hyprland and keep Jay" \
-      "Preview removing Jay (+ eligible extras)" \
-      "Remove Jay only (preserve dependencies/config)" \
-      "Remove Jay and Awtarchy-owned extras" \
-      "Preview removing Hyprland (+ eligible extras)" \
-      "Remove Hyprland only (preserve dependencies/config)" \
-      "Remove Hyprland and Awtarchy-owned extras" \
+      "Status: installed compositors / GPU" \
+      "Preview: add Jay" \
+      "Install Jay (preserve Hyprland)" \
+      "Preview: add Hyprland" \
+      "Install Hyprland (preserve Jay)" \
+      "Preview: remove Jay and owned extras" \
+      "Remove Jay only" \
+      "Remove Jay and eligible owned extras" \
+      "Preview: remove Hyprland and owned extras" \
+      "Remove Hyprland only" \
+      "Remove Hyprland and eligible owned extras" \
       "Back")" || return 0
     rc=0
     case "$choice" in
@@ -1596,20 +1596,18 @@ compositor_menu() {
       10) run_compositor_manager remove-hyprland apply yes || rc=$? ;;
       *) return 0 ;;
     esac
-    (( rc == 0 )) || printf 'Compositor operation exited with status %s.\n' "$rc" >&2
+    (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
     pause_menu
   done
 }
-compositor_offer_once() {
-  compositor_trial_installed || return 0
-  pacman -Qq jay >/dev/null 2>&1 && return 0
-  local marker="$TARGET_HOME/.local/state/awtarchy/compositor-trial-offered" choice
-  [[ ! -e "$marker" && ! -L "$marker" ]] || return 0
-  choice="$(single_select_menu \
-    
+
+maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
   local choice rc update_rc
+  if compositor_trial_installed && ! pacman -Qq jay >/dev/null 2>&1; then
+    printf 'JayWM experimental session available. Choose Manage compositors to try it alongside Hyprland.\n'
+  fi
   while true; do
     choice="$(single_select_menu "Awtarchy Maintenance" 0 \
       "Refresh Awtarchy updater from main" \
@@ -1622,6 +1620,7 @@ compositor_offer_once() {
       "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
+      "Manage compositors (Hyprland / Jay)" \
       "Exit")" || exit 0
 
     case "$choice" in
@@ -1702,6 +1701,10 @@ compositor_offer_once() {
         clear_screen
         print_version_status >/dev/tty
         pause_menu
+        ;;
+      10)
+        compositor_menu || rc=$?
+        [[ -z ${rc:-} ]] || return "$rc"
         ;;
       *) exit 0 ;;
     esac
@@ -1824,347 +1827,8 @@ main() {
       elif (( $# == 1 )) && [[ "$1" == status ]]; then
         run_compositor_manager status plan no
       else
-        die "Usage: awtarchy compositor [status]. Use the menu for changes."
+        die "Usage: awtarchy compositor [status]; the interactive menu handles changes."
       fi
-      ;;
-    mic-suppression)
-      shift
-      if (( $# == 0 )) && [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]]; then
-        mic_suppression_menu
-      else
-        if (( $# == 0 )); then
-          run_mic_suppression status
-        else
-          run_mic_suppression "$@"
-        fi
-      fi
-      ;;
-    sunshine-autostart)
-      shift
-      if (( $# == 0 )); then
-        run_sunshine_autostart status
-      elif (( $# == 1 )); then
-        run_sunshine_autostart "$1"
-      else
-        die "sunshine-autostart accepts only status, enable, or disable."
-      fi
-      ;;
-    nvidia-rollback)
-      ensure_latest_updater "$@"
-      shift
-      run_current_nvidia_rollback "$@"
-      ;;
-    update)
-      reject_stable_testing_overrides "$@"
-      protect_git_state_before_updater_refresh "$@"
-      ensure_latest_updater "$@"
-      check_package_mirrors_once
-      shift
-      ensure_update_disk_headroom
-      if ! config_release_ready_or_noop "$@"; then
-        return 0
-      fi
-      local update_rc=0
-      run_runtime update-reset-backup --mode preserve "$@" || update_rc=$?
-      case "$update_rc" in
-        0)
-          reconcile_quickshell_ui_after_update
-          clear_deferred_resume_marker
-          ;;
-        20)
-          log "Update was rolled back by the user; skipping post-update UI reconciliation."
-          return 0
-          ;;
-        21)
-          log "Hyprland config apply deferred until fresh login; no UI reconciliation performed."
-          return 0
-          ;;
-        *)
-          return "$update_rc"
-          ;;
-      esac
-      ;;
-    reset)
-      reject_stable_testing_overrides "$@"
-      protect_git_state_before_updater_refresh "$@"
-      ensure_latest_updater "$@"
-      shift
-      config_release_ready_or_noop "$@" || return 0
-      exec_runtime update-reset-backup --mode clean "$@"
-      ;;
-    review)
-      reject_stable_testing_overrides "$@"
-      protect_git_state_before_updater_refresh "$@"
-      ensure_latest_updater "$@"
-      shift
-      config_release_ready_or_noop "$@" || return 0
-      exec_runtime update-reset-backup --mode preserve --review-only "$@"
-      ;;
-    clean-backups|update-backup-cleaner|backup-cleaner)
-      shift
-      exec_runtime clean-backups "$@"
-      ;;
-    update-reset-backup)
-      reject_stable_testing_overrides "$@"
-      protect_git_state_before_updater_refresh "$@"
-      ensure_latest_updater "$@"
-      shift
-      config_release_ready_or_noop "$@" || return 0
-      exec_runtime update-reset-backup "$@"
-      ;;
-    git)
-      ensure_latest_updater "$@"
-      shift
-      if (( $# == 0 )); then
-        git_menu
-      else
-        git_cli "$@"
-      fi
-      ;;
-    install|dry-run|dryrun|test)
-      die "Installation is handled by awtarchy-install.sh, not the awtarchy maintenance command."
-      ;;
-    "")
-      refresh_menu_updater_if_available
-      check_package_mirrors_once
-      local report_helper="${TARGET_HOME}/.config/hypr/scripts/awtarchy_report_failure.sh"
-      if [[ -f "$report_helper" && ! -L "$report_helper" && -O "$report_helper" ]]; then
-        bash "$report_helper" prompt-pending || true
-      fi
-      maintenance_menu
-      ;;
-    *)
-      die "Unknown command: $1"
-      ;;
-  esac
-}
-
-main "$@"Awtarchy Jay Trial\nKeep Hyprland. Would you like to explore Jay?' 0 \
-    "Preview Jay installation" "Open compositor management" "Not now")" || return 0
-  install -d -m 0755 "$TARGET_HOME/.local/state/awtarchy"
-  : >"$marker"
-  case "$choice" in
-    0) run_compositor_manager install-jay plan no; pause_menu ;;
-    1) compositor_menu ;;
-    *) : ;;
-  esac
-}
-
-maintenance_menu() {
-  [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
-
-  local choice rc update_rc
-  compositor_offer_once
-  while true; do
-    choice="$(single_select_menu "Awtarchy Maintenance" 0 \
-      "Refresh Awtarchy updater from main" \
-      "Update configs (preserve Hyprland customizations)" \
-      "Reset configs (clean-slate managed files)" \
-      "Reconcile packages (install current / remove replaced)" \
-      "NVIDIA driver recovery / rollback" \
-      "Review config changes without applying" \
-      "Microphone noise suppression" \
-      "Sunshine autostart" \
-      "Clean Awtarchy backup files" \
-      "Version information" \
-      "Manage compositors (Hyprland / Jay)" \
-      "Exit")" || exit 0
-
-    case "$choice" in
-      0)
-        self_update_safely
-        exec "${TARGET_HOME}/.local/bin/awtarchy"
-        ;;
-      1)
-        protect_git_state_before_updater_refresh
-        ensure_latest_updater update
-        check_package_mirrors_once
-        if config_release_ready_or_noop; then
-          update_rc=0
-          run_runtime update-reset-backup --mode preserve || update_rc=$?
-          case "$update_rc" in
-            0)
-              reconcile_quickshell_ui_after_update
-              clear_deferred_resume_marker
-              ;;
-            20)
-              log "Update was rolled back by the user; skipping post-update UI reconciliation."
-              ;;
-            21)
-              log "Hyprland config apply deferred until fresh login; no UI reconciliation performed."
-              ;;
-            *)
-              rc="$update_rc"
-              ;;
-          esac
-        fi
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      2)
-        protect_git_state_before_updater_refresh
-        ensure_latest_updater reset
-        if config_release_ready_or_noop; then
-          run_runtime update-reset-backup --mode clean || rc=$?
-        fi
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      3)
-        ensure_latest_updater packages
-        check_package_mirrors_once
-        clear_screen
-        run_package_reconciler || rc=$?
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      4)
-        ensure_latest_updater
-        nvidia_recovery_menu
-        ;;
-      5)
-        protect_git_state_before_updater_refresh
-        ensure_latest_updater review
-        if config_release_ready_or_noop; then
-          run_runtime update-reset-backup --mode preserve --review-only || rc=$?
-        fi
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      6)
-        mic_suppression_menu || rc=$?
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      7)
-        sunshine_autostart_menu || rc=$?
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      8)
-        run_runtime clean-backups || rc=$?
-        pause_menu
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      9)
-        clear_screen
-        print_version_status >/dev/tty
-        pause_menu
-        ;;
-      10)
-        compositor_menu || rc=$?
-        [[ -z ${rc:-} ]] || return "$rc"
-        ;;
-      *) exit 0 ;;
-    esac
-    unset rc
-  done
-}
-
-usage() {
-  cat <<'EOF'
-Usage:
-  awtarchy
-  awtarchy update [--tag <tag>] [update options]
-  awtarchy reset [--tag <tag>] [update options]
-  awtarchy packages [--review]
-  awtarchy mic-suppression [status|enable [mono|stereo]|mono|stereo|disable|restart]
-  awtarchy sunshine-autostart [status|enable|disable]
-  awtarchy nvidia-rollback [--pick | --list | --version <driver-version>]
-  awtarchy review [--tag <tag>]
-  awtarchy report
-  awtarchy git
-  awtarchy git review --branch <branch> [--commit <40-character-sha>]
-  awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
-  awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
-  awtarchy clean-backups [options]
-  awtarchy troubleshoot
-  awtarchy version
-  awtarchy check-update
-  awtarchy self-update
-  awtarchy help
-
-The updater always refreshes from the current `main` branch head.
-Managed configs update only from the latest published release or an exact
-published release selected with --tag.
-
-Package reconciliation uses the current installed Awtarchy package catalogs.
-It can install missing current dependencies and selected catalog items, and it
-can remove explicitly retired/replaced packages. Retired package removal is
-preselected only when Awtarchy recorded ownership of that package. On systems
-with NVIDIA drivers, Awtarchy asks before a full system upgrade and saves a
-rollback point when the current NVIDIA/kernel package archives are available.
-Use 'awtarchy nvidia-rollback' to restore the last saved driver rollback point.
-Use '--pick' to choose another fully reconstructable historical driver,
-'--list' to inspect previous NVIDIA releases from the official Arch Linux Archive, or '--version <driver-version>' to
-select one directly. Awtarchy saves the current package set before switching.
-
-Git testing is explicit. The selected Awtarchy remote branch is resolved to an
-exact revision, and an exact --commit is accepted only when it belongs to that
-branch. After a Quickshell-capable release is published, run awtarchy update to
-return configs to the published release stream.
-
-Installation is handled only by awtarchy-install.sh.
-EOF
-}
-
-main() {
-  drop_launcher_privileges "$@"
-  init_target
-
-  case "${1:-}" in
-    troubleshoot)
-      shift
-      (( $# == 0 )) || die "troubleshoot does not accept options."
-      require_runtime
-      AWTARCHY_TROUBLESHOOT_COMMAND=awtarchy exec bash "$RUNTIME" troubleshoot
-      ;;
-    report)
-      shift
-      (( $# == 0 )) || die "report does not accept options."
-      run_failure_reports
-      return 0
-      ;;
-    resume-update)
-      shift
-      (( $# == 0 )) || die "resume-update does not accept options."
-      resume_deferred_hyprland_update
-      return 0
-      ;;
-    version)
-      print_version_status
-      return 0
-      ;;
-    check-update)
-      print_version_status
-      local installed remote=""
-      installed="$(installed_updater_commit)"
-      remote="$(updater_branch_head 2>/dev/null || true)"
-      if [[ -n $remote && $installed != "$remote" ]]; then
-        return 10
-      fi
-      return 0
-      ;;
-    help|-h|--help)
-      usage
-      return 0
-      ;;
-  esac
-
-  cleanup_legacy_quickshell_command
-  ensure_vpn_directory
-
-  case "${1:-}" in
-    self-update)
-      shift
-      (( $# == 0 )) || die "self-update does not accept options; the updater source is always ${UPDATER_BRANCH}."
-      self_update_safely
-      ;;
-    packages)
-      ensure_latest_updater "$@"
-      if [[ ${2:-} != --review ]]; then
-        check_package_mirrors_once
-      fi
-      shift
-      run_package_reconciler "$@"
       ;;
     mic-suppression)
       shift
