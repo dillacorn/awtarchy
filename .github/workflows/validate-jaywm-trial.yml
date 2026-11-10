@@ -17,6 +17,8 @@ on:
       - 'tests/test-jay-compositor-management.py'
       - 'tests/test-jay-compositor-update-apply.py'
       - 'tests/test-jay-stage-hyprland.py'
+      - 'tests/test-jay-first-login-appearance.py'
+      - 'trials/jay/repair-first-login-appearance.py'
       - 'tests/test-jay-sync.py'
       - 'awtarchy-install.sh'
       - 'local/bin/awtarchy'
@@ -54,6 +56,7 @@ jobs:
           python3 tests/test-jay-compositor-management.py
           python3 tests/test-jay-compositor-update-apply.py
           python3 tests/test-jay-stage-hyprland.py
+          python3 tests/test-jay-first-login-appearance.py
           python3 tests/test-jay-sync.py
           bash -n awtarchy-install.sh local/bin/awtarchy
           bash -n local/share/awtarchy/awtarchy-runtime.sh
