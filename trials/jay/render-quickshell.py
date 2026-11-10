@@ -86,6 +86,11 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         "/hypr/scripts/awtarchy_lock.sh",
                         "/jay/awtarchy-trial/lock.sh")
+                    # Jay's lock.sh itself waits for a secure Quickshell lock
+                    # or returns only after swaylock -f confirms locking.
+                    # Do not make fallback success depend on Quickshell IPC.
+                    text = text.replace(
+                        " && ~/.config/jay/awtarchy-trial/lock.sh wait-secure 5", "")
                     text = text.replace(
                         "/hypr/scripts/quickshell_lockscreen_capture.sh",
                         "/jay/awtarchy-trial/lock-capture.sh")
