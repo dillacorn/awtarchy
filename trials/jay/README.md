@@ -90,6 +90,46 @@ actual configured driver/renderer and performance on first Jay login.
 **Readiness:** The management interface is ready for non-destructive preview.
 The Jay desktop itself still has the runtime/feature limitations listed below.
 
+### First-login appearance correction (existing Jay trial installations)
+
+The first live Jay test exposed an invisible cursor and compositor title bars.
+On Jay 1.15, `show-titles` must be a **top-level** TOML option, not a
+`[theme]` key. The trial now uses `use-hardware-cursor = false` as an
+**unverified software-cursor workaround**, `cursor-size = 24`, and top-level
+`show-titles = false`. These apply to **new** Jay installs. The hardware
+cursor workaround needs a real second-login test.
+
+Existing profiles include imported monitor settings that must not be replaced.
+From **Hyprland**, pull this trial branch and use the separate guarded migration:
+
+```bash
+git -C "$HOME/awtarchy-jay-trial" pull --ff-only origin JayWM_Migration_Trial_Investigation
+python3 "$HOME/awtarchy-jay-trial/trials/jay/repair-first-login-appearance.py" --preview
+python3 "$HOME/awtarchy-jay-trial/trials/jay/repair-first-login-appearance.py" --apply
+```
+
+The helper refuses unknown or customized original settings and, on apply,
+backs up `~/.config/jay/config.toml` before changing only these appearance
+values. It preserves the imported output block and all shortcuts. It is not
+run by `awtarchy compositor` because the normal Jay updater deliberately
+preserves personalized TOML.
+
+**Known limits:** Native Hyprland-style `gaps_in=6` / `gaps_out=9` have
+no Jay 1.15 TOML equivalent; do not invent unsupported keys or fake spacing.
+The first test also reported one-way workspace transfers and nonfunctional
+Quickshell shortcuts. Do not mark either fixed without the next live test.
+
+For a failed Quickshell startup or shortcuts, inspect the saved log from
+Hyprland without launching another shell:
+
+```bash
+if [[ -f "$HOME/.cache/awtarchy/quickshell-jay.log" ]]; then
+    tail -n 160 "$HOME/.cache/awtarchy/quickshell-jay.log"
+else
+    printf 'Jay Quickshell log absent; session startup may not have reached the manager.\n'
+fi
+```
+
 ## Isolated trial preparation from Hyprland
 
 Do not use `awtarchy update` as a replacement for explicit trial staging.
