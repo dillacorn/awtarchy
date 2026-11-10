@@ -2,6 +2,7 @@
 """Test Jay output persistence without a Wayland session or user config writes."""
 from pathlib import Path
 import os
+import importlib.util
 import subprocess
 import sys
 import tempfile
@@ -14,6 +15,42 @@ HELPER = ROOT / "trials/jay/monitor-profile.py"
 def run(args, env):
     return subprocess.run([sys.executable, str(HELPER), *args],
                           env=env, text=True, capture_output=True)
+
+def test_hyprland_import():
+    spec = importlib.util.spec_from_file_location("jay_trial_monitor", HELPER)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    monitors = [
+        {"name": "DP-3", "width": 1920, "height": 1080, "refreshRate": 239.964,
+         "scale": 1.0, "x": -1920, "y": 0, "disabled": False},
+        {"name": "DP-1", "width": 1920, "height": 1080, "refreshRate": 360.0,
+         "scale": 1.0, "x": 0, "y": 0, "disabled": False},
+        {"name": "HDMI-A-1", "disabled": True},
+    ]
+    result = module.import_hyprland_active_outputs(monitors)
+    assert set(result) == {"DP-3", "DP-1"}
+    assert result["DP-3"]["x"] == 0
+    assert result["DP-1"]["x"] == 1920
+    assert result["DP-3"]["mode"]["refresh-rate"] == 239.964
+    assert result["DP-1"]["mode"]["refresh-rate"] == 360
+    for invalid in [
+        [],
+        [{"name": "DP-1", "disabled": True}],
+        [monitors[0], monitors[0]],
+        [{**monitors[0], "refreshRate": None}],
+        [{**monitors[0], "scale": 0}],
+        [{**monitors[0], "width": 0}],
+        [{**monitors[0], "x": 1.5}],
+        [{**monitors[0], "refreshRate": float("nan")}],
+    ]:
+        try:
+            module.import_hyprland_active_outputs(invalid)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError(f"Invalid Hyprland monitor list accepted: {invalid}")
+
 
 def test_profile():
     with tempfile.TemporaryDirectory() as root:
@@ -52,4 +89,5 @@ def test_profile():
 
 if __name__ == "__main__":
     test_profile()
+    test_hyprland_import()
     print("PASS: Jay monitor profile writes, backups, validation, collision and symlink guards")
