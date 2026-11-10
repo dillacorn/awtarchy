@@ -5,6 +5,9 @@ Jay's control-center edits apply live but are not persisted. This helper writes
 only its own marked block. Reads are read-only, writes are atomic and backed up.
 """
 import argparse
+import json
+import math
+import subprocess
 from datetime import datetime, timezone
 import os
 from pathlib import Path
@@ -117,11 +120,58 @@ def write_safely(path, old, new):
             temp.unlink()
     return backup
 
+def import_hyprland_active_outputs(monitors):
+    """Parse actual Hyprland output geometry; never infer refresh/modes."""
+    if not isinstance(monitors, list) or not monitors:
+        raise ValueError("Hyprland returned no monitor list")
+    active = {}
+    for mon in monitors:
+        if not isinstance(mon, dict):
+            raise ValueError("Malformed Hyprland monitor entry")
+        if mon.get("disabled") is True:
+            continue
+        name = mon.get("name")
+        if not isinstance(name, str) or not CONNECTOR.fullmatch(name):
+            raise ValueError("Invalid Hyprland connector name")
+        if name in active:
+            raise ValueError("Duplicate monitor connector")
+        for field in ("width", "height", "x", "y", "refreshRate", "scale"):
+            value = mon.get(field)
+            if isinstance(value, bool) or not isinstance(value, (float, int)) or not math.isfinite(value):
+                raise ValueError(f"{name}: unknown {field}; refusing guessed mode")
+        if mon["width"] <= 0 or mon["height"] <= 0:
+            raise ValueError(f"{name}: zero-size monitor")
+        if int(mon["x"]) != mon["x"] or int(mon["y"]) != mon["y"]:
+            raise ValueError(f"{name}: unsupported fractional output coordinates")
+        active[name] = dict(mon)
+    if not active:
+        raise ValueError("No enabled Hyprland outputs")
+    # Jay requires nonnegative coordinates; preserve relative layout.
+    min_x = min(int(v["x"]) for v in active.values())
+    min_y = min(int(v["y"]) for v in active.values())
+    result = {}
+    for name, mon in active.items():
+        mode = f'{int(mon["width"])}x{int(mon["height"])}@{float(mon["refreshRate"]):.3f}'
+        position = f'{int(mon["x"])-min_x}x{int(mon["y"])-min_y}'
+        result[name] = make_entry(name, mode, position, str(mon["scale"]))
+    return result
+
+def live_hyprland_outputs():
+    if (os.environ.get("XDG_CURRENT_DESKTOP") != "Hyprland"
+            or not os.environ.get("HYPRLAND_INSTANCE_SIGNATURE")
+            or not os.environ.get("WAYLAND_DISPLAY")):
+        raise ValueError("Import requires an active Hyprland desktop session")
+    result = subprocess.run(["hyprctl", "monitors", "-j"], check=True,
+                            capture_output=True, text=True, timeout=4)
+    return import_hyprland_active_outputs(json.loads(result.stdout))
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--list", action="store_true")
     group.add_argument("--set", nargs=4, metavar=("CONNECTOR", "MODE", "POSITION", "SCALE"))
+    group.add_argument("--preview-hyprland", action="store_true")
+    group.add_argument("--import-hyprland", action="store_true")
     args = parser.parse_args()
     config = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "jay/config.toml"
     contents, start, finish, indexed = source_state(config)
@@ -133,8 +183,20 @@ def main():
         if not indexed:
             print("No persistent overrides; use jay randr show --modes")
         return
-    connector, mode, position, scale = args.set
-    indexed[connector] = make_entry(connector, mode, position, scale)
+    if args.preview_hyprland or args.import_hyprland:
+        imported = live_hyprland_outputs()
+        for name, entry in sorted(imported.items()):
+            mode = entry["mode"]
+            print(f'{name}: {mode["width"]}x{mode["height"]}'
+                  f'@{float(mode["refresh-rate"]):g} -> '
+                  f'{entry["x"]}x{entry["y"]}, scale={float(entry["scale"]):g}')
+        if args.preview_hyprland:
+            print("PREVIEW ONLY; Jay config was not modified.")
+            return
+        indexed = imported
+    else:
+        connector, mode, position, scale = args.set
+        indexed[connector] = make_entry(connector, mode, position, scale)
     new = contents[:start] + render(indexed) + contents[finish:]
     tomllib.loads(new)
     backup = write_safely(config, contents, new)
@@ -144,6 +206,7 @@ def main():
 if __name__ == "__main__":
     try:
         main()
-    except (OSError, UnicodeError, ValueError, TypeError, KeyError) as exc:
+    except (OSError, UnicodeError, ValueError, TypeError, KeyError,
+            subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         print(f'Jay profile error: {exc}', file=sys.stderr)
         sys.exit(1)
