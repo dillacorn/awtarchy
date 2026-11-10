@@ -1636,6 +1636,11 @@ compositor_offer_once() {
         exec "${TARGET_HOME}/.local/bin/awtarchy"
         ;;
       1)
+        if compositor_trial_installed; then
+          printf 'Jay trial is active. Stable main updates would replace its unreleased command.\n'
+          compositor_menu
+          continue
+        fi
         protect_git_state_before_updater_refresh
         ensure_latest_updater update
         check_package_mirrors_once
@@ -1865,6 +1870,9 @@ main() {
       run_current_nvidia_rollback "$@"
       ;;
     update)
+      if compositor_trial_installed; then
+        die "Jay trial active: use awtarchy compositor to review/apply Jay updates. Stable main update requires explicit awtarchy self-update first."
+      fi
       reject_stable_testing_overrides "$@"
       protect_git_state_before_updater_refresh "$@"
       ensure_latest_updater "$@"
@@ -1895,6 +1903,9 @@ main() {
       esac
       ;;
     reset)
+      if compositor_trial_installed; then
+        die "Jay trial active: stable reset would replace branch management. Use awtarchy self-update explicitly to leave the trial."
+      fi
       reject_stable_testing_overrides "$@"
       protect_git_state_before_updater_refresh "$@"
       ensure_latest_updater "$@"
@@ -1903,6 +1914,9 @@ main() {
       exec_runtime update-reset-backup --mode clean "$@"
       ;;
     review)
+      if compositor_trial_installed; then
+        die "Jay trial active: review Jay updates in awtarchy compositor. Stable release review requires self-update first."
+      fi
       reject_stable_testing_overrides "$@"
       protect_git_state_before_updater_refresh "$@"
       ensure_latest_updater "$@"
