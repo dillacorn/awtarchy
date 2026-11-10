@@ -88,9 +88,9 @@ def render(index):
         parts.append('[[outputs]]\n'
                      f'match.connector = "{connector}"\n'
                      f'x = {item["x"]}\ny = {item["y"]}\n'
-                     f'scale = {float(item["scale"]):g}\n'
+                     f'scale = {float(item["scale"]):.6f}\n'
                      f'mode = {{ width = {mode["width"]}, height = {mode["height"]}, '
-                     f'refresh-rate = {float(mode["refresh-rate"]):g} }}')
+                     f'refresh-rate = {float(mode["refresh-rate"]):.3f} }}')
     return "\n" + "\n\n".join(parts) + "\n"
 
 def write_safely(path, old, new):
@@ -200,7 +200,7 @@ def main():
     new = contents[:start] + render(indexed) + contents[finish:]
     tomllib.loads(new)
     backup = write_safely(config, contents, new)
-    print(f'Saved Jay output: {connector}; backup: {backup}')
+    print(f'Saved Jay outputs; backup: {backup}')
     print('Config auto-reload applies the saved profile; verify after a new login.')
 
 if __name__ == "__main__":
