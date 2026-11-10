@@ -4,6 +4,7 @@ on:
     branches: [JayWM_Migration_Trial_Investigation]
     paths:
       - 'trials/jay/**'
+      - 'config/quickshell/awtarchy/**'
       - 'tests/test-jay-trial.sh'
       - 'tests/test-jay-monitor-profile.py'
       - 'tests/test-jay-monitor-import.py'
@@ -40,3 +41,27 @@ jobs:
           python3 tests/test-jay-quicksettings.py
           python3 tests/test-jay-diagnose.py
           bash -n local/share/awtarchy/awtarchy-runtime.sh
+
+  qml-parse:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Qt6 QML syntax parser
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq qt6-declarative-dev-tools
+          test -x /usr/lib/qt6/bin/qmlformat
+      - name: Generate isolated Jay shell and parse every QML component
+        run: |
+          set -euo pipefail
+          output="$RUNNER_TEMP/awtarchy-jay"
+          python3 trials/jay/render-quickshell.py \
+            --source config/quickshell/awtarchy \
+            --dest "$output" --bridge-dir trials/jay
+          count=0
+          while IFS= read -r -d '' file; do
+            /usr/lib/qt6/bin/qmlformat --ignore-settings "$file" >/dev/null
+            count=$((count + 1))
+          done < <(find "$output" -maxdepth 1 -type f -name '*.qml' -print0)
+          (( count >= 55 ))
+          printf 'PASS: Qt6 parsed %s Jay Quickshell QML components\n' "$count"
