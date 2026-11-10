@@ -23,6 +23,9 @@ def check():
         assert "not available" in (target / "ScreenShareGuardCard.qml").read_text().lower()
         assert "screenshare_guard.sh" not in (target / "ScreenShareGuardCard.qml").read_text()
         assert "JayBridge.activateWorkspace" in (target / "Bar.qml").read_text()
+        quick = (target / "QuickSettings.qml").read_text()
+        assert 'visible: root.quickSettingsSectionVisible("display-effects")' not in quick
+        assert 'visible: root.quickSettingsSectionVisible("submap")' not in quick
         assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()
         assert "import Quickshell.Hyprland" not in "\n".join(p.read_text() for p in files)

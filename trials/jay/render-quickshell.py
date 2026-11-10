@@ -70,6 +70,18 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
                         '["python3", (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/jay/awtarchy-trial/keyboard-state.py"]')
+                if path.name == "QuickSettings.qml":
+                    # Preserve supported bar + audio state. Do not offer
+                    # nonfunctional night-light, vibrance or input-mode toggles.
+                    text = text.replace(
+                        'visible: root.quickSettingsSectionVisible("display-effects")',
+                        'visible: false')
+                    text = text.replace(
+                        'visible: root.quickSettingsSectionVisible("submap")',
+                        'visible: false')
+                    text = text.replace(
+                        'text: "JayBridge Submap"',
+                        'text: "Jay input modes (keyboard shortcuts)"')
                 if path.name == "PowerMenu.qml":
                     text = text.replace(
                         "/hypr/scripts/awtarchy_lock.sh",
