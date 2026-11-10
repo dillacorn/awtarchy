@@ -27,6 +27,7 @@ def source_plan(repo: Path, home: Path):
             result.append((src, dest))
     # Validate every destination type and every ancestor before making writes.
     result.append((None, home / ".config"))
+    result.append((None, home / ".config/quickshell"))
     for _, dest_root in pairs:
         result.append((None, dest_root))
     for src, dest in result:
