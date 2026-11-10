@@ -44,8 +44,6 @@ if [[ "$operation" == update-jay ]]; then
   printf 'Review/apply Jay managed helper and Quickshell updates; personal TOML and modified files remain preserved.\n'
 elif [[ "$operation" == install-jay ]]; then
   printf 'Jay via aur-scan; Arch/Quickshell dependencies via pacman.\n'
-elif [[ "$operation" == update-jay ]]; then
-  python3 "$repo/trials/jay/sync.py" apply --repo "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   printf 'Hyprland and its compositor packages via pacman; existing config preserved.\n'
 else
@@ -99,10 +97,17 @@ add_pkg() {
   record "$pkg"
 }
 drop_pkg() {
-  local pkg="$1"
+  local pkg="$1" targets=""
   installed "$pkg" || return 0
   if ! owned "$pkg"; then printf 'Keep untracked: %s\n' "$pkg"; return 0; fi
-  sudo pacman -R --noconfirm "$pkg" || { fail "Pacman blocked removal: $pkg"; return 1; }
+  # Confirm the exact removal transaction before writing any package state.
+  # -R --print performs no changes and -R never cascades or removes dependencies.
+  targets="$(pacman -R --print --print-format '%n' -- "$pkg")" ||
+    { fail "Pacman dependency preflight blocked removal: $pkg"; return 1; }
+  [[ "$targets" == "$pkg" ]] ||
+    { fail "Unexpected pacman removal targets for $pkg; refused"; return 1; }
+  sudo pacman -R --noconfirm -- "$pkg" ||
+    { fail "Pacman blocked removal: $pkg"; return 1; }
   if installed "$pkg"; then fail "Removal unverified: $pkg"; return 1; fi
   sudo sed -i "\|^$pkg$|d" "$ledger"
   printf 'Removed: %s\n' "$pkg"
@@ -158,7 +163,24 @@ else
     fi
   fi
   installed "$other" || { fail "Cannot remove last compositor; install $other first"; exit 1; }
-  for pkg in $packages; do drop_pkg "$pkg"; done
+  # A removal must not start with optional components and only later find that
+  # the compositor cannot be removed. Remove the compositor first.
+  if installed "$target" && ! owned "$target"; then
+    fail "Compositor $target was not installed by Awtarchy; no package removed."; exit 1
+  fi
+  drop_pkg "$target"
+  if [[ "$remove_deps" == yes ]]; then
+    for pkg in $packages; do
+      [[ "$pkg" == "$target" ]] && continue
+      # Keep explicitly shared runtime dependencies, even when tracked.
+      case "$pkg" in
+        quickshell|foot|fuzzel|mako|grim|slurp|wl-clipboard|cliphist|xdg-desktop-portal-gtk|jq|python|pipewire|playerctl)
+          printf 'Preserving shared dependency: %s\n' "$pkg"
+          continue ;;
+      esac
+      drop_pkg "$pkg"
+    done
+  fi
   if [[ "$target" == jay ]] && ! installed jay &&
      [[ -f "$session_file" && ! -L "$session_file" ]] &&
      cmp -s "$repo/trials/jay/jay.desktop" "$session_file"; then
