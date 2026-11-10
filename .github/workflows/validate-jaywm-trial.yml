@@ -6,6 +6,7 @@ on:
       - 'trials/jay/**'
       - 'tests/test-jay-trial.sh'
       - 'tests/test-jay-monitor-profile.py'
+      - 'tests/test-jay-quickshell-port.py'
       - '.github/workflows/validate-jaywm-trial.yml'
   pull_request:
     paths:
@@ -22,3 +23,4 @@ jobs:
         run: |
           bash tests/test-jay-trial.sh
           python3 tests/test-jay-monitor-profile.py
+          python3 tests/test-jay-quickshell-port.py
