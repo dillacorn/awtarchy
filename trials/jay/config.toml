@@ -360,6 +360,14 @@ match.app-id = "awtarchy-qalc"
 initial-tile-state = "floating"
 initial-floating-size = { width = 640, height = 520 }
 
+# btop in Foot uses --app-id btop from ALT/SUPER+SHIFT+B. Equivalent to
+# Hyprland 80% x 85% floating size on the current 1920x1080 trial monitors.
+# Jay 1.15 supports fixed initial floating sizes, not monitor percentages.
+[[windows]]
+match.app-id = "btop"
+initial-tile-state = "floating"
+initial-floating-size = { width = 1536, height = 918 }
+
 # Quickshell's individual floating utility surfaces open on their mapped
 # output. Jay centers them by default; dynamic bar-relative positioning still
 # needs a verified Jay-native implementation.
