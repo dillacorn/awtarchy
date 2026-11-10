@@ -169,6 +169,27 @@ Qs.Singleton {
 """
                     (destination / path.name).write_text(text, encoding="utf-8")
                     continue
+                if path.name == "FlyoutSettings.qml":
+                    # This shared panel has a *second* independent capture
+                    # writer for Network and Bluetooth. Remove it in Jay.
+                    raw = 'readonly property bool effectiveShowCaptureControl: showCaptureControl\\n        || managedConnectivityCapture'
+                    if raw not in text:
+                        raise ValueError("FlyoutSettings capture controls changed")
+                    text = text.replace(
+                        raw,
+                        'readonly property bool effectiveShowCaptureControl: false')
+                    start = text.index('    function toggleCaptureControl() {')
+                    end = text.index('\\n    }', start) + len('\\n    }')
+                    text = text[:start] + (
+                        '    function toggleCaptureControl() {\\n'
+                        '        managedMessage = "Jay does not support per-window capture exclusion.";\\n'
+                        '    }') + text[end:]
+                if path.name == "CaptureEyeButton.qml":
+                    # The shared eye icon must never accept clicks that
+                    # pretend Jay can exclude surfaces from screencopy.
+                    if 'enabled: !root.locked' not in text:
+                        raise ValueError("CaptureEyeButton changed")
+                    text = text.replace('enabled: !root.locked', 'enabled: false')
                 if path.name == "QuickSettings.qml":
                     text = text.replace(
                         '/hypr/scripts/default_applications.sh',
