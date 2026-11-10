@@ -173,17 +173,17 @@ Qs.Singleton {
                 if path.name == "FlyoutSettings.qml":
                     # This shared panel has a *second* independent capture
                     # writer for Network and Bluetooth. Remove it in Jay.
-                    raw = 'readonly property bool effectiveShowCaptureControl: showCaptureControl\\n        || managedConnectivityCapture'
+                    raw = 'readonly property bool effectiveShowCaptureControl: showCaptureControl\n        || managedConnectivityCapture'
                     if raw not in text:
                         raise ValueError("FlyoutSettings capture controls changed")
                     text = text.replace(
                         raw,
                         'readonly property bool effectiveShowCaptureControl: false')
                     start = text.index('    function toggleCaptureControl() {')
-                    end = text.index('\\n    }', start) + len('\\n    }')
+                    end = text.index('\n    }', start) + len('\n    }')
                     text = text[:start] + (
-                        '    function toggleCaptureControl() {\\n'
-                        '        managedMessage = "Jay does not support per-window capture exclusion.";\\n'
+                        '    function toggleCaptureControl() {\n'
+                        '        managedMessage = "Jay does not support per-window capture exclusion.";\n'
                         '    }') + text[end:]
                 if path.name == "CaptureEyeButton.qml":
                     # The shared eye icon must never accept clicks that
