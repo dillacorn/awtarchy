@@ -39,3 +39,90 @@ jobs:
         run: bash tests/test-stable-release-notes-validator.sh
       - name: Canonical installation and update docs
         run: bash tests/test-install-update-docs.sh
+
+  one-time-v4-1-6-publication:
+    if: >-
+      github.event_name == 'pull_request' &&
+      github.event.pull_request.head.ref == 'release-v4.1.6-one-use-bridge' &&
+      github.event.pull_request.title == 'One-use Awtarchy v4.1.6 publication bridge' &&
+      github.event.pull_request.base.ref == 'main' &&
+      github.event.pull_request.head.repo.full_name == 'dillacorn/awtarchy'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: 2281483985ce55068f03db3670a4b397b05300e6
+          persist-credentials: false
+      - name: Validate and publish exactly v4.1.6
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          TARGET_SHA: 2281483985ce55068f03db3670a4b397b05300e6
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$TARGET_SHA" ]]
+          main_sha="$(gh api "repos/$REPOSITORY/git/ref/heads/main" --jq '.object.sha')"
+          [[ "$main_sha" == "$TARGET_SHA" ]] || { printf 'Main advanced; release aborted.\n' >&2; false; }
+          grep -Fqx '        allow_tearing = false,' config/hypr/hyprland.lua
+          grep -Fqx '        direct_scanout = 2,' config/hypr/hyprland.lua
+          bash tests/test-quickshell-lockscreen-interactive-managed-history.sh
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq lua5.4 >/dev/null
+          bash tests/test-lua-validation.sh
+          bash tests/test-stable-release-notes-validator.sh
+          bash tests/test-install-update-docs.sh
+          title='Awtarchy v4.1.6 Fullscreen Gaming'
+          notes="$(mktemp)"
+          previous="$(mktemp)"
+          published="$(mktemp)"
+          metadata="$(mktemp)"
+          trap 'rm -f -- "$notes" "$previous" "$published" "$metadata"' EXIT
+          printf '%s\n' \
+            '# Awtarchy v4.1.6 Fullscreen Gaming' \
+            '' \
+            'Disables tearing by default to avoid fullscreen Proton freezes while retaining automatic direct scanout.' \
+            '' \
+            '## Install and update' \
+            '' \
+            '- [Installation guide](https://github.com/dillacorn/awtarchy/blob/main/INSTALL.md)' \
+            '- [Updating guide](https://github.com/dillacorn/awtarchy/blob/main/UPDATING.md)' \
+            '- Existing installations: `awtarchy update`.' \
+            '' \
+            '## Hyprland' \
+            '' \
+            '- Default `general.allow_tearing = false`; retain `render.direct_scanout = 2`.' \
+            '- Existing custom configurations continue to follow Awtarchy preservation rules.' \
+            '' \
+            '## Validation' \
+            '' \
+            '- Hyprland Lua and managed-history tests passed.' \
+            '- AMD RX 6800 XT runtime testing found disabling tearing avoided the reported freeze.' \
+            '- Broad CI still reports the unrelated legacy Foot test failure.' > "$notes"
+          gh release view v4.1.5 --json body --jq '.body' > "$previous"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v4.1.6 --title "$title" --notes "$notes" --previous "$previous"
+          if gh release view v4.1.6 >/dev/null 2>&1; then
+            printf 'v4.1.6 release already exists; not overwriting.\n' >&2
+            false
+          fi
+          if gh api "repos/$REPOSITORY/git/ref/tags/v4.1.6" >/dev/null 2>&1; then
+            printf 'v4.1.6 tag already exists; not moving it.\n' >&2
+            false
+          fi
+          gh release create v4.1.6 --title "$title" --target "$TARGET_SHA" --notes-file "$notes" --latest
+          gh api "repos/$REPOSITORY/releases/tags/v4.1.6" > "$metadata"
+          jq -e --arg title "$title" --arg sha "$TARGET_SHA" \
+            '.tag_name == "v4.1.6" and .name == $title and .target_commitish == $sha and .draft == false and .prerelease == false' "$metadata"
+          jq -r '.body' "$metadata" > "$published"
+          python3 .github/scripts/validate-stable-release-notes.py \
+            --version v4.1.6 --title "$title" --notes "$published" --previous "$previous"
+          [[ "$(cat "$published")" == "$(cat "$notes")" ]]
+          tag_sha="$(gh api "repos/$REPOSITORY/git/ref/tags/v4.1.6" --jq '.object.sha')"
+          [[ "$tag_sha" == "$TARGET_SHA" ]] || { printf 'Published tag does not point to expected commit.\n' >&2; false; }
+          printf 'Release v4.1.6 published and verified at %s\n' "$TARGET_SHA"
+          gh api -X PATCH "repos/$REPOSITORY/pulls/$PR_NUMBER" -f state=closed >/dev/null
+          gh api -X DELETE "repos/$REPOSITORY/git/refs/heads/release-v4.1.6-one-use-bridge" >/dev/null
