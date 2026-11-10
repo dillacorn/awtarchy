@@ -118,6 +118,14 @@ Quickshell 0.3.2, native display modes, graphical authentication, screen
 sharing, input modes and Quickshell flyout focus, games, direct scanout, VRR,
 tearing and per-monitor restore. Static CI is not a runtime pass.
 
+## First-login acceptance
+
+Before calling the full trial ready, follow the
+[FIRST_LOGIN_CHECKLIST.md](FIRST_LOGIN_CHECKLIST.md) as a regression checklist.
+It includes the exact first-Mango-session failures (400 Hz/DP-3 mode, global
+workspaces, submaps, Default Applications, Quickshell floating focus and
+privacy). A green static workflow is not equivalent to passing that checklist.
+
 ## Strict parity blockers (not ready for full migration test flight)
 
 1. **Live floating positioning:** Jay initial floating window rules exist, but
