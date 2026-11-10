@@ -13,7 +13,7 @@ runtime = (root / "local/share/awtarchy/awtarchy-runtime.sh").read_text()
 subprocess.run(["bash", "-n", str(manager)], check=True)
 assert "compositor_menu()" in launcher
 assert '"Manage compositors (Hyprland / Jay)"' in launcher
-assert "JayWM experimental session available" in launcher
+assert "compositor_offer_once" in launcher
 assert "compositor_trial_installed" in launcher
 assert "install_trial_compositor_command" in installer
 assert "compositor-trial-source" in installer and "compositor-trial-source" in runtime
