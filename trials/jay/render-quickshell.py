@@ -53,6 +53,9 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-jay")
                     text = text.replace("awtarchy-quickshell", "awtarchy-jay-quickshell")
                 if path.name == "Bar.qml":
+                    text = text.replace(
+                        'Quickshell.env("HYPR_SUBMAP_STATE_FILE") || (runtimeHome + "/awtarchy-hypr-submap")',
+                        '(runtimeHome + "/awtarchy-jay-submap")')
                     start = text.index("    function focusWorkspace(selector) {")
                     end = text.index("\n    }", start) + len("\n    }")
                     text = text[:start] + """    function focusWorkspace(selector) {

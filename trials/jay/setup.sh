@@ -41,8 +41,8 @@ python3 "$src/render-manager.py" --source "$root/config/hypr/scripts/quickshell.
     --dest "$temp/quickshell.sh" || fail 'Quickshell manager port failed'
 bash -n "$temp/quickshell.sh"
 
-sources=(config.toml session.sh capture.sh jay-portals.conf monitor-info.py application-state.sh cursor-theme.sh position.sh runtime-rules.sh quicksettings.sh keyboard-state.py lock.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh)
-targets=("$jay/config.toml" "$trial/session.sh" "$trial/capture.sh" "$portal/jay-portals.conf" "$trial/monitor-info.py" "$trial/application-state.sh" "$trial/cursor-theme.sh" "$trial/position.sh" "$trial/runtime-rules.sh" "$trial/quicksettings.sh" "$trial/keyboard-state.py" "$trial/lock.sh" "$trial/lock-capture.sh" "$trial/ipc.sh" "$trial/launcher.sh" "$trial/power.sh" "$trial/clipboard.sh" "$trial/notifications.sh" "$trial/quick-settings.sh")
+sources=(config.toml session.sh capture.sh jay-portals.conf monitor-info.py application-state.sh cursor-theme.sh position.sh runtime-rules.sh quicksettings.sh keyboard-state.py mode-state.sh lock.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh)
+targets=("$jay/config.toml" "$trial/session.sh" "$trial/capture.sh" "$portal/jay-portals.conf" "$trial/monitor-info.py" "$trial/application-state.sh" "$trial/cursor-theme.sh" "$trial/position.sh" "$trial/runtime-rules.sh" "$trial/quicksettings.sh" "$trial/keyboard-state.py" "$trial/mode-state.sh" "$trial/lock.sh" "$trial/lock-capture.sh" "$trial/ipc.sh" "$trial/launcher.sh" "$trial/power.sh" "$trial/clipboard.sh" "$trial/notifications.sh" "$trial/quick-settings.sh")
 for i in "${!sources[@]}"; do
     a="$src/${sources[$i]}" b="${targets[$i]}"
     [[ -f "$a" && ! -L "$a" ]] || fail "Missing/linked source: $a"

@@ -21,6 +21,10 @@ fi
 # Start the Jay copy of Awtarchy's existing Quickshell UI. If the
 # compositor-specific bridge fails, the native Jay bar remains available
 # with ALT+SHIFT+B, and a Mako fallback can still display notifications.
+mode_state="${XDG_CONFIG_HOME:-$HOME/.config}/jay/awtarchy-trial/mode-state.sh"
+if [[ -f "$mode_state" && ! -L "$mode_state" ]]; then
+    bash "$mode_state" default
+fi
 manager="${XDG_CONFIG_HOME:-$HOME/.config}/jay/awtarchy-trial/quickshell.sh"
 if [[ -f "$manager" && ! -L "$manager" ]] && bash "$manager" start; then
     printf 'Jay trial: Quickshell IPC started; runtime parity is unverified.\n'
