@@ -61,6 +61,7 @@ def check():
         assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
         assert "toggleDefaultApps(): void" in (target / "shell.qml").read_text()
         assert "/jay/awtarchy-trial/default-apps.sh" in (target / "QuickSettings.qml").read_text()
+        assert "/jay/awtarchy-trial/sensitive-capture.sh" in (target / "NetworkMenu.qml").read_text()
         assert 'JayBridge.toggleUtility("Wiremix"' in (target / "Bar.qml").read_text()
         assert "wiremix-toggle.sh" not in (target / "Bar.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()

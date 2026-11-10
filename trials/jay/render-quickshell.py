@@ -66,6 +66,7 @@ TRANSLATIONS = {
     "/hypr/scripts/quickshell_flyout_prepare.sh": "/jay/awtarchy-trial/position.sh",
     "/hypr/scripts/hypr_quicksettings.sh": "/jay/awtarchy-trial/quicksettings.sh",
     "/hypr/scripts/quickshell_application_state.sh": "/jay/awtarchy-trial/application-state.sh",
+    "/hypr/scripts/quickshell_sensitive_capture.sh": "/jay/awtarchy-trial/sensitive-capture.sh",
     "/hypr/scripts/quickshell_bar_drag_runtime.sh": "/jay/awtarchy-trial/runtime-rules.sh",
 }
 
