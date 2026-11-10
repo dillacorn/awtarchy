@@ -15,6 +15,7 @@ on:
       - 'tests/test-jay-quicksettings.py'
       - 'tests/test-jay-diagnose.py'
       - 'tests/test-jay-compositor-management.py'
+      - 'tests/test-jay-compositor-update-apply.py'
       - 'tests/test-jay-sync.py'
       - 'awtarchy-install.sh'
       - 'local/bin/awtarchy'
@@ -45,6 +46,7 @@ jobs:
           python3 tests/test-jay-quicksettings.py
           python3 tests/test-jay-diagnose.py
           python3 tests/test-jay-compositor-management.py
+          python3 tests/test-jay-compositor-update-apply.py
           python3 tests/test-jay-sync.py
           bash -n awtarchy-install.sh local/bin/awtarchy
           bash -n local/share/awtarchy/awtarchy-runtime.sh
