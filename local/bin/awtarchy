@@ -1580,6 +1580,8 @@ compositor_menu() {
       "Preview: remove Hyprland and owned extras" \
       "Remove Hyprland only" \
       "Remove Hyprland and eligible owned extras" \
+      "Review Jay managed config changes (no writes)" \
+      "Apply Jay managed updates (preserve custom edits)" \
       "Back")" || return 0
     rc=0
     case "$choice" in
@@ -1594,6 +1596,8 @@ compositor_menu() {
       8) run_compositor_manager remove-hyprland plan yes || rc=$? ;;
       9) run_compositor_manager remove-hyprland apply no || rc=$? ;;
       10) run_compositor_manager remove-hyprland apply yes || rc=$? ;;
+      11) run_compositor_manager update-jay plan no || rc=$? ;;
+      12) run_compositor_manager update-jay apply no || rc=$? ;;
       *) return 0 ;;
     esac
     (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
