@@ -20,6 +20,12 @@ def check():
         assert len(files) >= len(list(SRC.glob("*.qml")))
         assert (target / "JayBridge.qml").is_file()
         assert (target / "JayFocusGrab.qml").is_file()
+        settings = (target / "FlyoutSettings.qml").read_text()
+        assert "readonly property bool effectiveShowCaptureControl: false" in settings
+        assert "captureWriter.exec([" not in settings
+        assert "managedMessage = \"Jay does not support per-window capture exclusion.\"" in settings
+        eye = (target / "CaptureEyeButton.qml").read_text()
+        assert "enabled: false" in eye
         for file, surface in {
             "Launcher.qml": "launcher",
             "ClipboardMenu.qml": "clipboard",
