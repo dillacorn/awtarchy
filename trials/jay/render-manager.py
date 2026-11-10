@@ -22,8 +22,8 @@ def render(source: Path, target: Path):
          'nohup jay run-tagged awtarchy-jay-shell qs -c "$CONFIG_NAME" 7>&- 8>&-'),
         ('/hypr/scripts/quickshell_cursor_theme.sh',
          '/jay/awtarchy-trial/cursor-theme.sh'),
-        ('/awtarchy/quickshell.log', '/awtarchy/quickshell-jay.log'),
-        ('/awtarchy/quickshell-start.lock', '/awtarchy/quickshell-jay-start.lock'),
+        ('LOG_FILE="${STATE_DIR}/quickshell.log"', 'LOG_FILE="${STATE_DIR}/quickshell-jay.log"'),
+        ('START_LOCK_FILE="${STATE_DIR}/quickshell-start.lock"', 'START_LOCK_FILE="${STATE_DIR}/quickshell-jay-start.lock"'),
     ]
     for old, new in substitutions:
         if old not in body:
