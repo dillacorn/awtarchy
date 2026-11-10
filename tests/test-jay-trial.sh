@@ -3,7 +3,7 @@
 set -euo pipefail
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)"
 trial="$root/trials/jay"
-for file in setup.sh session.sh capture.sh diagnose.sh application-state.sh cursor-theme.sh position.sh runtime-rules.sh quicksettings.sh lock.sh mode-state.sh mode-help.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh; do bash -n "$trial/$file"; done
+for file in setup.sh session.sh capture.sh diagnose.sh application-state.sh cursor-theme.sh position.sh runtime-rules.sh sensitive-capture.sh quicksettings.sh lock.sh mode-state.sh mode-help.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh; do bash -n "$trial/$file"; done
 python3 - "$trial" <<'PY'
 from pathlib import Path
 import sys

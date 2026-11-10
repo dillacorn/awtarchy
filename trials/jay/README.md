@@ -137,6 +137,10 @@ privacy). A green static workflow is not equivalent to passing that checklist.
    equivalents. Unavailable display-effects/submap/Num Lock UI is hidden.
 3. **Privacy:** Dynamic Screen Share Guard controls have no verified Jay
    equivalent. Jay shows a read-only warning instead of unsafe fake toggles.
+   The seven per-flyout capture-eye controls are disabled in the Jay-generated
+   UI and cannot claim protection. Saving a Jay flyout's other appearance
+   settings retains the user's shared Hyprland capture preferences. The
+   sensitive VPN subpanel fails closed because exclusion is unverified.
    Screen sharing and capture still need actual runtime tests.
 4. **GPU color:** Hyprland digital vibrance shaders and night-light controls
    have not been ported. Native Jay color-management is not equivalent proof.
