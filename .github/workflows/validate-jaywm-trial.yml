@@ -8,11 +8,15 @@ on:
       - 'tests/test-jay-monitor-profile.py'
       - 'tests/test-jay-quickshell-port.py'
       - 'tests/test-jay-manager-port.py'
+      - 'tests/test-jay-installer-choice.py'
+      - 'local/share/awtarchy/awtarchy-runtime.sh'
       - '.github/workflows/validate-jaywm-trial.yml'
   pull_request:
     paths:
       - 'trials/jay/**'
       - 'tests/test-jay-trial.sh'
+      - 'tests/test-jay-installer-choice.py'
+      - 'local/share/awtarchy/awtarchy-runtime.sh'
       - '.github/workflows/validate-jaywm-trial.yml'
   workflow_dispatch:
 jobs:
@@ -26,3 +30,5 @@ jobs:
           python3 tests/test-jay-monitor-profile.py
           python3 tests/test-jay-quickshell-port.py
           python3 tests/test-jay-manager-port.py
+          python3 tests/test-jay-installer-choice.py
+          bash -n local/share/awtarchy/awtarchy-runtime.sh
