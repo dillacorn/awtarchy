@@ -141,9 +141,9 @@ assert all("foot" in module.managed_line(target_lines, key)
 live = temp / "preserved-hyprland.lua"
 out = temp / "migrated-hyprland.lua"
 custom = '-- personalized layout should be retained intact\n'
-original = custom + current.replace(
-    'local web_browser = "firefox"', 'local web_browser = "custom-browser"'
-)
+browser_line = 'local web_browser = "python3 ~/.config/hypr/scripts/default_applications.py launch browser"'
+assert current.count(browser_line) == 1, "expected current default browser launcher"
+original = custom + current.replace(browser_line, 'local web_browser = "custom-browser"')
 legacy = original
 for key, old_line in module.LEGACY_COMMANDS:
     new_line = module.managed_line(current.splitlines(), key)
