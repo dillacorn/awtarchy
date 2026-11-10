@@ -18,6 +18,8 @@ with tempfile.TemporaryDirectory() as temp:
     assert "hyprctl monitors" not in body
     assert "jay run-tagged awtarchy-jay-shell" in body
     assert "awtarchy-jay" in body
+    assert '[[ "$(ipc control ping 2>/dev/null)" == "ok" ]]' in body
+    assert 'ipc control ping >/dev/null 2>&1' not in body
     assert body.count("monitor-info.py") >= 3
     try:
         module.render(SRC, dst)
