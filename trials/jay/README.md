@@ -72,8 +72,12 @@ python3 "$HOME/awtarchy-jay-trial/trials/jay/import-hypr-monitors.py" --preview
 python3 "$HOME/awtarchy-jay-trial/trials/jay/import-hypr-monitors.py" --apply
 ```
 
-The importer normalizes negative monitor coordinates, makes an atomic Jay
-profile with a backup, and **refuses to overwrite Jay output overrides**.
+The first fresh `setup.sh --install` invoked inside an active Hyprland session
+**automatically imports the active monitor profile once** after preview validation.
+If the installer runs from a TTY, it cannot see your running Hyprland displays;
+use the commands above from Hyprland afterward. Existing Jay output overrides
+are never auto-overwritten. The importer normalizes negative monitor coordinates,
+makes an atomic Jay profile with a backup, and **refuses to overwrite Jay output overrides**.
 It does not change Hyprland. Manually edit the resulting separate Jay profile
 or use the existing `monitor-profile.py --set` for later Jay changes.
 

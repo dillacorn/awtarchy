@@ -41,8 +41,8 @@ python3 "$src/render-manager.py" --source "$root/config/hypr/scripts/quickshell.
     --dest "$temp/quickshell.sh" || fail 'Quickshell manager port failed'
 bash -n "$temp/quickshell.sh"
 
-sources=(config.toml session.sh capture.sh jay-portals.conf monitor-info.py application-state.sh cursor-theme.sh position.sh runtime-rules.sh quicksettings.sh quicksettings.py keyboard-state.py mode-state.sh mode-help.sh lock.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh)
-targets=("$jay/config.toml" "$trial/session.sh" "$trial/capture.sh" "$portal/jay-portals.conf" "$trial/monitor-info.py" "$trial/application-state.sh" "$trial/cursor-theme.sh" "$trial/position.sh" "$trial/runtime-rules.sh" "$trial/quicksettings.sh" "$trial/quicksettings.py" "$trial/keyboard-state.py" "$trial/mode-state.sh" "$trial/mode-help.sh" "$trial/lock.sh" "$trial/lock-capture.sh" "$trial/ipc.sh" "$trial/launcher.sh" "$trial/power.sh" "$trial/clipboard.sh" "$trial/notifications.sh" "$trial/quick-settings.sh")
+sources=(config.toml session.sh capture.sh jay-portals.conf monitor-info.py application-state.sh cursor-theme.sh position.sh runtime-rules.sh quicksettings.sh quicksettings.py monitor-profile.py import-hypr-monitors.py keyboard-state.py mode-state.sh mode-help.sh lock.sh lock-capture.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh)
+targets=("$jay/config.toml" "$trial/session.sh" "$trial/capture.sh" "$portal/jay-portals.conf" "$trial/monitor-info.py" "$trial/application-state.sh" "$trial/cursor-theme.sh" "$trial/position.sh" "$trial/runtime-rules.sh" "$trial/quicksettings.sh" "$trial/quicksettings.py" "$trial/monitor-profile.py" "$trial/import-hypr-monitors.py" "$trial/keyboard-state.py" "$trial/mode-state.sh" "$trial/mode-help.sh" "$trial/lock.sh" "$trial/lock-capture.sh" "$trial/ipc.sh" "$trial/launcher.sh" "$trial/power.sh" "$trial/clipboard.sh" "$trial/notifications.sh" "$trial/quick-settings.sh")
 for i in "${!sources[@]}"; do
     a="$src/${sources[$i]}" b="${targets[$i]}"
     [[ -f "$a" && ! -L "$a" ]] || fail "Missing/linked source: $a"
@@ -76,6 +76,20 @@ for pair in "$src/jay.desktop:$desktop" "$src/jay.portal:$system_portal"; do
         # do not overwrite it or require it to match this fallback byte-for-byte.
     fi
 done
+# Capture exact active Hyprland refresh rates (including high-Hz gaming panels)
+# before any installation writes. A TTY/first-install user can configure later.
+live_hyprland=false
+if [[ "${XDG_CURRENT_DESKTOP:-}" == Hyprland
+    && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" && -n "${WAYLAND_DISPLAY:-}" ]]; then
+    live_hyprland=true
+    python3 "$src/import-hypr-monitors.py" --preview \
+        || fail 'Could not read the active Hyprland monitor profile; no destination files changed'
+fi
+fresh_jay_config=false
+if [[ ! -e "$jay/config.toml" && ! -L "$jay/config.toml" ]]; then
+    fresh_jay_config=true
+fi
+
 python3 - "$src/config.toml" <<'PY'
 import sys, tomllib
 from pathlib import Path
@@ -105,6 +119,11 @@ for i in "${!sources[@]}"; do
     }
 done
 [[ -e "$manager_target" ]] || install -m 0755 -- "$temp/quickshell.sh" "$manager_target"
+if [[ "$fresh_jay_config" == true && "$live_hyprland" == true ]]; then
+    # Only the very first Jay profile imports. Later Jay edits are independent.
+    python3 "$src/import-hypr-monitors.py" --apply \
+        || fail 'Jay monitor import failed; other staged files remain, Hyprland unchanged'
+fi
 if [[ ! -d "$shell_dir" ]]; then
     mkdir -m 0700 -- "$shell_dir"
     cp -a -- "$temp/awtarchy-jay/." "$shell_dir/"

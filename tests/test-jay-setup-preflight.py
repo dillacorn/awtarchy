@@ -60,4 +60,9 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-jay-check.") as base:
     assert not (config_home / "jay").exists(), "--check wrote Jay config"
     assert not (config_home / "quickshell/awtarchy-jay").exists(), "--check wrote generated QML"
     assert not (temp / "system").exists(), "--check touched system target"
+    body = (trial / "setup.sh").read_text()
+    assert "fresh_jay_config" in body
+    assert "live_hyprland" in body
+    assert 'python3 "$src/import-hypr-monitors.py" --apply' in body
+    assert "monitor-profile.py import-hypr-monitors.py" in body
 print("PASS: Jay --check leaves config, Quickshell, and Ly destinations unchanged")
