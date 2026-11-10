@@ -6,6 +6,7 @@ on:
       - 'trials/jay/**'
       - 'tests/test-jay-trial.sh'
       - 'tests/test-jay-monitor-profile.py'
+      - 'tests/test-jay-monitor-import.py'
       - 'tests/test-jay-quickshell-port.py'
       - 'tests/test-jay-manager-port.py'
       - 'tests/test-jay-installer-choice.py'
@@ -28,6 +29,7 @@ jobs:
         run: |
           bash tests/test-jay-trial.sh
           python3 tests/test-jay-monitor-profile.py
+          python3 tests/test-jay-monitor-import.py
           python3 tests/test-jay-quickshell-port.py
           python3 tests/test-jay-manager-port.py
           python3 tests/test-jay-installer-choice.py
