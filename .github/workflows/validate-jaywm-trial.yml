@@ -1,0 +1,21 @@
+name: Validate JayWM Trial
+on:
+  push:
+    branches: [JayWM_Migration_Trial_Investigation]
+    paths:
+      - 'trials/jay/**'
+      - 'tests/test-jay-trial.sh'
+      - '.github/workflows/validate-jaywm-trial.yml'
+  pull_request:
+    paths:
+      - 'trials/jay/**'
+      - 'tests/test-jay-trial.sh'
+      - '.github/workflows/validate-jaywm-trial.yml'
+  workflow_dispatch:
+jobs:
+  static-trial:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check shell and TOML
+        run: bash tests/test-jay-trial.sh

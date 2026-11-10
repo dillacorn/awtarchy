@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Jay (Awtarchy Trial)
+Comment=Isolated JayWM session, Hyprland remains installed
+Exec=jay run
+Type=Application
+DesktopNames=jay

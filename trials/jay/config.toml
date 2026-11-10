@@ -1,0 +1,148 @@
+# Isolated JayWM compositor trial; default Jay config is replaced, not inherited.
+auto-reload = true
+device-config-filter = "all"
+show-bar = true
+tearing.mode = "variant2"
+vrr.mode = "variant1"
+idle = { minutes = 10, grace-period = { seconds = 5 } }
+on-idle = { type = "exec", exec = { prog = "swaylock", args = ["-f", "-c", "10151c"], privileged = true } }
+on-graphics-initialized = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/session.sh\""] }
+
+[env]
+XDG_CURRENT_DESKTOP = "jay"
+XDG_SESSION_DESKTOP = "jay"
+XDG_SESSION_TYPE = "wayland"
+MOZ_ENABLE_WAYLAND = "1"
+GDK_BACKEND = "wayland,x11,*"
+QT_QPA_PLATFORM = "wayland;xcb"
+QT_QPA_PLATFORMTHEME = "qt5ct"
+GTK_THEME = "Materia-dark"
+XCURSOR_THEME = "Bibata-Modern-Ice"
+XCURSOR_SIZE = "24"
+
+[theme]
+bar-position = "top"
+container-borders = "full-smart"
+border-width = 1
+show-titles = false
+
+[shortcuts]
+logo-Return = { type = "exec", exec = "foot" }
+alt-Return = { type = "exec", exec = "foot" }
+alt-shift-Return = { type = "exec", exec = ["foot", "yazi"] }
+logo-e = { type = "exec", exec = "pcmanfm-qt" }
+logo-r = { type = "exec", exec = "fuzzel" }
+logo-space = { type = "exec", exec = "fuzzel" }
+alt-p = { type = "exec", exec = "fuzzel" }
+logo-q = "close"
+alt-shift-q = "close"
+alt-F4 = "close"
+alt-f = "toggle-floating"
+logo-f = "toggle-floating"
+alt-ctrl-f = "toggle-fullscreen"
+logo-ctrl-f = "toggle-fullscreen"
+alt-d = "split-horizontal"
+alt-v = "split-vertical"
+alt-r = "toggle-split"
+alt-m = "toggle-mono"
+alt-c = "open-control-center"
+logo-ctrl-o = "open-control-center"
+alt-shift-r = "reload-config-toml"
+logo-ctrl-l = { type = "exec", exec = { prog = "swaylock", args = ["-f", "-c", "10151c"], privileged = true } }
+logo-ctrl-alt-F12 = "toggle-visualize-compositing"
+logo-ctrl-shift-Left = { type = "move-to-output", direction = "left" }
+alt-ctrl-shift-Left = { type = "move-to-output", direction = "left" }
+logo-ctrl-shift-Right = { type = "move-to-output", direction = "right" }
+alt-ctrl-shift-Right = { type = "move-to-output", direction = "right" }
+logo-shift-s = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" area", privileged = true } }
+Print = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
+XF86AudioRaiseVolume = { type = "exec", exec = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+"] }
+XF86AudioLowerVolume = { type = "exec", exec = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"] }
+XF86AudioMute = { type = "exec", exec = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"] }
+alt-h = "focus-left"
+alt-shift-h = "move-left"
+alt-j = "focus-down"
+alt-shift-j = "move-down"
+alt-k = "focus-up"
+alt-shift-k = "move-up"
+alt-l = "focus-right"
+alt-shift-l = "move-right"
+alt-Left = "focus-left"
+alt-shift-Left = "move-left"
+alt-Down = "focus-down"
+alt-shift-Down = "move-down"
+alt-Up = "focus-up"
+alt-shift-Up = "move-up"
+alt-Right = "focus-right"
+alt-shift-Right = "move-right"
+alt-1 = { type = "show-workspace", name = "1" }
+alt-shift-1 = { type = "move-to-workspace", name = "1" }
+alt-2 = { type = "show-workspace", name = "2" }
+alt-shift-2 = { type = "move-to-workspace", name = "2" }
+alt-3 = { type = "show-workspace", name = "3" }
+alt-shift-3 = { type = "move-to-workspace", name = "3" }
+alt-4 = { type = "show-workspace", name = "4" }
+alt-shift-4 = { type = "move-to-workspace", name = "4" }
+alt-5 = { type = "show-workspace", name = "5" }
+alt-shift-5 = { type = "move-to-workspace", name = "5" }
+alt-6 = { type = "show-workspace", name = "6" }
+alt-shift-6 = { type = "move-to-workspace", name = "6" }
+alt-7 = { type = "show-workspace", name = "7" }
+alt-shift-7 = { type = "move-to-workspace", name = "7" }
+alt-8 = { type = "show-workspace", name = "8" }
+alt-shift-8 = { type = "move-to-workspace", name = "8" }
+alt-9 = { type = "show-workspace", name = "9" }
+alt-shift-9 = { type = "move-to-workspace", name = "9" }
+alt-0 = { type = "show-workspace", name = "10" }
+alt-shift-0 = { type = "move-to-workspace", name = "10" }
+logo-h = "focus-left"
+logo-shift-h = "move-left"
+logo-j = "focus-down"
+logo-shift-j = "move-down"
+logo-k = "focus-up"
+logo-shift-k = "move-up"
+logo-l = "focus-right"
+logo-shift-l = "move-right"
+logo-Left = "focus-left"
+logo-shift-Left = "move-left"
+logo-Down = "focus-down"
+logo-shift-Down = "move-down"
+logo-Up = "focus-up"
+logo-shift-Up = "move-up"
+logo-Right = "focus-right"
+logo-shift-Right = "move-right"
+logo-1 = { type = "show-workspace", name = "1" }
+logo-shift-1 = { type = "move-to-workspace", name = "1" }
+logo-2 = { type = "show-workspace", name = "2" }
+logo-shift-2 = { type = "move-to-workspace", name = "2" }
+logo-3 = { type = "show-workspace", name = "3" }
+logo-shift-3 = { type = "move-to-workspace", name = "3" }
+logo-4 = { type = "show-workspace", name = "4" }
+logo-shift-4 = { type = "move-to-workspace", name = "4" }
+logo-5 = { type = "show-workspace", name = "5" }
+logo-shift-5 = { type = "move-to-workspace", name = "5" }
+logo-6 = { type = "show-workspace", name = "6" }
+logo-shift-6 = { type = "move-to-workspace", name = "6" }
+logo-7 = { type = "show-workspace", name = "7" }
+logo-shift-7 = { type = "move-to-workspace", name = "7" }
+logo-8 = { type = "show-workspace", name = "8" }
+logo-shift-8 = { type = "move-to-workspace", name = "8" }
+logo-9 = { type = "show-workspace", name = "9" }
+logo-shift-9 = { type = "move-to-workspace", name = "9" }
+logo-0 = { type = "show-workspace", name = "10" }
+logo-shift-0 = { type = "move-to-workspace", name = "10" }
+ctrl-alt-F1 = { type = "switch-to-vt", num = 1 }
+ctrl-alt-F2 = { type = "switch-to-vt", num = 2 }
+ctrl-alt-F3 = { type = "switch-to-vt", num = 3 }
+ctrl-alt-F4 = { type = "switch-to-vt", num = 4 }
+ctrl-alt-F5 = { type = "switch-to-vt", num = 5 }
+ctrl-alt-F6 = { type = "switch-to-vt", num = 6 }
+ctrl-alt-F7 = { type = "switch-to-vt", num = 7 }
+ctrl-alt-F8 = { type = "switch-to-vt", num = 8 }
+ctrl-alt-F9 = { type = "switch-to-vt", num = 9 }
+ctrl-alt-F10 = { type = "switch-to-vt", num = 10 }
+ctrl-alt-F11 = { type = "switch-to-vt", num = 11 }
+ctrl-alt-F12 = { type = "switch-to-vt", num = 12 }
+
+# AWTARCHY-JAY-OUTPUTS-BEGIN
+# AWTARCHY-JAY-OUTPUTS-END
