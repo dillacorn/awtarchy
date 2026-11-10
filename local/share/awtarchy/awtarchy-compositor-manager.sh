@@ -69,9 +69,9 @@ if [[ "$mode" == plan ]]; then
       python3 "$repo/trials/jay/sync.py" review --repo "$repo" ;;
     install-hyprland)
       python3 "$repo/trials/jay/stage-hyprland.py" --preview --repo "$repo" ;;
-    *)
-      printf 'Preview only; nothing changed.\n' ;;
+    *) : ;;
   esac
+  printf 'Preview only; nothing changed.\n'
   exit 0
 fi
 [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] ||

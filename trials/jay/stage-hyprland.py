@@ -26,6 +26,7 @@ def source_plan(repo: Path, home: Path):
             dest = dest_root / src.relative_to(src_root)
             result.append((src, dest))
     # Validate every destination type and every ancestor before making writes.
+    result.append((None, home / ".config"))
     for _, dest_root in pairs:
         result.append((None, dest_root))
     for src, dest in result:
