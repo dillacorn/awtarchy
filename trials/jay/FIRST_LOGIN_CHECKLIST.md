@@ -4,6 +4,32 @@ Status: **not approved for the full-feature test flight**. Use this after the
 remaining parity blockers are closed. This checklist records the regressions
 seen during the first MangoWM trial and other Awtarchy-specific integrations.
 
+## First live trial, 2026-11-10
+
+Observed (not yet corrected in a live Jay session):
+
+- Jay 1.15.0 launched from Ly as **Jay (Awtarchy Trial)**.
+- User reported both display resolution/refresh rates appeared normal;
+  exact observed values and subsequent-login persistence remain unchecked.
+- Mouse cursor was invisible. The branch now proposes a software-cursor
+  fallback; verify visually before marking this fixed.
+- Window title bars were visible: the original TOML incorrectly nested
+  `show-titles = false` under `[theme]`. A top-level fix is staged but
+  still needs a second-login test.
+- Hyprland-like inner/outer gaps were missing. Jay 1.15 TOML has no
+  corresponding keys; this is a feature limitation, not a missed setting.
+- ALT+CTRL+SHIFT+Up moved a workspace upward, but Down did not restore it.
+  Check focus/workspace state and Jay's directional-output behavior.
+- Quickshell keyboard-driven surfaces, including SUPER+P power menu, did
+  not open. Inspect the persistent `~/.cache/awtarchy/quickshell-jay.log`
+  from Hyprland before changing startup or QML IPC code.
+- User successfully left Jay and returned to the existing Hyprland session.
+
+Do not mistake static CI or branch configuration corrections for verified
+runtime fixes. The installed Jay TOML preserves imported monitor settings;
+run the guarded appearance migration from `README.md` in this directory
+before retesting.
+
 ## Before changing login sessions (while in Hyprland)
 
 - [ ] Hyprland remains available in Ly; no forced package removal or config replacement
