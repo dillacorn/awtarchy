@@ -122,7 +122,7 @@ elif [[ "$operation" == install-hyprland ]]; then
   fi
 else
   desktop_name=""
-  if [[ -n "$XDG_CURRENT_DESKTOP" ]]; then desktop_name="$XDG_CURRENT_DESKTOP"; fi
+  if [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then desktop_name="$XDG_CURRENT_DESKTOP"; fi
   if [[ "$operation" == remove-jay ]]; then
     other=hyprland
     target=jay
