@@ -24,6 +24,15 @@ Hyprland remains the working rollback session; no automatic removals.
 - Jay session starts the LXQt PolicyKit agent as a temporary replacement.
   The original trusted terminal agent is still specific to Hyprland.
 - Original Foot palette and `[colors-dark] alpha=0.85` remain unchanged.
+- Jay Quick Settings returns its own live display/bar status and supports
+  validated bar enable/auto-hide/position actions. Display-effects, submap
+  picker, and Num Lock tweak panels are hidden until real compositor APIs are
+  available. Unsupported actions fail explicitly instead of changing Hyprland.
+- The staged preflight now has an executable CI fixture: `--check` is verified
+  not to write Jay config, generated Quickshell, or Ly destination files. The
+  installer preserves its action mode separately from file permission modes.
+- The Jay Power Menu can use the secure Swaylock `-f` fallback without a
+  subsequent Quickshell-only readiness probe incorrectly rejecting it.
 
 ## Isolated trial preparation from Hyprland
 
@@ -92,14 +101,28 @@ SUPER+ALT+N/M/V selects the noalt/mouse/VM input mode; press the same toggle
 again to return to normal. ALT+SHIFT+R reloads Jay's configuration.
 SUPER+CTRL+ALT+SHIFT+B toggles the native Jay fallback bar.
 
+## Independent validation already performed
+
+CI validates the installer compositor-choice logic, isolated Quickshell
+rendering, monitor profile import, and real read-only `setup.sh --check`
+against temporary destinations. Jay Quick Settings runs with fake compositor
+output and verifies unsupported commands cannot mutate settings. Awtarchy's
+existing update-session-recovery and cursor CI jobs are also run on the branch.
+
+**Still untested:** an actual Jay compositor startup, QML load under
+Quickshell 0.3.2, native display modes, graphical authentication, screen
+sharing, input modes and Quickshell flyout focus, games, direct scanout, VRR,
+tearing and per-monitor restore. Static CI is not a runtime pass.
+
 ## Strict parity blockers (not ready for full migration test flight)
 
 1. **Live floating positioning:** Jay initial floating window rules exist, but
    the exact Hyprland bar-relative positioning and dynamic resize/handoff
    backend is not ported. Existing Jay placeholder explicitly fails.
-2. **Quickshell Quick Settings:** The generated UI shares state, but the
-   compositor-specific Quick Settings backend is not yet implemented.
-   Unsupported controls are not claimed to work.
+2. **Quickshell Quick Settings:** Monitor/bar status and bar controls
+   have a Jay-native adapter with isolated tests. Brightness, Night Light,
+   vibrance, sched-ext, and direct submap controls do not yet have verified
+   equivalents. Unavailable display-effects/submap/Num Lock UI is hidden.
 3. **Privacy:** Dynamic Screen Share Guard controls have no verified Jay
    equivalent. Jay shows a read-only warning instead of unsafe fake toggles.
    Screen sharing and capture still need actual runtime tests.
