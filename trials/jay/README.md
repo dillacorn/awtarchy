@@ -91,7 +91,7 @@ replaced by this isolated trial.
 Inside Jay, run:
 
 ```bash
-bash "$HOME/awtarchy-jay-trial/trials/jay/diagnose.sh"
+bash "$HOME/.config/jay/awtarchy-trial/diagnose.sh"
 jay randr show --modes
 jay --json randr
 ```
