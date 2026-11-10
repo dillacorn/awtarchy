@@ -64,11 +64,14 @@ else
   printf 'Removal uses pacman -R; never -Rns or cascade.\n'
 fi
 if [[ "$mode" == plan ]]; then
-  if [[ "$operation" == update-jay ]]; then
-    python3 "$repo/trials/jay/sync.py" review --repo "$repo"
-  else
-    printf 'Preview only; nothing changed.\n'
-  fi
+  case "$operation" in
+    update-jay)
+      python3 "$repo/trials/jay/sync.py" review --repo "$repo" ;;
+    install-hyprland)
+      python3 "$repo/trials/jay/stage-hyprland.py" --preview --repo "$repo" ;;
+    *)
+      printf 'Preview only; nothing changed.\n' ;;
+  esac
   exit 0
 fi
 [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] ||
@@ -133,20 +136,17 @@ elif [[ "$operation" == update-jay ]]; then
   # removals are reachable through this branch.
   python3 "$repo/trials/jay/sync.py" apply --repo "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
-  for pkg in hyprland hyprland-qt-support hyprpaper hypridle hyprpicker hyprsunset xdg-desktop-portal-hyprland; do
+  # Validate every destination before installing anything. Copy only missing
+  # Awtarchy scripts, shaders, configuration and shared shell files.
+  python3 "$repo/trials/jay/stage-hyprland.py" --preview --repo "$repo"
+  for pkg in hyprland hyprland-qt-support hyprpaper hypridle hyprpicker hyprsunset \
+      xdg-desktop-portal-hyprland quickshell foot fuzzel mako grim slurp \
+      wl-clipboard cliphist jq python pipewire playerctl; do
     add_pkg "$pkg"
   done
-  config="$HOME/.config/hypr/hyprland.lua"
-  [[ ! -L "$config" && ! -L "$HOME/.config/hypr" ]] ||
-    { fail 'Hyprland config is a symlink; refusing'; exit 1; }
-  if [[ ! -e "$config" ]]; then
-    install -d -m 0755 "$HOME/.config/hypr"
-    install -m 0644 "$repo/config/hypr/hyprland.lua" "$config"
-  fi
-  if [[ ! -e "$HOME/.config/quickshell/awtarchy" ]]; then
-    install -d -m 0755 "$HOME/.config/quickshell"
-    cp -a "$repo/config/quickshell/awtarchy" "$HOME/.config/quickshell/awtarchy"
-  fi
+  python3 "$repo/trials/jay/stage-hyprland.py" --apply --repo "$repo"
+  [[ -f /usr/share/wayland-sessions/hyprland.desktop ]] ||
+    { fail 'The Hyprland package did not provide a usable Ly Wayland session entry'; exit 1; }
 else
   desktop_name=""
   if [[ -n "${XDG_CURRENT_DESKTOP:-}" ]]; then desktop_name="$XDG_CURRENT_DESKTOP"; fi
