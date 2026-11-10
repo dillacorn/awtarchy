@@ -22,10 +22,10 @@ def command(args):
         raise RuntimeError(result.stderr.strip() or "Backend command failed")
     return result.stdout.strip()
 
-def manager(action, name):
+def manager(action, name, value=None):
     if not MANAGER.is_file() or MANAGER.is_symlink():
         raise RuntimeError("Jay Quickshell manager unavailable")
-    return command(["bash", str(MANAGER), action, name])
+    return command(["bash", str(MANAGER), action, name] + ([] if value is None else [value]))
 
 def output_list():
     if not OUTPUT_INFO.is_file() or OUTPUT_INFO.is_symlink():
@@ -99,7 +99,7 @@ def action(args):
             raise ValueError("Invalid bar setting")
         if mon not in {m["name"] for m in output_list()}:
             raise ValueError("Unknown Jay monitor")
-        manager(dispatch[name][0], mon)
+        manager(dispatch[name][0], mon, value)
         return
     if name == "wallpaper" and not rest:
         command(["awtwall"])
