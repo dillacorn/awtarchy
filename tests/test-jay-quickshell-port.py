@@ -20,6 +20,22 @@ def check():
         assert len(files) >= len(list(SRC.glob("*.qml")))
         assert (target / "JayBridge.qml").is_file()
         assert (target / "JayFocusGrab.qml").is_file()
+        for file, surface in {
+            "Launcher.qml": "launcher",
+            "ClipboardMenu.qml": "clipboard",
+            "Notifications.qml": "notifications",
+            "NetworkMenu.qml": "network",
+            "QuickSettings.qml": "quick_settings",
+            "BluetoothMenu.qml": "bluetooth",
+            "BatteryMenu.qml": "battery",
+        }.items():
+            rendered = (target / file).read_text()
+            assert "readonly property bool captureAllowed: true" in rendered, file
+            assert "capture exclusion is unavailable" in rendered, file
+            assert 'queueStateCommand(["set-capture"' not in rendered, file
+            assert "capture protection enabled" not in rendered, file
+            assert 'BarState.captureAllowedFor("' + surface + '") ? "true" : "false"' in rendered, file
+
         assert "not available" in (target / "ScreenShareGuardCard.qml").read_text().lower()
         assert "screenshare_guard.sh" not in (target / "ScreenShareGuardCard.qml").read_text()
         assert "JayBridge.activateWorkspace" in (target / "Bar.qml").read_text()
