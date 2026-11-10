@@ -10,6 +10,8 @@ on:
       - 'tests/test-jay-monitor-import.py'
       - 'tests/test-jay-quickshell-port.py'
       - 'tests/test-jay-manager-port.py'
+      - 'tests/test-jay-ipc.py'
+      - 'trials/jay/ipc.sh'
       - 'tests/test-jay-installer-choice.py'
       - 'tests/test-jay-setup-preflight.py'
       - 'tests/test-jay-quicksettings.py'
@@ -49,6 +51,7 @@ jobs:
           python3 tests/test-jay-monitor-import.py
           python3 tests/test-jay-quickshell-port.py
           python3 tests/test-jay-manager-port.py
+          python3 tests/test-jay-ipc.py
           python3 tests/test-jay-installer-choice.py
           python3 tests/test-jay-setup-preflight.py
           python3 tests/test-jay-quicksettings.py
