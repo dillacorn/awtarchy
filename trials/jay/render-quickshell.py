@@ -19,6 +19,7 @@ TRANSLATIONS = {
     "/hypr/scripts/quickshell_flyout_prepare.sh": "/jay/awtarchy-trial/position.sh",
     "/hypr/scripts/hypr_quicksettings.sh": "/jay/awtarchy-trial/quicksettings.sh",
     "/hypr/scripts/quickshell_application_state.sh": "/jay/awtarchy-trial/application-state.sh",
+    "/hypr/scripts/quickshell_bar_drag_runtime.sh": "/jay/awtarchy-trial/runtime-rules.sh",
 }
 
 def render(source: Path, destination: Path, trial: Path):
@@ -61,6 +62,13 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
                         '["python3", (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/jay/awtarchy-trial/keyboard-state.py"]')
+                if path.name == "PowerMenu.qml":
+                    text = text.replace(
+                        "/hypr/scripts/awtarchy_lock.sh",
+                        "/jay/awtarchy-trial/lock.sh")
+                    text = text.replace(
+                        "/hypr/scripts/quickshell_lockscreen_capture.sh",
+                        "/jay/awtarchy-trial/lock-capture.sh")
                 if path.name == "NumlockSessionTweak.qml":
                     # No verified Jay numlock configuration command. Do not
                     # execute the Hyprland dispatcher in the other session.

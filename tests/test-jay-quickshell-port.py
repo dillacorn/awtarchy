@@ -21,6 +21,7 @@ def check():
         assert (target / "JayBridge.qml").is_file()
         assert (target / "JayFocusGrab.qml").is_file()
         assert "JayBridge.activateWorkspace" in (target / "Bar.qml").read_text()
+        assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()
         assert "import Quickshell.Hyprland" not in "\n".join(p.read_text() for p in files)
         for p in files:

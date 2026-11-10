@@ -1,7 +1,9 @@
 # Isolated JayWM compositor trial; default Jay config is replaced, not inherited.
 auto-reload = true
 device-config-filter = "all"
-show-bar = true
+show-bar = false
+# Show Jay native fallback bar with ALT+SHIFT+B if Quickshell fails.
+window-management-key = "Super_L"
 tearing.mode = "variant2"
 vrr.mode = "variant1"
 idle = { minutes = 10, grace-period = { seconds = 5 } }
@@ -46,6 +48,12 @@ alt-v = "split-vertical"
 alt-r = "toggle-split"
 alt-m = "toggle-mono"
 alt-c = "open-control-center"
+alt-shift-b = "toggle-bar"
+logo-a = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\""] }
+logo-p = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/power.sh\""] }
+logo-c = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/clipboard.sh\""] }
+logo-shift-n = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/notifications.sh\""] }
+logo-alt-s = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/quick-settings.sh\""] }
 logo-ctrl-o = "open-control-center"
 alt-shift-r = "reload-config-toml"
 logo-ctrl-l = { type = "exec", exec = { prog = "swaylock", args = ["-f", "-c", "10151c"], privileged = true } }
@@ -146,3 +154,54 @@ ctrl-alt-F12 = { type = "switch-to-vt", num = 12 }
 
 # AWTARCHY-JAY-OUTPUTS-BEGIN
 # AWTARCHY-JAY-OUTPUTS-END
+
+# Restricted privilege tags for the isolated Jay Quickshell process.
+# Jay denies workspace and foreign-toplevel management by default.
+[[clients]]
+match.tag = "awtarchy-jay-shell"
+capabilities = ["layer-shell", "foreign-toplevel-list", "foreign-toplevel-manager", "workspace-manager"]
+
+# Clipboard observers need data-control on Jay. Do not grant it to all apps.
+[[clients]]
+match.any = [{ comm = "wl-copy" }, { comm = "wl-paste" }]
+match.sandboxed = false
+capabilities = ["data-control"]
+
+# Quickshell's individual floating utility surfaces open on their mapped
+# output. Jay centers them by default; dynamic bar-relative positioning still
+# needs a verified Jay-native implementation.
+[[windows]]
+match.title = "Awtarchy Application Search"
+initial-tile-state = "floating"
+initial-floating-size = { width = 420, height = 582 }
+
+[[windows]]
+match.title = "Awtarchy Clipboard History"
+initial-tile-state = "floating"
+initial-floating-size = { width = 880, height = 760 }
+
+[[windows]]
+match.title = "Awtarchy Notification Center"
+initial-tile-state = "floating"
+initial-floating-size = { width = 520, height = 760 }
+
+[[windows]]
+match.title = "Awtarchy Quick Settings"
+initial-tile-state = "floating"
+initial-floating-size = { width = 860, height = 850 }
+
+[[windows]]
+match.title = "Awtarchy Network"
+initial-tile-state = "floating"
+initial-floating-size = { width = 520, height = 600 }
+
+[[windows]]
+match.title = "Awtarchy Bluetooth"
+initial-tile-state = "floating"
+initial-floating-size = { width = 500, height = 600 }
+
+[[windows]]
+match.title = "Awtarchy Battery"
+initial-tile-state = "floating"
+initial-floating-size = { width = 560, height = 560 }
+
