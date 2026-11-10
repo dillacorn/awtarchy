@@ -34,6 +34,62 @@ Hyprland remains the working rollback session; no automatic removals.
 - The Jay Power Menu can use the secure Swaylock `-f` fallback without a
   subsequent Quickshell-only readiness probe incorrectly rejecting it.
 
+## New Awtarchy compositor management (branch-only)
+
+On an **existing** Awtarchy installation, clone/update this exact branch and
+refresh only the installed maintenance command. Do NOT use --reinstall:
+
+```bash
+git clone --branch JayWM_Migration_Trial_Investigation --single-branch \
+  https://github.com/dillacorn/awtarchy.git "$HOME/awtarchy-jay-trial"
+cd "$HOME/awtarchy-jay-trial"
+bash tests/test-jay-trial.sh
+python3 tests/test-jay-compositor-management.py
+python3 tests/test-jay-sync.py
+sudo ./awtarchy-install.sh
+awtarchy compositor status
+awtarchy compositor
+```
+
+If the trial directory is already cloned, inspect its Git status and remote,
+then use git pull --ff-only on that exact branch instead of cloning again.
+
+The Awtarchy maintenance menu has a **Manage compositors** entry. It previews,
+installs, and removes either compositor with or without eligible tracked
+compositor-specific packages. Adding Jay does not remove Hyprland; adding
+Hyprland does not remove Jay. Package removal needs typed confirmation,
+refuses an active or final compositor, and never recursively deletes shared
+dependencies or user configuration. A package installed outside Awtarchy is
+never removed automatically. Existing user settings remain on disk after
+removing a compositor.
+
+**Reboot is recommended**, not performed. Ly usually sees new session desktop
+files when it restarts, but rebooting also ensures a clean graphics/session
+environment before switching compositors.
+
+The compositor menu also has **Review Jay managed updates** and **Apply Jay
+managed updates**. After updating the branch checkout, it refreshes unchanged
+Jay Quickshell/helpers with timestamped backups while leaving modified files
+and the personalized Jay TOML untouched. The baseline must have been recorded
+on first staging; otherwise apply refuses to guess. Monitor profiles remain
+independent. For custom TOML changes, review and merge into the organized
+~/.config/jay/config.toml manually.
+
+The branch command intentionally avoids automatic stable-main self-update while
+its trial helper is registered. Choosing stable self-update / stable update will
+return to published maintenance behavior and may remove these unreleased menu
+entries. Do not confuse ordinary stable updates with this branch-only Jay
+configuration review/apply path.
+
+**GPU:** Awtarchy's normal full installer still detects and installs the AMD,
+Intel, or NVIDIA driver stack. This compositor management path does not switch
+kernel drivers or assume a GPU vendor. Jay retains upstream's recommended Vulkan
+renderer, fullscreen tearing, VRR and direct-scanout defaults; verify the
+actual configured driver/renderer and performance on first Jay login.
+
+**Readiness:** The management interface is ready for non-destructive preview.
+The Jay desktop itself still has the runtime/feature limitations listed below.
+
 ## Isolated trial preparation from Hyprland
 
 Do not use `awtarchy update` as a replacement for explicit trial staging.
@@ -150,10 +206,11 @@ privacy). A green static workflow is not equivalent to passing that checklist.
 6. **Other parity:** exact floating app toggles, protected idle/suspend,
    full workspace/submap behavior and persistence, animations, screen zoom,
    Sunshine/Moonlight, per-monitor bar positioning and drag handling.
-7. **Installer/update:** The interactive fresh-install compositor choice is
-   implemented on this branch, but current stable/git update, full managed
-   migration, package reconciliation and Jay-only round-trip tests are not yet
-   proved. Do not assume a Jay trial checkout is installed by the main branch.
+7. **Installer/update:** Fresh-install compositor choice and branch-only
+   interactive management are implemented. Source-managed Jay helper/Quickshell
+   review/apply has fixture tests and preserves customized files. Stable
+   release updater flows still track main; full cross-compositor package
+   lifecycle and real-session rollback need live testing.
 
 The native tearing setting, direct scanout, VRR and game performance are not
 confirmed on your AMD graphics hardware. Verify with comparable games,
