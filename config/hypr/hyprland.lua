@@ -148,7 +148,7 @@ hl.config({
         gaps_out = 9,
         border_size = 1,
         resize_on_border = true,
-        allow_tearing = true,
+        allow_tearing = false,
         layout = "dwindle",
 
         col = {
