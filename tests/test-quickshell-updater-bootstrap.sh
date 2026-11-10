@@ -297,7 +297,8 @@ runtime_process_start_time() {
 spawn_real_process() {
   local executable="$1"
 
-  "$executable" 60 &
+  shift
+  "$executable" "$@" &
   SPAWNED_PID=$!
   REAL_CHILD_PIDS+=("$SPAWNED_PID")
   for _ in {1..100}; do
@@ -315,7 +316,7 @@ if [[ -x /usr/bin/sleep && -x /usr/bin/tail ]]; then
   mkdir -p -- "$real_fixture/proc"
   : >"$real_fixture/signals.log"
 
-  spawn_real_process /usr/bin/sleep \
+  spawn_real_process /usr/bin/sleep 60 \
     || fail 'Could not spawn real-process termination fixture'
   real_sleep_pid="$SPAWNED_PID"
   real_sleep_start="$(runtime_process_start_time "$real_sleep_pid")"
@@ -329,11 +330,12 @@ if [[ -x /usr/bin/sleep && -x /usr/bin/tail ]]; then
   builtin kill -0 "$real_sleep_pid" 2>/dev/null \
     || fail 'Mismatched real executable was terminated'
 
-  # Use a temporary executable named quickshell backed by /usr/bin/sleep so the
-  # production helper sees the exact expected basename in /proc/<pid>/exe.
-  cp -- /usr/bin/sleep "$real_fixture/quickshell"
+  # Use a renamed Python executable: newer coreutils multi-call sleep binaries
+  # reject the "quickshell" argv[0], so copying sleep is not portable.
+  # Still verify the actual executable basename through /proc/<pid>/exe.
+  cp -- /usr/bin/python3 "$real_fixture/quickshell"
   chmod 0755 "$real_fixture/quickshell"
-  spawn_real_process "$real_fixture/quickshell" \
+  spawn_real_process "$real_fixture/quickshell" -c 'import time; time.sleep(60)' \
     || fail 'Could not spawn real Quickshell-identity termination fixture'
   real_quickshell_pid="$SPAWNED_PID"
   real_quickshell_start="$(runtime_process_start_time "$real_quickshell_pid")"

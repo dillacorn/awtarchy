@@ -46,7 +46,8 @@ if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
     printf 'FAIL: Awtarchy must not uninstall Alacritty during the Foot migration\n' >&2
     exit 1
 fi
-require "$RUNTIME" 'if rel.startswith(".config/alacritty/") and ni is None:'
+require "$RUNTIME" 'if (rel.startswith(".config/alacritty/")'
+require "$RUNTIME" 'or rel.startswith(".local/share/SpeedCrunch/")) and ni is None:'
 require "$RUNTIME" 'if ! pacman -Qq foot >/dev/null 2>&1; then'
 require "$RUNTIME" 'pacman_install_one foot'
 require "$CONFIG" 'alpha=0.85'
