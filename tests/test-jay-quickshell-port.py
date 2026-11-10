@@ -26,6 +26,10 @@ def check():
         quick = (target / "QuickSettings.qml").read_text()
         assert 'visible: root.quickSettingsSectionVisible("display-effects")' not in quick
         assert 'visible: root.quickSettingsSectionVisible("submap")' not in quick
+        assert 'visible: root.quickSettingsSectionVisible("numlock")' not in quick
+        numlock = (target / "NumlockSessionTweak.qml").read_text()
+        assert "readonly property bool enabled: false" in numlock
+        assert "hyprctl" not in numlock and '"false"' not in numlock
         assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()
         assert "import Quickshell.Hyprland" not in "\n".join(p.read_text() for p in files)
