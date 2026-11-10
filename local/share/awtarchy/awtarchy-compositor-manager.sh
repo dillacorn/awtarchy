@@ -26,7 +26,7 @@ status() {
 }
 if [[ "$operation" == status ]]; then status; exit 0; fi
 case "$operation" in
-  install-jay|install-hyprland|remove-jay|remove-hyprland) ;;
+  install-jay|install-hyprland|remove-jay|remove-hyprland|update-jay) ;;
   *) fail 'Unknown operation'; exit 2 ;;
 esac
 [[ -f "$source_file" && ! -L "$source_file" && -O "$source_file" ]] ||
@@ -40,8 +40,12 @@ IFS= read -r repo < "$source_file" || :
   { fail 'Trial source incomplete'; exit 1; }
 printf 'Action: %s\n' "$operation"
 printf 'Personal configs are preserved. Shared packages are preserved.\n'
-if [[ "$operation" == install-jay ]]; then
+if [[ "$operation" == update-jay ]]; then
+  printf 'Review/apply Jay managed helper and Quickshell updates; personal TOML and modified files remain preserved.\n'
+elif [[ "$operation" == install-jay ]]; then
   printf 'Jay via aur-scan; Arch/Quickshell dependencies via pacman.\n'
+elif [[ "$operation" == update-jay ]]; then
+  python3 "$repo/trials/jay/sync.py" apply --repo "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   printf 'Hyprland and its compositor packages via pacman; existing config preserved.\n'
 else
@@ -61,7 +65,14 @@ else
   done
   printf 'Removal uses pacman -R; never -Rns or cascade.\n'
 fi
-if [[ "$mode" == plan ]]; then printf 'Preview only; nothing changed.\n'; exit 0; fi
+if [[ "$mode" == plan ]]; then
+  if [[ "$operation" == update-jay ]]; then
+    python3 "$repo/trials/jay/sync.py" review --repo "$repo"
+  else
+    printf 'Preview only; nothing changed.\n'
+  fi
+  exit 0
+fi
 [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] ||
   { fail 'Changes require interactive confirmation'; exit 1; }
 printf 'Type %s to authorize: ' "$operation" >/dev/tty
@@ -105,6 +116,10 @@ if [[ "$operation" == install-jay ]]; then
   fi
   bash "$repo/trials/jay/setup.sh" --check
   bash "$repo/trials/jay/setup.sh" --install
+  baseline="$HOME/.local/state/awtarchy/jay-managed-baseline.json"
+  if [[ ! -e "$baseline" && ! -L "$baseline" ]]; then
+    python3 "$repo/trials/jay/sync.py" record --repo "$repo"
+  fi
 elif [[ "$operation" == install-hyprland ]]; then
   for pkg in hyprland hyprland-qt-support hyprpaper hypridle hyprpicker hyprsunset xdg-desktop-portal-hyprland; do
     add_pkg "$pkg"
