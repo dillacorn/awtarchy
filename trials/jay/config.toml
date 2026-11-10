@@ -30,6 +30,9 @@ direct-scanout = true
 explicit-sync = true
 workspace-display-order = "sorted"
 show-bar = false
+show-titles = false   # Jay compositor titles, not application-side decorations.
+use-hardware-cursor = false  # Trial workaround for missing AMD hardware pointer.
+cursor-size = 24
 window-management-key = "Super_L"
 tearing.mode = "variant2"  # Allow tearing with one fullscreen game.
 vrr.mode = "variant1"      # VRR with fullscreen application(s), if supported.
@@ -63,7 +66,6 @@ XCURSOR_SIZE = "24"
 bar-position = "top"
 container-borders = "full-smart"
 border-width = 1
-show-titles = false
 
 # ----------------------------------------------------------------------------
 # Keyboard shortcuts
