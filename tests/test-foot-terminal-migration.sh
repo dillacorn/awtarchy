@@ -21,7 +21,7 @@ require "$RUNTIME" 'Terminal Apps:foot '
 require "$RUNTIME" 'config_dirs=(hypr quickshell foot '
 require "$RUNTIME" '.config/foot/*'
 require "$RUNTIME" '"alacritty", "foot",'
-require "$HYPR" 'local terminal = "foot"'
+require "$HYPR" 'local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"'
 grep -Fxq -- "local yazi = \"foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi\"" "$HYPR" || {
     printf '%s\n' 'FAIL: the Foot Yazi command is malformed' >&2
     exit 1
@@ -130,8 +130,12 @@ spec.loader.exec_module(module)
 
 assert len(module.LEGACY_COMMANDS) == 9, "missing historical Alacritty launch paths"
 current = target.read_text(encoding="utf-8")
-assert all("foot" in module.managed_line(current.splitlines(), key)
-           for key, _ in module.LEGACY_COMMANDS)
+target_lines = current.splitlines()
+assert module.managed_line(target_lines, "terminal") == (
+    'local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"'
+)
+assert all("foot" in module.managed_line(target_lines, key)
+           for key, _ in module.LEGACY_COMMANDS if key != "terminal")
 
 live = temp / "preserved-hyprland.lua"
 out = temp / "migrated-hyprland.lua"
@@ -180,8 +184,10 @@ out.unlink()
 
 # A bad release command must not be substituted into the live configuration.
 bad_target = temp / "bad-hyprland.lua"
-bad_target.write_text(current.replace('local terminal = "foot"',
-                                      'local terminal = "other-terminal"'), encoding="utf-8")
+bad_target.write_text(current.replace(
+    module.managed_line(current.splitlines(), "terminal"),
+    'local terminal = "other-terminal"'
+), encoding="utf-8")
 live.write_text(legacy, encoding="utf-8")
 result = subprocess.run(
     [sys.executable, str(script), str(live), str(bad_target), str(out)],
