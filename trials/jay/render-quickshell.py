@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-BRIDGE_FILES = ("JayBridge.qml", "JayFocusGrab.qml")
+BRIDGE_FILES = ("JayBridge.qml", "JayFocusGrab.qml", "ScreenShareGuardCard.qml")
 TRANSLATIONS = {
     "/hypr/scripts/quickshell.sh": "/jay/awtarchy-trial/quickshell.sh",
     "/hypr/scripts/quickshell_runtime_rules.sh": "/jay/awtarchy-trial/runtime-rules.sh",
@@ -37,6 +37,11 @@ def render(source: Path, destination: Path, trial: Path):
     destination.mkdir(parents=True)
     try:
         for path in candidates:
+            # Jay has no verified dynamic capture-shield API. Never allow the
+            # Hyprland capture toggle to misrepresent protection.
+            if path.name == "ScreenShareGuardCard.qml":
+                shutil.copyfile(trial / path.name, destination / path.name)
+                continue
             text = path.read_text(encoding="utf-8")
             if path.suffix == ".qml":
                 text = text.replace("import Quickshell.Hyprland\n", "import Quickshell.Wayland\n")

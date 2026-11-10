@@ -20,6 +20,8 @@ def check():
         assert len(files) >= len(list(SRC.glob("*.qml")))
         assert (target / "JayBridge.qml").is_file()
         assert (target / "JayFocusGrab.qml").is_file()
+        assert "not available" in (target / "ScreenShareGuardCard.qml").read_text().lower()
+        assert "screenshare_guard.sh" not in (target / "ScreenShareGuardCard.qml").read_text()
         assert "JayBridge.activateWorkspace" in (target / "Bar.qml").read_text()
         assert "/jay/awtarchy-trial/lock.sh" in (target / "PowerMenu.qml").read_text()
         assert "import Quickshell.WindowManager" in (target / "JayBridge.qml").read_text()

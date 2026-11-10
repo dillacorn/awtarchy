@@ -96,7 +96,13 @@ for d in "$home" "$jay" "$trial" "$portal" "$home/quickshell"; do
     [[ -d "$d" ]] || mkdir -m 0700 -- "$d"
 done
 for i in "${!sources[@]}"; do
-    [[ -e "${targets[$i]}" ]] || install -m 0644 -- "$src/${sources[$i]}" "${targets[$i]}"
+    [[ -e "${targets[$i]}" ]] || {
+        case "${sources[$i]}" in
+            *.sh) mode=0755 ;;
+            *) mode=0644 ;;
+        esac
+        install -m "$mode" -- "$src/${sources[$i]}" "${targets[$i]}"
+    }
 done
 [[ -e "$manager_target" ]] || install -m 0755 -- "$temp/quickshell.sh" "$manager_target"
 if [[ ! -d "$shell_dir" ]]; then
