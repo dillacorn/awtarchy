@@ -44,7 +44,3 @@ if command -v awww-daemon >/dev/null 2>&1 && command -v awww >/dev/null 2>&1; th
         ( sleep 1; awww img "$HOME/Pictures/wallpapers/awtarchy_geology.png" ) >/dev/null 2>&1 &
     fi
 fi
-# This fallback runs only inside Jay, leaving the Awtarchy Hyprland agent intact.
-if command -v lxqt-policykit-agent >/dev/null 2>&1; then
-    lxqt-policykit-agent >/dev/null 2>&1 &
-fi
