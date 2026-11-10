@@ -108,6 +108,8 @@ INSTALL_AUR=1
 INSTALL_FLATPAK=1
 INSTALL_GPU=1
 INSTALL_LY=0
+# Installer-selected compositor. Existing packages/sessions are never removed.
+COMPOSITOR_SELECTION="hyprland"
 ENABLE_KEYRING_PAM=0
 ENABLE_MIC_SUPPRESSION=0
 OVERWRITE_BASHRC=0
@@ -721,6 +723,22 @@ split_pkg_words() {
   printf '%s\n' "${words[@]}"
 }
 
+compositor_has_hyprland() {
+  [[ "${COMPOSITOR_SELECTION:-hyprland}" == hyprland || "${COMPOSITOR_SELECTION:-hyprland}" == both ]]
+}
+
+compositor_has_jay() {
+  [[ "${COMPOSITOR_SELECTION:-hyprland}" == jay || "${COMPOSITOR_SELECTION:-hyprland}" == both ]]
+}
+
+is_hyprland_only_package() {
+  case "${1:-}" in
+    hyprland|hyprpaper|hypridle|hyprpicker|hyprsunset|xdg-desktop-portal-hyprland)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 build_arch_picker_arrays() {
   ARCH_LABELS=()
   ARCH_VALUES=()
@@ -746,6 +764,9 @@ build_arch_picker_arrays() {
 
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] || continue
+      if ! compositor_has_hyprland && is_hyprland_only_package "$pkg"; then
+        continue
+      fi
       ARCH_LABELS+=("  ${pkg}")
       ARCH_VALUES+=("${pkg}")
       ARCH_SELECTED_FLAGS+=("1")
@@ -769,6 +790,9 @@ build_aur_picker_arrays() {
   done
 
   for pkg in "${PACKAGES_AUR[@]}"; do
+    if ! compositor_has_hyprland && [[ "$pkg" == hyprmoncfg-bin ]]; then
+      continue
+    fi
     AUR_LABELS+=("${pkg}")
     AUR_VALUES+=("${pkg}")
     AUR_SELECTED_FLAGS+=("1")
@@ -2234,17 +2258,23 @@ print_install_review() {
   printf 'System type: %s\n' "$system_type"
   printf 'Virtual machine/container detected: %s\n' "$IS_VM"
   printf 'Arch packages: %s\n' "${#ARCH_SELECTED[@]}"
-  printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  if compositor_has_jay; then
+    printf 'Required AUR dependencies: %s (including jay via aur-scan)\n' "$((${#REQUIRED_AUR_PACKAGES[@]} + 1))"
+  else
+    printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  fi
   printf 'Selected AUR packages: %s\n' "${#AUR_SELECTED[@]}"
   printf 'Flatpak apps: %s\n' "${#FLATPAK_SELECTED_IDS[@]}"
   printf 'GPU dependencies: %s\n' "$gpu_enabled"
   printf 'Ly tty2: %s\n' "$ly_enabled"
+  printf 'Wayland compositor: %s\n' "$COMPOSITOR_SELECTION"
   printf 'PAM keyring: %s\n' "$pam_enabled"
   printf 'Microphone noise suppression: %s\n' "$mic_suppression_enabled"
   printf 'Reboot at end: %s\n' "$reboot_label"
 
   printf '\n%s\n' "${COLOR_CYAN}Planned stages${COLOR_RESET}"
   printf '  - Check disk space and install bootstrap packages\n'
+  if compositor_has_jay; then printf '  - Install Jay and compositor dependencies through aur-scan/pacman\n'; fi
   printf '  - Clone/update ~/awtarchy if missing\n'
   if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip Arch repo packages\n'; fi
   printf '  - Install required AUR feature dependencies\n'
@@ -2297,6 +2327,7 @@ run_install_questionnaire() {
   fi
 
   if systemd-detect-virt --quiet; then IS_VM=true; else IS_VM=false; fi
+  COMPOSITOR_SELECTION="hyprland"
 
   local step=0 rc choice
   local -a labels=()
@@ -2314,6 +2345,7 @@ Nothing installs yet. This first part only collects choices.
 
 Before any changes are made, you will choose:
   - system type
+  - Wayland compositor (Hyprland, Jay, or both)
   - install sections
   - Arch repo packages
   - additional AUR packages (required feature dependencies are always installed)
@@ -2335,16 +2367,33 @@ In normal install mode it will overwrite awtarchy-managed config files under:
       1)
         if [[ "$IS_VM" == true ]]; then
           IS_LAPTOP=false
-          step=2
+          step=8
           continue
         fi
 
         choice="$(single_select_menu "System type" 1 "Laptop" "Desktop" "Back")" || { step=0; continue; }
         case "$choice" in
-          0) IS_LAPTOP=true; step=2 ;;
-          1) IS_LAPTOP=false; step=2 ;;
+          0) IS_LAPTOP=true; step=8 ;;
+          1) IS_LAPTOP=false; step=8 ;;
           *) step=0 ;;
         esac
+        ;;
+
+      8)
+        choice="$(single_select_menu "Wayland compositor" 0 "Hyprland" "Jay" "Hyprland + Jay" "Back")" || {
+          if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi
+          continue
+        }
+        case "$choice" in
+          0) COMPOSITOR_SELECTION="hyprland"; step=2 ;;
+          1) COMPOSITOR_SELECTION="jay"; step=2 ;;
+          2) COMPOSITOR_SELECTION="both"; step=2 ;;
+          *)
+            if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi ;;
+        esac
+        # Rebuild default package pickers after compositor selection changes.
+        unset ARCH_LABELS ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS
+        unset AUR_LABELS AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS
         ;;
 
       2)
@@ -2376,7 +2425,7 @@ In normal install mode it will overwrite awtarchy-managed config files under:
         else
           rc=$?
           if (( rc == 2 )); then
-            if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi
+            step=8
           else
             return "$rc"
           fi
@@ -2550,7 +2599,9 @@ prepare_base_install() {
   pacman_install_one yazi || die "Failed to install required Yazi application: yazi"
   pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"
   pacman_install_one 7zip || die "Failed to install required Yazi archive dependency: 7zip"
-  pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
+  if compositor_has_hyprland; then
+    pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
+  fi
 
   if [[ ! -d "$REPO_DIR" ]]; then
     log "Cloning awtarchy repository to ${REPO_DIR}..."
@@ -2573,6 +2624,15 @@ reconcile_power_profile_backend() {
 
   AWTARCHY_MANAGED_PACKAGES_FILE="${AWTARCHY_MANAGED_PACKAGES_FILE:-/var/lib/awtarchy/managed-packages}" \
     /usr/bin/bash "$reconciler"
+}
+
+install_jay_repo_dependencies_stage() {
+  compositor_has_jay || return 0
+  local package
+  for package in quickshell foot fuzzel mako swaylock grim slurp wl-clipboard cliphist \
+      xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl; do
+    pacman_install_one "$package" || die "Jay required Arch package failed: $package"
+  done
 }
 
 install_arch_repo_apps_stage() {
@@ -2905,6 +2965,9 @@ install_aur_repo_apps_stage() {
   local pkg
 
   packages_to_install+=("${REQUIRED_AUR_PACKAGES[@]}")
+  if compositor_has_jay; then
+    packages_to_install+=(jay)
+  fi
   if (( INSTALL_AUR == 1 )); then
     packages_to_install+=("${AUR_SELECTED[@]}")
   else
@@ -4381,6 +4444,7 @@ run_install() {
   fi
   prepare_base_install
   install_arch_repo_apps_stage
+  install_jay_repo_dependencies_stage
   if ! pacman -Qq foot >/dev/null 2>&1; then
     log "Installing required Foot terminal..."
     pacman_install_one foot || die "Foot is required before installing the Awtarchy desktop."
