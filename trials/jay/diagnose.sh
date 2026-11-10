@@ -10,7 +10,7 @@ jay pid
 printf '\n=== Outputs and modes ===\n'
 jay randr show --modes
 printf '\n=== Workspaces ===\n'
-jay tree query || true
+jay tree query -r root || true
 printf '\n=== Idle ===\n'
 jay idle status || true
 printf '\n=== PipeWire/Portal ===\n'
