@@ -1,20 +1,39 @@
-# Isolated JayWM compositor trial; default Jay config is replaced, not inherited.
+# Awtarchy Jay session (experimental). Editing this file affects Jay only.
+#
+# Most common changes:
+#   - Display refresh/position/scale: see AWTARCHY-JAY-OUTPUTS below.
+#   - Keybindings: [shortcuts] and [modes.*.shortcuts].
+#   - Floating utility windows: [[windows]] near the bottom.
+#   - Gaming: tearing, VRR and direct scanout near the top.
+#
+# Avoid editing the marked display block by hand if you intend to use the
+# Awtarchy monitor profile tool. The profile writer backs up every edit.
+# Jay replaces its default config with this file (does not merge defaults).
+
+# ----------------------------------------------------------------------------
+# Compositor / gaming / input defaults
+# ----------------------------------------------------------------------------
 auto-reload = true
 device-config-filter = "all"
-# Prioritize low-latency gaming while retaining safe compositor defaults.
 gfx-api = "Vulkan"
 direct-scanout = true
 explicit-sync = true
 workspace-display-order = "sorted"
 show-bar = false
-# Show Jay native fallback bar with ALT+SHIFT+B if Quickshell fails.
 window-management-key = "Super_L"
-tearing.mode = "variant2"
-vrr.mode = "variant1"
+tearing.mode = "variant2"  # Allow tearing with one fullscreen game.
+vrr.mode = "variant1"      # VRR with fullscreen application(s), if supported.
+
+# ----------------------------------------------------------------------------
+# Idle security / session startup
+# ----------------------------------------------------------------------------
 idle = { minutes = 10, grace-period = { seconds = 5 } }
 on-idle = { type = "exec", exec = { prog = "swaylock", args = ["-f", "-c", "10151c"], privileged = true } }
 on-graphics-initialized = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/session.sh\""] }
 
+# ----------------------------------------------------------------------------
+# Desktop environment (Jay session only)
+# ----------------------------------------------------------------------------
 [env]
 XDG_CURRENT_DESKTOP = "jay"
 XDG_SESSION_DESKTOP = "jay"
@@ -27,123 +46,177 @@ GTK_THEME = "Materia-dark"
 XCURSOR_THEME = "Bibata-Modern-Ice"
 XCURSOR_SIZE = "24"
 
+# ----------------------------------------------------------------------------
+# Window appearance
+# ----------------------------------------------------------------------------
 [theme]
 bar-position = "top"
 container-borders = "full-smart"
 border-width = 1
 show-titles = false
 
+# ----------------------------------------------------------------------------
+# Keyboard shortcuts
+# Shortcuts use Jay's documented alt/ctrl/logo/shift modifiers.
+# ALT or SUPER + 1..0 switches the GLOBAL workspace, not a per-output tag.
+# ALT/SUPER + SHIFT + 1..0 moves the focused window to that workspace.
+# ALT+SHIFT+R reloads after editing (auto-reload also enabled).
+# ----------------------------------------------------------------------------
+
 [shortcuts]
-logo-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
-alt-Return = { type = "exec", exec = "foot" }
-alt-shift-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
-logo-e = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch file-manager" } }
-logo-r = "toggle-split"
-logo-space = { type = "exec", exec = "fuzzel" }
+# Applications / launchers
 alt-p = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\"" } }
-logo-q = "close"
-alt-shift-q = "close"
-alt-F4 = "close"
-alt-f = "toggle-floating"
-logo-f = "toggle-floating"
-alt-ctrl-f = "toggle-fullscreen"
-logo-ctrl-f = "toggle-fullscreen"
-alt-d = "split-horizontal"
-alt-v = { type = "exec", exec = ["foot", "--app-id", "Wiremix", "wiremix"] }
-alt-r = "toggle-split"
-alt-m = "toggle-mono"
-alt-c = "open-control-center"
+alt-Return = { type = "exec", exec = "foot" }
 alt-shift-b = { type = "exec", exec = ["foot", "--app-id", "btop", "btop"] }
+alt-shift-c = { type = "exec", exec = { shell = "foot --app-id awtarchy-qalc --title Qalc bash \"$HOME/.config/hypr/scripts/qalc-terminal.sh\"" } }
+alt-shift-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
+alt-v = { type = "exec", exec = ["foot", "--app-id", "Wiremix", "wiremix"] }
 logo-a = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\""] }
-logo-p = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/power.sh\""] }
+logo-alt-a = { type = "exec", exec = { shell = "foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 \"$HOME/.config/hypr/scripts/default_applications.py\" tui" } }
+logo-alt-w = { type = "exec", exec = ["awtwall", "--random-all-different"] }
+logo-b = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch browser" } }
 logo-c = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/clipboard.sh\""] }
-logo-shift-n = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/notifications.sh\""] }
-logo-alt-s = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/quick-settings.sh\""] }
-logo-ctrl-o = "open-control-center"
+logo-ctrl-w = { type = "exec", exec = ["awtwall", "--random-all"] }
+logo-d = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\"" } }
+logo-e = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch file-manager" } }
+logo-n = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/notifications.sh\"" } }
+logo-p = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/power.sh\""] }
+logo-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
+logo-shift-c = { type = "exec", exec = { shell = "foot --app-id awtarchy-qalc --title Qalc bash \"$HOME/.config/hypr/scripts/qalc-terminal.sh\"" } }
+logo-shift-e = { type = "exec", exec = ["foot", "yazi"] }
+logo-shift-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
+logo-shift-w = { type = "exec", exec = ["awtwall", "--random-current"] }
+logo-space = { type = "exec", exec = "fuzzel" }
+logo-v = { type = "exec", exec = ["foot", "--app-id", "Wiremix", "wiremix"] }
+logo-w = { type = "exec", exec = ["foot", "--app-id", "wallpicker", "awtwall", "--resume"] }
+
+# Window focus, movement and layout
+alt-ctrl-f = "toggle-fullscreen"
+alt-d = "split-horizontal"
+alt-Down = "focus-down"
+alt-f = "toggle-floating"
+alt-F4 = "close"
+alt-h = "focus-left"
+alt-j = "focus-down"
+alt-k = "focus-up"
+alt-l = "focus-right"
+alt-Left = "focus-left"
+alt-m = "toggle-mono"
+alt-r = "toggle-split"
+alt-Right = "focus-right"
+alt-shift-Down = "move-down"
+alt-shift-h = "move-left"
+alt-shift-j = "move-down"
+alt-shift-k = "move-up"
+alt-shift-l = "move-right"
+alt-shift-Left = "move-left"
+alt-shift-q = "close"
 alt-shift-r = "reload-config-toml"
-logo-ctrl-l = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/lock.sh\" lock" } }
-logo-ctrl-alt-F12 = "toggle-visualize-compositing"
-logo-ctrl-shift-Left = { type = "move-to-output", direction = "left" }
+alt-shift-Right = "move-right"
+alt-shift-Up = "move-up"
+alt-Up = "focus-up"
+logo-ctrl-f = "toggle-fullscreen"
+logo-Down = "focus-down"
+logo-f = "toggle-floating"
+logo-h = "focus-left"
+logo-j = "focus-down"
+logo-k = "focus-up"
+logo-l = "focus-right"
+logo-Left = "focus-left"
+logo-m = { type = "exec", exec = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"] }
+logo-q = "close"
+logo-r = "toggle-split"
+logo-Right = "focus-right"
+logo-shift-Down = "move-down"
+logo-shift-h = "move-left"
+logo-shift-j = "move-down"
+logo-shift-k = "move-up"
+logo-shift-l = "move-right"
+logo-shift-Left = "move-left"
+logo-shift-q = "close"
+logo-shift-r = "toggle-split"
+logo-shift-Right = "move-right"
+logo-shift-Up = "move-up"
+logo-Up = "focus-up"
+logo-y = "toggle-float-pinned"
+
+# Global numbered workspaces
+alt-0 = { type = "show-workspace", name = "10" }
+alt-1 = { type = "show-workspace", name = "1" }
+alt-2 = { type = "show-workspace", name = "2" }
+alt-3 = { type = "show-workspace", name = "3" }
+alt-4 = { type = "show-workspace", name = "4" }
+alt-5 = { type = "show-workspace", name = "5" }
+alt-6 = { type = "show-workspace", name = "6" }
+alt-7 = { type = "show-workspace", name = "7" }
+alt-8 = { type = "show-workspace", name = "8" }
+alt-9 = { type = "show-workspace", name = "9" }
+alt-shift-0 = { type = "move-to-workspace", name = "10" }
+alt-shift-1 = { type = "move-to-workspace", name = "1" }
+alt-shift-2 = { type = "move-to-workspace", name = "2" }
+alt-shift-3 = { type = "move-to-workspace", name = "3" }
+alt-shift-4 = { type = "move-to-workspace", name = "4" }
+alt-shift-5 = { type = "move-to-workspace", name = "5" }
+alt-shift-6 = { type = "move-to-workspace", name = "6" }
+alt-shift-7 = { type = "move-to-workspace", name = "7" }
+alt-shift-8 = { type = "move-to-workspace", name = "8" }
+alt-shift-9 = { type = "move-to-workspace", name = "9" }
+logo-0 = { type = "show-workspace", name = "10" }
+logo-1 = { type = "show-workspace", name = "1" }
+logo-2 = { type = "show-workspace", name = "2" }
+logo-3 = { type = "show-workspace", name = "3" }
+logo-4 = { type = "show-workspace", name = "4" }
+logo-5 = { type = "show-workspace", name = "5" }
+logo-6 = { type = "show-workspace", name = "6" }
+logo-7 = { type = "show-workspace", name = "7" }
+logo-8 = { type = "show-workspace", name = "8" }
+logo-9 = { type = "show-workspace", name = "9" }
+logo-shift-0 = { type = "move-to-workspace", name = "10" }
+logo-shift-1 = { type = "move-to-workspace", name = "1" }
+logo-shift-2 = { type = "move-to-workspace", name = "2" }
+logo-shift-3 = { type = "move-to-workspace", name = "3" }
+logo-shift-4 = { type = "move-to-workspace", name = "4" }
+logo-shift-5 = { type = "move-to-workspace", name = "5" }
+logo-shift-6 = { type = "move-to-workspace", name = "6" }
+logo-shift-7 = { type = "move-to-workspace", name = "7" }
+logo-shift-8 = { type = "move-to-workspace", name = "8" }
+logo-shift-9 = { type = "move-to-workspace", name = "9" }
+
+# Move windows or workspaces between displays
+alt-ctrl-shift-Down = { type = "move-to-output", direction = "down" }
 alt-ctrl-shift-Left = { type = "move-to-output", direction = "left" }
-logo-ctrl-shift-Right = { type = "move-to-output", direction = "right" }
 alt-ctrl-shift-Right = { type = "move-to-output", direction = "right" }
+alt-ctrl-shift-Up = { type = "move-to-output", direction = "up" }
+logo-ctrl-shift-Down = { type = "move-to-output", direction = "down" }
+logo-ctrl-shift-Left = { type = "move-to-output", direction = "left" }
+logo-ctrl-shift-Right = { type = "move-to-output", direction = "right" }
+logo-ctrl-shift-Up = { type = "move-to-output", direction = "up" }
+
+# Quickshell, compositor and input modes
+alt-c = "open-control-center"
+logo-alt-backspace = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/quick-settings.sh\"" } }
+logo-alt-e = { type = "exec", exec = ["qs", "-c", "awtarchy-jay", "ipc", "call", "control", "toggleLockscreenEditor"] }
+logo-alt-m = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" mouse" } }, "enable-window-management", { type = "push-mode", name = "mouse" }]
+logo-alt-n = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" noalt" } }, { type = "push-mode", name = "noalt" }]
+logo-alt-s = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/quick-settings.sh\""] }
+logo-alt-v = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" vm" } }, { type = "push-mode", name = "vm" }]
+logo-ctrl-alt-F12 = "toggle-visualize-compositing"
+logo-ctrl-alt-shift-b = "toggle-bar"
+logo-ctrl-l = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/lock.sh\" lock" } }
+logo-ctrl-m = "open-control-center"
+logo-ctrl-o = "open-control-center"
+
+# Audio, screenshots and diagnostics
+logo-shift-d = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
+logo-shift-f = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
 logo-shift-s = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" area", privileged = true } }
+logo-shift-x = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" area", privileged = true } }
 Print = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
-XF86AudioRaiseVolume = { type = "exec", exec = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+"] }
 XF86AudioLowerVolume = { type = "exec", exec = ["wpctl", "set-volume", "@DEFAULT_AUDIO_SINK@", "5%-"] }
 XF86AudioMute = { type = "exec", exec = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"] }
-alt-h = "focus-left"
-alt-shift-h = "move-left"
-alt-j = "focus-down"
-alt-shift-j = "move-down"
-alt-k = "focus-up"
-alt-shift-k = "move-up"
-alt-l = "focus-right"
-alt-shift-l = "move-right"
-alt-Left = "focus-left"
-alt-shift-Left = "move-left"
-alt-Down = "focus-down"
-alt-shift-Down = "move-down"
-alt-Up = "focus-up"
-alt-shift-Up = "move-up"
-alt-Right = "focus-right"
-alt-shift-Right = "move-right"
-alt-1 = { type = "show-workspace", name = "1" }
-alt-shift-1 = { type = "move-to-workspace", name = "1" }
-alt-2 = { type = "show-workspace", name = "2" }
-alt-shift-2 = { type = "move-to-workspace", name = "2" }
-alt-3 = { type = "show-workspace", name = "3" }
-alt-shift-3 = { type = "move-to-workspace", name = "3" }
-alt-4 = { type = "show-workspace", name = "4" }
-alt-shift-4 = { type = "move-to-workspace", name = "4" }
-alt-5 = { type = "show-workspace", name = "5" }
-alt-shift-5 = { type = "move-to-workspace", name = "5" }
-alt-6 = { type = "show-workspace", name = "6" }
-alt-shift-6 = { type = "move-to-workspace", name = "6" }
-alt-7 = { type = "show-workspace", name = "7" }
-alt-shift-7 = { type = "move-to-workspace", name = "7" }
-alt-8 = { type = "show-workspace", name = "8" }
-alt-shift-8 = { type = "move-to-workspace", name = "8" }
-alt-9 = { type = "show-workspace", name = "9" }
-alt-shift-9 = { type = "move-to-workspace", name = "9" }
-alt-0 = { type = "show-workspace", name = "10" }
-alt-shift-0 = { type = "move-to-workspace", name = "10" }
-logo-h = "focus-left"
-logo-shift-h = "move-left"
-logo-j = "focus-down"
-logo-shift-j = "move-down"
-logo-k = "focus-up"
-logo-shift-k = "move-up"
-logo-l = "focus-right"
-logo-shift-l = "move-right"
-logo-Left = "focus-left"
-logo-shift-Left = "move-left"
-logo-Down = "focus-down"
-logo-shift-Down = "move-down"
-logo-Up = "focus-up"
-logo-shift-Up = "move-up"
-logo-Right = "focus-right"
-logo-shift-Right = "move-right"
-logo-1 = { type = "show-workspace", name = "1" }
-logo-shift-1 = { type = "move-to-workspace", name = "1" }
-logo-2 = { type = "show-workspace", name = "2" }
-logo-shift-2 = { type = "move-to-workspace", name = "2" }
-logo-3 = { type = "show-workspace", name = "3" }
-logo-shift-3 = { type = "move-to-workspace", name = "3" }
-logo-4 = { type = "show-workspace", name = "4" }
-logo-shift-4 = { type = "move-to-workspace", name = "4" }
-logo-5 = { type = "show-workspace", name = "5" }
-logo-shift-5 = { type = "move-to-workspace", name = "5" }
-logo-6 = { type = "show-workspace", name = "6" }
-logo-shift-6 = { type = "move-to-workspace", name = "6" }
-logo-7 = { type = "show-workspace", name = "7" }
-logo-shift-7 = { type = "move-to-workspace", name = "7" }
-logo-8 = { type = "show-workspace", name = "8" }
-logo-shift-8 = { type = "move-to-workspace", name = "8" }
-logo-9 = { type = "show-workspace", name = "9" }
-logo-shift-9 = { type = "move-to-workspace", name = "9" }
-logo-0 = { type = "show-workspace", name = "10" }
-logo-shift-0 = { type = "move-to-workspace", name = "10" }
+XF86AudioRaiseVolume = { type = "exec", exec = ["wpctl", "set-volume", "-l", "1.0", "@DEFAULT_AUDIO_SINK@", "5%+"] }
+
+# TTY switching
 ctrl-alt-F1 = { type = "switch-to-vt", num = 1 }
 ctrl-alt-F2 = { type = "switch-to-vt", num = 2 }
 ctrl-alt-F3 = { type = "switch-to-vt", num = 3 }
@@ -157,79 +230,56 @@ ctrl-alt-F10 = { type = "switch-to-vt", num = 10 }
 ctrl-alt-F11 = { type = "switch-to-vt", num = 11 }
 ctrl-alt-F12 = { type = "switch-to-vt", num = 12 }
 
-logo-d = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/launcher.sh\"" } }
-logo-shift-Return = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch terminal" } }
-logo-shift-e = { type = "exec", exec = ["foot", "yazi"] }
-logo-b = { type = "exec", exec = { shell = "python3 \"$HOME/.config/hypr/scripts/default_applications.py\" launch browser" } }
-logo-shift-r = "toggle-split"
-logo-v = { type = "exec", exec = ["foot", "--app-id", "Wiremix", "wiremix"] }
+# Additional shortcuts
 logo-shift-b = { type = "exec", exec = ["foot", "--app-id", "btop", "btop"] }
-logo-n = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/notifications.sh\"" } }
-logo-ctrl-m = "open-control-center"
-logo-alt-backspace = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/quick-settings.sh\"" } }
-logo-alt-e = { type = "exec", exec = ["qs", "-c", "awtarchy-jay", "ipc", "call", "control", "toggleLockscreenEditor"] }
-logo-y = "toggle-float-pinned"
-logo-m = { type = "exec", exec = ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "toggle"] }
+logo-shift-n = { type = "exec", exec = ["bash", "-lc", "bash \"$HOME/.config/jay/awtarchy-trial/notifications.sh\""] }
 logo-x = { type = "toggle-overlay", name = "magic" }
-logo-shift-c = { type = "exec", exec = { shell = "foot --app-id awtarchy-qalc --title Qalc bash \"$HOME/.config/hypr/scripts/qalc-terminal.sh\"" } }
-alt-shift-c = { type = "exec", exec = { shell = "foot --app-id awtarchy-qalc --title Qalc bash \"$HOME/.config/hypr/scripts/qalc-terminal.sh\"" } }
-logo-w = { type = "exec", exec = ["foot", "--app-id", "wallpicker", "awtwall", "--resume"] }
-logo-shift-w = { type = "exec", exec = ["awtwall", "--random-current"] }
-logo-ctrl-w = { type = "exec", exec = ["awtwall", "--random-all"] }
-logo-alt-w = { type = "exec", exec = ["awtwall", "--random-all-different"] }
-logo-shift-x = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" area", privileged = true } }
-logo-shift-f = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
-logo-shift-d = { type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/capture.sh\" output", privileged = true } }
-logo-shift-q = "close"
-logo-ctrl-alt-shift-b = "toggle-bar"
-alt-ctrl-shift-Up = { type = "move-to-output", direction = "up" }
-alt-ctrl-shift-Down = { type = "move-to-output", direction = "down" }
-logo-ctrl-shift-Up = { type = "move-to-output", direction = "up" }
-logo-ctrl-shift-Down = { type = "move-to-output", direction = "down" }
-logo-alt-n = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" noalt" } }, { type = "push-mode", name = "noalt" }]
-logo-alt-m = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" mouse" } }, "enable-window-management", { type = "push-mode", name = "mouse" }]
-logo-alt-v = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" vm" } }, { type = "push-mode", name = "vm" }]
 
+# ----------------------------------------------------------------------------
+# Input modes: SUPER+ALT+N (noalt), SUPER+ALT+M (mouse), SUPER+ALT+V (VM)
+# NoAlt releases ALT bindings to games, rather than consuming them.
+# Current mode appears on the Quickshell bar (keyboard toggles are authoritative).
+# ----------------------------------------------------------------------------
 [modes."noalt".shortcuts]
 logo-alt-n = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" default" } }, "pop-mode"]
 logo-alt-m = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" mouse" } }, "clear-modes", "enable-window-management", { type = "push-mode", name = "mouse" }]
 logo-alt-v = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" vm" } }, "clear-modes", { type = "push-mode", name = "vm" }]
-alt-h = "none"
-alt-shift-h = "none"
-alt-j = "none"
-alt-shift-j = "none"
-alt-k = "none"
-alt-shift-k = "none"
-alt-l = "none"
-alt-shift-l = "none"
-alt-Left = "none"
-alt-shift-Left = "none"
-alt-Right = "none"
-alt-shift-Right = "none"
-alt-Up = "none"
-alt-shift-Up = "none"
-alt-Down = "none"
-alt-shift-Down = "none"
-alt-1 = "none"
-alt-shift-1 = "none"
-alt-2 = "none"
-alt-shift-2 = "none"
-alt-3 = "none"
-alt-shift-3 = "none"
-alt-4 = "none"
-alt-shift-4 = "none"
-alt-5 = "none"
-alt-shift-5 = "none"
-alt-6 = "none"
-alt-shift-6 = "none"
-alt-7 = "none"
-alt-shift-7 = "none"
-alt-8 = "none"
-alt-shift-8 = "none"
-alt-9 = "none"
-alt-shift-9 = "none"
-alt-0 = "none"
-alt-shift-0 = "none"
+alt-h = "forward"
+alt-shift-h = "forward"
+alt-j = "forward"
+alt-shift-j = "forward"
+alt-k = "forward"
+alt-shift-k = "forward"
+alt-l = "forward"
+alt-shift-l = "forward"
+alt-Left = "forward"
+alt-shift-Left = "forward"
+alt-Right = "forward"
+alt-shift-Right = "forward"
+alt-Up = "forward"
+alt-shift-Up = "forward"
+alt-Down = "forward"
+alt-shift-Down = "forward"
+alt-1 = "forward"
+alt-shift-1 = "forward"
+alt-2 = "forward"
+alt-shift-2 = "forward"
+alt-3 = "forward"
+alt-shift-3 = "forward"
+alt-4 = "forward"
+alt-shift-4 = "forward"
+alt-5 = "forward"
+alt-shift-5 = "forward"
+alt-6 = "forward"
+alt-shift-6 = "forward"
+alt-7 = "forward"
+alt-shift-7 = "forward"
+alt-8 = "forward"
+alt-shift-8 = "forward"
+alt-9 = "forward"
+alt-shift-9 = "forward"
+alt-0 = "forward"
+alt-shift-0 = "forward"
 
 [modes."mouse".shortcuts]
 logo-alt-m = [{ type = "exec", exec = { shell = "bash \"$HOME/.config/jay/awtarchy-trial/mode-state.sh\" default" } }, "disable-window-management", "pop-mode"]
@@ -265,6 +315,11 @@ logo-alt-shift-9 = { type = "move-to-workspace", name = "9" }
 logo-alt-0 = { type = "show-workspace", name = "10" }
 logo-alt-shift-0 = { type = "move-to-workspace", name = "10" }
 
+# ----------------------------------------------------------------------------
+# Persisted monitor modes, positions, refresh rates and scale
+# This block is managed by monitor-profile.py; do not move the markers.
+# The first test should import the ACTIVE Hyprland 400Hz + secondary layout.
+# ----------------------------------------------------------------------------
 # AWTARCHY-JAY-OUTPUTS-BEGIN
 # AWTARCHY-JAY-OUTPUTS-END
 
@@ -279,6 +334,19 @@ capabilities = ["layer-shell", "foreign-toplevel-list", "foreign-toplevel-manage
 match.any = [{ comm = "wl-copy" }, { comm = "wl-paste" }]
 match.sandboxed = false
 capabilities = ["data-control"]
+
+# Previous Mango issue: Default Applications must launch floating at 540x460,
+# not tile or silently call Hyprland IPC in the Jay session.
+[[windows]]
+match.app-id = "awtarchy-default-apps"
+initial-tile-state = "floating"
+initial-floating-size = { width = 540, height = 460 }
+initial-floating-position = { x = 200, y = 120 }
+
+[[windows]]
+match.app-id = "awtarchy-qalc"
+initial-tile-state = "floating"
+initial-floating-size = { width = 640, height = 520 }
 
 # Quickshell's individual floating utility surfaces open on their mapped
 # output. Jay centers them by default; dynamic bar-relative positioning still
