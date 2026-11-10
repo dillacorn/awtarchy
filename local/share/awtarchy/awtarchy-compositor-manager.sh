@@ -128,6 +128,10 @@ if [[ "$operation" == install-jay ]]; then
   if [[ ! -e "$baseline" && ! -L "$baseline" ]]; then
     python3 "$repo/trials/jay/sync.py" record --repo "$repo"
   fi
+elif [[ "$operation" == update-jay ]]; then
+  # Apply the previewed managed diff; no package operations or compositor
+  # removals are reachable through this branch.
+  python3 "$repo/trials/jay/sync.py" apply --repo "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   for pkg in hyprland hyprland-qt-support hyprpaper hypridle hyprpicker hyprsunset xdg-desktop-portal-hyprland; do
     add_pkg "$pkg"
