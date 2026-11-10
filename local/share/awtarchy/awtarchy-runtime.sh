@@ -3004,7 +3004,8 @@ install_aur_repo_apps_stage() {
       fi
     else
       if ! install_aur_with_scanner "$pkg"; then
-        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}" \
+            || { [[ "$pkg" == jay ]] && compositor_has_jay; }; then
           die "Required AUR dependency failed to install: ${pkg}"
         fi
         warn "AUR package failed: ${pkg}. Continuing with remaining selections."
@@ -3013,7 +3014,8 @@ install_aur_repo_apps_stage() {
     fi
 
     if ! aur_selected_package_installed "$pkg"; then
-      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}" \
+          || { [[ "$pkg" == jay ]] && compositor_has_jay; }; then
         die "Required AUR dependency is still unavailable after installation: ${pkg}"
       fi
       warn "AUR package was not detected after installation: ${pkg}"
