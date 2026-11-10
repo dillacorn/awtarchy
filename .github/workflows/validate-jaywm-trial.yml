@@ -10,6 +10,7 @@ on:
       - 'tests/test-jay-quickshell-port.py'
       - 'tests/test-jay-manager-port.py'
       - 'tests/test-jay-installer-choice.py'
+      - 'tests/test-jay-setup-preflight.py'
       - 'local/share/awtarchy/awtarchy-runtime.sh'
       - '.github/workflows/validate-jaywm-trial.yml'
   pull_request:
@@ -33,4 +34,5 @@ jobs:
           python3 tests/test-jay-quickshell-port.py
           python3 tests/test-jay-manager-port.py
           python3 tests/test-jay-installer-choice.py
+          python3 tests/test-jay-setup-preflight.py
           bash -n local/share/awtarchy/awtarchy-runtime.sh
