@@ -192,5 +192,9 @@ else
     printf 'Removed exact trial Ly entry.\n'
   fi
 fi
-printf 'Reboot recommended to refresh Ly sessions. No automatic reboot.\n'
+if [[ "$operation" == update-jay ]]; then
+  printf 'Jay managed files updated. Log out and back into Jay to reload them.\n'
+else
+  printf 'Reboot recommended to refresh Ly sessions. No automatic reboot.\n'
+fi
 printf 'Personal compositor configs retained.\n'

@@ -54,7 +54,16 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-jay-update-dispatch.") as fold
                 output += data
             if b"Personal compositor configs retained" in output:
                 break
-        waited, status = os.waitpid(pid, os.WNOHANG)
+        # The final banner can be read before Bash has reaped the child.
+        # Give it a bounded grace period rather than treating that race as
+        # failure or waiting indefinitely on a broken dialog.
+        waited = 0
+        status = 0
+        for _ in range(60):
+            waited, status = os.waitpid(pid, os.WNOHANG)
+            if waited != 0:
+                break
+            time.sleep(0.05)
         if waited == 0:
             os.kill(pid, 9)
             os.waitpid(pid, 0)
