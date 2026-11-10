@@ -19,8 +19,8 @@ assert "install_trial_compositor_command" in installer
 assert "compositor-trial-source" in installer and "compositor-trial-source" in runtime
 assert "aur-scan install jay --noconfirm" in manager.read_text()
 assert "pacman -R --noconfirm" in manager.read_text()
-assert "pacman -Rns" not in manager.read_text()
-assert "Cannot remove the last" in manager.read_text()
+assert "sudo pacman -R --noconfirm" in manager.read_text()
+assert "Cannot remove last compositor" in manager.read_text()
 assert "Cannot remove" in manager.read_text()
 with tempfile.TemporaryDirectory(prefix="awtarchy-compositor-test.") as folder:
     temp = Path(folder)
@@ -31,11 +31,11 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-compositor-test.") as folder:
     fake.write_text(
         '#!/usr/bin/env bash\n'
         'if [[ "$1" == "-Qq" ]]; then\n'
-        '  if [[ "$2" == hyprland ]]; then return 0; fi\n'
-        '  return 1\n'
+        '  if [[ "$2" == hyprland ]]; then exit 0; fi\n'
+        '  exit 1\n'
         'fi\n'
         f'printf "WRITTEN %s\\\\n" "$*" >> "{log}"\n'
-        'return 77\n')
+        'exit 77\n')
     fake.chmod(0o755)
     for name in ("sudo", "aur-scan"):
         target = bin_dir / name
