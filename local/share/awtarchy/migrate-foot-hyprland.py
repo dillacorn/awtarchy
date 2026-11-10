@@ -38,6 +38,10 @@ def managed_line(lines: list[str], key: str) -> str:
     if len(candidates) != 1:
         raise ValueError(f"staged Foot command is missing or ambiguous: {key}")
     line = candidates[0]
+    # Newer releases delegate the terminal choice to Awtarchy's default-app launcher.
+    # Older Foot-based release targets must remain valid for historical migrations.
+    if key == "terminal" and line == 'local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"':
+        return line
     if "foot" not in line or "alacritty" in line:
         raise ValueError(f"staged command is not Foot-based: {key}")
     return line

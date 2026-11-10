@@ -21,7 +21,7 @@ require "$RUNTIME" 'Terminal Apps:foot '
 require "$RUNTIME" 'config_dirs=(hypr quickshell foot '
 require "$RUNTIME" '.config/foot/*'
 require "$RUNTIME" '"alacritty", "foot",'
-require "$HYPR" 'local terminal = "foot"'
+require "$HYPR" 'local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"'
 grep -Fxq -- "local yazi = \"foot -f 'JetBrainsMono Nerd Font Mono:size=12' yazi\"" "$HYPR" || {
     printf '%s\n' 'FAIL: the Foot Yazi command is malformed' >&2
     exit 1
@@ -46,7 +46,8 @@ if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
     printf 'FAIL: Awtarchy must not uninstall Alacritty during the Foot migration\n' >&2
     exit 1
 fi
-require "$RUNTIME" 'if rel.startswith(".config/alacritty/") and ni is None:'
+require "$RUNTIME" 'if (rel.startswith(".config/alacritty/")'
+require "$RUNTIME" 'or rel.startswith(".local/share/SpeedCrunch/")) and ni is None:'
 require "$RUNTIME" 'if ! pacman -Qq foot >/dev/null 2>&1; then'
 require "$RUNTIME" 'pacman_install_one foot'
 require "$CONFIG" 'alpha=0.85'
@@ -130,15 +131,19 @@ spec.loader.exec_module(module)
 
 assert len(module.LEGACY_COMMANDS) == 9, "missing historical Alacritty launch paths"
 current = target.read_text(encoding="utf-8")
-assert all("foot" in module.managed_line(current.splitlines(), key)
-           for key, _ in module.LEGACY_COMMANDS)
+target_lines = current.splitlines()
+assert module.managed_line(target_lines, "terminal") == (
+    'local terminal = "python3 ~/.config/hypr/scripts/default_applications.py launch terminal"'
+)
+assert all("foot" in module.managed_line(target_lines, key)
+           for key, _ in module.LEGACY_COMMANDS if key != "terminal")
 
 live = temp / "preserved-hyprland.lua"
 out = temp / "migrated-hyprland.lua"
 custom = '-- personalized layout should be retained intact\n'
-original = custom + current.replace(
-    'local web_browser = "firefox"', 'local web_browser = "custom-browser"'
-)
+browser_line = 'local web_browser = "python3 ~/.config/hypr/scripts/default_applications.py launch browser"'
+assert current.count(browser_line) == 1, "expected current default browser launcher"
+original = custom + current.replace(browser_line, 'local web_browser = "custom-browser"')
 legacy = original
 for key, old_line in module.LEGACY_COMMANDS:
     new_line = module.managed_line(current.splitlines(), key)
@@ -180,8 +185,10 @@ out.unlink()
 
 # A bad release command must not be substituted into the live configuration.
 bad_target = temp / "bad-hyprland.lua"
-bad_target.write_text(current.replace('local terminal = "foot"',
-                                      'local terminal = "other-terminal"'), encoding="utf-8")
+bad_target.write_text(current.replace(
+    module.managed_line(current.splitlines(), "terminal"),
+    'local terminal = "other-terminal"'
+), encoding="utf-8")
 live.write_text(legacy, encoding="utf-8")
 result = subprocess.run(
     [sys.executable, str(script), str(live), str(bad_target), str(out)],
@@ -278,7 +285,7 @@ run_case(legacy.replace(
     'local terminal = "alacritty"',
     'local terminal = "alacritty --custom-options"'
 ), expected.replace(
-    'local terminal = "foot"',
+    module.managed_line(current.splitlines(), "terminal"),
     'local terminal = "alacritty --custom-options"'
 ))  # custom terminal command is user-owned
 run_case(legacy, legacy, valid_target=False)  # fail without modifying live file
