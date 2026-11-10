@@ -143,13 +143,13 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(
                         'function ping(): string { return "ok"; }',
                         'function ping(): string { return "ok"; }\n'
-                        '        function toggleDefaultApps(): void {\\n'
+                        '        function toggleDefaultApps(): void {\n'
                         '            JayBridge.toggleUtility("awtarchy-default-apps", '
                         '["foot", "--app-id", "awtarchy-default-apps", '
                         '"--title", "awtarchy-default-apps", "python3", '
                         '(Quickshell.env("XDG_CONFIG_HOME") || '
                         '(Quickshell.env("HOME") + "/.config")) '
-                        '+ "/hypr/scripts/default_applications.py", "tui"]);\\n'
+                        '+ "/hypr/scripts/default_applications.py", "tui"]);\n'
                         '        }')
                 if path.name == "KeyboardLockState.qml":
                     text = text.replace(
