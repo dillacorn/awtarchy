@@ -4094,7 +4094,11 @@ install_awtarchy_command_stage() {
   retry_command run_as_target install -m 0644 "$version_tmp" "$config_version_file"
   run_as_target rm -f -- "$version_tmp"
 
-  if [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
+  # The remote self-updater tracks stable main. It must not silently downgrade
+  # the Jay-aware installer/runtime during an unreleased compositor trial.
+  if compositor_has_jay; then
+    log "Jay trial selected: keeping the branch maintenance runtime; skipping main self-update."
+  elif [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
     log "Verifying the installed Awtarchy command against the current main updater..."
     if ! run_as_target env -u XDG_DATA_HOME -u XDG_STATE_HOME \
       HOME="$HOME_DIR" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
