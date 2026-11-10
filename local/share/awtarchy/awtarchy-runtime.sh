@@ -3323,7 +3323,7 @@ install_ly_stage() {
   done
 
   log "Installing/enabling Ly on ${tty} for next boot only..."
-  if [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
+  if compositor_has_hyprland && [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
     cat > /usr/share/wayland-sessions/hyprland.desktop <<'EOF'
 [Desktop Entry]
 Name=Hyprland
@@ -4107,6 +4107,31 @@ install_awtarchy_command_stage() {
   ok "Installed Awtarchy command: ${bin_dir}/awtarchy"
 }
 
+install_jay_session_stage() {
+  compositor_has_jay || return 0
+  local source="${REPO_DIR}/trials/jay" desktop="/usr/share/wayland-sessions/awtarchy-jay-trial.desktop"
+  local portal="/usr/share/xdg-desktop-portal/portals/jay.portal"
+
+  [[ -f "${source}/setup.sh" && ! -L "${source}/setup.sh" ]] \
+    || die "Jay source unavailable in the selected checkout; refusing to substitute main or another branch."
+  run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+    bash "${source}/setup.sh" --check \
+    || die "Jay session preflight failed; existing Jay/Hyprland configs were not overwritten."
+
+  install -d -m 0755 -- /usr/share/wayland-sessions /usr/share/xdg-desktop-portal/portals
+  if [[ ! -e "$desktop" && ! -L "$desktop" ]]; then
+    install -m 0644 -- "${source}/jay.desktop" "$desktop" \
+      || die "Could not add the isolated Jay Ly session."
+  fi
+  if [[ ! -e "$portal" && ! -L "$portal" ]]; then
+    install -m 0644 -- "${source}/jay.portal" "$portal" \
+      || die "Could not install the Jay portal descriptor."
+  fi
+  run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+    bash "${source}/setup.sh" --install \
+    || die "Jay session staging failed; Hyprland configuration was not removed."
+}
+
 copy_awtarchy_configs_stage() {
   log "Copying Awtarchy configuration files..."
   create_directory "${HOME_DIR}/.config"
@@ -4131,7 +4156,20 @@ copy_awtarchy_configs_stage() {
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
-      retry_command run_as_target cp -r -- "${REPO_DIR}/config/${dir}" "${HOME_DIR}/.config/" || exit 1
+      if [[ "$dir" == hypr ]] && ! compositor_has_hyprland; then
+        # Jay reuses Awtarchy desktop helpers, but Jay-only must not replace
+        # existing Hyprland Lua/idle/privacy compositor configuration.
+        log "Jay-only: preserving Hyprland compositor config; copying shared desktop helpers."
+        create_directory "${HOME_DIR}/.config/hypr"
+        local shared
+        for shared in scripts themes sounds; do
+          if [[ -d "${REPO_DIR}/config/hypr/${shared}" ]]; then
+            retry_command run_as_target cp -r -- "${REPO_DIR}/config/hypr/${shared}" "${HOME_DIR}/.config/hypr/" || exit 1
+          fi
+        done
+      else
+        retry_command run_as_target cp -r -- "${REPO_DIR}/config/${dir}" "${HOME_DIR}/.config/" || exit 1
+      fi
     else
       warn "Missing config/${dir}; skipping."
     fi
@@ -4443,6 +4481,10 @@ run_install() {
     return 0
   fi
   prepare_base_install
+  if compositor_has_jay; then
+    [[ -f "${REPO_DIR}/trials/jay/setup.sh" && ! -L "${REPO_DIR}/trials/jay/setup.sh" ]] \
+      || die "Jay selected, but selected checkout is missing the Jay trial. Use the exact Jay migration branch."
+  fi
   install_arch_repo_apps_stage
   install_jay_repo_dependencies_stage
   if ! pacman -Qq foot >/dev/null 2>&1; then
@@ -4470,10 +4512,11 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  install_jay_session_stage
   # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
   # The installer checkout may be root-owned; pass the trusted helper via stdin.
   local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"
-  if [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
+  if compositor_has_hyprland && [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
     run_as_target python3 - --config "${HOME_DIR}/.config/hypr/hyprland.lua" <"$gpu_cursor_helper" \
       || die "Could not apply the GPU-specific Hyprland cursor policy."
   fi
@@ -4486,13 +4529,19 @@ run_install() {
     run_as_target env "HOME=${HOME_DIR}" python3 - --home "$HOME_DIR" <"$cachyos_fish_helper" \
       || warn "Could not adjust CachyOS's stock Fish greeting; the existing shell config was preserved."
   fi
-  configure_sunshine_awtarchy_hook_stage
+  if compositor_has_hyprland; then
+    configure_sunshine_awtarchy_hook_stage
+  fi
   configure_installer_mic_suppression_stage
-  install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
+  if compositor_has_hyprland; then
+    install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
+  fi
   remove_legacy_shell_files_stage
   install_awtarchy_command_stage
   remove_legacy_shell_packages_stage
-  migrate_retired_hyprlock_stage "$REPO_DIR"
+  if compositor_has_hyprland; then
+    migrate_retired_hyprlock_stage "$REPO_DIR"
+  fi
 
   ok "Setup complete. Rebooting now."
   if (( NO_REBOOT == 1 )) || [[ "${AWTARCHY_NO_REBOOT:-0}" == "1" ]]; then
