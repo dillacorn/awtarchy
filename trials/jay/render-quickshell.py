@@ -57,6 +57,10 @@ def render(source: Path, destination: Path, trial: Path):
                     text = re.sub(
                         r'Quickshell\.execDetached\(\["hyprctl", "eval", "hl\.dispatch\(hl\.dsp\.workspace\.move\(\{ monitor = \\"" \+ (\w+)\.modelData\.dir \+ "\\" \}\)\)"\]\)',
                         r'JayBridge.moveWorkspace(\1.modelData.dir)', text)
+                if path.name == "KeyboardLockState.qml":
+                    text = text.replace(
+                        '["hyprctl", "devices", "-j"]',
+                        '["python3", (Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")) + "/jay/awtarchy-trial/keyboard-state.py"]')
                 if path.name == "NumlockSessionTweak.qml":
                     # No verified Jay numlock configuration command. Do not
                     # execute the Hyprland dispatcher in the other session.
