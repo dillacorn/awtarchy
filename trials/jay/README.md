@@ -14,11 +14,13 @@ python3 tests/test-jay-monitor-profile.py
 bash trials/jay/setup.sh --packages
 bash trials/jay/setup.sh --check
 bash trials/jay/setup.sh --install
+python3 trials/jay/monitor-profile.py --preview-hyprland
+python3 trials/jay/monitor-profile.py --import-hyprland
 ```
 
 The `--packages` step installs the `jay` AUR package through **`aur-scan install jay --noconfirm`**; its official supporting packages use pacman. The scripts don't remove anything or change the Awtarchy managed package ledger. `--check` is read-only and refuses any configuration collision; `--install` stages files only if absent/byte-identical and creates a separate `Jay (Awtarchy Trial)` Wayland session in Ly.
 
-**Reboot, then choose Jay (Awtarchy Trial) at Ly.** Don't restart Ly from an active graphical session. If it fails, return to **Hyprland** at Ly. Your Hyprland files, kernel and graphics drivers are unchanged.
+**For the isolated smoke test only:** after the preview and imported monitor profile look correct, reboot and choose Jay (Awtarchy Trial) at Ly. This is not the full Quickshell migration. Don't restart Ly from an active graphical session. If it fails, return to **Hyprland** at Ly. Your Hyprland files, kernel and graphics drivers are unchanged.
 
 ## Test Jay after logging in
 
@@ -31,10 +33,17 @@ The native Jay status bar shows true workspaces, not tags. ALT/SUPER + 1–0 sel
 
 ### Persist monitor modes, positions and refresh rates
 
-The Jay control-center display editor and `jay randr` modifications do **not** persist automatically across logins. After confirming actual connector names and supported refresh rates with `jay randr show --modes`, use:
+The Jay control-center display editor and `jay randr` modifications do **not** persist automatically across logins. **While still logged into Hyprland**, after staging the test, preview and import your actual active monitor settings:
 
 ```bash
+python3 "$HOME/awtarchy-jay-trial/trials/jay/monitor-profile.py" --preview-hyprland
+python3 "$HOME/awtarchy-jay-trial/trials/jay/monitor-profile.py" --import-hyprland
 python3 "$HOME/awtarchy-jay-trial/trials/jay/monitor-profile.py" --list
+```
+
+The import reads `hyprctl monitors -j` without changing Hyprland; it converts actual modes, scale, relative positions, and refresh to Jay's persistent TOML. A successful import means the values were recorded, **not that the target outputs support the same modes in Jay**. For manual changes, use the actual display connector and available modes from `jay randr show --modes`:
+
+```bash
 python3 "$HOME/awtarchy-jay-trial/trials/jay/monitor-profile.py" --set DP-1 1920x1080@240 0x0 1.0
 ```
 
