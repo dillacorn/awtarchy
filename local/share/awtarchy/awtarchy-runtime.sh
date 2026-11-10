@@ -4150,6 +4150,17 @@ install_jay_session_stage() {
   run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
     bash "${source}/setup.sh" --install \
     || die "Jay session staging failed; Hyprland configuration was not removed."
+  # Record an exact managed baseline on first staging. Later Jay updates may
+  # replace only unmodified code while preserving user TOML/QML and backups.
+  local sync_helper="${source}/sync.py"
+  local sync_baseline="${HOME_DIR}/.local/state/awtarchy/jay-managed-baseline.json"
+  if [[ ! -e "$sync_baseline" && ! -L "$sync_baseline" ]]; then
+    [[ -f "$sync_helper" && ! -L "$sync_helper" ]] ||
+      die "Jay managed update helper missing from trial checkout."
+    run_as_target env "HOME=${HOME_DIR}" \
+      python3 "$sync_helper" record --repo "$REPO_DIR" \
+      || die "Failed to record first Jay managed config baseline."
+  fi
 }
 
 copy_awtarchy_configs_stage() {
