@@ -285,7 +285,7 @@ run_case(legacy.replace(
     'local terminal = "alacritty"',
     'local terminal = "alacritty --custom-options"'
 ), expected.replace(
-    'local terminal = "foot"',
+    module.managed_line(current.splitlines(), "terminal"),
     'local terminal = "alacritty --custom-options"'
 ))  # custom terminal command is user-owned
 run_case(legacy, legacy, valid_target=False)  # fail without modifying live file
