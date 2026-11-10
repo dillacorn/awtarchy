@@ -91,7 +91,7 @@ def render(index):
     return "\n" + "\n\n".join(parts) + "\n"
 
 def write_safely(path, old, new):
-    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
     backup = path.with_name(path.name + ".backup-" + timestamp)
     # Exclusive creation: never replace an existing backup or a symlink.
     fd = os.open(backup, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -128,8 +128,8 @@ def main():
     if args.list:
         for name, entry in sorted(indexed.items()):
             print(f'{name}: {entry["mode"]["width"]}x{entry["mode"]["height"]}'
-                  f'@{entry["mode"]["refresh-rate"]:g}, {entry["x"]}x{entry["y"]}, '
-                  f'scale={entry["scale"]:g}')
+                  f'@{float(entry["mode"]["refresh-rate"]):g}, {entry["x"]}x{entry["y"]}, '
+                  f'scale={float(entry["scale"]):g}')
         if not indexed:
             print("No persistent overrides; use jay randr show --modes")
         return
