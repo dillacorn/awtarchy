@@ -17,7 +17,7 @@ if [[ "$mode" == --packages ]]; then
     command -v aur-scan >/dev/null 2>&1 || fail 'aur-scan is required'
     command -v sudo >/dev/null 2>&1 || fail 'sudo is required'
     aur-scan install jay --noconfirm
-    sudo pacman -S --needed --noconfirm foot fuzzel mako swaylock grim slurp wl-clipboard cliphist xdg-desktop-portal-gtk libnotify jq python pipewire
+    sudo pacman -S --needed --noconfirm foot fuzzel mako swaylock grim slurp wl-clipboard cliphist xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl
     printf 'Packages installed; run --check next.\n'
     exit 0
 fi
@@ -39,7 +39,7 @@ done
 if [[ -e "$desktop" || -L "$desktop" ]]; then
     [[ -f "$desktop" && ! -L "$desktop" ]] && cmp -s "$src/jay.desktop" "$desktop" || fail "Session entry conflict: $desktop"
 fi
-for cmd in jay foot fuzzel mako swaylock grim slurp wl-copy python3; do
+for cmd in jay foot fuzzel mako swaylock grim slurp wl-copy python3 lxqt-policykit-agent; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Missing $cmd; run --packages"
 done
 python3 - "$src/config.toml" <<'PY'
