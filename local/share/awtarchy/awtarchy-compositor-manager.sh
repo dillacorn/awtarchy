@@ -82,6 +82,9 @@ record() {
   local pkg="$1"
   [[ ! -L "$ledger" && ( ! -e "$ledger" || -f "$ledger" ) ]] ||
     { fail 'Ownership ledger is unsafe'; return 1; }
+  if [[ -e "$ledger" ]] && [[ "$(stat -c '%u' "$ledger")" != 0 ]]; then
+    fail 'Existing ownership ledger is not root-owned'; return 1
+  fi
   sudo install -d -m 0755 /var/lib/awtarchy
   if ! owned "$pkg"; then
     printf '%s\n' "$pkg" | sudo tee -a "$ledger" >/dev/null
@@ -142,11 +145,17 @@ else
     other=hyprland
     target=jay
     [[ "$desktop_name" != jay ]] || { fail 'Cannot remove running Jay'; exit 1; }
+    if command -v pgrep >/dev/null 2>&1 && pgrep -u "$(id -u)" -x jay >/dev/null 2>&1; then
+      fail 'Jay is still running on another TTY. Stop that session before removal.'; exit 1
+    fi
   else
     other=jay
     target=hyprland
     [[ "$desktop_name" != Hyprland && "$desktop_name" != hyprland ]] ||
       { fail 'Cannot remove running Hyprland'; exit 1; }
+    if command -v pgrep >/dev/null 2>&1 && pgrep -u "$(id -u)" -x Hyprland >/dev/null 2>&1; then
+      fail 'Hyprland is still running on another TTY. Stop that session before removal.'; exit 1
+    fi
   fi
   installed "$other" || { fail "Cannot remove last compositor; install $other first"; exit 1; }
   for pkg in $packages; do drop_pkg "$pkg"; done
