@@ -1,6 +1,11 @@
 # Isolated JayWM compositor trial; default Jay config is replaced, not inherited.
 auto-reload = true
 device-config-filter = "all"
+# Prioritize low-latency gaming while retaining safe compositor defaults.
+gfx-api = "Vulkan"
+direct-scanout = true
+explicit-sync = true
+workspace-display-order = "sorted"
 show-bar = false
 # Show Jay native fallback bar with ALT+SHIFT+B if Quickshell fails.
 window-management-key = "Super_L"
