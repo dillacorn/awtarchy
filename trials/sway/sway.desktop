@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Sway (Awtarchy Trial)
+Comment=Experimental Awtarchy Sway session with Hyprland fallback
+Exec=/usr/local/bin/awtarchy-sway-session
+Type=Application
+DesktopNames=sway
