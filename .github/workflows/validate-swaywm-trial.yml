@@ -49,6 +49,7 @@ jobs:
       - name: Run Sway regression checks
         run: |
           python tests/test-sway-trial.py
+          python tests/test-sway-ipc.py
 
       - name: Parse configuration using current Arch Sway
         env:
