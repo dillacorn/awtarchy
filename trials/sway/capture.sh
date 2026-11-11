@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Sway screenshots: grim/slurp -> clipboard + Satty annotation editor.
-# A capture lock protects selection/capture, not the editor's lifetime.
+# Sway: grim/slurp capture -> clipboard + Satty. Editing is never lock-held.
 set -euo pipefail
-[[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" && -n "${WAYLAND_DISPLAY:-}" ]] || {
-    printf 'Capture requires active Sway session\n' >&2; exit 1;
+[[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" &&
+   -n "${WAYLAND_DISPLAY:-}" ]] || {
+    printf 'Capture requires an active Sway session\n' >&2; exit 1;
 }
-[[ $# == 1 ]] || { printf 'Usage: capture.sh area|window|display|output\n' >&2; exit 2; }
+[[ $# -eq 1 ]] || { printf 'Usage: capture.sh area|window|display|output\n' >&2; exit 2; }
 mode="$1"
 case "$mode" in area|window|display|output) ;; *) printf 'Invalid capture mode\n' >&2; exit 2 ;; esac
 for tool in grim slurp wl-copy satty flock mktemp; do
@@ -14,24 +14,21 @@ for tool in grim slurp wl-copy satty flock mktemp; do
     }
 done
 if [[ "$mode" == window ]]; then
-    for tool in swaymsg jq; do
-        command -v "$tool" >/dev/null 2>&1 || exit 127
-    done
+    command -v swaymsg >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 || exit 127
 fi
 runtime="${XDG_RUNTIME_DIR:-}"
-[[ -d "$runtime" && ! -L "$runtime" ]] || {
-    printf 'Safe XDG_RUNTIME_DIR required\n' >&2; exit 1;
+[[ -n "$runtime" && -d "$runtime" && ! -L "$runtime" ]] || {
+    printf 'Safe XDG_RUNTIME_DIR is required\n' >&2; exit 1;
 }
 lock_dir="$runtime/awtarchy-locks"
 mkdir -p -m 0700 -- "$lock_dir"
 [[ -d "$lock_dir" && ! -L "$lock_dir" ]] || exit 1
 
-# Open the lock in a child subshell so the Satty editor never owns its fd.
-(
+capture() {
+    local geometry="" rectangles="" image="" ok=0
     flock -n 9 || {
-        if command -v notify-send >/dev/null 2>&1; then
-            notify-send 'Screenshot' 'Capture already in progress.' || true
-        fi
+        command -v notify-send >/dev/null 2>&1 &&
+            notify-send 'Screenshot' 'Capture already running.' || true
         return 0
     }
     case "$mode" in
@@ -46,35 +43,31 @@ mkdir -p -m 0700 -- "$lock_dir"
                 | "\(.rect.x),\(.rect.y) \(.rect.width)x\(.rect.height) \((.name // "Window") | gsub("[\r\n]"; " "))"
             ')" || return 1
             [[ -n "$rectangles" ]] || {
-                printf 'No visible windows to capture\n' >&2; return 1;
+                printf 'No visible application windows to capture\n' >&2
+                return 1
             }
-            geometry="$(printf '%s\n' "$rectangles" | slurp -r -f '%x,%y %wx%h' -b '#ffffff20' -c '#00000040')" || return 1 ;;
+            geometry="$(printf '%s\n' "$rectangles" |
+                slurp -r -f '%x,%y %wx%h' -b '#ffffff20' -c '#00000040')" || return 1 ;;
     esac
     [[ -n "$geometry" ]] || return 1
-    image="$(mktemp "$runtime/awtarchy-satty-XXXXXX.png")"
-    # Keep image path in a separate restricted file so the parent can read it;
-    # avoid a subshell variable that disappears when the capture finishes.
-    path_file="$(mktemp "$runtime/awtarchy-satty-path-XXXXXX")"
-    trap 'rm -f -- "${path_file:-}" "${image:-}"' RETURN
+    image="$(mktemp "$runtime/awtarchy-satty-XXXXXX.png")" || return 1
+    trap 'if [[ "${ok:-0}" != 1 ]]; then rm -f -- "${image:-}"; fi' EXIT
     grim -g "$geometry" "$image" || return 1
     wl-copy --type image/png < "$image" || return 1
-    printf '%s\n' "$image" > "$path_file"
-    # Parent receives this path via stdout once clipboard copy succeeds.
+    ok=1
     printf '%s\n' "$image"
-    trap - RETURN
-    rm -f -- "$path_file"
-) 9>"$lock_dir/sway-screenshot.lock" > "$runtime/awtarchy-satty-last-path-$$"
-rc=$?
-if (( rc != 0 )); then
-    rm -f -- "$runtime/awtarchy-satty-last-path-$$"
-    exit "$rc"
+}
+
+# Only the child capture command owns descriptor 9. Satty does not inherit it.
+if ! image="$(capture 9>"$lock_dir/sway-screenshot.lock")"; then
+    printf 'Sway screenshot capture failed or was canceled\n' >&2
+    exit 1
 fi
-image="$(<"$runtime/awtarchy-satty-last-path-$$")"
-rm -f -- "$runtime/awtarchy-satty-last-path-$$"
+[[ -n "$image" ]] || exit 0
 [[ -f "$image" && ! -L "$image" ]] || exit 1
 trap 'rm -f -- "$image"' EXIT
-out_dir="$HOME/Pictures/Screenshots"
-mkdir -p -- "$out_dir"
+directory="$HOME/Pictures/Screenshots"
+mkdir -p -- "$directory"
 satty --filename "$image" \
-    --output-filename "$out_dir/$(date +%m%d%Y-%I%p-%S).png" \
+    --output-filename "$directory/$(date +%m%d%Y-%I%p-%S).png" \
     --default-hide-toolbars
