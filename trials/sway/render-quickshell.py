@@ -170,6 +170,7 @@ def render(source: Path, destination: Path, trial: Path):
     function beginSwayDrag() {
         swayDragActive = true;
         swayDragCandidate = "none";
+        console.info("SwayBarDrag: received ALT+left press", monitorName);
         SwayDragBridge.beginBarDrag(monitorName);
     }
     function previewSwayDrag(dx, dy) {
@@ -187,6 +188,7 @@ def render(source: Path, destination: Path, trial: Path):
         if (!swayDragActive)
             return;
         swayDragActive = false;
+        console.info("SwayBarDrag: released", monitorName, swayDragCandidate);
         SwayDragBridge.finishBarDrag(monitorName, swayDragCandidate);
         swayDragCandidate = "none";
     }
