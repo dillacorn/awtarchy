@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Install current Arch Sway and validation tools
         run: |
-          pacman -Syu --noconfirm --needed git python bash sway jq
+          pacman -Syu --noconfirm --needed git python bash sway jq qt6-declarative
 
       - name: Check out exact trial commit
         uses: actions/checkout@v4
@@ -54,6 +54,21 @@ jobs:
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py
           python tests/test-sway-satty.py
+
+      - name: Parse generated Sway Quickshell layer-shell QML
+        run: |
+          generated="$(mktemp -d)"
+          python3 trials/sway/render-quickshell.py \
+            --source config/quickshell/awtarchy \
+            --dest "$generated/awtarchy-sway" \
+            --bridge-dir trials/sway
+          for filename in \
+              SwayFlyoutWindow.qml Launcher.qml ClipboardMenu.qml \
+              Notifications.qml QuickSettings.qml NetworkMenu.qml \
+              BluetoothMenu.qml BatteryMenu.qml; do
+            /usr/lib/qt6/bin/qmlformat \
+              "$generated/awtarchy-sway/$filename" >/dev/null
+          done
 
       - name: Parse configuration using current Arch Sway
         env:
