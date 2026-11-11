@@ -52,6 +52,7 @@ jobs:
           python tests/test-sway-ipc.py
           python tests/test-sway-monitors.py
           python tests/test-sway-quickshell-parity.py
+          python tests/test-sway-satty.py
 
       - name: Parse configuration using current Arch Sway
         env:
