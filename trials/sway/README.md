@@ -24,9 +24,10 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - Core packages: sway, swaybg, swayidle, swaylock, xdg-desktop-portal-wlr
 - Hyprland config, Quickshell profile and Hyprland Ly session remain installed.
 
-The existing Sway config and any imported display modes must not be silently
-overwritten. The managed-file updater records original hashes and preserves
-modified files. Removals use exact Awtarchy package ownership and non-cascading
+The updater compares the installed Sway config to its recorded baseline. If
+it is still unmodified, the updater can install new window rules while keeping
+the exact imported monitor block. User-modified configs and other edited files
+are preserved, with a backup before any managed replacement. Removals use exact Awtarchy package ownership and non-cascading
 pacman transactions. Shared packages are preserved.
 
 ## Compatibility matrix
@@ -43,8 +44,8 @@ Implemented means committed source, **not live verified**.
 | Floating btop at 80% x 85% | Native Foot app ID rule |
 | Persistent monitor modes | Guarded one-time Hyprland import |
 | Cursor image/theme/size | Native Sway seat settings |
-| Quickshell workspace/monitor | Native Quickshell.I3 bridge, unverified |
-| Quickshell menus/power/notifications | Isolated QML/IPC, unverified |
+| Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
+| Quickshell menus/power/notifications | Explicit floating title rules, native positioning and safe manual close; live test required |
 | Sway session lock | swaylock fallback; Quickshell-specific extras limited |
 | Clipboard screenshots | grim/slurp/wl-copy |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
@@ -53,7 +54,7 @@ Implemented means committed source, **not live verified**.
 | Hyprland blur/animations/rounding | **Not provided by standard Sway** |
 | Hyprland special-workspace geometry | Native Sway scratchpad differs |
 | noalt/mouse/vm submaps | Not yet fully ported |
-| Per-window Quickshell flyout placement | Still needs validation |
+| Per-window Quickshell flyout placement | Sway IPC positioning implemented; live test required |
 | Hyprland-specific utilities | Must be handled individually, not dispatched blindly |
 
 Do not advertise unimplemented capture protection, shader effects, or input
@@ -87,3 +88,7 @@ review the compositor manager's installation plan, and preserve Hyprland.
 
 Use swaymsg exit in a Sway terminal to return to Ly, then select Hyprland.
 Do not remove Hyprland, merge the trial, or release it based only on CI.
+
+Extended checklist: [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Satty screenshot annotation,
+Alt+bar edge dragging, maccel and theme isolation are staged in this branch,
+but must be confirmed in a real Sway session. SwayFX is not part of this test.
