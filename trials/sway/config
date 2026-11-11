@@ -1,0 +1,213 @@
+# Awtarchy Sway dual-compositor trial. Does not touch Hyprland.
+# Generated from audited Awtarchy Hyprland defaults; not a drop-in parity claim.
+# In particular, shaders/digital vibrance and Screen Share Guard have no port.
+set $alt Mod1
+set $super Mod4
+set $trial $HOME/.config/sway/awtarchy-trial
+
+# Core look/feel: Hyprland gaps_in=6, gaps_out=9, border_size=1, rounding=0.
+default_border pixel 1
+default_floating_border pixel 1
+gaps inner 6
+gaps outer 9
+smart_gaps off
+hide_edge_borders none
+font pango:monospace 10
+
+# Cursor: explicit XCursor theme instead of the unverified Jay rendering path.
+seat seat0 xcursor_theme Bibata-Modern-Ice 24
+seat seat0 hide_cursor 0
+floating_modifier Mod1 normal
+focus_follows_mouse yes
+focus_on_window_activation smart
+mouse_warping output
+workspace_auto_back_and_forth no
+xwayland enable
+
+# No built-in Sway bar: Awtarchy Quickshell has its own bar.
+# Native fallback is enabled by keeping the compositor usable without QML.
+bar {
+    mode invisible
+}
+
+# AWTARCHY-SWAY-OUTPUTS-BEGIN
+# Imported from active Hyprland by import-hypr-monitors.py, one time only.
+# AWTARCHY-SWAY-OUTPUTS-END
+output * bg #10151c solid_color
+
+# Explicit immediate tearing remains OFF by default, matching current Hyprland.
+# Output VRR is opt-in after real hardware checks, not asserted for all screens.
+# output DP-1 adaptive_sync on
+# output DP-1 allow_tearing yes
+
+# Spawn the separate Sway shell once; never invoke Hyprland autostart.
+exec bash $trial/session.sh
+
+# App shortcuts (match the existing Hyprland combinations).
+bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle
+bindsym Mod4+d exec bash $trial/ipc.sh launcher toggle
+bindsym Mod4+p exec bash $trial/ipc.sh powermenu begin
+bindsym Mod4+n exec bash $trial/ipc.sh notifications toggle
+bindsym Mod4+c exec bash $trial/ipc.sh clipboard toggle
+bindsym Mod4+Mod1+BackSpace exec bash $trial/ipc.sh quicksettings toggle
+bindsym Mod1+Return exec foot
+bindsym Mod4+Return exec foot
+bindsym Mod1+Shift+Return exec foot
+bindsym Mod4+Shift+Return exec foot
+bindsym Mod1+Shift+b exec foot --app-id btop btop
+bindsym Mod4+Shift+b exec foot --app-id btop btop
+bindsym Mod1+v exec foot --app-id Wiremix wiremix
+bindsym Mod4+v exec foot --app-id Wiremix wiremix
+bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
+bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
+bindsym Mod4+Shift+e exec foot yazi
+bindsym Mod4+Mod1+a exec foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 $HOME/.config/hypr/scripts/default_applications.py tui
+bindsym Mod4+space exec fuzzel
+bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+
+# Explicit keyboard focus history (actual stacking behavior still needs testing).
+bindsym Mod1+Tab focus next
+bindsym Mod1+Shift+Tab focus prev
+bindsym Mod4+q kill
+bindsym Mod4+Shift+q kill
+bindsym Mod1+Shift+q kill
+bindsym Mod1+F4 kill
+bindsym Mod1+f floating toggle
+bindsym Mod4+f floating toggle
+bindsym Mod1+Control+f fullscreen toggle
+bindsym Mod4+Control+f fullscreen toggle
+bindsym Mod1+r split toggle
+bindsym Mod4+r split toggle
+bindsym Mod1+Shift+r reload
+bindsym Mod4+Shift+r split toggle
+
+# Scratchpad: Sway's native scratchpad, not Hyprland's special workspace.
+bindsym Mod4+x scratchpad show
+bindsym Mod4+Control+x move scratchpad
+bindsym Mod4+y sticky toggle
+
+# Focus and directional movement. ALT/SUPER are both valid in default mode.
+bindsym Mod1+Left focus left
+bindsym Mod1+h focus left
+bindsym Mod1+Shift+Left move left
+bindsym Mod1+Shift+h move left
+bindsym Mod1+Control+Shift+Left move workspace to output left
+bindsym Mod4+Left focus left
+bindsym Mod4+h focus left
+bindsym Mod4+Shift+Left move left
+bindsym Mod4+Shift+h move left
+bindsym Mod4+Control+Shift+Left move workspace to output left
+bindsym Mod1+Down focus down
+bindsym Mod1+j focus down
+bindsym Mod1+Shift+Down move down
+bindsym Mod1+Shift+j move down
+bindsym Mod1+Control+Shift+Down move workspace to output down
+bindsym Mod4+Down focus down
+bindsym Mod4+j focus down
+bindsym Mod4+Shift+Down move down
+bindsym Mod4+Shift+j move down
+bindsym Mod4+Control+Shift+Down move workspace to output down
+bindsym Mod1+Up focus up
+bindsym Mod1+k focus up
+bindsym Mod1+Shift+Up move up
+bindsym Mod1+Shift+k move up
+bindsym Mod1+Control+Shift+Up move workspace to output up
+bindsym Mod4+Up focus up
+bindsym Mod4+k focus up
+bindsym Mod4+Shift+Up move up
+bindsym Mod4+Shift+k move up
+bindsym Mod4+Control+Shift+Up move workspace to output up
+bindsym Mod1+Right focus right
+bindsym Mod1+l focus right
+bindsym Mod1+Shift+Right move right
+bindsym Mod1+Shift+l move right
+bindsym Mod1+Control+Shift+Right move workspace to output right
+bindsym Mod4+Right focus right
+bindsym Mod4+l focus right
+bindsym Mod4+Shift+Right move right
+bindsym Mod4+Shift+l move right
+bindsym Mod4+Control+Shift+Right move workspace to output right
+
+# Global numbered workspaces, independent of output/tag.
+bindsym Mod1+1 workspace number 1
+bindsym Mod1+Shift+1 move container to workspace number 1
+bindsym Mod4+1 workspace number 1
+bindsym Mod4+Shift+1 move container to workspace number 1
+bindsym Mod1+2 workspace number 2
+bindsym Mod1+Shift+2 move container to workspace number 2
+bindsym Mod4+2 workspace number 2
+bindsym Mod4+Shift+2 move container to workspace number 2
+bindsym Mod1+3 workspace number 3
+bindsym Mod1+Shift+3 move container to workspace number 3
+bindsym Mod4+3 workspace number 3
+bindsym Mod4+Shift+3 move container to workspace number 3
+bindsym Mod1+4 workspace number 4
+bindsym Mod1+Shift+4 move container to workspace number 4
+bindsym Mod4+4 workspace number 4
+bindsym Mod4+Shift+4 move container to workspace number 4
+bindsym Mod1+5 workspace number 5
+bindsym Mod1+Shift+5 move container to workspace number 5
+bindsym Mod4+5 workspace number 5
+bindsym Mod4+Shift+5 move container to workspace number 5
+bindsym Mod1+6 workspace number 6
+bindsym Mod1+Shift+6 move container to workspace number 6
+bindsym Mod4+6 workspace number 6
+bindsym Mod4+Shift+6 move container to workspace number 6
+bindsym Mod1+7 workspace number 7
+bindsym Mod1+Shift+7 move container to workspace number 7
+bindsym Mod4+7 workspace number 7
+bindsym Mod4+Shift+7 move container to workspace number 7
+bindsym Mod1+8 workspace number 8
+bindsym Mod1+Shift+8 move container to workspace number 8
+bindsym Mod4+8 workspace number 8
+bindsym Mod4+Shift+8 move container to workspace number 8
+bindsym Mod1+9 workspace number 9
+bindsym Mod1+Shift+9 move container to workspace number 9
+bindsym Mod4+9 workspace number 9
+bindsym Mod4+Shift+9 move container to workspace number 9
+bindsym Mod1+0 workspace number 10
+bindsym Mod1+Shift+0 move container to workspace number 10
+bindsym Mod4+0 workspace number 10
+bindsym Mod4+Shift+0 move container to workspace number 10
+
+# Previous/next workspace and output fallback.
+bindsym Mod1+bracketleft workspace prev
+bindsym Mod1+bracketright workspace next
+bindsym Mod4+bracketleft workspace prev
+bindsym Mod4+bracketright workspace next
+bindsym Mod1+Control+Shift+bracketleft move workspace to output left
+bindsym Mod1+Control+Shift+bracketright move workspace to output right
+
+# Keyboard layouts, microphone and audio.
+bindsym Mod4+m exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+bindsym XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+
+# Capturing remains available; capture hiding is NOT implemented.
+bindsym Mod4+Shift+d exec bash $trial/capture.sh output
+bindsym Mod4+Shift+x exec bash $trial/capture.sh area
+bindsym Print exec bash $trial/capture.sh output
+
+# Awtarchy utility floating rules. Sway percentages remain relative to output.
+for_window [app_id="btop"] floating enable, resize set 80 ppt 85 ppt, move position center
+for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
+for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
+for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
+for_window [app_id="awtarchy-sway"] floating enable
+
+# Desktop tasks: same workspace numbers as the Hyprland config.
+assign [app_id="^(firefox|librewolf|brave-browser)$"] workspace number 2
+assign [app_id="^(vesktop|dev\\.vencord\\.Vesktop|discord)$"] workspace number 3
+assign [app_id="^(steam|com\\.valvesoftware\\.Steam|heroic)$"] workspace number 4
+assign [app_id="^(Spotify|com\\.spotify\\.Client)$"] workspace number 5
+assign [app_id="^(org\\.telegram\\.desktop|Telegram)$"] workspace number 6
+assign [app_id="^(obs|com\\.obsproject\\.Studio)$"] workspace number 10
+
+# Gaming: don't force tearing/VRR globally without confirming hardware behavior.
+for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
+
+# Emergency escape doesn't depend on Quickshell.
+bindsym Mod4+Control+l exec swaylock -f -c 10151c
+bindsym Mod4+Control+Alt+Shift+q exec swaymsg exit
