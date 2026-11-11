@@ -1878,10 +1878,10 @@ main() {
       run_current_nvidia_rollback "$@"
       ;;
     update)
+      reject_stable_testing_overrides "$@"
       if compositor_trial_installed; then
         die "Sway trial active: use awtarchy compositor for Sway updates. Explicit awtarchy self-update is needed to return to stable main."
       fi
-      reject_stable_testing_overrides "$@"
       protect_git_state_before_updater_refresh "$@"
       ensure_latest_updater "$@"
       check_package_mirrors_once
