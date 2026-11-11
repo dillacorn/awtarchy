@@ -173,6 +173,14 @@ def main():
         current = actual.get(key)
         target = sha(body)
         if current == target:
+            # A new managed asset may have been installed by setup.sh after
+            # the original baseline was recorded. Adopt only byte-for-byte
+            # source matches, never arbitrary existing user files.
+            if key not in original:
+                print(("ADOPT: " if args.mode == "apply" else "WOULD ADOPT: ")
+                      + key + " (exact source match; no file write)")
+                if args.mode == "apply":
+                    updated[key] = target
             counts["unchanged"] += 1
             continue
         if key == ".config/sway/awtarchy-trial/config":
