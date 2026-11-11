@@ -62,7 +62,14 @@ bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py l
 bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
 bindsym Mod4+Shift+e exec foot yazi
 bindsym Mod4+Mod1+a exec foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 $HOME/.config/hypr/scripts/default_applications.py tui
-bindsym Mod4+space exec fuzzel
+# Hyprland SUPER+SPACE dismisses the first popup; no launcher substitution.
+bindsym Mod4+space exec bash $trial/ipc.sh notifications hideFirstPopup
+bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
+bindsym Mod1+Control+space exec bash $trial/ipc.sh notifications hideFirstPopup
+bindsym Mod1+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
+bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
+# Fuzzel remains available from the App Launcher and a dedicated fallback.
+bindsym Mod4+Shift+space exec fuzzel
 bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 
@@ -129,6 +136,20 @@ bindsym Mod4+Shift+Right move right
 bindsym Mod4+Shift+l move right
 bindsym Mod4+Control+Shift+Right move workspace to output right
 
+# Hyprland-compatible manual resizing, including directional and quick resize.
+bindsym Mod1+y resize shrink width 30 px
+bindsym Mod1+o resize grow width 30 px
+bindsym Mod1+i resize grow height 30 px
+bindsym Mod1+u resize shrink height 30 px
+bindsym Mod1+Control+Left resize shrink width 30 px
+bindsym Mod1+Control+Right resize grow width 30 px
+bindsym Mod1+Control+Up resize shrink height 30 px
+bindsym Mod1+Control+Down resize grow height 30 px
+bindsym Mod4+Control+Left resize shrink width 30 px
+bindsym Mod4+Control+Right resize grow width 30 px
+bindsym Mod4+Control+Up resize shrink height 30 px
+bindsym Mod4+Control+Down resize grow height 30 px
+
 # Global numbered workspaces, independent of output/tag.
 bindsym Mod1+1 workspace number 1
 bindsym Mod1+Shift+1 move container to workspace number 1
@@ -184,8 +205,17 @@ bindsym Mod4+m exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
 bindsym XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
 bindsym XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
 bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+bindsym XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+bindsym XF86MonBrightnessUp exec brightnessctl -e4 -n2 set 5%+
+bindsym XF86MonBrightnessDown exec brightnessctl -e4 -n2 set 5%-
+bindsym XF86AudioPlay exec playerctl play-pause
+bindsym XF86AudioNext exec playerctl next
+bindsym XF86AudioPrev exec playerctl previous
 
 # Capturing remains available; capture hiding is NOT implemented.
+# Exact existing screenshot keys; window-only capture awaits a safe dedicated
+# implementation and therefore is not mapped to a misleading full display.
+bindsym Mod4+Shift+f exec bash $trial/capture.sh output
 bindsym Mod4+Shift+d exec bash $trial/capture.sh output
 bindsym Mod4+Shift+x exec bash $trial/capture.sh area
 bindsym Print exec bash $trial/capture.sh output
@@ -196,14 +226,24 @@ for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, m
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
 for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
 for_window [app_id="awtarchy-sway"] floating enable
+# Picture-in-picture and dialogs match Awtarchy's existing window rules.
+for_window [title="(?i)Picture[- ]?in[- ]?Picture.*"] floating enable, sticky enable, resize set 25 ppt 25 ppt, move position center
+for_window [title="^(Open File|Select a File|Choose wallpaper|Open Folder|Save As|Library|File Upload).*"] floating enable, move position center
 
 # Desktop tasks: same workspace numbers as the Hyprland config.
-assign [app_id="^(firefox|librewolf|brave-browser)$"] workspace number 2
-assign [app_id="^(vesktop|dev\\.vencord\\.Vesktop|discord)$"] workspace number 3
-assign [app_id="^(steam|com\\.valvesoftware\\.Steam|heroic)$"] workspace number 4
+assign [app_id="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|chiaki|moonlight|com\\.moonlight_stream\\.Moonlight|.*\\.exe)$"] workspace number 1
+assign [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*\\.exe)$"] workspace number 1
+for_window [app_id="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope)$"] fullscreen enable, inhibit_idle fullscreen
+for_window [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*\\.exe)$"] fullscreen enable, inhibit_idle fullscreen
+assign [app_id="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io\\.github\\.ungoogled_software\\.ungoogled_chromium)$"] workspace number 2
+assign [app_id="^(discord|com\\.discordapp\\.Discord|vesktop|dev\\.vencord\\.Vesktop|chat\\.revolt\\.RevoltDesktop|info\\.mumble\\.Mumble|fluxer|Fluxer)$"] workspace number 3
+assign [app_id="^(steam|com\\.valvesoftware\\.Steam|SteamChat|net\\.lutris\\.Lutris|itch|io\\.itch\\.itch|heroic|com\\.heroicgameslauncher\\.hgl|r2modman)$"] workspace number 4
 assign [app_id="^(Spotify|com\\.spotify\\.Client)$"] workspace number 5
-assign [app_id="^(org\\.telegram\\.desktop|Telegram)$"] workspace number 6
-assign [app_id="^(obs|com\\.obsproject\\.Studio)$"] workspace number 10
+assign [app_id="^(org\\.telegram\\.desktop|Telegram|Messages)$"] workspace number 6
+assign [app_id="^(Vncviewer|rustdesk)$"] workspace number 7
+assign [app_id="^(com\\.github\\.IsmaelMartinez\\.teams_for_linux)$"] workspace number 8
+assign [app_id="^(kdenlive|org\\.kde\\.kdenlive|org\\.shotcut\\.Shotcut|krita|org\\.kde\\.krita)$"] workspace number 9
+assign [app_id="^(obs|com\\.obsproject\\.Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com\\.dec05eba\\.gpu_screen_recorder)$"] workspace number 10
 
 # Gaming: don't force tearing/VRR globally without confirming hardware behavior.
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
