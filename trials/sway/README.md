@@ -45,7 +45,7 @@ Implemented means committed source, **not live verified**.
 | Persistent monitor modes | Guarded one-time Hyprland import |
 | Cursor image/theme/size | Native Sway seat settings |
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
-| Quickshell menus/power/notifications | Explicit floating title rules, native positioning and safe manual close; live test required |
+| Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; first-frame behavior and keyboard focus need live verification |
 | Sway session lock | swaylock fallback; Quickshell-specific extras limited |
 | Clipboard screenshots | grim/slurp/wl-copy |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
@@ -54,16 +54,39 @@ Implemented means committed source, **not live verified**.
 | Hyprland blur/animations/rounding | **Not provided by standard Sway** |
 | Hyprland special-workspace geometry | Native Sway scratchpad differs |
 | noalt/mouse/vm submaps | Not yet fully ported |
-| Per-window Quickshell flyout placement | Sway IPC positioning implemented; live test required |
+| Per-window Quickshell flyout placement | QML layer-shell anchors update without post-map Sway move/resize commands; live test required |
 | Hyprland-specific utilities | Must be handled individually, not dispatched blindly |
 
 Do not advertise unimplemented capture protection, shader effects, or input
 modes. Where a feature is unsupported, return an explicit error or hide the
 unsafe UI instead of acknowledging a no-op.
 
+## Sway Quickshell window model (experimental)
+
+The seven editable Awtarchy flyouts are regular application
+`FloatingWindow` toplevels in the Hyprland source. Sway's title-based
+floating rules can be applied after the first tiled frame, causing the
+visible tile -> float -> move transition reported during testing.
+
+The Sway-only renderer now replaces exactly those seven windows with
+`SwayFlyoutWindow.qml`, a native `PanelWindow` using wlroots layer-shell.
+It uses the selected monitor, edge placement, current panel dimensions,
+and bar size to set **anchors and margins before mapping**. It does not
+reserve screen space or run `swaymsg get_tree`/move/resize commands for
+these surfaces. Notification toast popups, power menu and theme picker
+already use layer-shell and remain unchanged. The original Hyprland QML
+sources are not edited.
+
+This removes the **regular tiled-window code path** by construction.
+It does not prove the actual first rendered frame, keyboard focus or
+menu dismissal behavior until a live Sway/Quickshell session is tested.
+The managed updater preserves personal modifications and previously
+imported DP-1/DP-3 display profiles; the new QML component must be staged
+before applying managed updates on an existing trial installation.
+
 ## Validation requirements
 
-The experimental GitHub Actions workflow runs test-sway-trial.py, Bash and
+The experimental GitHub Actions workflow runs Sway flyout-layer, shell and IPC tests, Bash and
 Python syntax checks, isolated QML generation and the real Sway config parser.
 Static tests alone do not establish display, input, focus, animation or gaming
 functionality. Each needs runtime verification.
