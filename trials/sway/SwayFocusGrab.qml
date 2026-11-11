@@ -1,46 +1,16 @@
 import QtQuick
 
-// Sway lacks hyprland_focus_grab_v1. We emulate focus loss for ordinary
-// application toplevels without injecting pointer events or stealing focus.
-// Layer-shell-only clicks remain a known limitation pending a native protocol.
+// The Hyprland focus-grab protocol has no equivalent in standard Sway.
+// Do not infer outside clicks from foreign-toplevel title events: those can
+// refer to the previously focused application while a flyout is mapping,
+// which incorrectly dismisses Quickshell immediately after opening.
+//
+// Explicit close, Escape, menu toggling, and workspace-change handling remain
+// active in the Awtarchy shell. Outside-click dismissal is disabled until a
+// reliable compositor-supported implementation is available.
 QtObject {
     id: root
-
     property bool active: false
-    property bool armed: false
     property var windows: []
     signal cleared()
-
-    onActiveChanged: {
-        armed = false;
-        if (active)
-            arming.restart();
-        else
-            arming.stop();
-    }
-
-    property Timer arming: Timer {
-        interval: 120
-        repeat: false
-        onTriggered: root.armed = root.active
-    }
-
-    property Connections focusWatch: Connections {
-        target: SwayBridge
-
-        function onRawEvent(event) {
-            if (!root.active || !root.armed || !event || event.name !== "activewindow")
-                return;
-            const fields = event.parse(2);
-            const title = String(fields[1] || "");
-            if (!title)
-                return;
-            for (const window of root.windows) {
-                if (window && String(window.title || "") === title)
-                    return;
-            }
-            root.active = false;
-            root.cleared();
-        }
-    }
 }
