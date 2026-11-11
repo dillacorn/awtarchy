@@ -97,6 +97,15 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     assert 'for_window [app_id="(?i)^(quickshell|awtarchy-sway|awtarchy-sway-quickshell)$"] floating enable' in config.decode()
     # Do not erase the workspace bar on a temporary empty Sway IPC snapshot.
     bridge = (shell / "SwayBridge.qml").read_text(encoding="utf-8")
+    # Quickshell exports ToplevelManager from Quickshell.Wayland, not
+    # Quickshell.WindowManager. A missing optional native toplevel module must
+    # not prevent the independent swaymsg workspaces from populating the bar.
+    assert "import Quickshell.Wayland" in bridge
+    assert "import Quickshell.WindowManager" not in bridge
+    assert bridge.count('typeof ToplevelManager === "undefined"') == 2
+    assert 'const mappedWorkspaces = [];' in bridge
+    assert 'root.workspaces = { values: mappedWorkspaces };' in bridge
+
     assert "if (!mappedWorkspaces.length)" in bridge
     assert "I3.workspaces.values || []" in bridge
 
