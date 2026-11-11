@@ -19,6 +19,11 @@ def load(name, file):
 
 state = load("sway_state", TRIAL / "workspace-state.py")
 sync = load("sway_sync", TRIAL / "sync.py")
+# Late-added assets become tracked only when they match exact managed bytes.
+source_sync = (TRIAL / "sync.py").read_text(encoding="utf-8")
+assert "if key not in original:" in source_sync
+assert "updated[key] = target" in source_sync
+assert "exact source match; no file write" in source_sync
 monitors = [
     {"type": "output", "name": "DP-1", "nodes": [
         {"type": "workspace", "name": "2", "nodes": [
