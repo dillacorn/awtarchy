@@ -88,82 +88,13 @@ if [[ "$action" == prepare ]]; then
     exit 0
 fi
 
-# Pre-map QML has already determined monitor, placement and dimensions.
-# These are advisory; explicit live resize arguments override saved size.
-if [[ -f "$profile" && ! -L "$profile" && -O "$profile" ]]; then
-    IFS=$'\t' read -r saved_monitor saved_place saved_w saved_h saved_bar saved_anchor < "$profile" || :
-    if [[ "$saved_monitor" =~ ^[A-Za-z0-9._:-]+$ ]] &&
-       [[ "$saved_place" =~ ^(center|top|bottom|left|right|top-center|bottom-center|left-center|right-center)$ ]] &&
-       number "$saved_w" && number "$saved_h" && number "$saved_bar"; then
-        if [[ "$action" == spawn ]]; then
-            monitor="$saved_monitor"
-            placement="$saved_place"
-        fi
-        [[ "$width" != 0 ]] || width="$saved_w"
-        [[ "$height" != 0 ]] || height="$saved_h"
-        bar="$saved_bar"
-        if [[ "$saved_anchor" =~ ^-?[0-9]+$ ]]; then anchor="$saved_anchor"; fi
-    fi
-fi
-[[ "$placement" != clamp ]] || placement=center
-if ! number "$width" || (( width < 1 )); then width="$default_w"; fi
-if ! number "$height" || (( height < 1 )); then height="$default_h"; fi
-
-read -r x0 y0 screen_w screen_h < <(
-    swaymsg -r -t get_outputs | jq -r --arg monitor "$monitor" '
-        .[] | select(.name == $monitor and .active == true)
-        | [.rect.x, .rect.y, .rect.width, .rect.height] | @tsv
-    '
-)
-[[ "${screen_w:-}" =~ ^[0-9]+$ && "${screen_h:-}" =~ ^[0-9]+$ ]] ||
-    { printf 'Sway flyout output missing: %s\n' "$monitor" >&2; exit 1; }
-(( screen_w > 20 && screen_h > 20 )) || exit 1
-(( width > screen_w - 20 )) && width=$(( screen_w - 20 ))
-(( height > screen_h - 20 )) && height=$(( screen_h - 20 ))
-center_x=$(( (screen_w-width)/2 ))
-center_y=$(( (screen_h-height)/2 ))
-x="$center_x"
-y="$center_y"
-case "$placement" in
-    top) y="$bar" ;;
-    bottom) y=$(( screen_h-height-bar )) ;;
-    left) x="$bar" ;;
-    right) x=$(( screen_w-width-bar )) ;;
-    top-center) y="$bar" ;;
-    bottom-center) y=$(( screen_h-height-bar )) ;;
-    left-center) x="$bar" ;;
-    right-center) x=$(( screen_w-width-bar )) ;;
-esac
-# Side-edge launchers have their bar on the vertical axis.
-if [[ "$surface" == launcher ]]; then
-    case "$placement" in
-        top) x=0 ;; bottom) x=0 ;;
-        left) y=0 ;; right) y=0 ;;
-    esac
-fi
-(( x < 0 )) && x=0
-(( y < 0 )) && y=0
-(( x > screen_w - width )) && x=$(( screen_w-width ))
-(( y > screen_h - height )) && y=$(( screen_h-height ))
-x=$(( x0+x ))
-y=$(( y0+y ))
-
-# Wait briefly for the mapped FloatingWindow. The static for_window rule
-# floats it immediately; this only corrects position after mapping.
-id=""
-for attempt in {1..35}; do
-    id="$(swaymsg -r -t get_tree | jq -r --arg title "$title" '
-        [ .. | objects
-          | select(.type? == "con" and .name? == $title and .visible? == true)
-          | .id ] | last // empty
-    ')" || exit 1
-    [[ "$id" =~ ^[0-9]+$ ]] && break
-    sleep 0.035
-done
-[[ "$id" =~ ^[0-9]+$ ]] || {
-    printf 'Sway flyout not mapped: %s\n' "$title" >&2; exit 1;
-}
-command="[con_id=$id] floating enable, resize set $width px $height px, move absolute position $x $y"
-result="$(swaymsg -r "$command")" || exit 1
-jq -e 'type == "array" and all(.[]; .success == true)' <<< "$result" >/dev/null ||
-    { printf 'Sway rejected flyout placement for %s\n' "$title" >&2; exit 1; }
+# The generated Sway flyouts are now native layer-shell panels, not
+# application toplevels. Their QML anchors and margins are calculated before
+# mapping; Sway does not enumerate them in get_tree, so post-map floating or
+# resize commands would be both ineffective and visibly unstable.
+#
+# This helper retains the exact existing prepare operation (and its per-output
+# sizing cache) to preserve the source QML's prewarm and readiness contract.
+# spawn/resize/clamp are intentionally successful no-ops. The layer-shell
+# component owns those updates reactively on the Qt side.
+exit 0
