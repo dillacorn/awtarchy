@@ -8,7 +8,7 @@ set -euo pipefail
 target="$1"
 method="$2"
 case "$target:$method" in
-    launcher:toggle|powermenu:begin|clipboard:toggle|notifications:toggle|quicksettings:toggle) ;;
+    launcher:toggle|powermenu:begin|clipboard:toggle|notifications:toggle|notifications:hideFirstPopup|quicksettings:toggle) ;;
     *) printf 'Unsupported Sway IPC target: %s/%s\n' "$target" "$method" >&2; exit 2 ;;
 esac
 manager="${XDG_CONFIG_HOME:-$HOME/.config}/sway/awtarchy-trial/quickshell.sh"
