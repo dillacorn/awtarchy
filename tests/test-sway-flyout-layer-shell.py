@@ -94,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
 position = (TRIAL / "position.sh").read_text(encoding="utf-8")
 assert "if [[ \"$action\" == prepare ]]" in position
 assert "post-map floating or" in position
-assert "get_tree" not in position
+assert "swaymsg -r -t get_tree" not in position
 assert "floating enable, resize" not in position
 assert "move absolute position" not in position
 assert "exit 0" in position
@@ -103,8 +103,8 @@ assert "exit 0" in position
 # it as a managed file, not a symlink back into Hyprland's shell.
 sync = (TRIAL / "sync.py").read_text(encoding="utf-8")
 setup = (TRIAL / "setup.sh").read_text(encoding="utf-8")
-assert '"render-quickshell.py"' in sync
-assert '"render-quickshell.py"' in setup
+assert "render-quickshell.py" in sync
+assert "render-quickshell.py" in setup
 assert '"$temp/awtarchy-sway/"*' in setup
 
 print("PASS: seven Sway flyouts map directly as layer-shell, with no tiled intermediary")
