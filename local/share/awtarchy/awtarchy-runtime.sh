@@ -108,6 +108,8 @@ INSTALL_AUR=1
 INSTALL_FLATPAK=1
 INSTALL_GPU=1
 INSTALL_LY=0
+# Installer-selected compositor. Existing packages/sessions are never removed.
+COMPOSITOR_SELECTION="hyprland"
 ENABLE_KEYRING_PAM=0
 ENABLE_MIC_SUPPRESSION=0
 OVERWRITE_BASHRC=0
@@ -721,6 +723,22 @@ split_pkg_words() {
   printf '%s\n' "${words[@]}"
 }
 
+compositor_has_hyprland() {
+  [[ "${COMPOSITOR_SELECTION:-hyprland}" == hyprland || "${COMPOSITOR_SELECTION:-hyprland}" == both ]]
+}
+
+compositor_has_sway() {
+  [[ "${COMPOSITOR_SELECTION:-hyprland}" == sway || "${COMPOSITOR_SELECTION:-hyprland}" == both ]]
+}
+
+is_hyprland_only_package() {
+  case "${1:-}" in
+    hyprland|hyprpaper|hypridle|hyprpicker|hyprsunset|xdg-desktop-portal-hyprland)
+      return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
 build_arch_picker_arrays() {
   ARCH_LABELS=()
   ARCH_VALUES=()
@@ -746,6 +764,9 @@ build_arch_picker_arrays() {
 
     while IFS= read -r pkg; do
       [[ -n "$pkg" ]] || continue
+      if ! compositor_has_hyprland && is_hyprland_only_package "$pkg"; then
+        continue
+      fi
       ARCH_LABELS+=("  ${pkg}")
       ARCH_VALUES+=("${pkg}")
       ARCH_SELECTED_FLAGS+=("1")
@@ -769,6 +790,9 @@ build_aur_picker_arrays() {
   done
 
   for pkg in "${PACKAGES_AUR[@]}"; do
+    if ! compositor_has_hyprland && [[ "$pkg" == hyprmoncfg-bin ]]; then
+      continue
+    fi
     AUR_LABELS+=("${pkg}")
     AUR_VALUES+=("${pkg}")
     AUR_SELECTED_FLAGS+=("1")
@@ -2234,17 +2258,23 @@ print_install_review() {
   printf 'System type: %s\n' "$system_type"
   printf 'Virtual machine/container detected: %s\n' "$IS_VM"
   printf 'Arch packages: %s\n' "${#ARCH_SELECTED[@]}"
-  printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  if compositor_has_sway; then
+    printf 'Required Arch compositor: sway (official repository)\n'
+  else
+    printf 'Required AUR dependencies: %s\n' "${#REQUIRED_AUR_PACKAGES[@]}"
+  fi
   printf 'Selected AUR packages: %s\n' "${#AUR_SELECTED[@]}"
   printf 'Flatpak apps: %s\n' "${#FLATPAK_SELECTED_IDS[@]}"
   printf 'GPU dependencies: %s\n' "$gpu_enabled"
   printf 'Ly tty2: %s\n' "$ly_enabled"
+  printf 'Wayland compositor: %s\n' "$COMPOSITOR_SELECTION"
   printf 'PAM keyring: %s\n' "$pam_enabled"
   printf 'Microphone noise suppression: %s\n' "$mic_suppression_enabled"
   printf 'Reboot at end: %s\n' "$reboot_label"
 
   printf '\n%s\n' "${COLOR_CYAN}Planned stages${COLOR_RESET}"
   printf '  - Check disk space and install bootstrap packages\n'
+  if compositor_has_sway; then printf '  - Install Sway from official Arch packages\n'; fi
   printf '  - Clone/update ~/awtarchy if missing\n'
   if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip Arch repo packages\n'; fi
   printf '  - Install required AUR feature dependencies\n'
@@ -2297,6 +2327,7 @@ run_install_questionnaire() {
   fi
 
   if systemd-detect-virt --quiet; then IS_VM=true; else IS_VM=false; fi
+  COMPOSITOR_SELECTION="hyprland"
 
   local step=0 rc choice
   local -a labels=()
@@ -2314,6 +2345,7 @@ Nothing installs yet. This first part only collects choices.
 
 Before any changes are made, you will choose:
   - system type
+  - Wayland compositor (Hyprland, Sway, or both)
   - install sections
   - Arch repo packages
   - additional AUR packages (required feature dependencies are always installed)
@@ -2335,16 +2367,33 @@ In normal install mode it will overwrite awtarchy-managed config files under:
       1)
         if [[ "$IS_VM" == true ]]; then
           IS_LAPTOP=false
-          step=2
+          step=8
           continue
         fi
 
         choice="$(single_select_menu "System type" 1 "Laptop" "Desktop" "Back")" || { step=0; continue; }
         case "$choice" in
-          0) IS_LAPTOP=true; step=2 ;;
-          1) IS_LAPTOP=false; step=2 ;;
+          0) IS_LAPTOP=true; step=8 ;;
+          1) IS_LAPTOP=false; step=8 ;;
           *) step=0 ;;
         esac
+        ;;
+
+      8)
+        choice="$(single_select_menu "Wayland compositor" 0 "Hyprland" "Sway" "Hyprland + Sway" "Back")" || {
+          if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi
+          continue
+        }
+        case "$choice" in
+          0) COMPOSITOR_SELECTION="hyprland"; step=2 ;;
+          1) COMPOSITOR_SELECTION="sway"; step=2 ;;
+          2) COMPOSITOR_SELECTION="both"; step=2 ;;
+          *)
+            if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi ;;
+        esac
+        # Rebuild default package pickers after compositor selection changes.
+        unset ARCH_LABELS ARCH_VALUES ARCH_SELECTED_FLAGS ARCH_KINDS
+        unset AUR_LABELS AUR_VALUES AUR_SELECTED_FLAGS AUR_KINDS
         ;;
 
       2)
@@ -2376,7 +2425,7 @@ In normal install mode it will overwrite awtarchy-managed config files under:
         else
           rc=$?
           if (( rc == 2 )); then
-            if [[ "$IS_VM" == true ]]; then step=0; else step=1; fi
+            step=8
           else
             return "$rc"
           fi
@@ -2550,7 +2599,9 @@ prepare_base_install() {
   pacman_install_one yazi || die "Failed to install required Yazi application: yazi"
   pacman_install_one fd || die "Failed to install required Yazi filename-search dependency: fd"
   pacman_install_one 7zip || die "Failed to install required Yazi archive dependency: 7zip"
-  pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
+  if compositor_has_hyprland; then
+    pacman_install_one hyprland-qt-support || die "Failed to install required Hyprland Qt style provider: hyprland-qt-support"
+  fi
 
   if [[ ! -d "$REPO_DIR" ]]; then
     log "Cloning awtarchy repository to ${REPO_DIR}..."
@@ -2573,6 +2624,15 @@ reconcile_power_profile_backend() {
 
   AWTARCHY_MANAGED_PACKAGES_FILE="${AWTARCHY_MANAGED_PACKAGES_FILE:-/var/lib/awtarchy/managed-packages}" \
     /usr/bin/bash "$reconciler"
+}
+
+install_sway_repo_dependencies_stage() {
+  compositor_has_sway || return 0
+  local package
+  for package in sway swaybg swayidle swaylock xdg-desktop-portal-wlr quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel mako swaylock grim slurp wl-clipboard cliphist \
+      xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl; do
+    pacman_install_one "$package" || die "Sway required Arch package failed: $package"
+  done
 }
 
 install_arch_repo_apps_stage() {
@@ -2941,7 +3001,8 @@ install_aur_repo_apps_stage() {
       fi
     else
       if ! install_aur_with_scanner "$pkg"; then
-        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+        if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}" \
+            ; then
           die "Required AUR dependency failed to install: ${pkg}"
         fi
         warn "AUR package failed: ${pkg}. Continuing with remaining selections."
@@ -2950,7 +3011,8 @@ install_aur_repo_apps_stage() {
     fi
 
     if ! aur_selected_package_installed "$pkg"; then
-      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}"; then
+      if array_contains_exact "$pkg" "${REQUIRED_AUR_PACKAGES[@]}" \
+          ; then
         die "Required AUR dependency is still unavailable after installation: ${pkg}"
       fi
       warn "AUR package was not detected after installation: ${pkg}"
@@ -3260,7 +3322,7 @@ install_ly_stage() {
   done
 
   log "Installing/enabling Ly on ${tty} for next boot only..."
-  if [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
+  if compositor_has_hyprland && [[ ! -f /usr/share/wayland-sessions/hyprland.desktop ]]; then
     cat > /usr/share/wayland-sessions/hyprland.desktop <<'EOF'
 [Desktop Entry]
 Name=Hyprland
@@ -4013,6 +4075,20 @@ install_awtarchy_command_stage() {
 
   retry_command run_as_target install -m 0755 "$runtime_src" "${install_dir}/awtarchy-runtime.sh"
   retry_command run_as_target install -m 0755 "$launcher_src" "${bin_dir}/awtarchy"
+  # A fresh Sway trial installation also receives the compositor menu.
+  local compositor_helper="$REPO_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local installed_helper="$install_dir/awtarchy-compositor-manager.sh"
+  local compositor_branch=""
+  if [[ -f "$compositor_helper" && ! -L "$compositor_helper" ]] && have git; then
+    compositor_branch="$(run_as_target git -C "$REPO_DIR" branch --show-current 2>/dev/null || true)"
+    if [[ "$compositor_branch" == SwayWM_Migration_Trial_Investigation ]]; then
+      bash -n "$compositor_helper" || die "Sway compositor manager failed syntax validation."
+      retry_command run_as_target install -m 0755 "$compositor_helper" "$installed_helper"
+      printf '%s\n' "$REPO_DIR" |
+        run_as_target tee "$state_dir/compositor-trial-source" >/dev/null
+      run_as_target chmod 0644 "$state_dir/compositor-trial-source"
+    fi
+  fi
 
   tag="$(detect_installed_release_tag)"
   if have git && git -C "$REPO_DIR" rev-parse --is-inside-work-tree >/dev/null 2>&1; then
@@ -4029,7 +4105,11 @@ install_awtarchy_command_stage() {
   retry_command run_as_target install -m 0644 "$version_tmp" "$config_version_file"
   run_as_target rm -f -- "$version_tmp"
 
-  if [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
+  # The remote self-updater tracks stable main. It must not silently downgrade
+  # the Sway-aware installer/runtime during an unreleased compositor trial.
+  if compositor_has_sway; then
+    log "Sway trial selected: keeping the branch maintenance runtime; skipping main self-update."
+  elif [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
     log "Verifying the installed Awtarchy command against the current main updater..."
     if ! run_as_target env -u XDG_DATA_HOME -u XDG_STATE_HOME \
       HOME="$HOME_DIR" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
@@ -4042,6 +4122,41 @@ install_awtarchy_command_stage() {
   fi
 
   ok "Installed Awtarchy command: ${bin_dir}/awtarchy"
+}
+
+install_sway_session_stage() {
+  compositor_has_sway || return 0
+  local source="${REPO_DIR}/trials/sway" desktop="/usr/share/wayland-sessions/awtarchy-sway-trial.desktop"
+  local launcher="/usr/local/bin/awtarchy-sway-session"
+
+  [[ -f "${source}/setup.sh" && ! -L "${source}/setup.sh" ]] \
+    || die "Sway source unavailable in the selected checkout; refusing to substitute main or another branch."
+  run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+    bash "${source}/setup.sh" --check \
+    || die "Sway session preflight failed; existing Sway/Hyprland configs were not overwritten."
+
+  install -d -m 0755 -- /usr/share/wayland-sessions /usr/local/bin
+  if [[ ! -e "$desktop" && ! -L "$desktop" ]]; then
+    install -m 0644 -- "${source}/sway.desktop" "$desktop" \
+      || die "Could not add the isolated Sway Ly session."
+  fi
+  if [[ ! -e "$launcher" && ! -L "$launcher" ]]; then
+    install -m 0755 -- "${source}/session-launch.sh" "$launcher" \
+      || die "Could not install the Sway session wrapper."
+  fi
+  run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+    bash "${source}/setup.sh" --install \
+    || die "Sway session staging failed; Hyprland configuration was not removed."
+  # Record exact managed source hashes and preserve imported Sway outputs.
+  local sync_helper="${source}/sync.py"
+  local sync_baseline="${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json"
+  if [[ ! -e "$sync_baseline" && ! -L "$sync_baseline" ]]; then
+    [[ -f "$sync_helper" && ! -L "$sync_helper" ]] ||
+      die "Sway managed update helper missing from trial checkout."
+    run_as_target env "HOME=${HOME_DIR}" \
+      python3 "$sync_helper" record --repo "$REPO_DIR" \
+      || die "Failed to record first Sway managed config baseline."
+  fi
 }
 
 copy_awtarchy_configs_stage() {
@@ -4068,7 +4183,20 @@ copy_awtarchy_configs_stage() {
   local dir
   for dir in "${config_dirs[@]}"; do
     if [[ -d "${REPO_DIR}/config/${dir}" ]]; then
-      retry_command run_as_target cp -r -- "${REPO_DIR}/config/${dir}" "${HOME_DIR}/.config/" || exit 1
+      if [[ "$dir" == hypr ]] && ! compositor_has_hyprland; then
+        # Sway reuses Awtarchy desktop helpers, but Sway-only must not replace
+        # existing Hyprland Lua/idle/privacy compositor configuration.
+        log "Sway-only: preserving Hyprland compositor config; copying shared desktop helpers."
+        create_directory "${HOME_DIR}/.config/hypr"
+        local shared
+        for shared in scripts themes sounds; do
+          if [[ -d "${REPO_DIR}/config/hypr/${shared}" ]]; then
+            retry_command run_as_target cp -r -- "${REPO_DIR}/config/hypr/${shared}" "${HOME_DIR}/.config/hypr/" || exit 1
+          fi
+        done
+      else
+        retry_command run_as_target cp -r -- "${REPO_DIR}/config/${dir}" "${HOME_DIR}/.config/" || exit 1
+      fi
     else
       warn "Missing config/${dir}; skipping."
     fi
@@ -4380,7 +4508,12 @@ run_install() {
     return 0
   fi
   prepare_base_install
+  if compositor_has_sway; then
+    [[ -f "${REPO_DIR}/trials/sway/setup.sh" && ! -L "${REPO_DIR}/trials/sway/setup.sh" ]] \
+      || die "Sway selected, but selected checkout is missing the Sway trial. Use the exact Sway migration branch."
+  fi
   install_arch_repo_apps_stage
+  install_sway_repo_dependencies_stage
   if ! pacman -Qq foot >/dev/null 2>&1; then
     log "Installing required Foot terminal..."
     pacman_install_one foot || die "Foot is required before installing the Awtarchy desktop."
@@ -4406,10 +4539,11 @@ run_install() {
     cleanup_legacy_keyring_pam_stage "$REPO_DIR"
   fi
   copy_awtarchy_configs_stage
+  install_sway_session_stage
   # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
   # The installer checkout may be root-owned; pass the trusted helper via stdin.
   local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"
-  if [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
+  if compositor_has_hyprland && [[ -f "$gpu_cursor_helper" && ! -L "$gpu_cursor_helper" ]]; then
     run_as_target python3 - --config "${HOME_DIR}/.config/hypr/hyprland.lua" <"$gpu_cursor_helper" \
       || die "Could not apply the GPU-specific Hyprland cursor policy."
   fi
@@ -4422,13 +4556,19 @@ run_install() {
     run_as_target env "HOME=${HOME_DIR}" python3 - --home "$HOME_DIR" <"$cachyos_fish_helper" \
       || warn "Could not adjust CachyOS's stock Fish greeting; the existing shell config was preserved."
   fi
-  configure_sunshine_awtarchy_hook_stage
+  if compositor_has_hyprland; then
+    configure_sunshine_awtarchy_hook_stage
+  fi
   configure_installer_mic_suppression_stage
-  install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
+  if compositor_has_hyprland; then
+    install_awtarchy_polkit_agent_runtime "$REPO_DIR" || die "Could not install the Awtarchy PolicyKit authentication runtime."
+  fi
   remove_legacy_shell_files_stage
   install_awtarchy_command_stage
   remove_legacy_shell_packages_stage
-  migrate_retired_hyprlock_stage "$REPO_DIR"
+  if compositor_has_hyprland; then
+    migrate_retired_hyprlock_stage "$REPO_DIR"
+  fi
 
   ok "Setup complete. Rebooting now."
   if (( NO_REBOOT == 1 )) || [[ "${AWTARCHY_NO_REBOOT:-0}" == "1" ]]; then
