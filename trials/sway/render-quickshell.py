@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-BRIDGE_FILES = ("SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml", "SwayDragBridge.qml")
+BRIDGE_FILES = ("SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml", "SwayDragBridge.qml", "SwayFlyoutWindow.qml")
 # The shared Awtarchy UI has per-flyout capture exclusion controls.
 # Sway does not provide a verified equivalent to Hyprland's capture rules.
 # Never advertise those controls as effective, or corrupt shared Hyprland
@@ -24,6 +24,40 @@ CAPTURE_SURFACES = {
     "BluetoothMenu.qml": "bluetooth",
     "BatteryMenu.qml": "battery",
 }
+
+# These seven modules declare regular application toplevels in the Hyprland
+# source. The Sway render uses native layer-shell panels instead so no Sway
+# workspace ever sees an intermediate tiled window.
+SWAY_LAYER_FLYOUTS = {
+    "Launcher.qml": ("launcherWindow", "launcher", "requestedPlacement"),
+    "ClipboardMenu.qml": ("clipboardWindow", "clipboard", "placement"),
+    "Notifications.qml": ("centerWindow", "notifications", "placement"),
+    "QuickSettings.qml": ("quickSettingsWindow", "quick-settings", "placement"),
+    "NetworkMenu.qml": ("networkWindow", "network", "placement"),
+    "BluetoothMenu.qml": ("bluetoothWindow", "bluetooth", "placement"),
+    "BatteryMenu.qml": ("batteryWindow", "battery", "placement"),
+}
+
+
+def render_layer_flyout(text: str, filename: str) -> str:
+    window_id, role, placement = SWAY_LAYER_FLYOUTS[filename]
+    source = f'    FloatingWindow {{\\n        id: {window_id}\\n'
+    target = (
+        f'    SwayFlyoutWindow {{\\n'
+        f'        id: {window_id}\\n'
+        f'        surfaceRole: "{role}"\\n'
+        f'        placement: root.{placement}\\n'
+    )
+    # Use actual newlines above: escaping in a code-generation helper is
+    # intentional, but the generated content remains ordinary QML.
+    source = source.replace('\\n', '\n')
+    target = target.replace('\\n', '\n')
+    if text.count(source) != 1:
+        raise ValueError(f"Missing exact Sway flyout window: {filename}:{window_id}")
+    if text.count("FloatingWindow {") != 1:
+        raise ValueError(f"Unexpected extra toplevel windows in {filename}")
+    return text.replace(source, target, 1)
+
 
 def disable_unavailable_capture_controls(text: str, surface: str) -> str:
     expr = (
@@ -101,6 +135,8 @@ def render(source: Path, destination: Path, trial: Path):
                         text, CAPTURE_SURFACES[path.name])
                 for old, new in TRANSLATIONS.items():
                     text = text.replace(old, new)
+                if path.name in SWAY_LAYER_FLYOUTS:
+                    text = render_layer_flyout(text, path.name)
                 if path.name == "shell.qml":
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-sway")
                     text = text.replace("awtarchy-quickshell", "awtarchy-sway-quickshell")
