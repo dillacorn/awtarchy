@@ -89,9 +89,11 @@ for phrase in ("pacman -R --print", "pacman -R --noconfirm",
                "managed-packages", "update-sway", "install-hyprland",
                "remove-hyprland"):
     assert phrase in MANAGER, phrase
-for prohibited in ("pacman -Rns", "pacman -Rdd", "aur-scan install sway",
-                   "sway.portal"):
+for prohibited in ("aur-scan install sway", "sway.portal"):
     assert prohibited not in MANAGER, prohibited
+# A user-facing warning may name destructive options; only actual commands
+# matter for preventing cascade or dependency-bypassing removal.
+assert re.search(r"(?m)^\\s*(?:sudo\\s+)?pacman\\s+-R(?:ns|dd)(?:\\s|$)", MANAGER) is None
 
 setup = (TRIAL / "setup.sh").read_text(encoding="utf-8")
 match = re.search(r"^sources=\(([^)]*)\)$", setup, flags=re.MULTILINE)
