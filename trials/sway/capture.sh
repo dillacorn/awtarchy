@@ -53,7 +53,9 @@ capture() {
     image="$(mktemp "$runtime/awtarchy-satty-XXXXXX.png")" || return 1
     trap 'if [[ "${ok:-0}" != 1 ]]; then rm -f -- "${image:-}"; fi' EXIT
     grim -g "$geometry" "$image" || return 1
-    wl-copy --type image/png < "$image" || return 1
+    # wl-copy forks a long-lived clipboard provider. Never let it inherit
+    # the capture flock descriptor, or later screenshots report lock-busy.
+    wl-copy --type image/png < "$image" 9>&- || return 1
     ok=1
     printf '%s\n' "$image"
 }
