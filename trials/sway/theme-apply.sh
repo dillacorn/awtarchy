@@ -1,0 +1,181 @@
+#!/usr/bin/env bash
+# Apply theme to the isolated Sway Quickshell UI and shared application palettes.
+
+set -euo pipefail
+
+name="${1:-}"
+[[ -n "$name" && "$name" != */* && "$name" != .* ]] || exit 2
+
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+THEME_DIR="$CONFIG_HOME/hypr/themes"
+THEME="$THEME_DIR/$name"
+QS_THEME="$CONFIG_HOME/quickshell/awtarchy-sway/theme.json"
+STATE_DIR="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy"
+MICRO_SETTINGS="$CONFIG_HOME/micro/settings.json"
+FOOT_CONF="$CONFIG_HOME/foot/foot.ini"
+
+[[ -f "$THEME" ]] || exit 1
+
+theme_value() {
+    local key="$1" fallback="$2" value
+    value="$(awk -F= -v key="$key" '$1 == key { value=$0; sub(/^[^=]*=/, "", value); gsub(/^[[:space:]]*["\047]|["\047][[:space:]]*$/, "", value); print value; exit }' "$THEME")"
+    printf '%s\n' "${value:-$fallback}"
+}
+
+extract_theme_metadata() {
+    python3 - "$THEME" "$1" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8", errors="replace")
+kind = sys.argv[2]
+patterns = {
+    "micro": r'"colorscheme"\s*:\s*"([^"]+)"',
+}
+match = re.search(patterns[kind], text)
+print(match.group(1).strip() if match else "")
+PY
+}
+
+active_border="$(theme_value NEW_ACTIVE_BORDER 'a0a0a0ff')"
+inactive_border="$(theme_value NEW_INACTIVE_BORDER '4b4b4bff')"
+
+background="$(theme_value QS_BACKGROUND '#353535')"
+hover="$(theme_value QS_HOVER '#404040')"
+focus="$(theme_value QS_FOCUS '#4a4a4a')"
+active="$(theme_value QS_ACTIVE '#2b2b2b')"
+urgent="$(theme_value QS_URGENT '#ff5555')"
+charging="$(theme_value QS_CHARGING '#6a9955')"
+critical="$(theme_value QS_CRITICAL '#ff5555')"
+foreground="$(theme_value QS_FOREGROUND '#d0d0d0')"
+dark="$(theme_value QS_DARK '#1a1a1a')"
+muted="$(theme_value QS_MUTED "$hover")"
+lock_accent="$foreground"
+if [[ $active_border =~ ^[[:xdigit:]]{8}$ ]]; then
+    lock_accent="#${active_border:0:6}"
+fi
+
+micro_scheme="$(theme_value MICRO_COLORSCHEME 'geany')"
+
+
+# Sway theme changes must never modify Hyprland's Lua or session settings.
+# Bar/launcher colors use the isolated awtarchy-sway theme.json. Foot and
+# Micro remain user-level applications, so their selected palettes are shared.
+
+if [[ -n "$micro_scheme" && -f "$MICRO_SETTINGS" ]]; then
+    python3 - "$MICRO_SETTINGS" "$micro_scheme" <<'PY'
+from pathlib import Path
+import json
+import re
+import sys
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+try:
+    data = json.loads(text)
+except json.JSONDecodeError:
+    # Legacy Awtarchy theme scripts could leave trailing commas in Micro's
+    # settings.json. Repair those before applying the new colorscheme.
+    repaired = re.sub(r",(\s*[}\]])", r"\1", text)
+    data = json.loads(repaired)
+
+data["colorscheme"] = sys.argv[2]
+path.write_text(json.dumps(data, indent=4) + "\n", encoding="utf-8")
+PY
+fi
+
+if [[ -f "$FOOT_CONF" ]]; then
+    # Exact 18-color palettes migrated from Awtarchy's former Alacritty themes.
+    # Custom themes without a Foot palette retain the Quickshell-derived fallback.
+    python3 - "$FOOT_CONF" "$CONFIG_HOME/foot/themes/${name}.ini" "$background" "$foreground" "$urgent" "$charging" "$focus" "$lock_accent" <<'PY'
+from pathlib import Path
+import re
+import sys
+
+path = Path(sys.argv[1])
+palette_path = Path(sys.argv[2])
+names = ("background", "foreground", *(f"regular{i}" for i in range(8)), *(f"bright{i}" for i in range(8)))
+fallback_names = ("background", "foreground", "regular1", "regular2", "regular4", "regular5")
+colors = {}
+
+if palette_path.is_file():
+    for line in palette_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        match = re.fullmatch(r"([a-z]+[0-9]?)=([0-9a-fA-F]{6})", line)
+        if not match or match.group(1) not in names or match.group(1) in colors:
+            raise SystemExit(f"invalid Foot palette entry in {palette_path}")
+        colors[match.group(1)] = match.group(2).lower()
+    if set(colors) != set(names):
+        raise SystemExit(f"incomplete Foot palette in {palette_path}")
+else:
+    for name, value in zip(fallback_names, sys.argv[3:]):
+        if not re.fullmatch(r"#[0-9A-Fa-f]{6}", value):
+            raise SystemExit(f"invalid Foot theme color for {name}")
+        colors[name] = value[1:].lower()
+
+content = path.read_text(encoding="utf-8")
+for name, value in colors.items():
+    content, count = re.subn(
+        rf"(?m)^({re.escape(name)}=)[0-9A-Fa-f]{{6}}$",
+        lambda match, color=value: match.group(1) + color,
+        content,
+    )
+    if count != 1:
+        raise SystemExit(f"missing Foot palette entry: {name}")
+path.write_text(content, encoding="utf-8")
+PY
+fi
+
+# Recolor existing Foot windows without restarting their shell, Yazi, or
+# scrollback. The helper targets only our user's Foot-owned PTYs, never other
+# terminals or the isolated PolicyKit authentication frontend. Newly opened
+# Foot windows read the updated foot.ini normally.
+FOOT_LIVE_THEME="$CONFIG_HOME/hypr/scripts/foot_theme_live.py"
+if [[ -f "$FOOT_CONF" && -f "$FOOT_LIVE_THEME" ]]; then
+    python3 "$FOOT_LIVE_THEME" "$FOOT_CONF" || \
+        printf '%s\n' 'Foot live recoloring failed; new Foot windows still use the updated theme.' >&2
+fi
+
+mkdir -p "$(dirname "$QS_THEME")" "$STATE_DIR"
+python3 - "$QS_THEME" \
+    "$background" "$hover" "$focus" "$active" "$urgent" \
+    "$charging" "$critical" "$foreground" "$dark" "$muted" \
+    "$lock_accent" <<'PY'
+import json
+import os
+import sys
+import tempfile
+
+path = sys.argv[1]
+keys = (
+    "background", "hover", "focus", "active", "urgent",
+    "charging", "critical", "foreground", "dark", "muted",
+    "lockAccent",
+)
+data = dict(zip(keys, sys.argv[2:]))
+fd, tmp = tempfile.mkstemp(prefix="theme.", suffix=".json", dir=os.path.dirname(path))
+try:
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        json.dump(data, handle, indent=2)
+        handle.write("\n")
+    os.replace(tmp, path)
+finally:
+    if os.path.exists(tmp):
+        os.unlink(tmp)
+PY
+
+printf '%s\n' "$name" >"$STATE_DIR/active-theme"
+
+# The PolicyKit terminal uses a trusted root-owned base config plus sanitized
+# visual overrides from the user's current Foot config. Restart the hidden
+# agent after a theme change so its next prompt reflects the new theme.
+if command -v systemctl >/dev/null 2>&1 \
+    && systemctl --user is-active --quiet awtarchy-polkit-agent.service 2>/dev/null;
+then
+    systemctl --user try-restart awtarchy-polkit-agent.service >/dev/null 2>&1 || true
+fi
+
+
