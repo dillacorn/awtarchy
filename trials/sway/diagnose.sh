@@ -50,7 +50,7 @@ fi
 printf '\n=== Recent Quickshell warning/error lines ===\n'
 log="${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/quickshell-sway.log"
 if [[ -f "$log" && ! -L "$log" ]]; then
-    grep -iE 'error|warn|qml|failed|swaybridge|swaydragbridge' "$log" | tail -n 45 || true
+    grep -iE 'error|warn|qml|failed|swaybridge|swaydragbridge|swaybardrag' "$log" | tail -n 45 || true
 else
     printf 'Sway Quickshell log unavailable\n'
 fi
