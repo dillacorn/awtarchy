@@ -57,7 +57,10 @@ jobs:
           XDG_RUNTIME_DIR: /tmp/awtarchy-sway-ci-runtime
         run: |
           install -d -m 0700 "$XDG_RUNTIME_DIR"
-          sway -C -c trials/sway/config
+          # Arch Sway carries file capabilities that GitHub container policy
+          # cannot grant. A non-capability copy can still validate config.
+          install -m 0755 "$(command -v sway)" "$XDG_RUNTIME_DIR/sway-validator"
+          "$XDG_RUNTIME_DIR/sway-validator" -C -c trials/sway/config
 
       - name: Check patch consistency
         run: |
