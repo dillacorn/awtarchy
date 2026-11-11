@@ -84,6 +84,24 @@ Singleton {
     }
 
     function refreshMonitors() {
+        // Show the focused native workspace even if the Sway JSON helper has
+        // not started yet. Do not invent occupancy for hidden workspaces.
+        if (!(root.workspaces.values || []).length) {
+            const native = I3.workspaces.values || [];
+            const fallback = native.map(w => ({
+                id: Number(w.number),
+                name: String(w.name || ""),
+                monitor: { name: w.monitor ? String(w.monitor.name) : "" },
+                active: Boolean(w.active),
+                focused: Boolean(w.focused),
+                urgent: Boolean(w.urgent),
+                hasFullscreen: false,
+                toplevels: { values: [] }
+            })).filter(w => Number.isInteger(w.id)
+                && w.id >= 1 && w.id <= 10 && w.monitor.name.length > 0);
+            if (fallback.length)
+                root.workspaces = { values: fallback };
+        }
         if (!workspaceReader.running)
             workspaceReader.exec(["python3", root.workspaceScript]);
     }
@@ -130,6 +148,12 @@ Singleton {
                 toplevels: { values: clients }
             });
         }
+
+        // Sway always has at least one live numbered workspace in this
+        // managed session. Ignore momentary blank/inconsistent IPC snapshots
+        // instead of blanking both bars until the next successful poll.
+        if (!mappedWorkspaces.length)
+            return;
 
         const wsSignature = JSON.stringify(mappedWorkspaces.map(w =>
             [w.id, w.monitor.name, w.active, w.focused, w.urgent,
