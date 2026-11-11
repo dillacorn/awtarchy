@@ -191,11 +191,13 @@ def render(source: Path, destination: Path, trial: Path):
         swayDragCandidate = "none";
     }
 ''')
-                    item_anchor = '    Item {\\n        anchors.fill: parent'
-                    if text.count(item_anchor) != 2:
-                        raise ValueError("Expected two Sway bar orientation Items")
-                    handlers = []
-                    for orientation in ("Horizontal", "Vertical"):
+                    for orientation, layout in (
+                        ("Horizontal", "horizontalLayout"),
+                        ("Vertical", "verticalLayout"),
+                    ):
+                        anchor = '    Item {\n        id: ' + layout + '\n'
+                        if text.count(anchor) != 1:
+                            raise ValueError("Missing Sway bar layout: " + layout)
                         handler = '''
         DragHandler {
             id: swayBarDragORIENTATION
@@ -216,14 +218,11 @@ def render(source: Path, destination: Path, trial: Path):
             }
         }
 '''.replace("ORIENTATION", orientation)
-                        handlers.append(handler)
-                    parts = text.split(item_anchor)
-                    text = (parts[0] + item_anchor + handlers[0] + parts[1]
-                            + item_anchor + handlers[1] + parts[2])
+                        text = text.replace(anchor, anchor + handler, 1)
                 if path.name == "shell.qml":
                     # Direct signals preserve drag event ordering and avoid
                     # subprocess races between begin/preview/finish.
-                    needle = '    IpcHandler {\\n        target: "control"'
+                    needle = '    IpcHandler {\n        target: "control"'
                     if text.count(needle) != 1:
                         raise ValueError("Quickshell control section changed")
                     text = text.replace(needle, '''    Connections {
