@@ -56,6 +56,9 @@ bindsym Mod1+Shift+Return exec foot
 bindsym Mod4+Shift+Return exec foot
 bindsym Mod1+Shift+b exec foot --app-id btop btop
 bindsym Mod4+Shift+b exec foot --app-id btop btop
+# Match Hyprland's ALT/SUPER+SHIFT+M maccel launcher.
+bindsym Mod1+Shift+m exec foot --app-id maccel maccel
+bindsym Mod4+Shift+m exec foot --app-id maccel maccel
 bindsym Mod1+v exec foot --app-id Wiremix wiremix
 bindsym Mod4+v exec foot --app-id Wiremix wiremix
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
@@ -222,6 +225,7 @@ bindsym Print exec bash $trial/capture.sh output
 
 # Awtarchy utility floating rules. Sway percentages remain relative to output.
 for_window [app_id="btop"] floating enable, resize set 80 ppt 85 ppt, move position center
+for_window [app_id="maccel"] floating enable, resize set 90 ppt 96 ppt, move position center
 for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
 for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
@@ -236,8 +240,10 @@ assign [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|g
 for_window [app_id="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope)$"] fullscreen enable, inhibit_idle fullscreen
 for_window [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*[.]exe)$"] fullscreen enable, inhibit_idle fullscreen
 assign [app_id="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
+assign [class="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
 assign [app_id="^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
 assign [app_id="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
+assign [class="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
 assign [app_id="^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
 assign [app_id="^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
 assign [app_id="^(Vncviewer|rustdesk)$"] workspace number 7
