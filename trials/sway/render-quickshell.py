@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-BRIDGE_FILES = ("SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml")
+BRIDGE_FILES = ("SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml", "SwayDragBridge.qml")
 # The shared Awtarchy UI has per-flyout capture exclusion controls.
 # Sway does not provide a verified equivalent to Hyprland's capture rules.
 # Never advertise those controls as effective, or corrupt shared Hyprland
@@ -156,6 +156,24 @@ def render(source: Path, destination: Path, trial: Path):
                             'onClicked: SwayBridge.moveWorkspace('
                             + arrow + '.modelData.dir)'
                         )
+                if path.name == "shell.qml":
+                    # Direct signals preserve drag event ordering and avoid
+                    # subprocess races between begin/preview/finish.
+                    needle = '    IpcHandler {\\n        target: "control"'
+                    if text.count(needle) != 1:
+                        raise ValueError("Quickshell control section changed")
+                    text = text.replace(needle, '''    Connections {
+        target: SwayDragBridge
+        function onBeginBarDrag(monitor) { root.beginBarDrag(monitor); }
+        function onPreviewBarDrag(monitor, candidate) {
+            root.previewBarDrag(monitor, candidate);
+        }
+        function onFinishBarDrag(monitor, candidate) {
+            root.finishBarDrag(monitor, candidate);
+        }
+    }
+
+''' + needle)
                 if path.name == "shell.qml":
                     text = text.replace(
                         'function ping(): string { return "ok"; }',
