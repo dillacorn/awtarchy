@@ -93,6 +93,12 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     assert "/sway/awtarchy-trial/theme-apply.sh" in picker
     assert (shell / "SwayDragBridge.qml").is_file()
     assert "SwayBridge" in qml_shell
+    # Sway does not have toplevel title at initial map; pre-float by app ID.
+    assert 'for_window [app_id="(?i)^(quickshell|awtarchy-sway|awtarchy-sway-quickshell)$"] floating enable' in config.decode()
+    # Do not erase the workspace bar on a temporary empty Sway IPC snapshot.
+    bridge = (shell / "SwayBridge.qml").read_text(encoding="utf-8")
+    assert "if (!mappedWorkspaces.length)" in bridge
+    assert "I3.workspaces.values || []" in bridge
 
 source = (TRIAL / "capture.sh").read_text(encoding="utf-8")
 assert 'satty --filename "$image"' in source
