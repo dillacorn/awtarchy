@@ -246,27 +246,27 @@ for_window [title="^(Open File|Select a File|Choose wallpaper|Open Folder|Save A
 
 # Desktop tasks: same workspace numbers as the Hyprland config.
 assign [app_id="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|chiaki|moonlight|com[.]moonlight_stream[.]Moonlight|.*[.]exe)$"] workspace number 1
-assign [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*[.]exe)$"] workspace number 1
+assign [class="(?i)^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*[.]exe)$"] workspace number 1
 for_window [app_id="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope)$"] fullscreen enable, inhibit_idle fullscreen
-for_window [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*[.]exe)$"] fullscreen enable, inhibit_idle fullscreen
+for_window [class="(?i)^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|gamescope|.*[.]exe)$"] fullscreen enable, inhibit_idle fullscreen
 assign [app_id="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
-assign [class="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
+assign [class="(?i)^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
 assign [app_id="^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
-assign [class="^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
+assign [class="(?i)^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
 assign [app_id="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
-assign [class="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
+assign [class="(?i)^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
 assign [app_id="^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
-assign [class="^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
+assign [class="(?i)^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
 assign [app_id="^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
-assign [class="^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
+assign [class="(?i)^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
 assign [app_id="^(Vncviewer|rustdesk)$"] workspace number 7
-assign [class="^(Vncviewer|rustdesk)$"] workspace number 7
+assign [class="(?i)^(Vncviewer|rustdesk)$"] workspace number 7
 assign [app_id="^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"] workspace number 8
-assign [class="^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"] workspace number 8
+assign [class="(?i)^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"] workspace number 8
 assign [app_id="^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"] workspace number 9
-assign [class="^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"] workspace number 9
+assign [class="(?i)^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"] workspace number 9
 assign [app_id="^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
-assign [class="^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
+assign [class="(?i)^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
 
 # Gaming: don't force tearing/VRR globally without confirming hardware behavior.
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
