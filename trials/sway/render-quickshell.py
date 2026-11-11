@@ -137,9 +137,24 @@ def render(source: Path, destination: Path, trial: Path):
     }""" + text[end:]
                     # Sway provides workspace-manager Wayland operations; no
                     # false "move window" substitution for whole workspace.
-                    text = re.sub(
-                        r'Quickshell\.execDetached\(\["hyprctl", "eval", "hl\.dispatch\(hl\.dsp\.workspace\.move\(\{ monitor = \\"" \+ (\w+)\.modelData\.dir \+ "\\" \}\)\)"\]\)',
-                        r'SwayBridge.moveWorkspace(\1.modelData.dir)', text)
+                    # Both horizontal and vertical workspace arrows must be
+                    # translated. Reject source drift instead of keeping a
+                    # runnable-looking Hyprland command in the Sway shell.
+                    for arrow in ("arrowSlot", "arrowSlotVertical"):
+                        matches = [
+                            line.strip() for line in text.splitlines()
+                            if 'onClicked: Quickshell.execDetached(["hyprctl"' in line
+                            and arrow + ".modelData.dir" in line
+                        ]
+                        if len(matches) != 1:
+                            raise ValueError(
+                                "Missing or duplicated workspace arrow: " + arrow
+                            )
+                        text = text.replace(
+                            matches[0],
+                            'onClicked: SwayBridge.moveWorkspace('
+                            + arrow + '.modelData.dir)'
+                        )
                 if path.name == "shell.qml":
                     text = text.replace(
                         'function ping(): string { return "ok"; }',
