@@ -58,6 +58,42 @@ def expected_files(repo, home, temporary):
     result[home / ".config/sway/awtarchy-trial/quickshell.sh"] = generated.read_bytes()
     return result
 
+def prepare_config_update(old: bytes, new: bytes) -> bytes:
+    """Keep the original Sway output profile byte-for-byte across updates.
+
+    Called only when the installed config hash still matches Awtarchy's
+    recorded baseline. A user-edited config is preserved without guessing.
+    """
+    start = "# AWTARCHY-SWAY-OUTPUTS-BEGIN"
+    end = "# AWTARCHY-SWAY-OUTPUTS-END"
+    previous = old.decode("utf-8")
+    proposed = new.decode("utf-8")
+    for text in (previous, proposed):
+        if text.count(start) != 1 or text.count(end) != 1:
+            raise ValueError("Sway monitor delimiters changed; refusing config update")
+    imported = previous.split(start, 1)[1].split(end, 1)[0]
+    return (proposed.split(start, 1)[0] + start + imported + end
+            + proposed.split(end, 1)[1]).encode("utf-8")
+
+
+def validate_sway_config(target: Path, content: bytes):
+    # Parse the *real* imported monitor profile with installed Sway before
+    # replacing the live config. This never starts a session.
+    with tempfile.NamedTemporaryFile(
+            prefix=".sway-config-check-", dir=target.parent,
+            delete=False) as stage:
+        temp_path = Path(stage.name)
+        stage.write(content)
+    try:
+        result = subprocess.run(
+            ["sway", "-C", "-c", str(temp_path)], timeout=20,
+            capture_output=True, text=True)
+        if result.returncode:
+            raise ValueError("Sway rejected candidate config: " + result.stderr.strip())
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
 def atomic_replace(target, body):
     if target.is_symlink() or target.parent.is_symlink():
         raise ValueError("Refusing symlinked Sway destination")
@@ -140,8 +176,26 @@ def main():
             counts["unchanged"] += 1
             continue
         if key == ".config/sway/awtarchy-trial/config":
-            counts["preserve"] += 1
-            print("PRESERVE personal Sway config: " + key)
+            # Awtarchy's original installer records the installed config
+            # *after* one-time monitor import. Honor that exact hash as proof
+            # the user has not edited it. Preserve every personal change.
+            if original.get(key) != current:
+                counts["preserve"] += 1
+                print("PRESERVE user-modified Sway config: " + key)
+                continue
+            candidate = prepare_config_update(path.read_bytes(), body)
+            if sha(candidate) == current:
+                counts["unchanged"] += 1
+                continue
+            validate_sway_config(path, candidate)
+            counts["update"] += 1
+            print(("UPDATE: " if args.mode == "apply" else "WOULD UPDATE: ")
+                  + key + " (preserve imported monitor layout)")
+            if args.mode == "apply":
+                if sha(path.read_bytes()) != current:
+                    raise ValueError("Sway config changed during update; refusing")
+                atomic_replace(path, candidate)
+                updated[key] = sha(candidate)
             continue
         if current is None:
             counts["missing"] += 1
