@@ -257,6 +257,10 @@ def render(source: Path, destination: Path, trial: Path):
                 if path.name == "ThemePicker.qml":
                     if '/sway/awtarchy-trial/theme-apply.sh' not in text:
                         raise ValueError("ThemePicker still uses Hyprland apply backend")
+                    state_name = '/awtarchy/active-theme'
+                    if text.count(state_name) != 1:
+                        raise ValueError("ThemePicker active state location changed")
+                    text = text.replace(state_name, '/awtarchy/active-theme-sway')
                 if path.name == "KeyboardLockState.qml":
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
