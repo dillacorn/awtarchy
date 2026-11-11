@@ -177,5 +177,3 @@ if command -v systemctl >/dev/null 2>&1 \
 then
     systemctl --user try-restart awtarchy-polkit-agent.service >/dev/null 2>&1 || true
 fi
-
-
