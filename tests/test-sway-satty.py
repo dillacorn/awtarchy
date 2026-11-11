@@ -27,6 +27,8 @@ printf 'fakePNG' > "$3"
 set -euo pipefail
 printf 'slurp:%s\n' "$*" >>"$EVENTS"
 printf '10,20 300x200\n'
+[[ ! -e /proc/self/fd/9 ]] || { printf 'slurp inherited screenshot lock\n' >&2; exit 13; }
+sleep 2 >/dev/null 2>&1 &
 """,
         "wl-copy": r"""#!/usr/bin/env bash
 set -euo pipefail
