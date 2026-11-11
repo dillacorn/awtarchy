@@ -116,8 +116,8 @@ for name, title in (
 ):
     cfg = config.decode()
     assert 'for_window [title="^' + title + '$"] floating enable' in cfg, name
-assert "bindsym Mod1+Shift+m exec foot --app-id maccel maccel" in config.decode()
-assert "bindsym Mod4+Shift+m exec foot --app-id maccel maccel" in config.decode()
+assert "bindsym Mod1+Shift+m exec foot --app-id maccel maccel tui" in config.decode()
+assert "bindsym Mod4+Shift+m exec foot --app-id maccel maccel tui" in config.decode()
 assert 'for_window [app_id="maccel"] floating enable' in config.decode()
 
 print("PASS: Sway hidden workspace occupancy, scratchpad filtering, UI positioning, gestures, theme and Satty")
