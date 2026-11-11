@@ -194,6 +194,7 @@ def render(source: Path, destination: Path, trial: Path):
                     item_anchor = '    Item {\\n        anchors.fill: parent'
                     if text.count(item_anchor) != 2:
                         raise ValueError("Expected two Sway bar orientation Items")
+                    handlers = []
                     for orientation in ("Horizontal", "Vertical"):
                         handler = '''
         DragHandler {
@@ -215,7 +216,10 @@ def render(source: Path, destination: Path, trial: Path):
             }
         }
 '''.replace("ORIENTATION", orientation)
-                        text = text.replace(item_anchor, item_anchor + handler, 1)
+                        handlers.append(handler)
+                    parts = text.split(item_anchor)
+                    text = (parts[0] + item_anchor + handlers[0] + parts[1]
+                            + item_anchor + handlers[1] + parts[2])
                 if path.name == "shell.qml":
                     # Direct signals preserve drag event ordering and avoid
                     # subprocess races between begin/preview/finish.
