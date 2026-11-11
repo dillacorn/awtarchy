@@ -33,6 +33,9 @@ set -euo pipefail
 [[ "$1" == "--type" && "$2" == "image/png" ]] || exit 2
 [[ "$(cat)" == "fakePNG" ]] || exit 3
 printf 'clipboard\n' >>"$EVENTS"
+[[ ! -e /proc/self/fd/9 ]] || exit 14
+# Emulate wl-copy keeping a clipboard-serving process alive after return.
+sleep 2 >/dev/null 2>&1 &
 """,
         "satty": r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -78,6 +81,16 @@ printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con
             assert "-r" in lines[0]
         if mode in ("display", "output"):
             assert "-o" in lines[0]
+
+    # A second screenshot must succeed while the previous clipboard provider
+    # remains running; the old inherited flock caused a false lock-busy.
+    events.write_text("")
+    retry = subprocess.run(
+        ["bash", str(SCRIPT), "area"], env=env,
+        capture_output=True, text=True, timeout=10
+    )
+    assert retry.returncode == 0, (retry.stdout, retry.stderr)
+    assert any(x.startswith("satty:") for x in events.read_text().splitlines())
 
     env["XDG_CURRENT_DESKTOP"] = "Hyprland"
     events.write_text("")
