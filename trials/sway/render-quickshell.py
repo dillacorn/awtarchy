@@ -156,6 +156,66 @@ def render(source: Path, destination: Path, trial: Path):
                             'onClicked: SwayBridge.moveWorkspace('
                             + arrow + '.modelData.dir)'
                         )
+                if path.name == "Bar.qml":
+                    # Layer-shell bars cannot be moved with Sway's window
+                    # floating_modifier. Capture ALT+left drag in the bar Item
+                    # and forward the preview/commit through Quickshell itself.
+                    props = '    property bool wsDrawerOpen: false'
+                    if text.count(props) != 1:
+                        raise ValueError("Bar root state changed")
+                    text = text.replace(props, props + '''
+    property bool swayDragActive: false
+    property string swayDragCandidate: "none"
+
+    function beginSwayDrag() {
+        swayDragActive = true;
+        swayDragCandidate = "none";
+        SwayDragBridge.beginBarDrag(monitorName);
+    }
+    function previewSwayDrag(dx, dy) {
+        if (!swayDragActive || Math.max(Math.abs(dx), Math.abs(dy)) < 18)
+            return;
+        const candidate = Math.abs(dx) * 1.2 >= Math.abs(dy)
+            ? (dx > 0 ? "right" : "left")
+            : (dy > 0 ? "bottom" : "top");
+        if (candidate !== swayDragCandidate) {
+            swayDragCandidate = candidate;
+            SwayDragBridge.previewBarDrag(monitorName, candidate);
+        }
+    }
+    function finishSwayDrag() {
+        if (!swayDragActive)
+            return;
+        swayDragActive = false;
+        SwayDragBridge.finishBarDrag(monitorName, swayDragCandidate);
+        swayDragCandidate = "none";
+    }
+''')
+                    item_anchor = '    Item {\\n        anchors.fill: parent'
+                    if text.count(item_anchor) != 2:
+                        raise ValueError("Expected two Sway bar orientation Items")
+                    for orientation in ("Horizontal", "Vertical"):
+                        handler = '''
+        DragHandler {
+            id: swayBarDragORIENTATION
+            acceptedButtons: Qt.LeftButton
+            acceptedModifiers: Qt.AltModifier
+            target: null
+            dragThreshold: 5
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+            onActiveChanged: {
+                if (active)
+                    bar.beginSwayDrag();
+                else
+                    bar.finishSwayDrag();
+            }
+            onActiveTranslationChanged: {
+                if (active)
+                    bar.previewSwayDrag(activeTranslation.x, activeTranslation.y);
+            }
+        }
+'''.replace("ORIENTATION", orientation)
+                        text = text.replace(item_anchor, item_anchor + handler, 1)
                 if path.name == "shell.qml":
                     # Direct signals preserve drag event ordering and avoid
                     # subprocess races between begin/preview/finish.
