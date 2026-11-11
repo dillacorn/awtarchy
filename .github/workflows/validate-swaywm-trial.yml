@@ -39,7 +39,7 @@ jobs:
     steps:
       - name: Install current Arch Sway and validation tools
         run: |
-          pacman -Sy --noconfirm --needed git python bash sway jq
+          pacman -Syu --noconfirm --needed git python bash sway jq
 
       - name: Check out exact trial commit
         uses: actions/checkout@v4
