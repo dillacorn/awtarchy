@@ -231,8 +231,11 @@ for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, m
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
 for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
 # Quickshell FloatingWindow surfaces are regular xdg_toplevels in Sway.
-# Match exact titles rather than floating all Quickshell windows; the bar,
-# theme picker, popup notifications and power overlay use layer-shell.
+# Title rules can apply after the first tile. Float known Quickshell app IDs
+# before their titles arrive, then apply precise per-title geometry below.
+# Awtarchy's PanelWindow bars / theme overlays use layer shell, not xdg-toplevel.
+# The exact app ID still needs confirmation from a live Sway get_tree.
+for_window [app_id="(?i)^(quickshell|awtarchy-sway|awtarchy-sway-quickshell)$"] floating enable, border none
 for_window [title="^Awtarchy Application Search$"] floating enable, border pixel 1, resize set 420 px 582 px, move position center
 for_window [title="^Awtarchy Clipboard History$"] floating enable, border pixel 1, resize set 880 px 760 px, move position center
 for_window [title="^Awtarchy Notification Center$"] floating enable, border pixel 1, resize set 520 px 760 px, move position center
