@@ -14,7 +14,9 @@ def render(source: Path, target: Path):
         ('CONFIG_NAME="${QUICKSHELL_CONFIG_NAME:-awtarchy}"',
          'CONFIG_NAME="${QUICKSHELL_CONFIG_NAME:-awtarchy-sway}"'),
         ('need hyprctl', 'need swaymsg'),
-        # Quickshell IPC can return a zero status with a textual error.\n        # A started process is not equivalent to a registered control handler.\n        ('    ipc control ping >/dev/null 2>&1',\n         '    [[ "$(ipc control ping 2>/dev/null)" == "ok" ]]'),
+        # A zero exit code from qs does not prove a registered IPC handler.
+        ('    ipc control ping >/dev/null 2>&1',
+         '    [[ "$(ipc control ping 2>/dev/null)" == "ok" ]]'),
         ('hyprctl monitors -j 2>/dev/null',
          'python3 "${CONFIG_HOME}/sway/awtarchy-trial/monitor-info.py" monitors 2>/dev/null'),
         ('hyprctl activeworkspace -j 2>/dev/null',
