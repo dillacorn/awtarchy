@@ -118,7 +118,7 @@ drop_pkg() {
 if [[ "$operation" == install-sway ]]; then
   for pkg in sway swaybg swayidle swaylock xdg-desktop-portal-wlr \
       quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel mako \
-      grim slurp wl-clipboard cliphist xdg-desktop-portal-gtk \
+      grim slurp satty wl-clipboard cliphist xdg-desktop-portal-gtk \
       libnotify jq python pipewire lxqt-policykit playerctl; do
     add_pkg "$pkg"
   done
