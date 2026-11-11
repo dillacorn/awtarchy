@@ -218,9 +218,10 @@ bindsym XF86AudioPrev exec playerctl previous
 # Capturing remains available; capture hiding is NOT implemented.
 # Exact existing screenshot keys; window-only capture awaits a safe dedicated
 # implementation and therefore is not mapped to a misleading full display.
-bindsym Mod4+Shift+f exec bash $trial/capture.sh output
-bindsym Mod4+Shift+d exec bash $trial/capture.sh output
+bindsym Mod4+Shift+f exec bash $trial/capture.sh display
+bindsym Mod4+Shift+d exec bash $trial/capture.sh display
 bindsym Mod4+Shift+x exec bash $trial/capture.sh area
+bindsym Mod4+Shift+s exec bash $trial/capture.sh window
 bindsym Print exec bash $trial/capture.sh output
 
 # Awtarchy utility floating rules. Sway percentages remain relative to output.
@@ -229,7 +230,16 @@ for_window [app_id="maccel"] floating enable, resize set 90 ppt 96 ppt, move pos
 for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
 for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
-for_window [app_id="awtarchy-sway"] floating enable
+# Quickshell FloatingWindow surfaces are regular xdg_toplevels in Sway.
+# Match exact titles rather than floating all Quickshell windows; the bar,
+# theme picker, popup notifications and power overlay use layer-shell.
+for_window [title="^Awtarchy Application Search$"] floating enable, border pixel 1, resize set 420 px 582 px, move position center
+for_window [title="^Awtarchy Clipboard History$"] floating enable, border pixel 1, resize set 880 px 760 px, move position center
+for_window [title="^Awtarchy Notification Center$"] floating enable, border pixel 1, resize set 520 px 760 px, move position center
+for_window [title="^Awtarchy Quick Settings$"] floating enable, border pixel 1, resize set 860 px 850 px, move position center
+for_window [title="^Awtarchy Network$"] floating enable, border pixel 1, resize set 520 px 600 px, move position center
+for_window [title="^Awtarchy Bluetooth$"] floating enable, border pixel 1, resize set 500 px 600 px, move position center
+for_window [title="^Awtarchy Battery$"] floating enable, border pixel 1, resize set 560 px 560 px, move position center
 # Picture-in-picture and dialogs match Awtarchy's existing window rules.
 for_window [title="(?i)Picture[- ]?in[- ]?Picture.*"] floating enable, sticky enable, resize set 25 ppt 25 ppt, move position center
 for_window [title="^(Open File|Select a File|Choose wallpaper|Open Folder|Save As|Library|File Upload).*"] floating enable, move position center
@@ -242,14 +252,21 @@ for_window [class="^(steam_app_.*|lutris_game_class|minigalaxy|playnite_game_cla
 assign [app_id="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
 assign [class="^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"] workspace number 2
 assign [app_id="^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
+assign [class="^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"] workspace number 3
 assign [app_id="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
 assign [class="^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"] workspace number 4
 assign [app_id="^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
+assign [class="^(Spotify|com[.]spotify[.]Client)$"] workspace number 5
 assign [app_id="^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
+assign [class="^(org[.]telegram[.]desktop|Telegram|Messages)$"] workspace number 6
 assign [app_id="^(Vncviewer|rustdesk)$"] workspace number 7
+assign [class="^(Vncviewer|rustdesk)$"] workspace number 7
 assign [app_id="^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"] workspace number 8
+assign [class="^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"] workspace number 8
 assign [app_id="^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"] workspace number 9
+assign [class="^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"] workspace number 9
 assign [app_id="^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
+assign [class="^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
 
 # Gaming: don't force tearing/VRR globally without confirming hardware behavior.
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
