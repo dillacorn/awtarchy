@@ -1,0 +1,63 @@
+name: Validate SwayWM experimental trial
+
+on:
+  push:
+    branches: [SwayWM_Migration_Trial_Investigation]
+    paths:
+      - ".github/workflows/validate-swaywm-trial.yml"
+      - "trials/sway/**"
+      - "tests/test-sway-*.py"
+      - "config/hypr/hyprland.lua"
+      - "config/hypr/scripts/quickshell.sh"
+      - "config/quickshell/awtarchy/**"
+      - "awtarchy-install.sh"
+      - "local/bin/awtarchy"
+      - "local/share/awtarchy/awtarchy-runtime.sh"
+      - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/validate-swaywm-trial.yml"
+      - "trials/sway/**"
+      - "tests/test-sway-*.py"
+      - "config/hypr/hyprland.lua"
+      - "config/hypr/scripts/quickshell.sh"
+      - "config/quickshell/awtarchy/**"
+      - "awtarchy-install.sh"
+      - "local/bin/awtarchy"
+      - "local/share/awtarchy/awtarchy-runtime.sh"
+      - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-compositor-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:latest
+    steps:
+      - name: Install current Arch Sway and validation tools
+        run: |
+          pacman -Sy --noconfirm --needed git python bash sway jq
+
+      - name: Check out exact trial commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Sway regression checks
+        run: |
+          python tests/test-sway-trial.py
+
+      - name: Parse configuration using current Arch Sway
+        env:
+          WLR_BACKENDS: headless
+          XDG_RUNTIME_DIR: /tmp/awtarchy-sway-ci-runtime
+        run: |
+          install -d -m 0700 "$XDG_RUNTIME_DIR"
+          sway -C -c trials/sway/config
+
+      - name: Check patch consistency
+        run: |
+          git diff --check
