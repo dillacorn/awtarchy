@@ -68,6 +68,7 @@ TRANSLATIONS = {
     "/hypr/scripts/quickshell_application_state.sh": "/sway/awtarchy-trial/application-state.sh",
     "/hypr/scripts/quickshell_sensitive_capture.sh": "/sway/awtarchy-trial/sensitive-capture.sh",
     "/hypr/scripts/quickshell_bar_drag_runtime.sh": "/sway/awtarchy-trial/runtime-rules.sh",
+    "/hypr/scripts/quickshell_theme_apply.sh": "/sway/awtarchy-trial/theme-apply.sh",
 }
 
 def render(source: Path, destination: Path, trial: Path):
@@ -167,6 +168,14 @@ def render(source: Path, destination: Path, trial: Path):
                         '(Quickshell.env("HOME") + "/.config")) '
                         '+ "/hypr/scripts/default_applications.py", "tui"]);\n'
                         '        }')
+                if path.name == "Theme.qml":
+                    old_theme = '/quickshell/awtarchy/theme.json'
+                    if text.count(old_theme) != 1:
+                        raise ValueError("Quickshell theme path changed; refusing port")
+                    text = text.replace(old_theme, '/quickshell/awtarchy-sway/theme.json')
+                if path.name == "ThemePicker.qml":
+                    if '/sway/awtarchy-trial/theme-apply.sh' not in text:
+                        raise ValueError("ThemePicker still uses Hyprland apply backend")
                 if path.name == "KeyboardLockState.qml":
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
