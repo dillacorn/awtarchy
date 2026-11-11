@@ -57,8 +57,8 @@ bindsym Mod4+Shift+Return exec foot
 bindsym Mod1+Shift+b exec foot --app-id btop btop
 bindsym Mod4+Shift+b exec foot --app-id btop btop
 # Match Hyprland's ALT/SUPER+SHIFT+M maccel launcher.
-bindsym Mod1+Shift+m exec foot --app-id maccel maccel
-bindsym Mod4+Shift+m exec foot --app-id maccel maccel
+bindsym Mod1+Shift+m exec foot --app-id maccel maccel tui
+bindsym Mod4+Shift+m exec foot --app-id maccel maccel tui
 bindsym Mod1+v exec foot --app-id Wiremix wiremix
 bindsym Mod4+v exec foot --app-id Wiremix wiremix
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
