@@ -28,14 +28,14 @@ capture() {
     local geometry="" rectangles="" image="" ok=0
     flock -n 9 || {
         command -v notify-send >/dev/null 2>&1 &&
-            notify-send 'Screenshot' 'Capture already running.' || true
+            notify-send 'Screenshot' 'Capture already running.' 9>&- || true
         return 0
     }
     case "$mode" in
-        area) geometry="$(slurp -b '#ffffff20' -c '#00000040')" || return 1 ;;
-        display|output) geometry="$(slurp -o -r -c '#00000000')" || return 1 ;;
+        area) geometry="$(slurp -b '#ffffff20' -c '#00000040' 9>&-)" || return 1 ;;
+        display|output) geometry="$(slurp -o -r -c '#00000000' 9>&-)" || return 1 ;;
         window)
-            rectangles="$(swaymsg -r -t get_tree | jq -r '
+            rectangles="$(swaymsg -r -t get_tree 9>&- | jq -r '
                 .. | objects
                 | select(.type? == "con" and (.visible? == true))
                 | select((.app_id? // "") != "" or .window? != null)
@@ -47,12 +47,12 @@ capture() {
                 return 1
             }
             geometry="$(printf '%s\n' "$rectangles" |
-                slurp -r -f '%x,%y %wx%h' -b '#ffffff20' -c '#00000040')" || return 1 ;;
+                slurp -r -f '%x,%y %wx%h' -b '#ffffff20' -c '#00000040' 9>&-)" || return 1 ;;
     esac
     [[ -n "$geometry" ]] || return 1
     image="$(mktemp "$runtime/awtarchy-satty-XXXXXX.png")" || return 1
     trap 'if [[ "${ok:-0}" != 1 ]]; then rm -f -- "${image:-}"; fi' EXIT
-    grim -g "$geometry" "$image" || return 1
+    grim -g "$geometry" "$image" 9>&- || return 1
     # wl-copy forks a long-lived clipboard provider. Never let it inherit
     # the capture flock descriptor, or later screenshots report lock-busy.
     wl-copy --type image/png < "$image" 9>&- || return 1
