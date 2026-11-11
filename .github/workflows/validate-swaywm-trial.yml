@@ -62,6 +62,14 @@ jobs:
           install -m 0755 "$(command -v sway)" "$XDG_RUNTIME_DIR/sway-validator"
           "$XDG_RUNTIME_DIR/sway-validator" -C -c trials/sway/config
 
-      - name: Check patch consistency
-        run: |
-          git diff --check
+
+  patch-consistency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check trial changes for whitespace errors
+        run: git diff --check origin/main...HEAD
