@@ -167,7 +167,7 @@ finally:
         os.unlink(tmp)
 PY
 
-printf '%s\n' "$name" >"$STATE_DIR/active-theme"
+printf '%s\n' "$name" >"$STATE_DIR/active-theme-sway"
 
 # The PolicyKit terminal uses a trusted root-owned base config plus sanitized
 # visual overrides from the user's current Foot config. Restart the hidden
