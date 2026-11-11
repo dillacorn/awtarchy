@@ -3,7 +3,7 @@ import QtQuick
 import Quickshell
 import Quickshell.Io
 import Quickshell.I3
-import Quickshell.WindowManager
+import Quickshell.Wayland
 
 // Sway's get_tree is authoritative for applications on hidden workspaces.
 // Foreign-toplevel screen lists only describe visible/current workspaces and
@@ -69,7 +69,8 @@ Singleton {
     }
 
     function toggleUtility(appId, command) {
-        const values = ToplevelManager.toplevels.values || [];
+        const values = typeof ToplevelManager === "undefined"
+            ? [] : (ToplevelManager.toplevels.values || []);
         const found = values.filter(t => String(t.appId || "") === String(appId));
         if (found.length) {
             const current = found.find(t => t.activated);
@@ -109,7 +110,10 @@ Singleton {
     function applyWorkspaceState(state) {
         if (!Array.isArray(state))
             throw new Error("Expected array from Sway workspace helper");
-        const nativeWindows = ToplevelManager.toplevels.values || [];
+        // Workspace state is authoritative through swaymsg get_tree. The
+        // foreign-toplevel API is optional and must never blank the bar.
+        const nativeWindows = typeof ToplevelManager === "undefined"
+            ? [] : (ToplevelManager.toplevels.values || []);
         const mappedWorkspaces = [];
         const mappedWindows = [];
 
