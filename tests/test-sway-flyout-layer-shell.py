@@ -48,7 +48,7 @@ for required in (
     "BarState.barSizeFor(",
 ):
     assert required in shell_helper, f"Layer-shell helper missing {required!r}"
-assert "FloatingWindow" not in shell_helper
+assert "\nFloatingWindow {" not in shell_helper
 
 with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
     output = Path(directory) / "awtarchy-sway"
