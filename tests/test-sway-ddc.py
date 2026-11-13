@@ -3,6 +3,7 @@
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import tempfile
@@ -23,6 +24,15 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
         directory_path.mkdir(parents=True, exist_ok=True)
 
     (config / "hypr/ddcutil-bus-map.conf").write_text("DP-1=2\n")
+    # Stage the repository sources like the installer (0755) before executing.
+    staged_scripts = config / "hypr/scripts"
+    staged_scripts.mkdir(parents=True)
+    for source in (CONTROLLER, BAR):
+        target = staged_scripts / source.name
+        shutil.copyfile(source, target)
+        target.chmod(0o755)
+    CONTROLLER = staged_scripts / CONTROLLER.name
+    BAR = staged_scripts / BAR.name
     swaymsg = bin_dir / "swaymsg"
     swaymsg.write_text(
         "#!/usr/bin/env bash\n"
