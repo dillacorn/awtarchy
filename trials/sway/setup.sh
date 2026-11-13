@@ -23,7 +23,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh diagnose.sh sway-portals.conf)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh diagnose.sh ddc.sh sway-portals.conf)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
@@ -35,6 +35,17 @@ for name in "${sources[@]}"; do
             grep -Fqx '# Awtarchy Sway dual-compositor trial. Does not touch Hyprland.' "$target" || { fail 'Unknown existing Sway config'; exit 1; }
         fi
     fi
+done
+# Stage exact branch-matched controller sources into the isolated Sway tree.
+# Never overwrite installed Hyprland helper scripts or unknown Sway files.
+ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh)
+for name in "${ddc_sources[@]}"; do
+    source="$repo/config/hypr/scripts/$name"
+    target="$trial/$name"
+    [[ -f "$source" && ! -L "$source" ]] || { fail "Unsafe brightness source: $source"; exit 1; }
+    [[ ! -e "$target" && ! -L "$target" || ( -f "$target" && ! -L "$target" ) ]] || {
+        fail "Unsafe brightness destination: $target"; exit 1;
+    }
 done
 for file in "$temp/quickshell.sh" "$temp/awtarchy-sway/"*; do
     if [[ "$file" == "$temp/quickshell.sh" ]]; then target="$trial/quickshell.sh"; else target="$shell_dir/${file##*/}"; fi
@@ -53,6 +64,9 @@ for i in "${!sources[@]}"; do
     [[ ! -e "$target" ]] || continue
     case "$name" in *.sh) perms=0755 ;; *) perms=0644 ;; esac
     install -m "$perms" -- "$src/$name" "$target"
+done
+for name in "${ddc_sources[@]}"; do
+    [[ -e "$trial/$name" ]] || install -m 0755 -- "$repo/config/hypr/scripts/$name" "$trial/$name"
 done
 [[ -e "$trial/quickshell.sh" ]] || install -m 0755 -- "$temp/quickshell.sh" "$trial/quickshell.sh"
 for file in "$temp/awtarchy-sway/"*; do
