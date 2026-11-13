@@ -65,7 +65,9 @@ bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py hyprmoncfg
 bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
+bindsym Mod4+Mod1+l exec smtty -S -l
 bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
+bindsym Mod4+Mod1+k exec smtty -k
 bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
 bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
@@ -234,9 +236,9 @@ bindsym Print exec bash $trial/capture.sh output
 # Awtarchy utility floating rules. Sway percentages remain relative to output.
 for_window [app_id="btop"] floating enable, resize set 80 ppt 85 ppt, move position center
 for_window [app_id="maccel"] floating enable, resize set 90 ppt 96 ppt, move position center
-for_window [app_id="hyprmoncfg"] floating enable, resize set 80 ppt 80 ppt, move position center
-for_window [app_id="smtty"] floating enable, resize set 1000 px 680 px, move position center
-for_window [app_id="smtty-O"] floating enable, resize set 1000 px 680 px, move position center
+for_window [app_id="hyprmoncfg"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [app_id="smtty"] floating enable, resize set 50 ppt 65 ppt, move position center
+for_window [app_id="smtty-O"] floating enable, resize set 50 ppt 65 ppt, move position center
 for_window [app_id="wallpicker"] floating enable, resize set 85 ppt 90 ppt, move position center
 for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
