@@ -34,7 +34,8 @@ shell_helper = (TRIAL / "SwayFlyoutWindow.qml").read_text(encoding="utf-8")
 for required in (
     "PanelWindow {",
     "WlrLayershell.layer: WlrLayer.Top",
-    "WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand",
+    'WlrLayershell.keyboardFocus: surfaceRole === "launcher"',
+    "WlrKeyboardFocus.OnDemand",
     "exclusionMode: ExclusionMode.Ignore",
     "anchors {",
     "left: true",
