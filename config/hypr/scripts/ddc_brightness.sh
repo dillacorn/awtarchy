@@ -301,12 +301,13 @@ def owner_is_alive():
         return True
     return True
 
-IN_ATTRIB = 0x00000004
 IN_CLOSE_WRITE = 0x00000008
 IN_MOVED_TO = 0x00000080
-IN_CREATE = 0x00000100
 IN_DELETE = 0x00000200
-mask = IN_ATTRIB | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE
+# IN_CREATE fires before the writer has finished the record. Reading at
+# creation can falsely retry DDC while the startup status is being written.
+# IN_CLOSE_WRITE and IN_MOVED_TO cover completed writes (direct or atomic).
+mask = IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE
 
 libc = ctypes.CDLL(None, use_errno=True)
 init = libc.inotify_init1
