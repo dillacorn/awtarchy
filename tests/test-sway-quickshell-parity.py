@@ -89,6 +89,9 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     assert bar.count("onActiveTranslationChanged:") == 2
     assert qml_shell.count("target: SwayDragBridge") == 1
     assert "SwayBridge.moveWorkspace" in bar
+    assert 'return workspace.focused || workspace.active || workspace.toplevels.values.length > 0;' in bar
+    assert '/sway/awtarchy-trial/ddc.sh' in bar
+    assert '/hypr/scripts/ddc_brightness.sh' not in bar
     assert "/quickshell/awtarchy-sway/theme.json" in theme
     assert "/sway/awtarchy-trial/theme-apply.sh" in picker
     assert (shell / "SwayDragBridge.qml").is_file()
