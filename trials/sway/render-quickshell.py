@@ -52,6 +52,8 @@ def render_layer_flyout(text: str, filename: str) -> str:
     # intentional, but the generated content remains ordinary QML.
     source = source.replace('\\n', '\n')
     target = target.replace('\\n', '\n')
+    if filename == "Notifications.qml":
+        target += "        edgeAnchor: root.anchorAlongEdge\\n".replace('\\n', '\n')
     if text.count(source) != 1:
         raise ValueError(f"Missing exact Sway flyout window: {filename}:{window_id}")
     if text.count("FloatingWindow {") != 1:
