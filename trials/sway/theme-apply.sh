@@ -169,7 +169,7 @@ PY
 
 printf '%s\n' "$name" >"$STATE_DIR/active-theme-sway"
 
-# Apply Sway borders immediately using the selected theme, never hyprctl.
+# Apply Sway borders immediately without contacting the other compositor.
 if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then
     border_helper="$CONFIG_HOME/sway/awtarchy-trial/theme-colors.sh"
     [[ -f "$border_helper" && ! -L "$border_helper" ]] || {
