@@ -139,6 +139,22 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace(old, new)
                 if path.name in SWAY_LAYER_FLYOUTS:
                     text = render_layer_flyout(text, path.name)
+                    # Sway layer-shell positions belong to the target output.
+                    # The Hyprland source keeps mapped windows on their old
+                    # screen and moves them by compositor IPC. That no-op
+                    # positioning path is wrong for a Sway PanelWindow, so
+                    # explicitly remap on a cross-monitor handoff instead.
+                    window_id, _, _ = SWAY_LAYER_FLYOUTS[path.name]
+                    target_name = "target" if path.name == "ClipboardMenu.qml" else "targetScreen"
+                    old_screen = (f"        if (!{window_id}.visible)\\n"
+                                  f"            {window_id}.screen = {target_name};").replace('\\n', '\n')
+                    new_screen = (f"        if ({window_id}.visible "
+                                  f"&& {window_id}.screen !== {target_name})\\n"
+                                  f"            {window_id}.visible = false;\\n"
+                                  f"        {window_id}.screen = {target_name};").replace('\\n', '\n')
+                    if text.count(old_screen) != 1:
+                        raise ValueError(f"Missing Sway output handoff: {path.name}")
+                    text = text.replace(old_screen, new_screen, 1)
                 if path.name == "shell.qml":
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-sway")
                     text = text.replace("awtarchy-quickshell", "awtarchy-sway-quickshell")
