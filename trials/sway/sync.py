@@ -214,22 +214,30 @@ def main():
                 updated[key] = sha(candidate)
             continue
         if current is None:
-            # New narrowly scoped brightness assets can safely be staged by
-            # this managed updater. Existing unknown files still fail closed.
-            new_brightness = key in (
+            # New QML emitted by our strict Sway renderer is managed source,
+            # not an unknown user file. This was previously skipped, leaving
+            # the shell unable to start when SwayFlyoutWindow.qml was added.
+            # Existing files that differ from source remain protected below.
+            generated_qml = (
+                path.parent == home / ".config/quickshell/awtarchy-sway"
+                and path.suffix == ".qml"
+                and re.fullmatch(r"[A-Za-z0-9_-]+[.]qml", path.name) is not None
+            )
+            new_helper = key in (
                 ".config/sway/awtarchy-trial/ddc_brightness.sh",
                 ".config/sway/awtarchy-trial/hypr-ddc-brightness.sh",
                 ".config/sway/awtarchy-trial/ddc.sh",
                 ".config/sway/awtarchy-trial/theme-colors.sh",
                 ".config/sway/awtarchy-trial/toggle-utility.py",
             )
-            if not new_brightness:
+            if not (generated_qml or new_helper):
                 counts["missing"] += 1
                 print("MISSING (manual re-stage required): " + key)
                 continue
             counts["update"] += 1
+            label = "new rendered Sway QML" if generated_qml else "new Sway-only helper"
             print(("INSTALL: " if args.mode == "apply" else "WOULD INSTALL: ")
-                  + key + " (new Sway-only brightness helper)")
+                  + key + " (" + label + ")")
             if args.mode == "apply":
                 atomic_replace(path, body)
                 updated[key] = target
