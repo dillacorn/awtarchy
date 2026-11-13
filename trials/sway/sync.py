@@ -220,6 +220,8 @@ def main():
                 ".config/sway/awtarchy-trial/ddc_brightness.sh",
                 ".config/sway/awtarchy-trial/hypr-ddc-brightness.sh",
                 ".config/sway/awtarchy-trial/ddc.sh",
+                ".config/sway/awtarchy-trial/theme-colors.sh",
+                ".config/sway/awtarchy-trial/toggle-utility.py",
             )
             if not new_brightness:
                 counts["missing"] += 1
