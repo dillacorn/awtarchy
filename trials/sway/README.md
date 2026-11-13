@@ -42,6 +42,8 @@ Implemented means committed source, **not live verified**.
 | Workspaces 1-10 | Native; not tags |
 | Move whole workspace to monitor | Directional Sway command |
 | Floating btop at 80% x 85% | Native Foot app ID rule |
+| Floating utility toggles | Sway tree-based exact app-ID toggle; close local floating instance, relocate remote floating instance, never close tiled windows |
+| Theme picker and window borders | Super+T toggles Sway Quickshell picker; selected active/inactive theme border colors apply through Sway IPC and on compositor reload |
 | Persistent monitor modes | Guarded one-time Hyprland import |
 | Cursor image/theme/size | Native Sway seat settings |
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
@@ -113,5 +115,5 @@ Use swaymsg exit in a Sway terminal to return to Ly, then select Hyprland.
 Do not remove Hyprland, merge the trial, or release it based only on CI.
 
 Extended checklist: [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Satty screenshot annotation,
-Alt+bar edge dragging, maccel and theme isolation are staged in this branch,
+Alt+bar edge dragging, floating utility toggles, maccel and theme isolation are staged in this branch,
 but must be confirmed in a real Sway session. SwayFX is not part of this test.
