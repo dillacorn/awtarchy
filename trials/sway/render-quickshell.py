@@ -159,6 +159,16 @@ def render(source: Path, destination: Path, trial: Path):
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-sway")
                     text = text.replace("awtarchy-quickshell", "awtarchy-sway-quickshell")
                 if path.name == "Bar.qml":
+                    # Sway has a separate active workspace on every output;
+                    # focused is true on only one output. Show each visible
+                    # empty workspace, not just the globally focused one.
+                    predicate = 'return workspace.focused || workspace.toplevels.values.length > 0;'
+                    if text.count(predicate) != 1:
+                        raise ValueError("Sway workspace visibility predicate changed")
+                    text = text.replace(
+                        predicate,
+                        'return workspace.focused || workspace.active '
+                        '|| workspace.toplevels.values.length > 0;', 1)
                     text = text.replace(
                         'onRightClicked: Quickshell.execDetached([bar.wiremixScript])',
                         'onRightClicked: SwayBridge.toggleUtility("Wiremix", '
