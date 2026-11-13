@@ -178,14 +178,14 @@ PanelWindow {
             height: 28
             x: Math.max(0, parent.width - width - 5)
             y: Math.max(0, parent.height - height - 5)
-            color: "#252525"
-            border.color: "#909090"
+            color: Theme.popupBackground
+            border.color: Theme.focus
             border.width: 1
             radius: 0
             Text {
                 anchors.centerIn: parent
                 text: popup.resizePreviewWidth + " × " + popup.resizePreviewHeight
-                color: "#eeeeee"
+                color: Theme.foreground
                 font.pixelSize: 11
             }
         }
