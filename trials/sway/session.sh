@@ -16,9 +16,10 @@ manager="$trial/quickshell.sh"
 if [[ -f "$manager" && ! -L "$manager" ]] && bash "$manager" start; then
     printf 'Sway trial Quickshell control endpoint reports ready\n'
 else
-    printf 'Sway trial Quickshell failed; enable Sway fallback bar.\n' >&2
-    swaymsg bar mode dock >/dev/null 2>&1 || true
-    if command -v mako >/dev/null 2>&1; then mako >/dev/null 2>&1 & fi
+    # A separate swaybar/mako fallback masks broken Quickshell startup and
+    # lets another notification daemon claim org.freedesktop.Notifications.
+    # Leave the compositor and terminal usable; the user can fix the shell.
+    printf 'Sway trial Quickshell failed; inspect the Sway Quickshell log.\n' >&2
 fi
 if command -v wl-paste >/dev/null 2>&1 && command -v cliphist >/dev/null 2>&1; then
     wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
