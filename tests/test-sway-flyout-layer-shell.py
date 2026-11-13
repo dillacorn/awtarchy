@@ -49,6 +49,21 @@ for required in (
 ):
     assert required in shell_helper, f"Layer-shell helper missing {required!r}"
 assert "\nFloatingWindow {" not in shell_helper
+for required in (
+    "acceptedButtons: Qt.RightButton",
+    "acceptedModifiers: Qt.AltModifier",
+    "grabPermissions: PointerHandler.CanTakeOverFromAnything",
+    "resizePreviewWidth",
+    "resizePreviewHeight",
+    "popup.implicitWidth = popup.resizePreviewWidth",
+    "popup.implicitHeight = popup.resizePreviewHeight",
+    "popup.requestActivate()",
+    'surfaceRole === "launcher"',
+    "WlrKeyboardFocus.Exclusive",
+):
+    assert required in shell_helper, required
+assert shell_helper.index("popup.implicitWidth = popup.resizePreviewWidth") < shell_helper.index("onActiveTranslationChanged:"), (
+    "Sway resize must commit once on release, not during pointer motion")
 
 with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
     output = Path(directory) / "awtarchy-sway"
@@ -90,6 +105,16 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
     assert "root.positionLauncher()" in launcher
     assert "search.forceActiveFocus();" in launcher
     assert "launcherWindow.visible = true;" in launcher
+    assert "root.resizeStartWidth + activeTranslation.x" not in launcher, (
+        "Hyprland live-resize handler must not compete with Sway drag handler")
+
+    power = (output / "PowerMenu.qml").read_text(encoding="utf-8")
+    assert 'WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive' in power
+    assert 'powerWindow.requestActivate();' in power
+    assert 'keyCatcher.forceActiveFocus();' in power
+
+    picker = (output / "ThemePicker.qml").read_text(encoding="utf-8")
+    assert picker.count("Keys.onEscapePressed: root.close()") >= 2
 
 position = (TRIAL / "position.sh").read_text(encoding="utf-8")
 assert "if [[ \"$action\" == prepare ]]" in position
