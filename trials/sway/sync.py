@@ -12,6 +12,15 @@ import sys
 import tempfile
 from datetime import datetime, timezone
 
+# The broken 2026-11-13 trial updater forced manual staging of this exact
+# initial component. Recognize only those original bytes when upgrading a
+# still-untracked manual install; all other untracked QML stays protected.
+LEGACY_MANUAL_INSTALL_HASHES = {
+    ".config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml": frozenset({
+        "f2ade98dad43a0ca39564f1ccd45992c296ea0a8d08fb2bf82c69698965ff461",
+    }),
+}
+
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -239,6 +248,21 @@ def main():
             print(("INSTALL: " if args.mode == "apply" else "WOULD INSTALL: ")
                   + key + " (" + label + ")")
             if args.mode == "apply":
+                atomic_replace(path, body)
+                updated[key] = target
+            continue
+        if (key not in original
+                and current in LEGACY_MANUAL_INSTALL_HASHES.get(key, ())):
+            # The user had to install the original flyout QML by hand to
+            # recover a broken Quickshell session. Its exact stock hash is
+            # proven, so this specific older copy can be updated and backed
+            # up without adopting arbitrary untracked user content.
+            counts["update"] += 1
+            print(("UPDATE: " if args.mode == "apply" else "WOULD UPDATE: ")
+                  + key + " (recognized old manual Sway hotfix; backup)")
+            if args.mode == "apply":
+                if sha(path.read_bytes()) != current:
+                    raise ValueError("Sway manual hotfix changed during update; refusing")
                 atomic_replace(path, body)
                 updated[key] = target
             continue
