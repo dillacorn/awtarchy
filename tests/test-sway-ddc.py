@@ -25,14 +25,16 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
 
     (config / "hypr/ddcutil-bus-map.conf").write_text("DP-1=2\n")
     # Stage the repository sources like the installer (0755) before executing.
-    staged_scripts = config / "hypr/scripts"
+    staged_scripts = config / "sway/awtarchy-trial"
     staged_scripts.mkdir(parents=True)
-    for source in (CONTROLLER, BAR):
+    adapter_source = ROOT / "trials/sway/ddc.sh"
+    for source in (CONTROLLER, BAR, adapter_source):
         target = staged_scripts / source.name
         shutil.copyfile(source, target)
         target.chmod(0o755)
     CONTROLLER = staged_scripts / CONTROLLER.name
     BAR = staged_scripts / BAR.name
+    ADAPTER = staged_scripts / adapter_source.name
     swaymsg = bin_dir / "swaymsg"
     swaymsg.write_text(
         "#!/usr/bin/env bash\n"
@@ -92,7 +94,7 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
     assert missing.returncode != 0, missing.stdout
     assert "monitor not found" in missing.stderr
 
-    bar = run(BAR, "status")
+    bar = run(ADAPTER, "status")
     assert bar.returncode == 0, bar.stderr
     data = json.loads(bar.stdout)
     assert data["percentage"] == 47, data
@@ -100,7 +102,8 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
     spec = importlib.util.spec_from_file_location("sway_quicksettings", QUICKSETTINGS)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    module.DDC_STATUS = BAR
+    module.DDC_STATUS = ADAPTER
+    module.DDC_CONTROL = CONTROLLER
     monitors = [{"name": "DP-1"}, {"name": "DP-3"}]
     with patch.dict(os.environ, environment):
         status = module.brightness_status("DP-1", monitors)
