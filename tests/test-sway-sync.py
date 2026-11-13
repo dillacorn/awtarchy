@@ -75,6 +75,27 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     assert missing.stat().st_mtime_ns == stamp
     assert json.loads(manifest.read_text())[key] == digest(desired[missing])
 
+    # Reproduce the user's manual recovery: an old QML component exists, but
+    # the baseline never recorded it. Only recognized stock bytes may upgrade.
+    legacy = b"// original hand-installed Sway layer-shell QML\n"
+    installed = json.loads(manifest.read_text())
+    installed.pop(key)
+    manifest.write_text(json.dumps(installed, indent=2) + "\n")
+    missing.write_bytes(legacy)
+    original_hashes = sway_sync.LEGACY_MANUAL_INSTALL_HASHES
+    with patch.object(sway_sync, "LEGACY_MANUAL_INSTALL_HASHES",
+                      {key: frozenset({digest(legacy)})}):
+        assert "recognized old manual Sway hotfix" in run("review")
+        assert "recognized old manual Sway hotfix" in run("apply")
+    assert missing.read_bytes() == desired[missing]
+    assert any(
+        path.read_bytes() == legacy
+        for path in missing.parent.glob("SwayFlyoutWindow.qml.backup-*")
+    ), "Manually installed stock QML must be backed up before replacement"
+    assert json.loads(manifest.read_text())[key] == digest(desired[missing])
+    assert key in original_hashes
+    assert len(next(iter(original_hashes[key]))) == 64
+
     # If the user edits their managed QML, the updater must never overwrite.
     missing.write_bytes(b"// personal Sway QML modification\n")
     report = run("apply")
