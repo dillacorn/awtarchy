@@ -23,7 +23,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh diagnose.sh ddc.sh sway-portals.conf)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
