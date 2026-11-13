@@ -134,8 +134,14 @@ for name, title in (
 ):
     cfg = config.decode()
     assert 'for_window [title="^' + title + '$"] floating enable' in cfg, name
-assert "bindsym Mod1+Shift+m exec foot --app-id maccel maccel tui" in config.decode()
-assert "bindsym Mod4+Shift+m exec foot --app-id maccel maccel tui" in config.decode()
+assert "bindsym Mod1+Shift+m exec python3 $trial/toggle-utility.py maccel" in config.decode()
+assert "bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel" in config.decode()
+assert 'bindsym Mod4+t exec bash $trial/ipc.sh themes toggle' in config.decode()
+assert "exec_always bash $trial/theme-colors.sh" in config.decode()
+assert "client.focused" in (TRIAL / "theme-colors.sh").read_text()
+assert "theme-colors.sh" in (TRIAL / "theme-apply.sh").read_text()
+assert 'themes:toggle' in (TRIAL / "ipc.sh").read_text()
+assert 'toggle-utility.py' in (TRIAL / "SwayBridge.qml").read_text()
 assert 'for_window [app_id="maccel"] floating enable' in config.decode()
 
 print("PASS: Sway hidden workspace occupancy, scratchpad filtering, UI positioning, gestures, theme and Satty")
