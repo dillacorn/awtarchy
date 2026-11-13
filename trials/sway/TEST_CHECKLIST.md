@@ -65,7 +65,11 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 ## 4. Applications and screenshots
 
 - [ ] Alt+Shift+B opens floating btop at ~80% × 85% screen size.
-- [ ] Alt+Shift+M or Super+Shift+M launches floating maccel at ~90% × 96%.
+- [ ] Alt+Shift+M or Super+Shift+M toggles floating maccel at ~90% × 96%, without spawning duplicates.
+- [ ] Pressing a utility shortcut again closes its floating instance on the active workspace; a floating instance on another workspace is closed and reopened locally.
+- [ ] A manually tiled utility is never killed by its toggle shortcut.
+- [ ] Super+W toggles floating wallpicker; Super+Ctrl+M and Super+Alt+G/O toggle their Hyprland-equivalent utilities.
+- [ ] Super+T opens/closes the Sway-only theme picker; selecting a theme recolors active and inactive window borders immediately and after relogin/reload.
 - [ ] Wiremix, Qalc, default-applications TUI and Foot/Yazi launch correctly.
 - [ ] Super+Shift+X selects an area, copies it and opens **Satty**.
 - [ ] Super+Shift+S selects a window, copies it and opens Satty.
