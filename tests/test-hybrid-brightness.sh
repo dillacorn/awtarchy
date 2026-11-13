@@ -314,6 +314,25 @@ sleep 0.4
 [[ ! -s "$notify_log" ]] \
   || fail "silent brightness adjustment emitted a routine notification"
 
+# A previous test used a fast asynchronous worker. Do not let its final
+# hardware write race the next case's optimistic two-scroll assertions.
+worker_pid_file="$runtime_dir/hypr-ddc-brightness-$(id -u)/worker_LVDS-1.pid"
+worker_settled=false
+for _ in {1..120}; do
+  worker_pid=""
+  if [[ -r "$worker_pid_file" ]]; then
+    IFS= read -r worker_pid <"$worker_pid_file" || true
+  fi
+  if [[ ! "$worker_pid" =~ ^[0-9]+$ ]] \
+      || ! kill -0 "$worker_pid" 2>/dev/null; then
+    worker_settled=true
+    break
+  fi
+  sleep 0.05
+done
+[[ "$worker_settled" == true ]] \
+  || fail "previous brightness worker did not settle before preview test"
+
 # Bar preview should advance immediately per wheel event, independently of the
 # hardware worker's delayed DDC/backlight write.
 env \
@@ -356,7 +375,7 @@ env \
   "$BAR_MODULE" up
 read -r preview_twice preview_max _preview_ts <"$preview_file"
 (( preview_twice == preview_once + 5 )) \
-  || fail "bar brightness preview did not advance immediately for consecutive wheel events"
+  || fail "bar brightness preview did not advance for consecutive wheel events: first=$preview_once second=$preview_twice"
 [[ "$preview_max" == 100 ]] \
   || fail "bar brightness preview lost the logical maximum"
 
