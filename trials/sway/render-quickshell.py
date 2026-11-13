@@ -403,7 +403,60 @@ Qs.Singleton {
                     text = text.replace(
                         'text: "SwayBridge Submap"',
                         'text: "Sway input modes (keyboard shortcuts)"')
+                if path.name == "Launcher.qml":
+                    # The Sway layer-shell facade provides the common
+                    # Alt+right resize handler. Keeping the Hyprland-specific
+                    # handler would compete for the same pointer grab and
+                    # resize the surface during the gesture.
+                    old_resize = """            DragHandler {
+                target: null
+                acceptedButtons: Qt.RightButton
+                acceptedModifiers: Qt.AltModifier
+                onActiveChanged: {
+                    if (active) {
+                        positionTimer.stop();
+                        root.resizeStartWidth = root.liveWidth;
+                        root.resizeStartHeight = root.liveHeight;
+                    } else {
+                        boundsGuardTimer.restart();
+                    }
+                }
+                onActiveTranslationChanged: {
+                    if (!active)
+                        return;
+                    root.setWindowSize(
+                        root.resizeStartWidth + activeTranslation.x,
+                        root.resizeStartHeight + activeTranslation.y
+                    );
+                }
+            }
+
+"""
+                    if text.count(old_resize) != 1:
+                        raise ValueError("Original launcher resize handler changed")
+                    text = text.replace(old_resize, "", 1)
                 if path.name == "PowerMenu.qml":
+                    # PowerMenu is a full-screen modal layer-shell window.
+                    # OnDemand focus leaves keyCatcher without keyboard input
+                    # until clicked on Sway. Exclusive is scoped to visibility
+                    # and Escape remains a direct menu handler.
+                    power = '    PanelWindow {\\n        id: powerWindow\\n'
+                    power = power.replace('\\n', '\n')
+                    if text.count(power) != 1:
+                        raise ValueError("PowerMenu panel changed")
+                    power_focus = (
+                        '    PanelWindow {\\n'
+                        '        id: powerWindow\\n'
+                        '        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive\\n'
+                        '        onVisibleChanged: {\\n'
+                        '            if (visible)\\n'
+                        '                Qt.callLater(() => {\\n'
+                        '                    powerWindow.requestActivate();\\n'
+                        '                    keyCatcher.forceActiveFocus();\\n'
+                        '                });\\n'
+                        '        }\\n'
+                    ).replace('\\n', '\n')
+                    text = text.replace(power, power_focus, 1)
                     text = text.replace(
                         "/hypr/scripts/awtarchy_lock.sh",
                         "/sway/awtarchy-trial/lock.sh")
