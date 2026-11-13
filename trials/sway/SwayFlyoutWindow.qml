@@ -16,6 +16,8 @@ PanelWindow {
     property string title: ""
     property string placement: "center"
     property string surfaceRole: ""
+    // Notification Center anchors to the clicked bar button, not screen center.
+    property real edgeAnchor: -1
     property size minimumSize: Qt.size(1, 1)
     property size maximumSize: Qt.size(10000, 10000)
 
@@ -56,8 +58,18 @@ PanelWindow {
         return Math.max(0, Math.min(Math.max(0, high), Math.round(value)));
     }
 
-    // Mirror the existing Awtarchy bar-adjacent positions without Sway IPC.
-    // Launcher edge modes have their own x/y bias from the original helper.
+    // Match quickshell_flyout_prepare.sh: launcher aligns to the Apps end,
+    // clipboard / Quick Settings center along the bar, connectivity and
+    // battery menus align to the far corner, and Notification Center follows
+    // the clicked bell position. All coordinates are local to popup.screen.
+    readonly property bool cornerRole: surfaceRole === "network"
+        || surfaceRole === "bluetooth" || surfaceRole === "battery"
+    readonly property bool notificationRole: surfaceRole === "notifications"
+    readonly property int notificationAnchorX: edgeAnchor >= 0
+        ? Math.round(edgeAnchor) : outputWidth - 40
+    readonly property int notificationAnchorY: edgeAnchor >= 0
+        ? Math.round(edgeAnchor) : outputHeight - 40
+
     readonly property int offsetX: {
         const center = Math.round((outputWidth - panelWidth) / 2);
         const left = barOffset;
@@ -66,6 +78,11 @@ PanelWindow {
             return clamp(left, outputWidth - panelWidth);
         if (placement === "right" || placement === "right-center")
             return clamp(right, outputWidth - panelWidth);
+        if (notificationRole && (placement === "top" || placement === "bottom"))
+            return clamp(Math.max(6, Math.min(outputWidth - panelWidth - 6,
+                notificationAnchorX - panelWidth)), outputWidth - panelWidth);
+        if (cornerRole && (placement === "top" || placement === "bottom"))
+            return clamp(outputWidth - panelWidth - 8, outputWidth - panelWidth);
         if (surfaceRole === "launcher"
             && (placement === "top" || placement === "bottom"))
             return 0;
@@ -80,6 +97,11 @@ PanelWindow {
             return clamp(top, outputHeight - panelHeight);
         if (placement === "bottom" || placement === "bottom-center")
             return clamp(bottom, outputHeight - panelHeight);
+        if (notificationRole && (placement === "left" || placement === "right"))
+            return clamp(Math.max(6, Math.min(outputHeight - panelHeight - 6,
+                notificationAnchorY - panelHeight)), outputHeight - panelHeight);
+        if (cornerRole && (placement === "left" || placement === "right"))
+            return clamp(outputHeight - panelHeight - 8, outputHeight - panelHeight);
         if (surfaceRole === "launcher"
             && (placement === "left" || placement === "right"))
             return 0;
