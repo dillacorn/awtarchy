@@ -15,8 +15,8 @@ HOME = Path(os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config")))
 TRIAL = HOME / "sway/awtarchy-trial"
 MANAGER = TRIAL / "quickshell.sh"
 OUTPUT_INFO = TRIAL / "monitor-info.py"
-DDC_STATUS = HOME / "hypr/scripts/ddc_brightness.sh"
-DDC_CONTROL = HOME / "hypr/scripts/hypr-ddc-brightness.sh"
+DDC_STATUS = TRIAL / "ddc.sh"
+DDC_CONTROL = TRIAL / "hypr-ddc-brightness.sh"
 
 def command(args):
     result = subprocess.run(args, capture_output=True, text=True, timeout=5)
