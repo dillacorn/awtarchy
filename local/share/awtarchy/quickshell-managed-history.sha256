@@ -1652,3 +1652,6 @@ bed5893bc2547586d9afae1349f1e8b4bb1e178c26a3fe1d1ac440598f861c92	.config/hypr/hy
 # Sway dual-compositor trial: compositor-aware DDC source snapshots.
 8b84a53a92daa504552c4778c80c93cc79f09dfbdb9c8bf527883a62a13e8c05	.config/hypr/scripts/ddc_brightness.sh
 7269ae33d97869b95812495f55245a12c4492822c2c820888c1e7c0ed9b584d0	.config/hypr/scripts/hypr-ddc-brightness.sh
+
+# DDC watcher: wait for complete inotify state writes.
+f182b998f6127bbf7d468d6f982eee3e7a6a2fa75c2259e4fb1a26ea293fddd9	.config/hypr/scripts/ddc_brightness.sh
