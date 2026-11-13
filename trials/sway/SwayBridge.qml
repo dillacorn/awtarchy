@@ -69,18 +69,19 @@ Singleton {
     }
 
     function toggleUtility(appId, command) {
-        const values = typeof ToplevelManager === "undefined"
-            ? [] : (ToplevelManager.toplevels.values || []);
-        const found = values.filter(t => String(t.appId || "") === String(appId));
-        if (found.length) {
-            const current = found.find(t => t.activated);
-            if (current)
-                current.close();
-            else
-                found[0].activate();
-            return true;
-        }
-        Quickshell.execDetached(command);
+        // Reuse the same compositor-verified floating-only shortcut logic.
+        // ToplevelManager cannot enumerate hidden Sway workspaces reliably.
+        const supported = {
+            "Wiremix": "wiremix",
+            "awtarchy-default-apps": "default-apps"
+        };
+        const utility = supported[String(appId)] || "";
+        if (!utility)
+            return false;
+        Quickshell.execDetached([
+            "python3", configHome + "/sway/awtarchy-trial/toggle-utility.py",
+            utility
+        ]);
         return true;
     }
 
