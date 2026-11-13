@@ -43,18 +43,25 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 ## 3. Quickshell bar and desktop utilities
 
 - [ ] The Quickshell bar loads on both monitors with correct placement.
+- [ ] No native Swaybar appears, including after a previous Quickshell failure.
+- [ ] Only Awtarchy's Quickshell notification popups appear; Mako is not started by Sway.
+- [ ] The previously hand-installed SwayFlyoutWindow.qml updates from its exact stock hash with a backup, without overwriting user edits.
 - [ ] Bar workspace numbers, active marker, occupied markers, icons and tasks agree.
 - [ ] Workspace buttons and mouse wheel switch to the expected workspaces.
 - [ ] Alt+left dragging the **bar** previews another edge and saves the new edge.
 - [ ] Bar orientation, auto-hide, size, transparency and per-monitor settings persist.
 - [ ] Alt+P and Super+D open the application launcher as a **floating** window.
+- [ ] Application launcher receives typing immediately from Alt+P / Super+D without hovering or clicking; Escape closes.
+- [ ] Alt+right mouse-drag on the launcher and all seven layer-shell flyouts stays active until button release and applies the previewed size.
 - [ ] Application launcher stays open, searches, launches and closes via Escape.
-- [ ] Super+P opens the power menu as a layer-shell overlay.
+- [ ] Super+P opens the power menu as a layer-shell overlay and accepts letter shortcuts without clicking a tile.
+- [ ] Escape dismisses the power menu without triggering an action; avoid testing shutdown by pressing S unintentionally.
 - [ ] Clipboard, notifications, quick settings, network, Bluetooth and battery
   flyouts float, are positioned correctly and **do not close immediately**.
 - [ ] Flyout position/size adjustments and monitor targeting work.
 - [ ] Switching workspaces dismisses relevant floating panels without stale state.
 - [ ] Theme picker opens as an overlay and applies a theme to **awtarchy-sway**.
+- [ ] Escape dismisses the focused theme picker directly without closing any underlying Quick Settings flyout.
 - [ ] Changing Sway's theme does not modify `hyprland.lua` or its theme.json.
 - [ ] Foot's live palette and Micro colors match expected theme behavior.
 - [ ] Quickshell reload/relogin retains preferences and does not restart endlessly.
