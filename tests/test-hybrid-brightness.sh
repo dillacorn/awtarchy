@@ -28,7 +28,12 @@ cleanup() {
 }
 trap cleanup EXIT
 # Preserve the failed command and line number if an early assertion exits silently.
-trap 'status=$?; printf "FAIL: hybrid brightness at line %s (status %s): %s\\n" "$LINENO" "$status" "$BASH_COMMAND" >&2' ERR
+report_hybrid_error() {
+  local code="$1" line="$2" failed_command="$3"
+  printf 'FAIL: hybrid brightness at line %s (status %s): %s\\n' \
+    "$line" "$code" "$failed_command" >&2
+}
+trap 'report_hybrid_error "$?" "$LINENO" "$BASH_COMMAND"' ERR
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
