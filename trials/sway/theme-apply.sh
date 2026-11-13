@@ -169,6 +169,16 @@ PY
 
 printf '%s\n' "$name" >"$STATE_DIR/active-theme-sway"
 
+# Apply Sway borders immediately using the selected theme, never hyprctl.
+if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then
+    border_helper="$CONFIG_HOME/sway/awtarchy-trial/theme-colors.sh"
+    [[ -f "$border_helper" && ! -L "$border_helper" ]] || {
+        printf 'Sway theme border helper unavailable: %s\n' "$border_helper" >&2
+        exit 1
+    }
+    bash "$border_helper" "$name"
+fi
+
 # The PolicyKit terminal uses a trusted root-owned base config plus sanitized
 # visual overrides from the user's current Foot config. Restart the hidden
 # agent after a theme change so its next prompt reflects the new theme.
