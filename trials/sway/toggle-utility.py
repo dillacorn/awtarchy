@@ -101,7 +101,7 @@ def toggle(name):
     targets, should_launch = classify(ipc("-t", "get_tree"), ipc("-t", "get_workspaces"),
                                       identities, protect)
     for con_id in targets:
-        result = ipc("-t", "command", f"[con_id={con_id}] kill")
+        result = ipc("-t", "command", f"[con_id={con_id} floating] kill")
         if not isinstance(result, list) or not result or not all(
                 isinstance(row, dict) and row.get("success") is True for row in result):
             raise RuntimeError(f"Sway refused to close utility container {con_id}")
