@@ -18,4 +18,4 @@ for script in "$bar" "$controller"; do
     }
 done
 export HYPR_BRIGHTNESS_SCRIPT="$controller"
-bash "$bar" "$@"
+exec bash "$bar" "$@"
