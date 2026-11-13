@@ -54,8 +54,11 @@ for key, expected in {
     "Mod4+p": "ipc.sh powermenu begin",
     "Mod1+Tab": "focus next",
     "Mod1+Shift+Tab": "focus prev",
-    "Mod1+Shift+b": "foot --app-id btop btop",
-    "Mod4+Shift+b": "foot --app-id btop btop",
+    "Mod1+Shift+b": "toggle-utility.py btop",
+    "Mod4+Shift+b": "toggle-utility.py btop",
+    "Mod4+t": "ipc.sh themes toggle",
+    "Mod4+w": "toggle-utility.py wallpicker",
+    "Mod4+Control+m": "toggle-utility.py hyprmoncfg",
     "Mod1+Control+Shift+Down": "move workspace to output down",
     "Mod1+Control+Shift+Up": "move workspace to output up",
 }.items():
@@ -101,6 +104,7 @@ assert match is not None
 names = shlex.split(match.group(1))
 assert len(names) == len(set(names))
 assert "config" in names and "sway-portals.conf" in names
+assert "toggle-utility.py" in names and "theme-colors.sh" in names
 for name in names:
     assert name and "/" not in name and (TRIAL / name).is_file(), name
 sync = (TRIAL / "sync.py").read_text(encoding="utf-8")
