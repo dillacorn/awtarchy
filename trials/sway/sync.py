@@ -37,6 +37,14 @@ def expected_files(repo, home, temporary):
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe Sway source file: " + str(source))
         result[target] = source.read_bytes()
+    # The Sway session uses private copies of DDC scripts. The active
+    # ~/.config/hypr/scripts files may be user-modified or from a release that
+    # predates this trial; never depend on changing them for Sway updates.
+    for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh"):
+        source = repo / "config/hypr/scripts" / name
+        if source.is_symlink() or not source.is_file():
+            raise ValueError("Unsafe shared brightness source: " + str(source))
+        result[home / ".config/sway/awtarchy-trial" / name] = source.read_bytes()
     shell = temporary / "awtarchy-sway"
     subprocess.run(
         ["python3", str(trial / "render-quickshell.py"),
@@ -206,8 +214,23 @@ def main():
                 updated[key] = sha(candidate)
             continue
         if current is None:
-            counts["missing"] += 1
-            print("MISSING (manual re-stage required): " + key)
+            # New narrowly scoped brightness assets can safely be staged by
+            # this managed updater. Existing unknown files still fail closed.
+            new_brightness = key in (
+                ".config/sway/awtarchy-trial/ddc_brightness.sh",
+                ".config/sway/awtarchy-trial/hypr-ddc-brightness.sh",
+                ".config/sway/awtarchy-trial/ddc.sh",
+            )
+            if not new_brightness:
+                counts["missing"] += 1
+                print("MISSING (manual re-stage required): " + key)
+                continue
+            counts["update"] += 1
+            print(("INSTALL: " if args.mode == "apply" else "WOULD INSTALL: ")
+                  + key + " (new Sway-only brightness helper)")
+            if args.mode == "apply":
+                atomic_replace(path, body)
+                updated[key] = target
             continue
         if original.get(key) != current:
             counts["preserve"] += 1
