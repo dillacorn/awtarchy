@@ -80,11 +80,18 @@ already use layer-shell and remain unchanged. The original Hyprland QML
 sources are not edited.
 
 This removes the **regular tiled-window code path** by construction.
+Sway flyouts now use Alt+right-drag with a dimension preview, committing the
+layer-shell resize on release to avoid breaking the pressed-pointer grab.
+The shortcut-opened launcher and power menu request immediate keyboard focus.
+Sway no longer launches a native swaybar or Mako fallback that competes with
+the Awtarchy bar and notifications.
 It does not prove the actual first rendered frame, keyboard focus or
 menu dismissal behavior until a live Sway/Quickshell session is tested.
 The managed updater preserves personal modifications and previously
-imported DP-1/DP-3 display profiles; the new QML component must be staged
-before applying managed updates on an existing trial installation.
+imported DP-1/DP-3 display profiles. New generated Sway QML components are
+installed automatically; exact copies manually staged during the earlier
+missing-component recovery are recognized and upgraded with a backup.
+Unknown or customized files remain protected.
 
 ## Validation requirements
 
