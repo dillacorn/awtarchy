@@ -27,6 +27,8 @@ cleanup() {
   rm -rf -- "$TMP"
 }
 trap cleanup EXIT
+# Preserve the failed command and line number if an early assertion exits silently.
+trap 'status=$?; printf "FAIL: hybrid brightness at line %s (status %s): %s\\n" "$LINENO" "$status" "$BASH_COMMAND" >&2' ERR
 
 fail() {
   printf 'FAIL: %s\n' "$*" >&2
