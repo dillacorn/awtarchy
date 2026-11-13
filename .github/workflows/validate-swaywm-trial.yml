@@ -55,6 +55,8 @@ jobs:
           python tests/test-sway-flyout-layer-shell.py
           python tests/test-sway-satty.py
           python tests/test-sway-ddc.py
+          python tests/test-sway-utility-toggle.py
+          python tests/test-sway-theme-colors.py
 
       - name: Parse generated Sway Quickshell layer-shell QML
         run: |
