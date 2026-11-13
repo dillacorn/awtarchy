@@ -79,7 +79,7 @@ assert "swayfx" not in CONFIG.lower()
 # A native swaybar created during failed Quickshell startup was left visible
 # even after the shell recovered; Mako also competed with Quickshell's own
 # org.freedesktop.Notifications provider.
-assert not re.search(r"(?m)^\\s*bar\\s*\\{", CONFIG)
+assert not re.search(r"(?m)^\s*bar\s*\{", CONFIG)
 session = (TRIAL / "session.sh").read_text(encoding="utf-8")
 assert "swaymsg bar mode dock" not in session
 assert "mako >/dev/null" not in session
