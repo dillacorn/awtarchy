@@ -42,7 +42,7 @@ with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "sway", "SWAYSOCK": "/test/s
          patch.object(module.subprocess, "Popen") as launch:
         module.toggle("maccel")
         launch.assert_not_called()
-        assert ipc.call_args_list[-1].args == ("-t", "command", "[con_id=12] kill")
+        assert ipc.call_args_list[-1].args == ("-t", "command", "[con_id=12 floating] kill")
     with patch.object(module, "ipc", side_effect=[floating_remote, focused,
                                                     [{"success": True}], [{"success": True}]]), \
          patch.object(module.subprocess, "Popen") as launch:
