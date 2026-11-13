@@ -5,12 +5,14 @@ This stages a complete, isolated fake home and real renderer output. It does
 not modify the developer's actual Sway, Hyprland, or Quickshell files.
 """
 import hashlib
+import io
 import json
 import os
+from contextlib import redirect_stdout
 from pathlib import Path
-import subprocess
 import sys
 import tempfile
+from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SYNC = ROOT / "trials/sway/sync.py"
@@ -41,14 +43,17 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     manifest = state / "sway-managed-baseline.json"
     manifest.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
 
-    env = os.environ.copy()
-    env["HOME"] = str(home)
     def run(mode):
-        result = subprocess.run(
-            [sys.executable, str(SYNC), mode, "--repo", str(ROOT)],
-            env=env, capture_output=True, text=True, timeout=50)
-        assert result.returncode == 0, result.stdout + "\n" + result.stderr
-        return result.stdout
+        output = io.StringIO()
+        # CI runs its Arch container as root. The real updater must reject
+        # root, so emulate only the current uid while exercising its real
+        # main() implementation against an isolated temporary home.
+        with patch.dict(os.environ, {"HOME": str(home)}), \
+             patch.object(sway_sync.os, "geteuid", return_value=1000), \
+             patch.object(sys, "argv", [str(SYNC), mode, "--repo", str(ROOT)]), \
+             redirect_stdout(output):
+            sway_sync.main()
+        return output.getvalue()
 
     report = run("review")
     assert "WOULD INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in report, report
