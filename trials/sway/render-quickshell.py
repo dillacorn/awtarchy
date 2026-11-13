@@ -105,6 +105,7 @@ TRANSLATIONS = {
     "/hypr/scripts/quickshell_sensitive_capture.sh": "/sway/awtarchy-trial/sensitive-capture.sh",
     "/hypr/scripts/quickshell_bar_drag_runtime.sh": "/sway/awtarchy-trial/runtime-rules.sh",
     "/hypr/scripts/quickshell_theme_apply.sh": "/sway/awtarchy-trial/theme-apply.sh",
+    "/hypr/scripts/ddc_brightness.sh": "/sway/awtarchy-trial/ddc.sh",
 }
 
 def render(source: Path, destination: Path, trial: Path):
