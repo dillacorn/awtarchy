@@ -105,7 +105,8 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     # not prevent the independent swaymsg workspaces from populating the bar.
     assert "import Quickshell.Wayland" in bridge
     assert "import Quickshell.WindowManager" not in bridge
-    assert bridge.count('typeof ToplevelManager === "undefined"') == 2
+    # Utility toggles now use Sway IPC, not the optional toplevel manager.
+    assert bridge.count('typeof ToplevelManager === "undefined"') == 1
     assert 'const mappedWorkspaces = [];' in bridge
     assert 'root.workspaces = { values: mappedWorkspaces };' in bridge
 
