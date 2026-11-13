@@ -42,6 +42,8 @@ output * bg #10151c solid_color
 
 # Spawn the separate Sway shell once; never invoke Hyprland autostart.
 exec bash $trial/session.sh
+# Reapply the selected border palette after every Sway config reload.
+exec_always bash $trial/theme-colors.sh
 
 # App shortcuts (match the existing Hyprland combinations).
 bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle
@@ -54,17 +56,22 @@ bindsym Mod1+Return exec foot
 bindsym Mod4+Return exec foot
 bindsym Mod1+Shift+Return exec foot
 bindsym Mod4+Shift+Return exec foot
-bindsym Mod1+Shift+b exec foot --app-id btop btop
-bindsym Mod4+Shift+b exec foot --app-id btop btop
-# Match Hyprland's ALT/SUPER+SHIFT+M maccel launcher.
-bindsym Mod1+Shift+m exec foot --app-id maccel maccel tui
-bindsym Mod4+Shift+m exec foot --app-id maccel maccel tui
-bindsym Mod1+v exec foot --app-id Wiremix wiremix
-bindsym Mod4+v exec foot --app-id Wiremix wiremix
+# Match Hyprland's floating-only utility toggles. Never close tiled apps.
+bindsym Mod1+Shift+b exec python3 $trial/toggle-utility.py btop
+bindsym Mod4+Shift+b exec python3 $trial/toggle-utility.py btop
+bindsym Mod1+Shift+m exec python3 $trial/toggle-utility.py maccel
+bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
+bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
+bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
+bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py hyprmoncfg
+bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
+bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
+bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
+bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
 bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
 bindsym Mod4+Shift+e exec foot yazi
-bindsym Mod4+Mod1+a exec foot --app-id awtarchy-default-apps --title awtarchy-default-apps python3 $HOME/.config/hypr/scripts/default_applications.py tui
+bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
 # Hyprland SUPER+SPACE dismisses the first popup; no launcher substitution.
 bindsym Mod4+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
@@ -227,6 +234,10 @@ bindsym Print exec bash $trial/capture.sh output
 # Awtarchy utility floating rules. Sway percentages remain relative to output.
 for_window [app_id="btop"] floating enable, resize set 80 ppt 85 ppt, move position center
 for_window [app_id="maccel"] floating enable, resize set 90 ppt 96 ppt, move position center
+for_window [app_id="hyprmoncfg"] floating enable, resize set 80 ppt 80 ppt, move position center
+for_window [app_id="smtty"] floating enable, resize set 1000 px 680 px, move position center
+for_window [app_id="smtty-O"] floating enable, resize set 1000 px 680 px, move position center
+for_window [app_id="wallpicker"] floating enable, resize set 85 ppt 90 ppt, move position center
 for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
 for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
 for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
