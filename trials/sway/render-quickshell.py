@@ -328,6 +328,24 @@ def render(source: Path, destination: Path, trial: Path):
                     if text.count(state_name) != 1:
                         raise ValueError("ThemePicker active state location changed")
                     text = text.replace(state_name, '/awtarchy/active-theme-sway')
+                    # Qt ApplicationShortcut does not reliably cross separate
+                    # Sway layer-shell windows. Handle Escape in the focused
+                    # theme input and bubble it to the active panel as well.
+                    needle = '                            Keys.onPressed: event => {\n'
+                    if text.count(needle) != 1:
+                        raise ValueError("Theme search keyboard handler changed")
+                    text = text.replace(
+                        needle,
+                        '                            Keys.onEscapePressed: root.close()\n\n'
+                        + needle, 1)
+                    panel = '        Rectangle {\n            anchors.fill: parent\n            color: Theme.popupBackground\n'
+                    if text.count(panel) != 1:
+                        raise ValueError("Theme panel changed")
+                    text = text.replace(
+                        panel,
+                        '        Rectangle {\n            anchors.fill: parent\n'
+                        '            Keys.onEscapePressed: root.close()\n'
+                        '            color: Theme.popupBackground\n', 1)
                 if path.name == "KeyboardLockState.qml":
                     text = text.replace(
                         '["hyprctl", "devices", "-j"]',
