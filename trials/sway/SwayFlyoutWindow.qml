@@ -21,12 +21,31 @@ PanelWindow {
     property size minimumSize: Qt.size(1, 1)
     property size maximumSize: Qt.size(10000, 10000)
 
+    // Changing the wlroots layer surface geometry during a pressed-pointer
+    // gesture can end the grab before the button is released. Stage dimensions
+    // through the drag and commit a single resize on release.
+    property int resizeStartWidth: 0
+    property int resizeStartHeight: 0
+    property int resizePreviewWidth: 0
+    property int resizePreviewHeight: 0
+    property bool resizeInProgress: false
+
     visible: false
     focusable: true
     aboveWindows: true
     exclusionMode: ExclusionMode.Ignore
     WlrLayershell.layer: WlrLayer.Top
-    WlrLayershell.keyboardFocus: WlrKeyboardFocus.OnDemand
+    // A shortcut-opened launcher must own the keyboard immediately, without
+    // requiring a pointer click. Other flyouts retain on-demand focus.
+    WlrLayershell.keyboardFocus: surfaceRole === "launcher"
+        ? WlrKeyboardFocus.Exclusive : WlrKeyboardFocus.OnDemand
+    onVisibleChanged: {
+        if (visible && surfaceRole === "launcher")
+            Qt.callLater(() => {
+                if (popup.visible)
+                    popup.requestActivate();
+            });
+    }
     WlrLayershell.namespace: "awtarchy-sway-flyout"
 
     // Two adjacent anchors preserve the window's requested size rather than
@@ -107,4 +126,68 @@ PanelWindow {
             return 0;
         return clamp(center, outputHeight - panelHeight);
     }
+    // This pointer handler lives above the flyout contents and consumes only
+    // Alt+right drags. Normal clicking, scrolling and text input still pass to
+    // the original widget. No Sway window rule can resize layer-shell clients.
+    Item {
+        id: resizeCapture
+        anchors.fill: parent
+        z: 1000
+        enabled: popup.visible
+
+        DragHandler {
+            id: swayResizeDrag
+            target: null
+            acceptedButtons: Qt.RightButton
+            acceptedModifiers: Qt.AltModifier
+            dragThreshold: 3
+            grabPermissions: PointerHandler.CanTakeOverFromAnything
+            onActiveChanged: {
+                if (active) {
+                    popup.resizeStartWidth = popup.width;
+                    popup.resizeStartHeight = popup.height;
+                    popup.resizePreviewWidth = popup.width;
+                    popup.resizePreviewHeight = popup.height;
+                    popup.resizeInProgress = true;
+                } else if (popup.resizeInProgress) {
+                    popup.resizeInProgress = false;
+                    // Commit only after the release. Resizing mid-gesture
+                    // invalidated Sway's Wayland pointer grab.
+                    popup.implicitWidth = popup.resizePreviewWidth;
+                    popup.implicitHeight = popup.resizePreviewHeight;
+                }
+            }
+            onActiveTranslationChanged: {
+                if (!active || !popup.resizeInProgress)
+                    return;
+                const maxW = Math.min(popup.maximumSize.width, popup.outputWidth - 1);
+                const maxH = Math.min(popup.maximumSize.height, popup.outputHeight - 1);
+                const minW = Math.min(maxW, Math.max(1, popup.minimumSize.width));
+                const minH = Math.min(maxH, Math.max(1, popup.minimumSize.height));
+                popup.resizePreviewWidth = Math.max(minW, Math.min(maxW,
+                    Math.round(popup.resizeStartWidth + activeTranslation.x)));
+                popup.resizePreviewHeight = Math.max(minH, Math.min(maxH,
+                    Math.round(popup.resizeStartHeight + activeTranslation.y)));
+            }
+        }
+
+        Rectangle {
+            visible: swayResizeDrag.active
+            width: 115
+            height: 28
+            x: Math.max(0, parent.width - width - 5)
+            y: Math.max(0, parent.height - height - 5)
+            color: "#252525"
+            border.color: "#909090"
+            border.width: 1
+            radius: 0
+            Text {
+                anchors.centerIn: parent
+                text: popup.resizePreviewWidth + " × " + popup.resizePreviewHeight
+                color: "#eeeeee"
+                font.pixelSize: 11
+            }
+        }
+    }
+
 }
