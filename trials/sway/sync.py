@@ -239,6 +239,7 @@ def main():
                 ".config/sway/awtarchy-trial/theme-colors.sh",
                 ".config/sway/awtarchy-trial/toggle-utility.py",
                 ".config/sway/awtarchy-trial/lock-manager.sh",
+                ".config/sway/awtarchy-trial/mime-parity.py",
             )
             if not (generated_qml or new_helper):
                 counts["missing"] += 1
