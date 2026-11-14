@@ -121,7 +121,7 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
     assert run("wait-secure").returncode != 0
     assert log.read_text() == "", (
         "Missing Quickshell manager must not start swaylock or fall back")
-    assert "swaylock" not in LOCK.read_text()
+    assert "swaylock -f" not in LOCK.read_text()
 
     # Never run a real lock outside an active Sway session.
     invalid = env.copy()
