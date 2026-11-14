@@ -49,6 +49,7 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
         "case \" $* \" in\n"
         "  *' getvcp 0x10'*) printf '%s\\n' "
         "'VCP code 0x10 (Brightness): current value = 47, max value = 100' ;;\n"
+        "  *' setvcp 0x10 '*) : ;;\n"
         "  *) printf 'Unexpected DDC operation\\n' >&2; return 1 ;;\n"
         "esac\n"
     )
@@ -110,5 +111,19 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
         assert status["current"] == 47, status
         assert status["max"] == 100, status
         assert module.brightness_status("UNKNOWN", monitors)["current"] is None
+
+    # Quick Settings uses an absolute brightness write. That controller must
+    # publish the new percentage to the same cache watched by the Sway bar;
+    # reopening the flyout must not immediately revert to the old percentage.
+    changed = run(CONTROLLER, "--monitor", "DP-1", "set-percent", "75")
+    assert changed.returncode == 0, changed.stderr
+    state = (cache / "hypr-ddc-brightness/state_DP-1.tsv").read_text()
+    assert state.split()[0] == "75", state
+    updated_bar = run(ADAPTER, "status")
+    assert updated_bar.returncode == 0, updated_bar.stderr
+    assert json.loads(updated_bar.stdout)["percentage"] == 75, updated_bar.stdout
+    with patch.dict(os.environ, environment):
+        updated_panel = module.brightness_status("DP-1", monitors)
+    assert updated_panel["current"] == 75, updated_panel
 
 print("PASS: Sway DDC status, focused monitor, bar output and Quick Settings value")
