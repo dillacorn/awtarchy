@@ -6,7 +6,7 @@ set -euo pipefail
     printf 'Sway mode-state requires Sway Wayland session\n' >&2
     exit 1
 }
-[[ $# -eq 1 ]] || { printf 'usage: mode-state.sh default|noalt|mouse|vm\n' >&2; exit 2; }
+[[ $# -eq 1 ]] || { printf 'usage: mode-state.sh sync|default|noalt|mouse|vm\n' >&2; exit 2; }
 mode="$1"
 if [[ "$mode" == sync ]]; then
     [[ -n "${SWAYSOCK:-}" ]] || { printf 'Missing Sway socket\n' >&2; exit 1; }

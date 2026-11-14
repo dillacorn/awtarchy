@@ -69,6 +69,9 @@ else:
         assert (runtime / "awtarchy-sway-submap").read_text().strip() == name
     assert call("toggle", "vm").returncode == 0
     assert state.read_text() == "default"
+    assert call("toggle", "mouse").returncode == 0
+    assert call("reset").returncode == 0
+    assert state.read_text() == "default"
     assert (runtime / "awtarchy-sway-submap").read_text() == ""
     assert call("toggle", "noalt", reject=True).returncode != 0
     assert state.read_text() == "default"

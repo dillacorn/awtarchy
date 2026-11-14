@@ -22,7 +22,7 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - System session launcher: /usr/local/bin/awtarchy-sway-session
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
 - Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Fuzzel dmenu)
-- Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock requirement)
+- Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock or Mako installed for this Quickshell-based session)
 - Hyprland config, Quickshell profile and Hyprland Ly session remain installed.
 
 The updater compares the installed Sway config to its recorded baseline. If

@@ -109,9 +109,19 @@ assert "swaybg_command -" in CONFIG
 assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
-assert "swaylock" not in RUNTIME.split(
+sway_package_stage = RUNTIME.split(
     "install_sway_repo_dependencies_stage() {", 1
 )[1].split("install_arch_repo_apps_stage()", 1)[0]
+assert "swaylock" not in sway_package_stage
+assert " mako " not in sway_package_stage
+sway_manager_install = MANAGER.split(
+    'if [[ "$operation" == install-sway ]]; then\n  for pkg in ', 1
+)[1].split("; do", 1)[0]
+assert "swaylock" not in sway_manager_install.split()
+assert "mako" not in sway_manager_install.split()
+# Historical, explicitly owned swaylock remains eligible for removal,
+# without removing anything the user installed independently.
+assert "swaybg swayidle swaylock" in MANAGER
 screencast = (TRIAL / "screencast-chooser.conf").read_text()
 assert "chooser_type=dmenu" in screencast
 assert "chooser_cmd=fuzzel --dmenu" in screencast
