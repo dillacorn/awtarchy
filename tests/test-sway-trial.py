@@ -46,7 +46,13 @@ assert "JayWM_Migration_Trial_Investigation" not in RUNTIME
 bindings = {}
 for line in CONFIG.splitlines():
     if line.startswith("bindsym "):
-        _, key, action = line.split(maxsplit=2)
+        parts = line.split(maxsplit=3)
+        # Sway accepts binding flags before the keysym. Preserve checks
+        # for native mode toggles even when --inhibited is required.
+        if parts[1].startswith("--"):
+            _, _, key, action = parts
+        else:
+            _, key, action = line.split(maxsplit=2)
         bindings.setdefault(key, []).append(action)
 for key, expected in {
     "Mod1+Tab": "focus-cycle.py next",
