@@ -40,6 +40,7 @@ def expected_files(repo, home, temporary):
         target = (
             home / ".config/sway/awtarchy-trial/config" if name == "config" else
             home / ".config/xdg-desktop-portal/sway-portals.conf" if name == "sway-portals.conf" else
+            home / ".config/xdg-desktop-portal-wlr/sway" if name == "screencast-chooser.conf" else
             home / ".config/sway/awtarchy-trial" / name
         )
         source = trial / name
@@ -240,6 +241,8 @@ def main():
                 ".config/sway/awtarchy-trial/toggle-utility.py",
                 ".config/sway/awtarchy-trial/lock-manager.sh",
                 ".config/sway/awtarchy-trial/mime-parity.py",
+                ".config/sway/awtarchy-trial/focus-cycle.py",
+                ".config/xdg-desktop-portal-wlr/sway",
             )
             if not (generated_qml or new_helper):
                 counts["missing"] += 1
