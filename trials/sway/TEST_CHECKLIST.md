@@ -20,6 +20,8 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] `swaymsg -r -t get_inputs` shows flat acceleration and zero pointer gain; compare feel to Hyprland at the same hardware DPI and maccel profile.
 - [ ] No unexpected title bars; 6 px inner and 9 px outer gaps.
 - [ ] Power menu lock launches the **existing Quickshell awtarchy-lock** UI, not plain swaylock, and authenticates with PAM.
+- [ ] Quickshell lockscreen in Sway matches Hyprland's saved per-monitor layout, background, custom images, clock and visualizer settings.
+- [ ] Secure desktop backdrop/transition capture works on both displays, and private capture files are removed after unlock.
 - [ ] `qs -c awtarchy-lock ipc call lock state` reports `secure` only after the compositor confirms the WlSessionLock.
 - [ ] Emergency Super+Ctrl+L remains available to invoke swaylock without requiring Quickshell.
 - [ ] Suspend and hibernate refuse to proceed if the secure Quickshell lock cannot be verified.
@@ -52,7 +54,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] The previously hand-installed SwayFlyoutWindow.qml updates from its exact stock hash with a backup, without overwriting user edits.
 - [ ] Bar workspace numbers, active marker, occupied markers, icons and tasks agree.
 - [ ] Workspace buttons and mouse wheel switch to the expected workspaces.
-- [ ] Alt+left dragging the **bar** previews another edge and saves the new edge.
+- [ ] Alt+left dragging the **bar** previews another edge and saves the new edge; the pointer gesture stays active until mouse release without Sway layer-shell margin movement interrupting it.
 - [ ] Bar orientation, auto-hide, size, transparency and per-monitor settings persist.
 - [ ] Alt+P and Super+D open the application launcher as a **floating** window.
 - [ ] Application launcher receives typing immediately from Alt+P / Super+D without hovering or clicking; Escape closes.
@@ -102,6 +104,9 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] VRR remains opt-in and must be assessed independently of tearing.
 - [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work.
 - [ ] Clipboard, screenshots, file dialog and desktop portals work after reboot.
+- [ ] Sway's folder MIME association matches the file manager selected in Awtarchy (PCManFM-Qt by default), without overriding any unrelated MIME defaults.
+- [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser.
+- [ ] A user-provided `sway-mimeapps.list` folder override is preserved and produces an explicit warning instead of being overwritten.
 - [ ] Power menu lock, suspend and shutdown have correct safeguards.
 - [ ] Idle inhibition during fullscreen games and calls behaves as intended.
 - [ ] Sway logout returns to Ly without affecting Hyprland startup.
