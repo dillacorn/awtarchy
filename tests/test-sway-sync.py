@@ -31,6 +31,8 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     with tempfile.TemporaryDirectory(prefix="sway-render-test-") as stage:
         desired = sway_sync.expected_files(ROOT, home, Path(stage))
 
+    manager_path = home / ".local/share/awtarchy/awtarchy-compositor-manager.sh"
+    assert manager_path in desired
     missing = home / ".config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml"
     assert missing in desired, "Sway renderer must provide a layer-shell popup module"
     baseline = {}
@@ -101,6 +103,34 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     report = run("apply")
     assert "PRESERVE modified file: " + key in report, report
     assert missing.read_bytes() == b"// personal Sway QML modification\n"
+
+    # The old installed menu source is registered only by its exact known Git
+    # stock blob ID. A customized one must always be preserved.
+    legacy_manager = b"#!/usr/bin/env bash\n# old stock Sway manager\n"
+    current_baseline = json.loads(manifest.read_text())
+    manager_key = str(manager_path.relative_to(home))
+    current_baseline.pop(manager_key, None)
+    manifest.write_text(json.dumps(current_baseline, indent=2) + "\n")
+    manager_path.write_bytes(legacy_manager)
+    with patch.object(sway_sync, "LEGACY_MANAGER_GIT_BLOBS",
+                      frozenset({sway_sync.git_blob_sha1(legacy_manager)})):
+        assert "recognized original trial manager" in run("review")
+        assert "recognized original trial manager" in run("apply")
+    assert manager_path.read_bytes() == desired[manager_path]
+    assert any(path.read_bytes() == legacy_manager
+               for path in manager_path.parent.glob(
+                   "awtarchy-compositor-manager.sh.backup-*"))
+    assert json.loads(manifest.read_text())[manager_key] == digest(
+        desired[manager_path])
+
+    custom = b"#!/usr/bin/env bash\n# user customization\n"
+    current_baseline = json.loads(manifest.read_text())
+    current_baseline.pop(manager_key)
+    manifest.write_text(json.dumps(current_baseline, indent=2) + "\n")
+    manager_path.write_bytes(custom)
+    report = run("apply")
+    assert "PRESERVE modified file: " + manager_key in report
+    assert manager_path.read_bytes() == custom
 
 
 # Hot activation must target exactly this Awtarchy Sway session. Mock the

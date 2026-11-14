@@ -79,7 +79,10 @@ previously produced a misleading `update=0` even when GitHub had newer Sway
 changes. The read-only review now checks the remote branch head before
 claiming to be current. The confirmed Apply action fast-forwards only a
 clean checkout of the named Sway trial branch, then applies managed file
-changes and activates Sway in place. Dirty or diverged checkouts fail safely
+changes and activates Sway in place. Known original installed compositor
+manager versions are upgraded with a backup as a managed file, so subsequent
+menu operations gain the source freshness check; custom manager edits remain
+untouched. Dirty or diverged checkouts fail safely
 without discarding edits or rewriting history.
 
 The screen-picker portal backend reads its configuration on service start.

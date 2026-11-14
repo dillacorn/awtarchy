@@ -21,6 +21,21 @@ LEGACY_MANUAL_INSTALL_HASHES = {
     }),
 }
 
+# Exact Git blob IDs of prior stock trial compositor managers; do NOT upgrade
+# any user-modified manager. This once-only adoption lets the menu refresh its
+# own future source-check and activation behavior without a separate installer.
+LEGACY_MANAGER_GIT_BLOBS = frozenset({
+    "77e494c9f8fe758b3cc26b26bb680d167f33cbc1",
+    "f17db9840449b73c235b458314908f6b821ffb43",
+    "14d085b3045ccb6654d9bd02684e880c83f6e850",
+})
+
+
+def git_blob_sha1(body: bytes):
+    return hashlib.sha1(
+        b"blob " + str(len(body)).encode("ascii") + b"\x00" + body
+    ).hexdigest()
+
 def sha(data):
     return hashlib.sha256(data).hexdigest()
 
@@ -74,6 +89,14 @@ def expected_files(repo, home, temporary):
         check=True, timeout=30
     )
     result[home / ".config/sway/awtarchy-trial/quickshell.sh"] = generated.read_bytes()
+    # The installed menu runs this user-owned helper directly. Keep it in the
+    # managed Sway update set, but only migrate known unmodified stock versions.
+    source_manager = repo / "local/share/awtarchy/awtarchy-compositor-manager.sh"
+    if source_manager.is_symlink() or not source_manager.is_file():
+        raise ValueError("Missing or unsafe trial compositor manager source")
+    result[home / ".local/share/awtarchy/awtarchy-compositor-manager.sh"] = (
+        source_manager.read_bytes()
+    )
     return result
 
 def prepare_config_update(old: bytes, new: bytes) -> bytes:
@@ -391,6 +414,7 @@ def main():
                 ".config/sway/awtarchy-trial/idle-action.sh",
                 ".config/sway/awtarchy-trial/swayidle.conf",
                 ".config/xdg-desktop-portal-wlr/sway",
+                ".local/share/awtarchy/awtarchy-compositor-manager.sh",
             )
             if not (generated_qml or new_helper):
                 counts["missing"] += 1
@@ -426,6 +450,21 @@ def main():
             if args.mode == "apply":
                 if sha(path.read_bytes()) != current:
                     raise ValueError("Sway manual hotfix changed during update; refusing")
+                atomic_replace(path, body)
+                updated[key] = target
+                changed_keys.add(key)
+            continue
+        # Previous trial installs staged the manager outside this manifest.
+        # Adopt only exact known stock Git blobs; never take over custom scripts.
+        if (key == ".local/share/awtarchy/awtarchy-compositor-manager.sh"
+                and key not in original
+                and git_blob_sha1(path.read_bytes()) in LEGACY_MANAGER_GIT_BLOBS):
+            counts["update"] += 1
+            print(("UPDATE: " if args.mode == "apply" else "WOULD UPDATE: ")
+                  + key + " (recognized original trial manager; backup)")
+            if args.mode == "apply":
+                if git_blob_sha1(path.read_bytes()) not in LEGACY_MANAGER_GIT_BLOBS:
+                    raise ValueError("Trial manager changed during update; refusing")
                 atomic_replace(path, body)
                 updated[key] = target
                 changed_keys.add(key)
