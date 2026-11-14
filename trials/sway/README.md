@@ -43,6 +43,7 @@ Implemented means committed source, **not live verified**.
 | Move whole workspace to monitor | Directional Sway command |
 | Floating btop at 80% x 85% | Native Foot app ID rule |
 | Floating utility toggles | Sway tree-based exact app-ID toggle; close local floating instance, relocate remote floating instance, never close tiled windows |
+| Hyprland utility floating rules | Fourteen named tools match both Wayland app IDs and XWayland classes, with corresponding per-output sizing; ProtonUp-Qt main window floats at 45% × 45% while its dialogs float without forced main-window sizing |
 | Theme picker and window borders | Super+T toggles Sway Quickshell picker; selected active/inactive theme border colors apply through Sway IPC and on compositor reload |
 | Persistent monitor modes | Guarded one-time Hyprland import |
 | Cursor image/theme/size | Native Sway seat settings |
