@@ -3,8 +3,8 @@ import QtQuick.Layouts
 import Quickshell
 import Quickshell.Io
 
-// Screenshot audio preferences shared across Sway and Hyprland sessions.
-// Sound is tied to a successful grim capture, not Satty's later Save action.
+// Shared login and screenshot sound preferences for Sway and Hyprland.
+// Screenshot playback confirms a captured image, never a Satty save event.
 ColumnLayout {
     id: root
 
@@ -12,7 +12,7 @@ ColumnLayout {
     property bool expanded: false
     property bool loaded: false
     property string message: ""
-    property var values: ({ enabled: true, direct: true, satty: true, print: true })
+    property var values: ({ enabled: true, login: true, direct: true, satty: true, print: true })
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property bool isSway: String(Quickshell.env("XDG_CURRENT_DESKTOP") || "")
@@ -46,7 +46,7 @@ ColumnLayout {
             onStreamFinished: {
                 try {
                     const parsed = JSON.parse(text.trim());
-                    for (const key of ["enabled", "direct", "satty", "print"]) {
+                    for (const key of ["enabled", "login", "direct", "satty", "print"]) {
                         if (typeof parsed[key] !== "boolean")
                             throw new Error("invalid screenshot sound state");
                     }
@@ -83,11 +83,51 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Screenshot sounds"
+            text: "Sound settings"
             color: Theme.foreground
             font.family: Theme.fontFamily
             font.pixelSize: root.textSize
             font.bold: true
+        }
+
+        SettingsButton {
+            label: root.expanded ? "Less" : "Screenshot options"
+            textSize: root.textSize
+            onClicked: root.expanded = !root.expanded
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 6
+
+        Text {
+            Layout.fillWidth: true
+            text: "Login sound"
+            color: Theme.foreground
+            font.family: Theme.fontFamily
+            font.pixelSize: root.textSize
+        }
+
+        SettingsButton {
+            label: !root.loaded ? "Unavailable" : (root.values.login ? "On" : "Off")
+            active: root.loaded && root.values.login
+            available: root.loaded && !reader.running && !writer.running
+            textSize: root.textSize
+            onClicked: root.change("login")
+        }
+    }
+
+    RowLayout {
+        Layout.fillWidth: true
+        spacing: 6
+
+        Text {
+            Layout.fillWidth: true
+            text: "Screenshot sounds"
+            color: Theme.foreground
+            font.family: Theme.fontFamily
+            font.pixelSize: root.textSize
         }
 
         SettingsButton {
@@ -96,12 +136,6 @@ ColumnLayout {
             available: root.loaded && !reader.running && !writer.running
             textSize: root.textSize
             onClicked: root.change("enabled")
-        }
-
-        SettingsButton {
-            label: root.expanded ? "Less" : "Options"
-            textSize: root.textSize
-            onClicked: root.expanded = !root.expanded
         }
     }
 
@@ -152,7 +186,7 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "The main switch mutes all types without changing their individual settings."
+            text: "Screenshot master switch mutes all capture sounds; login audio is controlled separately."
             color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: root.textSize

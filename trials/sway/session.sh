@@ -35,6 +35,11 @@ if [[ -f "$trial/mime-parity.py" && ! -L "$trial/mime-parity.py" ]]; then
 fi
 if [[ -f "$manager" && ! -L "$manager" ]] && bash "$manager" start; then
     printf 'Sway trial Quickshell control endpoint reports ready\n'
+    # Sway config starts session.sh with exec, not exec_always.
+    # Never replay on swaymsg reload or a Quickshell restart.
+    if [[ -f "$trial/login-sound.sh" && ! -L "$trial/login-sound.sh" ]]; then
+        bash "$trial/login-sound.sh" >/dev/null 2>&1 &
+    fi
 else
     # A separate swaybar/mako fallback masks broken Quickshell startup and
     # lets another notification daemon claim org.freedesktop.Notifications.

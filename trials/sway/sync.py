@@ -68,8 +68,13 @@ def expected_files(repo, home, temporary):
     for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh"):
         source = repo / "config/hypr/scripts" / name
         if source.is_symlink() or not source.is_file():
-            raise ValueError("Unsafe shared brightness source: " + str(source))
+            raise ValueError("Unsafe shared helper source: " + str(source))
         result[home / ".config/sway/awtarchy-trial" / name] = source.read_bytes()
+    # Preserve the exact Awtarchy login MP3 in the isolated Sway profile.
+    login_audio = repo / "config/hypr/sounds/awtarchy-login.mp3"
+    if not login_audio.is_file() or login_audio.is_symlink():
+        raise ValueError("Missing or unsafe Awtarchy login audio")
+    result[home / ".config/sway/awtarchy-trial/awtarchy-login.mp3"] = login_audio.read_bytes()
     shell = temporary / "awtarchy-sway"
     subprocess.run(
         ["python3", str(trial / "render-quickshell.py"),
@@ -422,6 +427,9 @@ def main():
                 and re.fullmatch(r"[A-Za-z0-9_-]+[.]qml", path.name) is not None
             )
             new_helper = key in (
+                ".config/sway/awtarchy-trial/awtarchy-login.mp3",
+                ".config/sway/awtarchy-trial/login-sound.sh",
+                ".config/sway/awtarchy-trial/screenshot_sound.sh",
                 ".config/sway/awtarchy-trial/ddc_brightness.sh",
                 ".config/sway/awtarchy-trial/hypr-ddc-brightness.sh",
                 ".config/sway/awtarchy-trial/ddc.sh",

@@ -13,6 +13,7 @@ WAIT_AUDIO_SECS="${WAIT_AUDIO_SECS:-20}"
 AUDIO_POLL_SECS="${AUDIO_POLL_SECS:-0.10}"
 QUIET_POLLS="${QUIET_POLLS:-2}"
 SOUND_FILE="${SOUND_FILE:-$HOME/.config/hypr/sounds/awtarchy-login.mp3}"
+LOGIN_SOUND_PREFS="${LOGIN_SOUND_PREFS:-$HOME/.config/hypr/scripts/screenshot_sound.sh}"
 QUICKSHELL_MANAGER="${QUICKSHELL_MANAGER:-$HOME/.config/hypr/scripts/quickshell.sh}"
 SUBMAP_STATE_HELPER="${SUBMAP_STATE_HELPER:-$HOME/.config/hypr/scripts/submap_state.sh}"
 USB_REFRESH_LOCK_FILE="${USB_REFRESH_LOCK_FILE:-/run/awtarchy/usb-refresh/$(id -u).active}"
@@ -103,12 +104,21 @@ wait_for_optional_refresh_cycle() {
     return 1
 }
 
+login_sound_enabled() {
+    # The shared setting is optional until the updated managed helper lands.
+    # Missing settings preserve Hyprland's original login behavior (sound on).
+    [[ ! -L "$LOGIN_SOUND_PREFS" ]] || return 1
+    [[ -f "$LOGIN_SOUND_PREFS" ]] || return 0
+    bash "$LOGIN_SOUND_PREFS" is-enabled login
+}
+
 play_with_retry() {
     local end
     [[ -f "$SOUND_FILE" ]] || return 1
     have pw-play || return 1
     end=$(( $(date +%s) + WAIT_AUDIO_SECS ))
     while (( $(date +%s) < end )); do
+        login_sound_enabled || return 0
         if default_sink_is_real && pw-play "$SOUND_FILE" >/dev/null 2>&1; then return 0; fi
         sleep "$AUDIO_POLL_SECS"
     done
@@ -142,4 +152,5 @@ if (( network_backend_may_need_restart == 1 )); then
 fi
 
 wait_for_optional_refresh_cycle || exit 0
+# Keep startup, submap recovery and Quickshell readiness unaffected by mute.
 play_with_retry || exit 0

@@ -66,6 +66,8 @@ jobs:
           python tests/test-sway-sync.py
           python tests/test-sway-satty.py
           python tests/test-sway-screenshot-parity.py
+          python tests/test-sway-screenshot-sound.py
+          python tests/test-sway-login-sound.py
           python tests/test-sway-ddc.py
           python tests/test-sway-utility-toggle.py
           python tests/test-sway-theme-colors.py

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# One preference store and one shutter sound for Hyprland and Sway.
+# Shared login and screenshot sound preferences for Hyprland and Sway.
 set -euo pipefail
 
 usage() {
-    printf 'Usage: screenshot_sound.sh get | set enabled|direct|satty|print true|false | play direct|satty|print\n' >&2
+    printf 'Usage: screenshot_sound.sh get | is-enabled login | set enabled|login|direct|satty|print true|false | play direct|satty|print\n' >&2
     return 2
 }
 
@@ -11,9 +11,10 @@ usage() {
 action="$1"
 case "$action" in
     get) [[ $# -eq 1 ]] || { usage; exit 2; } ;;
+    is-enabled) [[ $# -eq 2 && "$2" == login ]] || { usage; exit 2; } ;;
     set)
         [[ $# -eq 3 ]] || { usage; exit 2; }
-        case "$2" in enabled|direct|satty|print) ;; *) usage; exit 2 ;; esac
+        case "$2" in enabled|login|direct|satty|print) ;; *) usage; exit 2 ;; esac
         case "$3" in true|false) ;; *) usage; exit 2 ;; esac
         ;;
     play)
@@ -30,6 +31,7 @@ fi
 state_dir="$state_home/awtarchy"
 state_file="$state_dir/screenshot-sound.conf"
 enabled=true
+login=true
 direct=true
 satty=true
 print=true
@@ -46,7 +48,7 @@ load_preferences() {
     }
     local key value
     while IFS='=' read -r key value || [[ -n "$key" ]]; do
-        case "$key" in enabled|direct|satty|print)
+        case "$key" in enabled|login|direct|satty|print)
             case "$value" in
                 true|false) printf -v "$key" '%s' "$value" ;;
                 *) printf 'Invalid screenshot sound state value\n' >&2; return 1 ;;
@@ -71,8 +73,8 @@ if [[ "$action" == set ]]; then
     printf -v "$2" '%s' "$3"
     temp="$(mktemp "$state_dir/.screenshot-sound-XXXXXXXX")"
     trap 'if [[ -n "$temp" ]]; then rm -f -- "$temp"; fi' EXIT
-    printf 'enabled=%s\ndirect=%s\nsatty=%s\nprint=%s\n' \
-        "$enabled" "$direct" "$satty" "$print" > "$temp"
+    printf 'enabled=%s\nlogin=%s\ndirect=%s\nsatty=%s\nprint=%s\n' \
+        "$enabled" "$login" "$direct" "$satty" "$print" > "$temp"
     mv -fT -- "$temp" "$state_file"
     temp=""
     exit 0
@@ -84,9 +86,13 @@ if ! load_preferences; then
     exit 1
 fi
 if [[ "$action" == get ]]; then
-    printf '{"enabled":%s,"direct":%s,"satty":%s,"print":%s}\n' \
-        "$enabled" "$direct" "$satty" "$print"
+    printf '{"enabled":%s,"login":%s,"direct":%s,"satty":%s,"print":%s}\n' \
+        "$enabled" "$login" "$direct" "$satty" "$print"
     exit 0
+fi
+if [[ "$action" == is-enabled ]]; then
+    [[ "$login" == true ]]
+    exit $?
 fi
 
 [[ "$enabled" == true ]] || exit 0

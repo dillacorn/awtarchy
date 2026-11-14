@@ -68,12 +68,21 @@ printf '%s\n' "$hash" >>"$EVENTS"
             assert events.read_text().splitlines()[-1] == "17280 " + EXPECTED_HASH
 
     # Absent state defaults on and never creates a state file during capture.
-    assert config() == dict(enabled=True, direct=True, satty=True, print=True)
+    assert config() == dict(enabled=True, login=True, direct=True, satty=True, print=True)
+    assert run("is-enabled", "login").returncode == 0
     assert not state.exists()
     expect_sound("direct")
     expect_sound("satty")
     expect_sound("print")
     assert not state.exists()
+
+    run("set", "login", "false")
+    assert config()["login"] is False
+    assert run("is-enabled", "login", check=False).returncode == 1
+    # Muting login must not mute screenshot capture sounds.
+    expect_sound("direct")
+    run("set", "login", "true")
+    assert run("is-enabled", "login").returncode == 0
 
     run("set", "satty", "false")
     assert config()["satty"] is False
@@ -93,7 +102,7 @@ printf '%s\n' "$hash" >>"$EVENTS"
     for mode in ("direct", "satty", "print"):
         expect_sound(mode, False)
     run("set", "enabled", "true")
-    assert config() == dict(enabled=True, direct=True, satty=False, print=False)
+    assert config() == dict(enabled=True, login=True, direct=True, satty=False, print=False)
     expect_sound("direct")
     expect_sound("satty", False)
     expect_sound("print", False)
@@ -101,9 +110,15 @@ printf '%s\n' "$hash" >>"$EVENTS"
     # Reject malformed settings commands and avoid changing saved state.
     before = cfg_file.read_bytes()
     for args in [("set", "direct", "yes"), ("set", "unexpected", "true"),
-                 ("play", "unknown"), ("get", "extra")]:
+                 ("play", "unknown"), ("is-enabled", "direct"), ("get", "extra")]:
         assert run(*args, check=False).returncode != 0
         assert cfg_file.read_bytes() == before
+
+    # Backwards-compatible upgrade from earlier screenshot-only settings.
+    cfg_file.write_text("enabled=false\ndirect=true\nsatty=false\nprint=true\n")
+    assert config() == dict(enabled=False, login=True, direct=True, satty=False, print=True)
+    run("set", "login", "false")
+    assert config()["login"] is False
 
     # No symlink following: reject linked settings instead of mutating targets.
     cfg_file.unlink()
@@ -115,5 +130,5 @@ printf '%s\n' "$hash" >>"$EVENTS"
     assert run("get", check=False).returncode != 0
     expect_sound("direct", False)
 
-print("PASS: Shared screenshot sound state, full mute, per-shortcut mute, "
-      "exact selected audio, no-save-on-get, and linked-state rejection")
+print("PASS: Shared login and screenshot audio, independent persistent toggles, "
+      "exact selected capture audio, compatibility and linked-state rejection")

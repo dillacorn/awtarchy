@@ -24,7 +24,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
@@ -41,6 +41,17 @@ for name in "${sources[@]}"; do
         fi
     fi
 done
+# Sway-only installations must receive the exact Awtarchy login MP3.
+# Never depend on the user's installed Hyprland configuration.
+login_audio_source="$repo/config/hypr/sounds/awtarchy-login.mp3"
+login_audio_target="$trial/awtarchy-login.mp3"
+[[ -f "$login_audio_source" && ! -L "$login_audio_source" ]] || {
+    fail "Missing exact Awtarchy login audio source"; exit 1;
+}
+[[ ! -e "$login_audio_target" && ! -L "$login_audio_target" ||
+   ( -f "$login_audio_target" && ! -L "$login_audio_target" ) ]] || {
+    fail "Unsafe Sway login audio destination"; exit 1;
+}
 # Stage exact branch-matched controller sources into the isolated Sway tree.
 # Never overwrite installed Hyprland helper scripts or unknown Sway files.
 ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh screenshot_sound.sh)
@@ -73,6 +84,8 @@ done
 for name in "${ddc_sources[@]}"; do
     [[ -e "$trial/$name" ]] || install -m 0755 -- "$repo/config/hypr/scripts/$name" "$trial/$name"
 done
+[[ -e "$login_audio_target" ]] ||
+    install -m 0644 -- "$login_audio_source" "$login_audio_target"
 [[ -e "$trial/quickshell.sh" ]] || install -m 0755 -- "$temp/quickshell.sh" "$trial/quickshell.sh"
 for file in "$temp/awtarchy-sway/"*; do
     target="$shell_dir/${file##*/}"
