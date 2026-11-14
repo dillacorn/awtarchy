@@ -57,7 +57,7 @@ Implemented means committed source, **not live verified**.
 | Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. No swaylock shortcut or fallback; unavailable/failed WlSessionLock returns failure. |
 | Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly session wrapper now exports the same qt5ct/qt6ct, Kvantum-compatible and GTK dark-theme environment as Hyprland; the installed root-owned wrapper must also be updated before relogin takes effect. |
 | Automatic Sway idle/suspend | Native swayidle daemon, started once per actual Sway socket and refreshed on managed updates/reloads. 3-minute secure Quickshell lock, 4-minute display power-off, 9-minute suspend (no bypass of logind sleep inhibitors). Keep Awake and active OBS output block these actions. Sway-native idle inhibitors protect fullscreen games and media; personal-app inhibition differences from Hyprland still need live testing. |
-| OBS screencast source picker | Quickshell theme-aware fullscreen overlay with keyboard/mouse selection and Escape cancellation. The chooser returns only exact monitor/window entries provided by xdg-desktop-portal-wlr. Restart the Sway portal service after applying this config when no live capture is active; never auto-approve screen sharing. |
+| OBS screencast source picker | Quickshell theme-aware fullscreen overlay with keyboard/mouse selection and Escape cancellation. The chooser returns only exact monitor/window entries provided by xdg-desktop-portal-wlr. Awtarchy updates automatically refresh the Sway backend only when PipeWire proves no xdpw stream is active; otherwise it preserves the stream and defers the refresh. Never auto-approve screen sharing. |
 | Clipboard screenshots | grim/slurp/wl-copy; Super+Shift+D copies a selected output without an editor, while Super+Shift+F opens Satty |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |
@@ -71,6 +71,22 @@ Implemented means committed source, **not live verified**.
 Do not advertise unimplemented capture protection, shader effects, or input
 modes. Where a feature is unsupported, return an explicit error or hide the
 unsafe UI instead of acknowledging a no-op.
+
+## Managed Sway update source
+
+The compositor menu reads a registered local Git checkout. A stale checkout
+previously produced a misleading `update=0` even when GitHub had newer Sway
+changes. The read-only review now checks the remote branch head before
+claiming to be current. The confirmed Apply action fast-forwards only a
+clean checkout of the named Sway trial branch, then applies managed file
+changes and activates Sway in place. Dirty or diverged checkouts fail safely
+without discarding edits or rewriting history.
+
+The screen-picker portal backend reads its configuration on service start.
+The updater refreshes it automatically only after a chooser-config update
+and only if no `xdpw-stream-*` PipeWire node is present. Unknown PipeWire
+state or an active screencast defers the restart rather than interrupting a
+user's screen sharing. No logout is needed.
 
 ## Sway idle policy (experimental)
 

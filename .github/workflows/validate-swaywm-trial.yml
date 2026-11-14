@@ -56,6 +56,7 @@ jobs:
           python tests/test-sway-modes.py
           python tests/test-sway-screen-picker.py
           python tests/test-sway-idle.py
+          python tests/test-sway-source-refresh.py
           python tests/test-sway-monitors.py
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py

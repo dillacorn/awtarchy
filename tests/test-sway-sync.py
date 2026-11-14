@@ -180,6 +180,50 @@ with tempfile.TemporaryDirectory(prefix="sway-live-reload-test-") as tmp:
         else:
             raise AssertionError("Rejected live reload must not report success")
 
+
+# A picker configuration update must refresh only idle xdpw backends, never
+# kill active recording streams. No portal restart for a missing PipeWire probe.
+from types import SimpleNamespace as Result
+
+def portal_response(argv, **kwargs):
+    if argv[:3] == ["systemctl", "--user", "is-active"]:
+        return Result(returncode=0, stdout="", stderr="")
+    if argv == ["pw-dump"]:
+        return Result(returncode=0, stdout=json.dumps([]), stderr="")
+    if argv[:3] == ["systemctl", "--user", "restart"]:
+        return Result(returncode=0, stdout="", stderr="")
+    raise AssertionError("Unexpected portal command: " + str(argv))
+
+with patch.object(sway_sync.subprocess, "run", side_effect=portal_response) as run_portal:
+    sway_sync.refresh_sway_portal_if_safe()
+    assert run_portal.call_count == 3
+    assert run_portal.call_args_list[-1].args[0] == [
+        "systemctl", "--user", "restart", "xdg-desktop-portal-wlr.service"]
+
+def portal_streaming(argv, **kwargs):
+    if argv[:3] == ["systemctl", "--user", "is-active"]:
+        return Result(returncode=0, stdout="", stderr="")
+    if argv == ["pw-dump"]:
+        return Result(returncode=0, stdout=json.dumps([
+            {"type":"PipeWire:Interface:Node",
+             "info":{"props":{"node.name":"xdpw-stream-abcdef"}}}]), stderr="")
+    raise AssertionError("An active stream must never be restarted")
+
+with patch.object(sway_sync.subprocess, "run", side_effect=portal_streaming) as run_portal:
+    sway_sync.refresh_sway_portal_if_safe()
+    assert run_portal.call_count == 2
+
+def portal_unknown(argv, **kwargs):
+    if argv[:3] == ["systemctl", "--user", "is-active"]:
+        return Result(returncode=0, stdout="", stderr="")
+    if argv == ["pw-dump"]:
+        return Result(returncode=1, stdout="", stderr="missing")
+    raise AssertionError("Unknown streaming status must never restart portal")
+
+with patch.object(sway_sync.subprocess, "run", side_effect=portal_unknown) as run_portal:
+    sway_sync.refresh_sway_portal_if_safe()
+    assert run_portal.call_count == 2
+
 print("PASS: live Sway session reload, shell-only restart and foreign-session protection")
 
 print("PASS: missing generated Sway QML install, exact-file adoption, customized QML preservation")

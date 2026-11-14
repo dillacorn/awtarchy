@@ -66,6 +66,9 @@ fi
 if [[ "$mode" == plan ]]; then
   case "$operation" in
     update-sway)
+      # Review must remain read-only and never misreport an old checkout as
+      # "already up to date". Only apply can change the registered Git tree.
+      bash "$repo/trials/sway/source-refresh.sh" check "$repo"
       python3 "$repo/trials/sway/sync.py" review --repo "$repo" ;;
     install-hyprland)
       python3 "$repo/trials/sway/stage-hyprland.py" --preview --repo "$repo" ;;
@@ -167,7 +170,11 @@ PY
     python3 "$repo/trials/sway/sync.py" record --repo "$repo"
   fi
 elif [[ "$operation" == update-sway ]]; then
-  # Apply the previewed managed diff; no package operations or compositor
+  # Update exactly the registered trial branch, never main or another repo.
+  # Only fast-forward a clean worktree; preserve all local edits/history.
+  # This happens after the existing interactive update-sway confirmation.
+  bash "$repo/trials/sway/source-refresh.sh" apply "$repo"
+  # Apply the branch-current diff; no package operations or compositor
   # removals are reachable through this branch.
   python3 "$repo/trials/sway/sync.py" apply --repo "$repo"
 elif [[ "$operation" == install-hyprland ]]; then

@@ -4,8 +4,10 @@ This is an experimental standard-Sway session. It does **not** replace Hyprland.
 The checklist includes features implemented in source, behaviors requiring a live
 test, and known unsupported Hyprland-only capabilities.
 
-Before testing: update the trial branch, use `awtarchy compositor` to **Review
-Sway managed config changes** and then **Apply Sway managed updates**.
+Before testing: use `awtarchy compositor` to **Review Sway managed config
+changes** and then **Apply Sway managed updates**. The review checks the
+registered checkout's remote revision without changing files; Apply safely
+fast-forwards a clean trial checkout after confirmation.
 Preserve imported DP-1/DP-3 display modes and any customized Sway configuration.
 A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 

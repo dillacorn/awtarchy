@@ -112,6 +112,53 @@ def validate_sway_config(target: Path, content: bytes):
         temp_path.unlink(missing_ok=True)
 
 
+def refresh_sway_portal_if_safe():
+    """Reload the Sway-only portal backend only when idle and already running.
+
+    xdpw reads its chooser configuration at startup. Never terminate an
+    active xdpw PipeWire source; that would interrupt screen sharing.
+    Unknown PipeWire state fails closed and defers the refresh.
+    """
+    service = "xdg-desktop-portal-wlr.service"
+    active = subprocess.run(
+        ["systemctl", "--user", "is-active", "--quiet", service],
+        capture_output=True, timeout=7)
+    if active.returncode != 0:
+        print("Portal chooser installed; inactive backend will use it on next start.")
+        return
+    try:
+        probe = subprocess.run(
+            ["pw-dump"], capture_output=True, text=True, timeout=8)
+        if probe.returncode:
+            raise ValueError("PipeWire state query failed")
+        nodes = json.loads(probe.stdout)
+        if not isinstance(nodes, list):
+            raise ValueError("Unexpected PipeWire state")
+        streaming = any(
+            isinstance(node, dict)
+            and node.get("type") == "PipeWire:Interface:Node"
+            and isinstance(node.get("info"), dict)
+            and isinstance(node["info"].get("props"), dict)
+            and str(node["info"]["props"].get("node.name", "")).startswith("xdpw-stream-")
+            for node in nodes
+        )
+    except (OSError, ValueError, subprocess.TimeoutExpired):
+        print("Portal chooser installed; could not prove streams are idle, "
+              "so the active portal was preserved.", file=sys.stderr)
+        return
+    if streaming:
+        print("Portal chooser installed; active screen sharing detected. "
+              "Preserving the current stream and deferring portal restart.")
+        return
+    result = subprocess.run(
+        ["systemctl", "--user", "restart", service],
+        capture_output=True, text=True, timeout=20)
+    if result.returncode:
+        raise ValueError("Portal picker installed but backend restart failed: "
+                         + result.stderr.strip())
+    print("LIVE: Sway screen-sharing portal refreshed for the Quickshell picker.")
+
+
 def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
     """Activate managed updates without interrupting the compositor session.
 
@@ -177,6 +224,11 @@ def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
                 raise ValueError('Sway idle files installed but swayidle could not start; '
                                  'check ~/.cache/awtarchy/swayidle.log')
             print('LIVE: Sway idle daemon checked and activated without logout.')
+
+    # No portal restart for unrelated updates, and no restart during any
+    # active xdpw screencast. Only the verified Sway trial may touch it.
+    if ".config/xdg-desktop-portal-wlr/sway" in changed_keys:
+        refresh_sway_portal_if_safe()
 
     needs_shell_restart = any(
         key.startswith(".config/quickshell/awtarchy-sway/")
@@ -394,9 +446,8 @@ def main():
     print("Personal config and user-modified files were never overwritten.")
     if args.mode == "apply":
         activate_in_running_sway(home, desired, changed_keys)
-        if ".config/xdg-desktop-portal-wlr/sway" in changed_keys:
-            print("Portal source picker updated. When no screencast is active, "
-                  "run: systemctl --user restart xdg-desktop-portal-wlr")
+        # Portal refresh is handled by activate_in_running_sway, only when
+        # the backend has no xdpw PipeWire stream; never require a logout.
 
 if __name__ == "__main__":
     try:
