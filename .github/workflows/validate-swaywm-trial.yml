@@ -52,6 +52,7 @@ jobs:
         run: |
           python tests/test-sway-trial.py
           python tests/test-sway-ipc.py
+          python tests/test-sway-focus-cycle.py
           python tests/test-sway-monitors.py
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py
@@ -74,7 +75,7 @@ jobs:
           for filename in \
               SwayFlyoutWindow.qml Launcher.qml ClipboardMenu.qml \
               Notifications.qml QuickSettings.qml NetworkMenu.qml \
-              BluetoothMenu.qml BatteryMenu.qml; do
+              BluetoothMenu.qml BatteryMenu.qml PowerMenu.qml; do
             /usr/lib/qt6/bin/qmlformat \
               "$generated/awtarchy-sway/$filename" >/dev/null
           done
