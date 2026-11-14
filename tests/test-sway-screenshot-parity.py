@@ -41,11 +41,11 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-focused-screenshot-") as temp:
     mocks = {
         "pw-play": r"""#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.30 --latency=20ms -" ]] || exit 8
-bytes="$(wc -c)"
-[[ "$bytes" -eq 9600 ]] || exit 9
+[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.80 --latency=20ms -" ]] || exit 8
+stats="$(python3 -c 'import sys,hashlib; pcm=sys.stdin.buffer.read(); print(len(pcm), hashlib.sha256(pcm).hexdigest())')"
+[[ "$stats" == "17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c" ]] || exit 9
 [[ "${SOUND_FAIL:-0}" != 1 ]] || exit 10
-printf 'shutter:%s\n' "$bytes" >>"$SOUND_EVENTS"
+printf 'shutter:%s\n' "$stats" >>"$SOUND_EVENTS"
 """,
         "hyprctl": r"""#!/usr/bin/env bash
 set -euo pipefail
@@ -138,7 +138,7 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
         if len(sound_events.read_text().splitlines()) >= 5:
             break
         time.sleep(0.05)
-    assert sound_events.read_text().splitlines() == ["shutter:9600"] * 5
+    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
 
     for monitor in ("none", "both", "malformed"):
         count = len(files())
@@ -159,7 +159,7 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
     assert len(files()) == before + 1
     assert any(line.startswith("clipboard:") for line in
                events.read_text().splitlines())
-    assert sound_events.read_text().splitlines() == ["shutter:9600"] * 5
+    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
 
     # Missing or failing sound playback may never compromise the screenshot.
     successful = run(SOUND_FAIL="1")
@@ -167,6 +167,6 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
     assert len(files()) == before + 2
     for _ in range(20):
         time.sleep(0.02)
-    assert sound_events.read_text().splitlines() == ["shutter:9600"] * 5
+    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
 
 print("PASS: Hyprland focused display save+copy, unique filenames and failure handling")
