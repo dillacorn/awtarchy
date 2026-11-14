@@ -43,13 +43,13 @@ for name in "${sources[@]}"; do
 done
 # Stage exact branch-matched controller sources into the isolated Sway tree.
 # Never overwrite installed Hyprland helper scripts or unknown Sway files.
-ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh)
+ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh screenshot_sound.sh)
 for name in "${ddc_sources[@]}"; do
     source="$repo/config/hypr/scripts/$name"
     target="$trial/$name"
-    [[ -f "$source" && ! -L "$source" ]] || { fail "Unsafe brightness source: $source"; exit 1; }
+    [[ -f "$source" && ! -L "$source" ]] || { fail "Unsafe shared helper source: $source"; exit 1; }
     [[ ! -e "$target" && ! -L "$target" || ( -f "$target" && ! -L "$target" ) ]] || {
-        fail "Unsafe brightness destination: $target"; exit 1;
+        fail "Unsafe shared helper destination: $target"; exit 1;
     }
 done
 for file in "$temp/quickshell.sh" "$temp/awtarchy-sway/"*; do

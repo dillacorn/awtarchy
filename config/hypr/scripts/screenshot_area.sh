@@ -250,6 +250,12 @@ log_event "grim-exit" "rc=0 bytes=$(stat -c %s "$TMPFILE" 2>/dev/null || printf 
 
 stop_freeze
 
+# Confirmation follows the successful grim capture, not the Satty save.
+sound_helper="$(dirname -- "${BASH_SOURCE[0]}")/screenshot_sound.sh"
+if [[ -f "$sound_helper" && ! -L "$sound_helper" ]]; then
+  bash "$sound_helper" play satty 9>&- >/dev/null 2>&1 || true
+fi
+
 CURRENT_STAGE="clipboard"
 log_event "clipboard-start"
 wl-copy --type image/png < "$TMPFILE" 9>&-

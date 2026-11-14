@@ -2,12 +2,14 @@
 """Run Sway's screenshot helper against isolated command mocks (no display)."""
 from pathlib import Path
 import os
+import shutil
 import subprocess
 import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "trials/sway/capture.sh"
+SCRIPT_SOURCE = ROOT / "trials/sway/capture.sh"
+SOUND_SOURCE = ROOT / "config/hypr/scripts/screenshot_sound.sh"
 
 with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:
     root = Path(directory)
@@ -15,6 +17,11 @@ with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:
     bin_dir.mkdir()
     (root / "run").mkdir()
     (root / "home").mkdir()
+    trial = root / "trial"
+    trial.mkdir()
+    SCRIPT = trial / "capture.sh"
+    shutil.copyfile(SCRIPT_SOURCE, SCRIPT)
+    shutil.copyfile(SOUND_SOURCE, trial / "screenshot_sound.sh")
     events = root / "events"
     sound_events = root / "sound-events"
     sound_events.touch()
@@ -119,6 +126,16 @@ esac
         if mode in ("display", "output"):
             assert "-o" in lines[0]
 
+    # Every successful Satty capture plays once before the editor opens.
+    for _ in range(80):
+        if len(sound_events.read_text().splitlines()) >= 4:
+            break
+        time.sleep(0.05)
+    assert sound_events.read_text().splitlines() == [
+        "shutter:17280 " + "baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"
+    ] * 4
+    sound_events.write_text("")
+
     # Super+Shift+D: directly capture the focused output, save PNG AND
     # clipboard, without slurp, Satty, or an output selection prompt.
     saved_files = []
@@ -190,6 +207,41 @@ esac
         assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 5
     assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
 
+    # Audio preferences can mute a single shortcut category without
+    # changing the other categories, including after Satty is canceled.
+    settings = trial / "screenshot_sound.sh"
+    def sound_set(key, value):
+        subprocess.run(["bash", str(settings), "set", key, value],
+                       env=env, check=True, timeout=4)
+
+    sound_set("satty", "false")
+    count = len(sound_events.read_text().splitlines())
+    satty_muted = subprocess.run(
+        ["bash", str(SCRIPT), "area"], env=env,
+        capture_output=True, text=True, timeout=10)
+    assert satty_muted.returncode == 0
+    time.sleep(0.15)
+    assert len(sound_events.read_text().splitlines()) == count
+
+    sound_set("print", "false")
+    printed_muted = subprocess.run(
+        ["bash", str(SCRIPT), "output"], env=env,
+        capture_output=True, text=True, timeout=10)
+    assert printed_muted.returncode == 0
+    time.sleep(0.15)
+    assert len(sound_events.read_text().splitlines()) == count
+
+    # Direct capture still sounds while Satty and Print Screen are muted.
+    direct_unmuted = subprocess.run(
+        ["bash", str(SCRIPT), "display-copy"], env=env,
+        capture_output=True, text=True, timeout=10)
+    assert direct_unmuted.returncode == 0
+    for _ in range(80):
+        if len(sound_events.read_text().splitlines()) > count:
+            break
+        time.sleep(0.05)
+    assert len(sound_events.read_text().splitlines()) == count + 1
+
     # Audio failure may not prevent a successful save+copy.
     success_without_audio = subprocess.run(
         ["bash", str(SCRIPT), "display-copy"],
@@ -197,7 +249,7 @@ esac
         capture_output=True, text=True, timeout=10
     )
     assert success_without_audio.returncode == 0
-    assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 6
+    assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 7
 
     # Super+Shift+F retains display picker and Satty (covered above).
 

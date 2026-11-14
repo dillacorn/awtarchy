@@ -62,9 +62,9 @@ def expected_files(repo, home, temporary):
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe Sway source file: " + str(source))
         result[target] = source.read_bytes()
-    # The Sway session uses private copies of DDC scripts. The active
-    # ~/.config/hypr/scripts files may be user-modified or from a release that
-    # predates this trial; never depend on changing them for Sway updates.
+    # Sway uses private copies of shared helpers (DDC and screenshot audio).
+    # Active ~/.config/hypr/scripts may be personalized or from an older
+    # release, so Sway updates must not depend on replacing those files.
     for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh"):
         source = repo / "config/hypr/scripts" / name
         if source.is_symlink() or not source.is_file():

@@ -58,6 +58,12 @@ OUTFILE="$HOME/Pictures/Screenshots/$(date +%m%d%Y-%I%p-%S).png"
 grim -g "$GEOM" "$TMPFILE"
 stop_freeze
 
+# Confirmation follows the successful grim capture, not the Satty save.
+sound_helper="$(dirname -- "${BASH_SOURCE[0]}")/screenshot_sound.sh"
+if [[ -f "$sound_helper" && ! -L "$sound_helper" ]]; then
+  bash "$sound_helper" play satty 9>&- >/dev/null 2>&1 || true
+fi
+
 # Release lock BEFORE satty starts, so you can take another screenshot while satty is open.
 flock -u 9 || true
 exec 9>&- || true

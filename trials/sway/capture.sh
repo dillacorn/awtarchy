@@ -90,6 +90,17 @@ capture() {
     else
         grim -g "$geometry" "$image" 9>&- || return 1
     fi
+    # Capture is complete once grim returns. Play before optional Satty editing
+    # or any save; closing the lock descriptor prevents rapid-capture stalls.
+    sound_helper="$(dirname -- "${BASH_SOURCE[0]}")/screenshot_sound.sh"
+    if [[ -f "$sound_helper" && ! -L "$sound_helper" ]]; then
+        sound_mode=satty
+        case "$mode" in
+            display-copy) sound_mode=direct ;;
+            output) sound_mode=print ;;
+        esac
+        bash "$sound_helper" play "$sound_mode" 9>&- >/dev/null 2>&1 || true
+    fi
     # wl-copy forks a long-lived clipboard provider. Never let it inherit
     # the capture flock descriptor, or later screenshots report lock-busy.
     wl-copy --type image/png < "$image" 9>&- || return 1
@@ -106,57 +117,7 @@ fi
 [[ -f "$image" && ! -L "$image" ]] || exit 1
 trap 'rm -f -- "$image"' EXIT
 
-# Best-effort audible feedback for direct captures only. PipeWire playback
-# must never block a screenshot or inherit the capture lock. Reproduce the
-# user-selected "Classic: tighter double-click" preview at 80% volume.
-play_screenshot_shutter() {
-    command -v pw-play >/dev/null 2>&1 || return 0
-    (
-        python3 -c '
-import math
-import random
-import struct
-import sys
 
-rate = 48000
-rng = random.Random(2026)
-
-def burst(t, start, duration, strength, decay=6):
-    x = (t - start) / duration
-    if not 0 <= x < 1:
-        return 0.0
-    return strength * math.exp(-decay * x)
-
-def tone(t, start, duration, frequency, strength):
-    x = (t - start) / duration
-    if not 0 <= x < 1:
-        return 0.0
-    envelope = math.sin(math.pi * x) ** 2
-    return strength * envelope * math.sin(
-        2 * math.pi * frequency * (t - start)
-    )
-
-samples = []
-for i in range(int(rate * 0.18)):
-    t = i / rate
-    noise = rng.uniform(-1, 1)
-    value = noise * (
-        burst(t, 0.005, 0.042, 1.0) +
-        burst(t, 0.064, 0.058, 1.0)
-    )
-    value += tone(t, 0.006, 0.049, 170, 0.45)
-    samples.append(value)
-
-peak = max(abs(s) for s in samples) or 1.0
-pcm = bytearray()
-for value in samples:
-    sample = max(-32768, min(32767, int(value / peak * 28000)))
-    pcm.extend(struct.pack("<h", sample))
-sys.stdout.buffer.write(pcm)
-' | pw-play --raw --format=s16 --rate=48000 --channels=1 \
-        --volume=0.80 --latency=20ms - >/dev/null 2>&1
-    ) 9>&- </dev/null >/dev/null 2>&1 &
-}
 
 # Super+Shift+D captures the focused output, copies it to the clipboard
 # (above) AND saves a unique PNG without asking for a display or Satty.
@@ -174,7 +135,6 @@ if [[ "$mode" == display-copy ]]; then
         exit 1
     fi
     printf 'Saved screenshot and copied to clipboard: %s\n' "$saved"
-    play_screenshot_shutter
     exit 0
 fi
 mkdir -p -- "$directory"

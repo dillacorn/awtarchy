@@ -79,7 +79,7 @@ jobs:
             --bridge-dir trials/sway
           for filename in \
               SwayFlyoutWindow.qml ScreenSharePicker.qml Launcher.qml ClipboardMenu.qml \
-              Notifications.qml QuickSettings.qml NetworkMenu.qml \
+              Notifications.qml QuickSettings.qml ScreenshotSoundSettings.qml NetworkMenu.qml \
               BluetoothMenu.qml BatteryMenu.qml PowerMenu.qml; do
             /usr/lib/qt6/bin/qmlformat \
               "$generated/awtarchy-sway/$filename" >/dev/null

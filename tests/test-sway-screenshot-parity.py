@@ -17,8 +17,10 @@ assert "hyprctl -j monitors" in source
 assert "grim -o" in source
 assert "wl-copy --type image/png" in source
 assert "flock -w 5 9" in source
-assert "play_screenshot_shutter" in source
-assert "play_screenshot_shutter" in SWAY.read_text()
+assert 'bash "$sound_helper" play direct 9>&-' in source
+assert 'bash "$sound_helper" play "$sound_mode" 9>&-' in SWAY.read_text()
+assert "screenshot_sound.sh" in source
+assert "screenshot_sound.sh" in SWAY.read_text()
 assert "notify-send " not in source
 assert "satty" not in "\n".join(line for line in source.splitlines()
                                 if not line.lstrip().startswith("#")).lower()
@@ -159,7 +161,13 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
     assert len(files()) == before + 1
     assert any(line.startswith("clipboard:") for line in
                events.read_text().splitlines())
-    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
+
+    # Sound confirms successful capture, even if clipboard copying fails.
+    for _ in range(80):
+        if len(sound_events.read_text().splitlines()) >= 6:
+            break
+        time.sleep(0.05)
+    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 6
 
     # Missing or failing sound playback may never compromise the screenshot.
     successful = run(SOUND_FAIL="1")
@@ -167,6 +175,6 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
     assert len(files()) == before + 2
     for _ in range(20):
         time.sleep(0.02)
-    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 5
+    assert sound_events.read_text().splitlines() == ["shutter:17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"] * 6
 
-print("PASS: Hyprland focused display save+copy, unique filenames and failure handling")
+print("PASS: Hyprland focused display save+copy, unique filenames and capture-first sound")

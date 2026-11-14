@@ -381,6 +381,7 @@ Singleton {
         panelPresented = false;
         quickSettingsWindow.visible = true;
         panelPresented = true;
+        screenshotSoundSettings.refresh();
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
         // The startup prewarm already populated status. Give the mapped window
@@ -2423,6 +2424,13 @@ Singleton {
                                     font.family: Theme.fontFamily
                                     font.pixelSize: root.scaledText(8)
                                     wrapMode: Text.Wrap
+                                }
+
+                                ScreenshotSoundSettings {
+                                    id: screenshotSoundSettings
+                                    Layout.fillWidth: true
+                                    visible: !root.awtarchyEditMode
+                                    textSize: root.scaledText(9)
                                 }
 
                                 RowLayout {
