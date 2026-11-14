@@ -56,6 +56,8 @@ jobs:
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py
           python tests/test-sway-lock.py
+          python tests/test-sway-lock-capture.py
+          python tests/test-sway-mime-parity.py
           python tests/test-sway-sync.py
           python tests/test-sway-satty.py
           python tests/test-sway-ddc.py
