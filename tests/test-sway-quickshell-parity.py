@@ -83,6 +83,24 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     bar = (shell / "Bar.qml").read_text(encoding="utf-8")
     qml_shell = (shell / "shell.qml").read_text(encoding="utf-8")
     theme = (shell / "Theme.qml").read_text(encoding="utf-8")
+    quicksettings = (shell / "QuickSettings.qml").read_text(encoding="utf-8")
+    upstream_quicksettings = (
+        ROOT / "config/quickshell/awtarchy/QuickSettings.qml"
+    ).read_text(encoding="utf-8")
+    # The Sway backend has two independent output parameters: the popup's
+    # panel output and the selected display's brightness output. Do not
+    # refresh the slider from the popup output after changing DP-3 -> DP-1.
+    assert (
+        '"--status-json",\n'
+        '            monitorName,\n'
+        '            (brightnessTarget.length > 0 ? brightnessTarget : monitorName)'
+    ) in quicksettings
+    assert (
+        '"--status-json",\n'
+        '            monitorName,\n'
+        '            monitorName'
+    ) in upstream_quicksettings
+    assert 'queueAction(["brightness-percent", target, String(next)]' in quicksettings
     picker = (shell / "ThemePicker.qml").read_text(encoding="utf-8")
     assert bar.count("acceptedModifiers: Qt.AltModifier") == 2
     assert bar.count("SwayDragBridge.beginBarDrag") == 1
