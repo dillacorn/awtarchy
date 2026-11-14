@@ -35,7 +35,7 @@ case "$lock_action" in
         else
             # Do not claim a compositor-secure lock merely because Quickshell
             # started. Wait for WlSessionLock.secure from the actual locker.
-            bash "$manager" lock
+            bash "$manager" "$lock_action"
             bash "$manager" wait-secure 5
         fi
         ;;
