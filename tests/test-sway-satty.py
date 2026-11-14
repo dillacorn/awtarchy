@@ -84,6 +84,19 @@ printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con
         if mode in ("display", "output"):
             assert "-o" in lines[0]
 
+    # Super+Shift+D selects the output and copies it, but never invokes
+    # Satty. Super+Shift+F retains the editor-enabled 'display' mode.
+    events.write_text("")
+    clip_only = subprocess.run(
+        ["bash", str(SCRIPT), "display-copy"], env=env,
+        capture_output=True, text=True, timeout=10
+    )
+    assert clip_only.returncode == 0, (clip_only.stdout, clip_only.stderr)
+    lines = events.read_text().splitlines()
+    assert len(lines) == 3, lines
+    assert "-o" in lines[0] and lines[1].startswith("grim:"), lines
+    assert lines[2] == "clipboard", lines
+
     # A second screenshot must succeed while the previous clipboard provider
     # remains running; the old inherited flock caused a false lock-busy.
     events.write_text("")
@@ -101,4 +114,4 @@ printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con
     assert denied.returncode != 0
     assert not events.read_text()
 
-print("PASS: Sway capture displays Satty after clipboard copy, unlocks capture and refuses Hyprland")
+print("PASS: Sway capture separates clipboard-only display from Satty and preserves safe capture locking")
