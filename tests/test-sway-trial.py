@@ -140,6 +140,13 @@ assert not re.search(r"(?m)^\s*bar\s*\{", CONFIG)
 session = (TRIAL / "session.sh").read_text(encoding="utf-8")
 assert "swaymsg bar mode dock" not in session
 assert "mako >/dev/null" not in session
+# Do not let Sway spawn its own solid-color swaybg over the user's
+# per-monitor Awtwall/awww wallpaper on compositor reload.
+assert re.search(r'(?m)^\\s*output\\s+[^#\\n]*\\s+(?:bg|background)\\s+', CONFIG) is None, (
+    "Sway's output background must not compete with Awtwall")
+assert 'awww-daemon' in session
+assert 'awtwall --restore' in session
+
 
 for path, fragments in (
     (TRIAL / "sway.desktop", ("Sway (Awtarchy Trial)",
