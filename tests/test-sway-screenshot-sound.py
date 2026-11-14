@@ -24,6 +24,18 @@ assert "ScreenshotSoundSettings" in (
     ROOT / "config/quickshell/awtarchy/QuickSettings.qml").read_text()
 assert (ROOT / "config/quickshell/awtarchy/ScreenshotSoundSettings.qml").is_file()
 
+# Sound settings alter stock-managed paths. Keep updater migration history
+# aligned so personalized older copies remain protected on release/update.
+history = (ROOT / "local/share/awtarchy/quickshell-managed-history.sha256").read_text()
+for source in (
+    ROOT / "config/quickshell/awtarchy/QuickSettings.qml",
+    ROOT / "config/hypr/scripts/quickshell_ready_sound.sh",
+):
+    installed = ".config/" + source.relative_to(ROOT / "config").as_posix()
+    digest = hashlib.sha256(source.read_bytes()).hexdigest()
+    assert digest + "\t" + installed in history.splitlines(), installed
+
+
 with tempfile.TemporaryDirectory(prefix="screenshot-sound-contract-") as temp:
     root = Path(temp)
     home = root / "home"
