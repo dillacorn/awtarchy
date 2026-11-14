@@ -46,10 +46,15 @@ xwayland enable
 # AWTARCHY-SWAY-OUTPUTS-END
 output * bg #10151c solid_color
 
-# Explicit immediate tearing remains OFF by default, matching current Hyprland.
-# Output VRR is opt-in after real hardware checks, not asserted for all screens.
+# Permit immediate flips on every output, but only when a fullscreen
+# application also allows/requests tearing. This does NOT make ordinary
+# desktop windows tear. Use Sway's native full-screen tearing path rather
+# than Hyprland's direct_scanout/allow_tearing configuration.
+output * allow_tearing yes
+# Sway recommends max_render_time off for immediate page flips. Leave VRR
+# opt-in; adaptive_sync is an independent display-specific setting.
+output * max_render_time off
 # output DP-1 adaptive_sync on
-# output DP-1 allow_tearing yes
 
 # Spawn the separate Sway shell once; never invoke Hyprland autostart.
 exec bash $trial/session.sh
@@ -295,7 +300,11 @@ assign [class="(?i)^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita
 assign [app_id="^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
 assign [class="(?i)^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"] workspace number 10
 
-# Gaming: don't force tearing/VRR globally without confirming hardware behavior.
+# Fullscreen gaming: opt into immediate flips for recognized native/Proton
+# game windows; Sway still requires fullscreen and output permission above.
+# Unknown games can request tearing through tearing-control-v1 themselves.
+for_window [app_id="^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|chiaki|moonlight|com[.]moonlight_stream[.]Moonlight|.*[.]exe)$"] allow_tearing yes
+for_window [class="(?i)^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"] allow_tearing yes
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
 
 # Emergency escape doesn't depend on Quickshell.
