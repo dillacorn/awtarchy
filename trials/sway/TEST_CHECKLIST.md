@@ -88,6 +88,9 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Super+W toggles floating wallpicker; Super+Ctrl+M and Super+Alt+G/O toggle their Hyprland-equivalent utilities.
 - [ ] Super+T opens/closes the Sway-only theme picker; selecting a theme recolors active and inactive window borders immediately and after relogin/reload.
 - [ ] Wiremix, Qalc, default-applications TUI and Foot/Yazi launch correctly.
+- [ ] ProtonUp-Qt launches floating and centered at approximately 45% × 45% of the active output; its Add Version, About and other child dialogs float without being forced to main-window size.
+- [ ] PulseAudio Volume Control, Pulsemixer, Tips TUI, hyprbars (when present), Wiremix and the existing floating utilities follow Hyprland's per-app sizes in Sway.
+- [ ] XWayland variants of Awtarchy floating utilities follow the same rule through WM_CLASS, and ordinary XWayland dialogs float without tiling unrelated applications or games.
 - [ ] Super+Shift+X selects an area, copies it and opens **Satty**.
 - [ ] Super+Shift+S selects a window, copies it and opens Satty.
 - [ ] Super+Shift+D/F selects a display and opens Satty.
