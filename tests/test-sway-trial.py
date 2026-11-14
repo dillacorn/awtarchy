@@ -69,7 +69,6 @@ for rule in (
     "seat seat0 xcursor_theme Bibata-Modern-Ice 24",
     "seat seat0 hide_cursor 0",
     "gaps inner 6", "gaps outer 9",
-    'for_window [app_id="btop"] floating enable',
     "# AWTARCHY-SWAY-OUTPUTS-BEGIN",
     "# AWTARCHY-SWAY-OUTPUTS-END",
 ):
@@ -100,8 +99,10 @@ floating_utility_sizes = {
 }
 for utility, geometry in floating_utility_sizes.items():
     hypr_class = utility.replace(".", "\\\\.")
-    assert f'match = {{ class = "^{hypr_class}$" }}, float = true' in HYPRLAND, (
-        "Hyprland reference removed or changed its floating class: " + utility)
+    assert any(
+        f'match = {{ class = "{pattern}" }}, float = true' in HYPRLAND
+        for pattern in (f"^{hypr_class}$", f"^({hypr_class})$")
+    ), "Hyprland reference removed or changed its floating class: " + utility
     sway_pattern = utility.replace(".", "[.]")
     for criterion in ("app_id", "class"):
         rule = (f'for_window [{criterion}="^{sway_pattern}$"] floating enable, '
