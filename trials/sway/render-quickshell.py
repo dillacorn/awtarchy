@@ -54,6 +54,13 @@ def render_layer_flyout(text: str, filename: str) -> str:
     target = target.replace('\\n', '\n')
     if filename == "Notifications.qml":
         target += "        edgeAnchor: root.anchorAlongEdge\\n".replace('\\n', '\n')
+    # Each original menu owns its per-monitor size overrides, settingsDirty
+    # flag and Save button. Keep that binding instead of writing directly to
+    # PanelWindow.implicitWidth/Height from the shared Sway drag handler.
+    size_method = "setWindowSize" if filename == "Launcher.qml" else "applyWindowSize"
+    target += (
+        f"        onResizeCommitted: (width, height) => root.{size_method}(width, height)\\n"
+    ).replace('\\n', '\n')
     if text.count(source) != 1:
         raise ValueError(f"Missing exact Sway flyout window: {filename}:{window_id}")
     if text.count("FloatingWindow {") != 1:
