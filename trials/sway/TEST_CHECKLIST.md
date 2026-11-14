@@ -65,7 +65,9 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Clipboard, notifications, quick settings, network, Bluetooth and battery
   flyouts float, are positioned correctly and **do not close immediately**.
 - [ ] Flyout position/size adjustments and monitor targeting work.
-- [ ] Alt+Mouse2 resizes a flyout; Save records the new dimensions and reopen/relogin restores them on the same monitor.
+- [ ] Alt+Mouse2 resizes all seven Sway flyouts; Save becomes available after a size change even when Sway has not reported an updated window frame.
+- [ ] Save writes the requested width and height to the shared `~/.cache/awtarchy/quickshell-state.json` for the active monitor, and reopening/relogin restores those exact dimensions.
+- [ ] Reset/Discard do not persist a modified size, and Copy still propagates the selected requested dimensions to another monitor.
 - [ ] Reset and copy-to-other-monitor still use the original Quickshell state, not a competing Sway geometry cache.
 - [ ] Switching workspaces dismisses relevant floating panels without stale state.
 - [ ] Theme picker opens as an overlay and applies a theme to **awtarchy-sway**.
