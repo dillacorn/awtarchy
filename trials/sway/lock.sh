@@ -10,7 +10,7 @@ set -euo pipefail
 }
 
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-manager="$config_home/hypr/scripts/awtarchy_lock.sh"
+manager="$config_home/sway/awtarchy-trial/lock-manager.sh"
 
 lock_fallback() {
     command -v swaylock >/dev/null 2>&1 || {
