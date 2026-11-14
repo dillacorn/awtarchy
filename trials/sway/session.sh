@@ -4,10 +4,20 @@ set -euo pipefail
 [[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" && -n "${WAYLAND_DISPLAY:-}" ]] || {
     printf 'Not an active Sway Wayland session\n' >&2; exit 1;
 }
+# Update D-Bus/systemd-launched desktop apps as well as direct Sway exec
+# children. The root-owned Ly session wrapper exports the Qt/GTK theme first.
+# Missing variables are ignored by these environment import helpers.
+session_environment=(
+    WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP
+    XDG_SESSION_TYPE QT_QPA_PLATFORM QT_QPA_PLATFORMTHEME
+    QT6CT_PLATFORM_PLUGIN QT_AUTO_SCREEN_SCALE_FACTOR
+    QT_WAYLAND_DISABLE_WINDOWDECORATION GTK_THEME XCURSOR_THEME
+    XCURSOR_SIZE GDK_BACKEND CLUTTER_BACKEND MOZ_ENABLE_WAYLAND
+)
 if command -v dbus-update-activation-environment >/dev/null 2>&1; then
-    dbus-update-activation-environment --systemd WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || true
+    dbus-update-activation-environment --systemd "${session_environment[@]}" || true
 fi
-systemctl --user import-environment WAYLAND_DISPLAY SWAYSOCK XDG_CURRENT_DESKTOP XDG_SESSION_DESKTOP XDG_SESSION_TYPE || true
+systemctl --user import-environment "${session_environment[@]}" || true
 if command -v lxqt-policykit-agent >/dev/null 2>&1; then
     lxqt-policykit-agent >/dev/null 2>&1 &
 fi
