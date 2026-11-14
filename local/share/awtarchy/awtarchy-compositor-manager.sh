@@ -69,7 +69,8 @@ if [[ "$mode" == plan ]]; then
       # Review must remain read-only and never misreport an old checkout as
       # "already up to date". Only apply can change the registered Git tree.
       bash "$repo/trials/sway/source-refresh.sh" check "$repo"
-      python3 "$repo/trials/sway/sync.py" review --repo "$repo" ;;
+      python3 "$repo/trials/sway/sync.py" review --repo "$repo"
+      bash "$repo/trials/sway/session-wrapper-update.sh" plan "$repo" ;;
     install-hyprland)
       python3 "$repo/trials/sway/stage-hyprland.py" --preview --repo "$repo" ;;
     *) : ;;
@@ -177,6 +178,8 @@ elif [[ "$operation" == update-sway ]]; then
   # Apply the branch-current diff; no package operations or compositor
   # removals are reachable through this branch.
   python3 "$repo/trials/sway/sync.py" apply --repo "$repo"
+  # Root-owned Ly wrapper: exact known stock hashes only, with backup.
+  bash "$repo/trials/sway/session-wrapper-update.sh" apply "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   # Validate every destination before installing anything. Copy only missing
   # Awtarchy scripts, shaders, configuration and shared shell files.

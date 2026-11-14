@@ -95,7 +95,7 @@ bindsym Mod4+Mod1+k exec smtty -k
 bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
 bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
-bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
+bindsym Mod4+e exec env QT_QPA_PLATFORMTHEME=qt5ct:qt6ct python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
 bindsym Mod4+Shift+e exec foot yazi
 bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
 # Hyprland SUPER+SPACE dismisses the first popup; no launcher substitution.
@@ -385,7 +385,7 @@ mode "noalt" {
     bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
     bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
     bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
-    bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
+    bindsym Mod4+e exec env QT_QPA_PLATFORMTHEME=qt5ct:qt6ct python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
     bindsym Mod4+Shift+e exec foot yazi
     bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
     bindsym Mod4+space exec bash $trial/ipc.sh notifications hideFirstPopup

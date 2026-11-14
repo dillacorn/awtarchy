@@ -253,7 +253,27 @@ def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
     if ".config/xdg-desktop-portal-wlr/sway" in changed_keys:
         refresh_sway_portal_if_safe()
 
-    needs_shell_restart = any(
+    # The compositor's own environment is immutable until next login, but
+    # D-Bus-activated apps and the Quickshell launcher can refresh in place.
+    qt_changed = ".config/sway/awtarchy-trial/session.sh" in changed_keys
+    if qt_changed:
+        themed_env = dict(os.environ, QT_QPA_PLATFORMTHEME="qt5ct:qt6ct")
+        for command in (
+            ["dbus-update-activation-environment", "--systemd",
+             "QT_QPA_PLATFORMTHEME"],
+            ["systemctl", "--user", "import-environment", "QT_QPA_PLATFORMTHEME"],
+        ):
+            try:
+                r = subprocess.run(command, env=themed_env,
+                                   capture_output=True, text=True, timeout=8)
+                if r.returncode:
+                    print("Sway Qt environment import failed: "
+                          + (r.stderr.strip() or " ".join(command)), file=sys.stderr)
+            except (OSError, subprocess.TimeoutExpired) as exc:
+                print("Sway Qt environment import unavailable: " + str(exc),
+                      file=sys.stderr)
+
+    needs_shell_restart = qt_changed or any(
         key.startswith(".config/quickshell/awtarchy-sway/")
         or key == ".config/sway/awtarchy-trial/quickshell.sh"
         for key in changed_keys
@@ -268,6 +288,8 @@ def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
               file=sys.stderr)
         return
     env = dict(os.environ, QUICKSHELL_CONFIG_NAME="awtarchy-sway")
+    if qt_changed:
+        env["QT_QPA_PLATFORMTHEME"] = "qt5ct:qt6ct"
     restart = subprocess.run(["bash", str(manager), "restart"],
                              env=env, timeout=30)
     if restart.returncode:

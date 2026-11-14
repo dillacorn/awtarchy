@@ -4,6 +4,9 @@ set -euo pipefail
 [[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" && -n "${WAYLAND_DISPLAY:-}" ]] || {
     printf 'Not an active Sway Wayland session\n' >&2; exit 1;
 }
+# Also cover the live Sway Quickshell launcher and D-Bus activation;
+# the privileged Ly wrapper adopts this for every app on the next login.
+export QT_QPA_PLATFORMTHEME=qt5ct:qt6ct
 # Update D-Bus/systemd-launched desktop apps as well as direct Sway exec
 # children. The root-owned Ly session wrapper exports the Qt/GTK theme first.
 # Missing variables are ignored by these environment import helpers.

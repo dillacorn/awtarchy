@@ -118,7 +118,9 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work, with the Sway Quickshell selector (no Fuzzel) after restarting xdg-desktop-portal-wlr without interrupting an active recording. Check keyboard/mouse source selection, Escape cancellation, and fullscreen overlays on both monitors.
 - [ ] Clipboard, screenshots, file dialog and desktop portals work after reboot.
 - [ ] Sway's folder MIME association matches the file manager selected in Awtarchy (PCManFM-Qt by default), without overriding any unrelated MIME defaults.
-- [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser. PCManFM-Qt must inherit the same qt5ct/qt6ct/Kvantum dark theme as Hyprland after updating the Ly Sway wrapper and relogging.
+- [ ] With PCManFM-Qt fully closed, press Super+E in Sway after applying the trial update. Verify the dark Kvantum/MateriaDark palette and Papirus-Dark icons from existing qt6ct config.
+- [ ] Verify a freshly launched application's folder-opening action uses the selected file manager and correct Qt6 palette. Previous processes may retain the old environment.
+- [ ] The root-owned Sway Ly wrapper is backed up/upgraded only when stock; custom edits are preserved. A normal future login inherits the Qt5/Qt6 theme list for every Sway-launched application.
 - [ ] A user-provided `sway-mimeapps.list` folder override is preserved and produces an explicit warning instead of being overwritten.
 - [ ] Power menu lock, suspend and shutdown have correct safeguards.
 - [ ] `python3 ~/.config/sway/awtarchy-trial/idle-manager.py status` reports `running` without duplicates after Sway reload or managed update.

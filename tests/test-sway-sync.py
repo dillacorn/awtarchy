@@ -195,6 +195,27 @@ with tempfile.TemporaryDirectory(prefix="sway-live-reload-test-") as tmp:
         sway_sync.activate_in_running_sway(home, expected, {shell_key})
         assert proc.call_count == 1
 
+    # Sway session.sh update reimports the Qt6 theme and restarts only QS.
+    session_key = ".config/sway/awtarchy-trial/session.sh"
+    manager.write_bytes(expected[manager])
+    def qt_response(argv, **kwargs):
+        if argv[-1] == "get_version":
+            return response(argv, **kwargs)
+        if argv[:2] == ["dbus-update-activation-environment", "--systemd"]:
+            assert kwargs["env"]["QT_QPA_PLATFORMTHEME"] == "qt5ct:qt6ct"
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if argv[:3] == ["systemctl", "--user", "import-environment"]:
+            assert kwargs["env"]["QT_QPA_PLATFORMTHEME"] == "qt5ct:qt6ct"
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        if argv == ["bash", str(manager), "restart"]:
+            assert kwargs["env"]["QT_QPA_PLATFORMTHEME"] == "qt5ct:qt6ct"
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise AssertionError("Unexpected Sway Qt activation: " + str(argv))
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=qt_response) as qt:
+        sway_sync.activate_in_running_sway(home, expected, {session_key})
+        assert qt.call_count == 4
+
     # A failed reload is reported after writes, never disguised as success.
     manager.write_bytes(expected[manager])
     def rejected(argv, **kwargs):

@@ -94,7 +94,7 @@ assert "input type:touchpad {" in CONFIG
 # variables must be exported before it launches the compositor.
 SESSION_LAUNCH = (TRIAL / "session-launch.sh").read_text(encoding="utf-8")
 for key, value in (
-    ("QT_QPA_PLATFORMTHEME", "qt5ct"),
+    ("QT_QPA_PLATFORMTHEME", "qt5ct:qt6ct"),
     ("QT6CT_PLATFORM_PLUGIN", "qt6ct"),
     ("GTK_THEME", "Materia-dark"),
     ("XCURSOR_THEME", "Bibata-Modern-Ice"),
@@ -102,9 +102,13 @@ for key, value in (
     assert f"export {key}={value}" in SESSION_LAUNCH
 # D-Bus activated apps must see the same dark theme as direct Sway exec.
 SESSION = (TRIAL / "session.sh").read_text(encoding="utf-8")
+assert "export QT_QPA_PLATFORMTHEME=qt5ct:qt6ct" in SESSION
 assert "QT_QPA_PLATFORMTHEME" in SESSION
 assert "QT6CT_PLATFORM_PLUGIN" in SESSION
 assert 'session_environment[@]' in SESSION
+assert CONFIG.count("QT_QPA_PLATFORMTHEME=qt5ct:qt6ct python3") == 2
+assert 'session-wrapper-update.sh" apply "$repo"' in MANAGER
+assert 'session-wrapper-update.sh" plan "$repo"' in MANAGER
 assert "swaybg_command -" in CONFIG
 assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG

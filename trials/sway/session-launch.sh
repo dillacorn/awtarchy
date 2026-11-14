@@ -20,7 +20,8 @@ export QT_QPA_PLATFORM='wayland;xcb'
 export CLUTTER_BACKEND=wayland
 export QT_AUTO_SCREEN_SCALE_FACTOR=1
 export QT_WAYLAND_DISABLE_WINDOWDECORATION=1
-export QT_QPA_PLATFORMTHEME=qt5ct
+# PCManFM-Qt is Qt6; allow both platform theme plugins in this Sway session.
+export QT_QPA_PLATFORMTHEME=qt5ct:qt6ct
 export QT6CT_PLATFORM_PLUGIN=qt6ct
 export MOZ_ENABLE_WAYLAND=1
 export GDK_SCALE=1

@@ -55,7 +55,7 @@ Implemented means committed source, **not live verified**.
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; power menu plus secondary shades use overlay layer to cover fullscreen windows; live testing required |
 | Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. No swaylock shortcut or fallback; unavailable/failed WlSessionLock returns failure. |
-| Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly session wrapper now exports the same qt5ct/qt6ct, Kvantum-compatible and GTK dark-theme environment as Hyprland; the installed root-owned wrapper must also be updated before relogin takes effect. |
+| Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly launcher now advertises qt5ct:qt6ct; Qt6 PCManFM-Qt can use its existing qt6ct/Kvantum/MateriaDark configuration. The updater refreshes the live Sway Quickshell/D-Bus environment and backs up/replaces only known unmodified root-owned Ly wrappers. The Sway compositor inherits the new environment on its next normal login. |
 | Automatic Sway idle/suspend | Native swayidle daemon, started once per actual Sway socket and refreshed on managed updates/reloads. 3-minute secure Quickshell lock, 4-minute display power-off, 9-minute suspend (no bypass of logind sleep inhibitors). Keep Awake and active OBS output block these actions. Sway-native idle inhibitors protect fullscreen games and media; personal-app inhibition differences from Hyprland still need live testing. |
 | OBS screencast source picker | Quickshell theme-aware fullscreen overlay with keyboard/mouse selection and Escape cancellation. The chooser returns only exact monitor/window entries provided by xdg-desktop-portal-wlr. Awtarchy updates automatically refresh the Sway backend only when PipeWire proves no xdpw stream is active; otherwise it preserves the stream and defers the refresh. Never auto-approve screen sharing. |
 | Clipboard screenshots | grim/slurp/wl-copy; Super+Shift+D copies a selected output without an editor, while Super+Shift+F opens Satty |
@@ -71,6 +71,26 @@ Implemented means committed source, **not live verified**.
 Do not advertise unimplemented capture protection, shader effects, or input
 modes. Where a feature is unsupported, return an explicit error or hide the
 unsafe UI instead of acknowledging a no-op.
+
+## Sway PCManFM-Qt theme
+
+PCManFM-Qt 2.x uses Qt6. The earlier Sway Ly wrapper exported only
+`QT_QPA_PLATFORMTHEME=qt5ct`, so the qt6ct palette/style/icon settings
+could be bypassed. Use the Arch-supported `qt5ct:qt6ct` list instead;
+the user's qt5ct/qt6ct, Kvantum and PCManFM-Qt settings are unchanged.
+
+When managed files update, Sway's session.sh imports this theme into
+D-Bus/systemd and the Quickshell manager is restarted with it. Both
+Sway's Super+E file-manager bindings pass the correct Qt platform-theme list
+even before the next session login. The compositor itself inherits the new
+environment only from the root-owned Ly launcher on next login. The
+privileged wrapper is upgraded only if it has a recognized, unmodified
+original stock hash, with a root-owned backup. Any custom launcher is kept.
+
+An existing PCManFM-Qt process retains its original environment; close it
+normally before testing a newly opened window. Check `pacman -Q qt6ct
+kvantum` if the dark theme still does not appear. No package changes or
+existing applications are forced to restart.
 
 ## Managed Sway update source
 
