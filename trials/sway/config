@@ -48,6 +48,8 @@ xwayland enable
 # directive; on a compositor reload its solid-color layer can cover the
 # Awtwall/awww wallpaper restored by session.sh. Leave background ownership
 # to the existing Awtwall/awww startup and saved per-output selection.
+# Disallow Sway-managed swaybg entirely so a reload cannot cover that layer.
+swaybg_command -
 
 # Permit immediate flips on every output, but only when a fullscreen
 # application also allows/requests tearing. This does NOT make ordinary
