@@ -105,6 +105,37 @@ fi
 [[ -n "$image" ]] || exit 0
 [[ -f "$image" && ! -L "$image" ]] || exit 1
 trap 'rm -f -- "$image"' EXIT
+
+# Best-effort audible feedback for direct captures only. PipeWire playback
+# must never block a screenshot or leak the capture lock into the sound player.
+# No file, event theme, external service or new package is required.
+play_screenshot_shutter() {
+    command -v pw-play >/dev/null 2>&1 || return 0
+    (
+        python3 -c '
+import random
+import struct
+import sys
+
+rate = 48000
+rng = random.Random(4231)
+frames = bytearray()
+for i in range(4800):
+    t = i / rate
+    # Two very short damped noise clicks, like a mechanical shutter.
+    envelope = 0.0
+    for start, duration, level in ((0.0, 0.020, 0.8), (0.029, 0.044, 0.46)):
+        progress = (t - start) / duration
+        if 0.0 <= progress < 1.0:
+            envelope += level * (1.0 - progress) ** 2
+    sample = int(17000 * envelope * rng.uniform(-1.0, 1.0))
+    frames.extend(struct.pack("<h", sample))
+sys.stdout.buffer.write(frames)
+' | pw-play --raw --format=s16 --rate=48000 --channels=1 \
+        --volume=0.30 --latency=20ms - >/dev/null 2>&1
+    ) 9>&- </dev/null >/dev/null 2>&1 &
+}
+
 # Super+Shift+D captures the focused output, copies it to the clipboard
 # (above) AND saves a unique PNG without asking for a display or Satty.
 directory="$HOME/Pictures/Screenshots"
@@ -121,6 +152,7 @@ if [[ "$mode" == display-copy ]]; then
         exit 1
     fi
     printf 'Saved screenshot and copied to clipboard: %s\n' "$saved"
+    play_screenshot_shutter
     exit 0
 fi
 mkdir -p -- "$directory"

@@ -29,6 +29,37 @@ mkdir -p -- "$lock_dir"
   exit 1
 }
 
+
+# Best-effort audible feedback for direct captures only. PipeWire playback
+# must never block a screenshot or leak the capture lock into the sound player.
+# No file, event theme, external service or new package is required.
+play_screenshot_shutter() {
+    command -v pw-play >/dev/null 2>&1 || return 0
+    (
+        python3 -c '
+import random
+import struct
+import sys
+
+rate = 48000
+rng = random.Random(4231)
+frames = bytearray()
+for i in range(4800):
+    t = i / rate
+    # Two very short damped noise clicks, like a mechanical shutter.
+    envelope = 0.0
+    for start, duration, level in ((0.0, 0.020, 0.8), (0.029, 0.044, 0.46)):
+        progress = (t - start) / duration
+        if 0.0 <= progress < 1.0:
+            envelope += level * (1.0 - progress) ** 2
+    sample = int(17000 * envelope * rng.uniform(-1.0, 1.0))
+    frames.extend(struct.pack("<h", sample))
+sys.stdout.buffer.write(frames)
+' | pw-play --raw --format=s16 --rate=48000 --channels=1 \
+        --volume=0.30 --latency=20ms - >/dev/null 2>&1
+    ) 9>&- </dev/null >/dev/null 2>&1 &
+}
+
 take_screenshot() {
   flock -w 5 9 || {
     printf 'Screenshot queue timed out after 5 seconds\n' >&2
@@ -70,5 +101,6 @@ if ! wl-copy --type image/png < "$file" 9>&-; then
 fi
 
   # No flash/notification: rapid captures remain visually uncontaminated.
+  play_screenshot_shutter
 }
 take_screenshot 9>"$lock_dir/hypr-screenshot.lock"

@@ -101,7 +101,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] XWayland variants of Awtarchy floating utilities follow the same rule through WM_CLASS, and ordinary XWayland dialogs float without tiling unrelated applications or games.
 - [ ] Super+Shift+X selects an area, copies it and opens **Satty**.
 - [ ] Super+Shift+S selects a window, copies it and opens Satty.
-- [ ] Super+Shift+D instantly captures only the currently focused display, saves a uniquely named PNG in ~/Pictures/Screenshots and copies the same image to the clipboard, with no selector or Satty. Test DP-1/DP-3 focus and two overlapping captures: both PNGs should exist, neither screenshot should include a confirmation overlay, and subsequent keypresses must not be silently dropped. Super+Shift+F continues to select a display and open Satty.
+- [ ] Super+Shift+D instantly captures only the currently focused display, saves a uniquely named PNG in ~/Pictures/Screenshots and copies the same image to the clipboard, with no selector or Satty. Test DP-1/DP-3 focus and two overlapping captures: both PNGs should exist, neither screenshot should include a confirmation overlay, subsequent keypresses must not be silently dropped, and a brief shutter click should play after each successful save+copy if PipeWire audio is available. Failed captures should remain silent. Super+Shift+F continues to select a display and open Satty.
 - [ ] Satty can annotate, save and cancel without leaving stale capture locks.
 - [ ] Taking another screenshot while Satty is open works.
 - [ ] No Hyprland-only screenshot command is executed in Sway.

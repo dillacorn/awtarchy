@@ -4,6 +4,7 @@ from pathlib import Path
 import os
 import subprocess
 import tempfile
+import time
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "trials/sway/capture.sh"
@@ -15,8 +16,18 @@ with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:
     (root / "run").mkdir()
     (root / "home").mkdir()
     events = root / "events"
+    sound_events = root / "sound-events"
+    sound_events.touch()
 
     mocks = {
+        "pw-play": r"""#!/usr/bin/env bash
+set -euo pipefail
+[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.30 --latency=20ms -" ]] || exit 8
+bytes="$(wc -c)"
+[[ "$bytes" -eq 9600 ]] || exit 9
+[[ "${SOUND_FAIL:-0}" != 1 ]] || exit 10
+printf 'shutter:%s\n' "$bytes" >>"$SOUND_EVENTS"
+""",
         "grim": r"""#!/usr/bin/env bash
 set -euo pipefail
 printf 'grim:%s\n' "$*" >>"$EVENTS"
@@ -88,6 +99,7 @@ esac
         "XDG_RUNTIME_DIR": str(root / "run"),
         "HOME": str(root / "home"),
         "EVENTS": str(events),
+        "SOUND_EVENTS": str(sound_events),
     })
     for mode in ("area", "window", "display", "output"):
         events.write_text("")
@@ -156,6 +168,15 @@ esac
     assert lines[2] == lines[5] == "clipboard", lines
     assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 5
 
+    # Audio playback is nonblocking and best-effort; five completed saves
+    # must trigger five quiet shutter clicks, even during overlap.
+    for _ in range(80):
+        if len(sound_events.read_text().splitlines()) >= 5:
+            break
+        time.sleep(0.05)
+    assert sound_events.read_text().splitlines() == ["shutter:9600"] * 5
+
+    # Missing output or malformed IPC must not play a shutter sound.
     # No focused output or invalid IPC must fail safely: no capture or save.
     for invalid in ("none", "both", "inactive", "malformed"):
         events.write_text("")
@@ -167,6 +188,17 @@ esac
         assert failed.returncode != 0, (invalid, failed.stdout, failed.stderr)
         assert events.read_text().splitlines() == ["swaymsg:get_outputs"]
         assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 5
+    assert sound_events.read_text().splitlines() == ["shutter:9600"] * 5
+
+    # Audio failure may not prevent a successful save+copy.
+    success_without_audio = subprocess.run(
+        ["bash", str(SCRIPT), "display-copy"],
+        env=dict(env, FOCUSED_OUTPUT="DP-1", SOUND_FAIL="1"),
+        capture_output=True, text=True, timeout=10
+    )
+    assert success_without_audio.returncode == 0
+    assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 6
+
     # Super+Shift+F retains display picker and Satty (covered above).
 
     # A second screenshot must succeed while the previous clipboard provider
