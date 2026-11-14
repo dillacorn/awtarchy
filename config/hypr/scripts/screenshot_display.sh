@@ -2,34 +2,50 @@
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
 # ~/.config/hypr/scripts/screenshot_display.sh
 
+# Super+Shift+D: capture the focused Hyprland monitor, save a PNG and
+# copy the same image to the Wayland clipboard. No slurp or Satty.
 set -euo pipefail
 
-# deps
-for cmd in grim hyprctl jq notify-send wl-copy; do
-  command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd missing" >&2; exit 1; }
+for cmd in grim hyprctl jq notify-send wl-copy mktemp date; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf '%s missing\n' "$cmd" >&2
+    exit 1
+  }
 done
 
+# Focused window/output, not the pointer's monitor. Refuse malformed/ambiguous
+# IPC so we never accidentally capture another display.
+mon="$(hyprctl -j monitors | jq -er '
+    if type != "array" then error("invalid monitors") else
+        [.[] | select(type == "object" and .focused == true)
+             | .name | select(type == "string" and length > 0)] |
+        if length == 1 then .[0]
+        else error("expected exactly one focused monitor") end
+    end
+')" || {
+  printf 'Unable to identify the focused Hyprland monitor\n' >&2
+  exit 1
+}
+
 out_dir="$HOME/Pictures/Screenshots"
-file="$out_dir/$(date +%m%d%Y-%I%p-%S).png"
+mkdir -p -- "$out_dir"
+[[ -d "$out_dir" && ! -L "$out_dir" ]] || {
+  printf 'Unsafe screenshots directory: %s\n' "$out_dir" >&2
+  exit 1
+}
 
-mkdir -p "$out_dir"
-
-# get monitor name from cursor, fallback to focused
-cursor_json="$(hyprctl -j cursors 2>/dev/null || true)"
-if [[ -n "$cursor_json" ]] && echo "$cursor_json" | jq -e . >/dev/null 2>&1; then
-    mon="$(echo "$cursor_json" | jq -r '.[0].monitor')"
+# Unique even when the shortcut is pressed repeatedly within one second.
+file="$(mktemp "$out_dir/$(date +%m%d%Y-%I%p-%S)-XXXXXXXX.png")" || exit 1
+if ! grim -o "$mon" "$file"; then
+  rm -f -- "$file"
+  printf 'Failed to capture focused monitor: %s\n' "$mon" >&2
+  exit 1
 fi
 
-if [[ -z "${mon:-}" || "$mon" == "null" ]]; then
-    monitor_json="$(hyprctl -j monitors 2>/dev/null || true)"
-    if [[ -n "$monitor_json" ]] && echo "$monitor_json" | jq -e . >/dev/null 2>&1; then
-        mon="$(echo "$monitor_json" | jq -r '.[] | select(.focused==true) | .name' | head -n1)"
-    fi
+# A screenshot already captured stays saved even if the clipboard fails.
+if ! wl-copy --type image/png < "$file"; then
+  printf 'Screenshot saved but clipboard copy failed: %s\n' "$file" >&2
+  exit 1
 fi
-
-[[ -n "${mon:-}" ]] || { echo "No monitor found" >&2; exit 1; }
-
-grim -o "$mon" "$file" >/dev/null 2>&1
-wl-copy --type image/png < "$file"
 
 notify-send --app-name 'awtarchy-screenshot' 'Screenshot saved & copied' "$file" || true
