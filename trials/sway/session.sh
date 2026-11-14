@@ -13,6 +13,13 @@ if command -v lxqt-policykit-agent >/dev/null 2>&1; then
 fi
 trial="${XDG_CONFIG_HOME:-$HOME/.config}/sway/awtarchy-trial"
 manager="$trial/quickshell.sh"
+# Align folder-opening XDG MIME with the existing Awtarchy file-manager
+# preference. Only inode/directory is changed, with a backup; any explicit
+# desktop-specific override and all unrelated associations are preserved.
+if [[ -f "$trial/mime-parity.py" && ! -L "$trial/mime-parity.py" ]]; then
+    python3 "$trial/mime-parity.py" apply ||
+        printf 'Sway: unable to align directory MIME default; leaving user associations unchanged.\n' >&2
+fi
 if [[ -f "$manager" && ! -L "$manager" ]] && bash "$manager" start; then
     printf 'Sway trial Quickshell control endpoint reports ready\n'
 else
