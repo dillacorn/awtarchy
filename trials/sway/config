@@ -17,6 +17,20 @@ font pango:monospace 10
 # Cursor: explicit XCursor theme instead of the unverified Jay rendering path.
 seat seat0 xcursor_theme Bibata-Modern-Ice 24
 seat seat0 hide_cursor 0
+# Match the Hyprland input profile: raw/flat mouse input at zero gain.
+# Maccel, when installed, remains the only intended pointer acceleration.
+input type:pointer {
+    accel_profile flat
+    pointer_accel 0
+}
+# Match Hyprland's touchpad preferences separately; do not accidentally
+# inherit mouse-only settings from the touchpad.
+input type:touchpad {
+    natural_scroll enabled
+    dwt enabled
+    click_method clickfinger
+    scroll_factor 0.5
+}
 floating_modifier Mod1 normal
 focus_follows_mouse yes
 focus_on_window_activation smart
