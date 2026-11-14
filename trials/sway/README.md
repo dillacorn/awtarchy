@@ -21,7 +21,8 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - Ly session: Sway (Awtarchy Trial)
 - System session launcher: /usr/local/bin/awtarchy-sway-session
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
-- Core packages: sway, swaybg, swayidle, swaylock, xdg-desktop-portal-wlr
+- Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Fuzzel dmenu)
+- Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock requirement)
 - Hyprland config, Quickshell profile and Hyprland Ly session remain installed.
 
 The updater compares the installed Sway config to its recorded baseline. If
@@ -38,7 +39,7 @@ Implemented means committed source, **not live verified**.
 | --- | --- |
 | 6px inner/9px outer gaps | Native config |
 | ALT+mouse drag and resize | Native Sway modifier |
-| ALT+TAB / ALT+SHIFT+TAB | Focus next/previous; stacking semantics differ |
+| ALT+TAB / ALT+SHIFT+TAB | Native Sway focus when only tiled applications exist; Sway-only focused-workspace leaf cycling bridges floating and tiled application windows |
 | Workspaces 1-10 | Native; not tags |
 | Move whole workspace to monitor | Directional Sway command |
 | Floating btop at 80% x 85% | Native Foot app ID rule |
@@ -52,10 +53,10 @@ Implemented means committed source, **not live verified**.
 | Mouse acceleration | Explicit `accel_profile flat`, `pointer_accel 0`, matching Hyprland; maccel remains independent |
 | Fullscreen game tearing | `output * allow_tearing yes`, `max_render_time off`, app-level allow for Steam/Proton/gamescope and matched game classes; hardware/runtime verification required |
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
-| Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; first-frame behavior and keyboard focus need live verification |
-| Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. Emergency swaylock remains. |
-| Directory default application | Sway reconciles `inode/directory` in the shared XDG `mimeapps.list` with the existing Awtarchy file-manager choice, leaving unrelated MIME associations unchanged and preserving an explicit `sway-mimeapps.list` override |
-| Clipboard screenshots | grim/slurp/wl-copy |
+| Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; power menu plus secondary shades use overlay layer to cover fullscreen windows; live testing required |
+| Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. No swaylock shortcut or fallback; unavailable/failed WlSessionLock returns failure. |
+| Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly session wrapper now exports the same qt5ct/qt6ct, Kvantum-compatible and GTK dark-theme environment as Hyprland; the installed root-owned wrapper must also be updated before relogin takes effect. |
+| Clipboard screenshots | grim/slurp/wl-copy; Super+Shift+D copies a selected output without an editor, while Super+Shift+F opens Satty |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |
 | Digital vibrance via shaders | **No confirmed native equivalent** |
