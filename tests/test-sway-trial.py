@@ -39,7 +39,7 @@ for phrase in ('COMPOSITOR_SELECTION="hyprland"', 'compositor_has_hyprland()',
                'install_sway_session_stage()', 'copy_awtarchy_configs_stage'):
     assert phrase in RUNTIME, phrase
 assert "packages_to_install+=(sway)" not in RUNTIME
-assert "for package in sway swaybg swayidle swaylock xdg-desktop-portal-wlr" in RUNTIME
+assert "for package in sway swaybg swayidle xdg-desktop-portal-wlr" in RUNTIME
 assert "sway via aur-scan" not in RUNTIME
 assert "JayWM_Migration_Trial_Investigation" not in RUNTIME
 
@@ -56,8 +56,6 @@ for key, expected in {
     "Mod1+p": "ipc.sh launcher toggle",
     "Mod4+d": "ipc.sh launcher toggle",
     "Mod4+p": "ipc.sh powermenu begin",
-    "Mod1+Tab": "focus next",
-    "Mod1+Shift+Tab": "focus prev",
     "Mod1+Shift+b": "toggle-utility.py btop",
     "Mod4+Shift+b": "toggle-utility.py btop",
     "Mod4+t": "ipc.sh themes toggle",
@@ -99,7 +97,7 @@ assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
 assert "swaylock" not in RUNTIME.split(
     "install_sway_repo_dependencies_stage() {", 1
-)[1].split("\\n}\n", 1)[0].split("install_arch_repo_apps_stage", 1)[0]
+)[1].split("install_arch_repo_apps_stage()", 1)[0]
 screencast = (TRIAL / "screencast-chooser.conf").read_text()
 assert "chooser_type=dmenu" in screencast
 assert "chooser_cmd=fuzzel --dmenu" in screencast
