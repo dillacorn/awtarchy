@@ -294,6 +294,17 @@ def render(source: Path, destination: Path, trial: Path):
 '''.replace("ORIENTATION", orientation)
                         text = text.replace(anchor, anchor + handler, 1)
                 if path.name == "shell.qml":
+                    # Changing WlrLayershell margins during the pressed-pointer
+                    # gesture interrupts Qt's DragHandler in Sway. Keep the
+                    # bar anchored until release, then apply the 5px drop
+                    # animation only while settling the finished move.
+                    old_gap = "property real dragFloatGap: dragVisualActive ? 5 : 0"
+                    new_gap = ("property real dragFloatGap: "
+                        "root.barDropPending && root.barDragMonitor === monitorName ? 5 : 0")
+                    if text.count(old_gap) != 1:
+                        raise ValueError("Sway drag margin source changed")
+                    text = text.replace(old_gap, new_gap)
+                if path.name == "shell.qml":
                     # Direct signals preserve drag event ordering and avoid
                     # subprocess races between begin/preview/finish.
                     needle = '    IpcHandler {\n        target: "control"'
