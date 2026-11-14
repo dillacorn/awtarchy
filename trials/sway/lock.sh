@@ -13,6 +13,12 @@ config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
 manager="$config_home/sway/awtarchy-trial/lock-manager.sh"
 
 lock_fallback() {
+    # A power-menu frame may have been staged before the dedicated manager
+    # became unavailable. Discard it before falling back to secure swaylock.
+    local capture="$config_home/sway/awtarchy-trial/lock-capture.sh"
+    if [[ -f "$capture" && ! -L "$capture" ]]; then
+        bash "$capture" discard-prepared >/dev/null 2>&1 || true
+    fi
     command -v swaylock >/dev/null 2>&1 || {
         printf 'No secure Quickshell lock manager or swaylock fallback available\n' >&2
         return 1
