@@ -151,6 +151,32 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
             assert f"Math.round({window_id}.width)" in original
             assert f"Math.round({window_id}.height)" in original
 
+    # Sway's wl_pointer sends one full 120-unit wheel notch alongside a
+    # 15-unit axis movement. Qt can expose both in a WheelEvent. A pixel-first
+    # 24-unit threshold would require two notches for each brightness action.
+    # Only complete angle steps take precedence; keep pixel-only/small-angle
+    # input (such as a touchpad) on the existing smoothing path.
+    upstream_button = (UPSTREAM / "BarButton.qml").read_text(encoding="utf-8")
+    sway_button = (output / "BarButton.qml").read_text(encoding="utf-8")
+    assert (
+        "const rawPixelDelta = Number(wheel.pixelDelta.y);\\n"
+        "        if (Number.isFinite(rawPixelDelta) && rawPixelDelta !== 0) {"
+    ).replace("\\n", "\n") in upstream_button
+    assert (
+        "const angleDelta = Number(wheel.angleDelta.y);\\n"
+        "        const rawPixelDelta = Number(wheel.pixelDelta.y);"
+    ).replace("\\n", "\n") in sway_button
+    assert (
+        "if (Number.isFinite(rawPixelDelta) && rawPixelDelta !== 0\\n"
+        "                && !(Number.isFinite(angleDelta)\\n"
+        "                     && Math.abs(angleDelta) >= wheelAngleStep)) {"
+    ).replace("\\n", "\n") in sway_button
+    assert sway_button.count("const angleDelta = Number(wheel.angleDelta.y);") == 1
+    assert "wheelAngleRemainder += angleDelta;" in sway_button
+    assert "wheelPixelRemainder += pixelDelta;" in sway_button
+    assert "readonly property real wheelAngleStep: 120" in sway_button
+    assert "readonly property real wheelPixelStep: 24" in sway_button
+
     # Native notification popups already use layer-shell; only the
     # notification center should be replaced.
     notifications = (output / "Notifications.qml").read_text(encoding="utf-8")
