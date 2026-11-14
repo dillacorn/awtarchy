@@ -46,7 +46,8 @@ Implemented means committed source, **not live verified**.
 | Hyprland utility floating rules | Fourteen named tools match both Wayland app IDs and XWayland classes, with corresponding per-output sizing; ProtonUp-Qt main window floats at 45% × 45% while its dialogs float without forced main-window sizing |
 | Theme picker and window borders | Super+T toggles Sway Quickshell picker; selected active/inactive theme border colors apply through Sway IPC and on compositor reload |
 | Persistent monitor modes | Guarded one-time Hyprland import |
-| Saved wallpaper through Sway reload | Awtwall/awww retains background ownership; no competing `output * bg` swaybg layer |
+| Saved wallpaper through Sway reload | Awtwall/awww retains background ownership; no competing `output * bg` swaybg layer and `swaybg_command -` prevents new compositor-managed backgrounds |
+| Quick Settings brightness per output | The Sway renderer sends the selected DP-1/DP-3 brightness target separately from the flyout's own output, preserving the readback after selection and updates |
 | Cursor image/theme/size | Native Sway seat settings |
 | Mouse acceleration | Explicit `accel_profile flat`, `pointer_accel 0`, matching Hyprland; maccel remains independent |
 | Fullscreen game tearing | `output * allow_tearing yes`, `max_render_time off`, app-level allow for Steam/Proton/gamescope and matched game classes; hardware/runtime verification required |
