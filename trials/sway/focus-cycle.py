@@ -63,6 +63,10 @@ def choice(tree, workspaces, direction):
     windows = toplevels(ws)
     if len(windows) < 2:
         return None
+    if not toplevels({"floating_nodes": ws.get("floating_nodes", [])}):
+        # Preserve native focus next/prev for tiled-only workspaces;
+        # custom cycling is needed only across the distinct floating tree.
+        return "native"
     focused = next((i for i, c in enumerate(windows) if c.get("focused")), -1)
     increment = 1 if direction == "next" else -1
     return windows[(focused + increment) % len(windows)]["id"]
@@ -76,7 +80,9 @@ def main():
     selected = choice(ipc("-t", "get_tree"), ipc("-t", "get_workspaces"), sys.argv[1])
     if selected is None:
         return
-    response = ipc("-t", "command", f"[con_id={selected}] focus")
+    instruction = (f"focus {sys.argv[1]}" if selected == "native"
+                   else f"[con_id={selected}] focus")
+    response = ipc("-t", "command", instruction)
     if not isinstance(response, list) or not response or not all(
         item.get("success") is True for item in response if isinstance(item, dict)
     ):
