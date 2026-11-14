@@ -106,9 +106,10 @@ bindsym Mod4+Shift+space exec fuzzel
 bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 
-# Explicit keyboard focus history (actual stacking behavior still needs testing).
-bindsym Mod1+Tab focus next
-bindsym Mod1+Shift+Tab focus prev
+# Cycle actual application toplevels in the focused workspace, across
+# Sway's separate tiling and floating container trees.
+bindsym Mod1+Tab exec python3 $trial/focus-cycle.py next
+bindsym Mod1+Shift+Tab exec python3 $trial/focus-cycle.py prev
 bindsym Mod4+q kill
 bindsym Mod4+Shift+q kill
 bindsym Mod1+Shift+q kill
@@ -249,7 +250,7 @@ bindsym XF86AudioPrev exec playerctl previous
 # Exact existing screenshot keys; window-only capture awaits a safe dedicated
 # implementation and therefore is not mapped to a misleading full display.
 bindsym Mod4+Shift+f exec bash $trial/capture.sh display
-bindsym Mod4+Shift+d exec bash $trial/capture.sh display
+bindsym Mod4+Shift+d exec bash $trial/capture.sh display-copy
 bindsym Mod4+Shift+x exec bash $trial/capture.sh area
 bindsym Mod4+Shift+s exec bash $trial/capture.sh window
 bindsym Print exec bash $trial/capture.sh output
@@ -349,6 +350,6 @@ for_window [app_id="^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playni
 for_window [class="(?i)^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"] allow_tearing yes
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
 
-# Emergency escape doesn't depend on Quickshell.
-bindsym Mod4+Control+l exec swaylock -f -c 10151c
+# No swaylock shortcut: the secure Awtarchy Quickshell session lock is
+# the only supported lock surface; failure to lock must fail closed.
 bindsym Mod4+Control+Alt+Shift+q exec swaymsg exit
