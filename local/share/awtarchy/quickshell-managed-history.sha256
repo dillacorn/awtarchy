@@ -1655,3 +1655,6 @@ bed5893bc2547586d9afae1349f1e8b4bb1e178c26a3fe1d1ac440598f861c92	.config/hypr/hy
 
 # DDC watcher: wait for complete inotify state writes.
 f182b998f6127bbf7d468d6f982eee3e7a6a2fa75c2259e4fb1a26ea293fddd9	.config/hypr/scripts/ddc_brightness.sh
+
+# Sound Settings: screenshot categories and independent login audio control.
+4bdb7af36a7b295b6865142d11c51043594a680f1e13a6a53f5e3879116c0024	.config/quickshell/awtarchy/QuickSettings.qml
