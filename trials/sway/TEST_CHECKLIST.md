@@ -77,6 +77,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Foot's live palette and Micro colors match expected theme behavior.
 - [ ] Quickshell reload/relogin retains preferences and does not restart endlessly.
 - [ ] Audio widgets, media keys, brightness, date/time, network and battery readouts.
+- [ ] In Quick Settings on either monitor, select the other monitor's brightness, change it (for example 35% to 75%), and verify the bar immediately updates and stays at the new value after a refresh, closing/reopening the flyout and selecting that output again.
 - [ ] Focus-on-outside-click dismissal is **not implemented** on Sway yet;
   explicit toggle, Escape and workspace-change dismissal are expected.
 
