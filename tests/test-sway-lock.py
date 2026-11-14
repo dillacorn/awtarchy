@@ -107,9 +107,16 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
 
     # The fallback can only be used for an explicit lock request.
     manager.unlink()
+    capture = config / "sway/awtarchy-trial/lock-capture.sh"
+    capture.write_text(
+        "#!/usr/bin/env bash\n"
+        "printf 'capture:%s\\n' \"$*\" >>\"$AWTARCHY_LOCK_TEST_LOG\"\n"
+    )
     log.write_text("")
     assert run("lock").returncode == 0
-    assert log.read_text().splitlines() == ["swaylock:-f -c 10151c"]
+    assert log.read_text().splitlines() == [
+        "capture:discard-prepared", "swaylock:-f -c 10151c",
+    ]
     log.write_text("")
     assert run("suspend").returncode != 0
     assert run("hibernate").returncode != 0
