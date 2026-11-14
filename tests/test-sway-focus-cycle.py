@@ -66,7 +66,7 @@ tiled_only = tree([leaf(11, "firefox", focused=True), leaf(12, "foot")], [])
 assert module.choice(tiled_only, focus, "next") == "native"
 assert module.choice(tiled_only, focus, "prev") == "native"
 with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "sway",
-                             "SWAYSOCK": "/tmp/fake-sway"}), \\
+                             "SWAYSOCK": "/tmp/fake-sway"}), \
      patch.object(module, "ipc", side_effect=[
          tiled_only, focus, [{"success": True}]
      ]) as ipc, patch.object(module.sys, "argv", ["focus-cycle.py", "next"]):
