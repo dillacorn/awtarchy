@@ -49,7 +49,7 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
         "case \"$1\" in\n"
         "  status) printf 'secure\\n' ;;\n"
         "  wait-secure) [[ \"${AWTARCHY_LOCK_TEST_FAIL_WAIT:-0}\" != 1 ]] ;;\n"
-        "  lock|suspend|hibernate) true ;;\n"
+        "  lock|lock-prepared|suspend|hibernate) true ;;\n"
         "  *) false ;;\n"
         "esac\n"
     )
@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
     log.write_text("")
     assert run("lock-prepared").returncode == 0
     assert log.read_text().splitlines() == [
-        "manager:lock", "manager:wait-secure 5",
+        "manager:lock-prepared", "manager:wait-secure 5",
     ]
     log.write_text("")
     assert run("suspend").returncode == 0
