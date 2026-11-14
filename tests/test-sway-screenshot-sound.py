@@ -29,6 +29,7 @@ assert (ROOT / "config/quickshell/awtarchy/ScreenshotSoundSettings.qml").is_file
 history = (ROOT / "local/share/awtarchy/quickshell-managed-history.sha256").read_text()
 for source in (
     ROOT / "config/quickshell/awtarchy/QuickSettings.qml",
+    ROOT / "config/quickshell/awtarchy/ScreenshotSoundSettings.qml",
     ROOT / "config/hypr/scripts/quickshell_ready_sound.sh",
 ):
     installed = ".config/" + source.relative_to(ROOT / "config").as_posix()
