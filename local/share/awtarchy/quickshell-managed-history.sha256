@@ -1658,3 +1658,6 @@ f182b998f6127bbf7d468d6f982eee3e7a6a2fa75c2259e4fb1a26ea293fddd9	.config/hypr/sc
 
 # Sound Settings: screenshot categories and independent login audio control.
 4bdb7af36a7b295b6865142d11c51043594a680f1e13a6a53f5e3879116c0024	.config/quickshell/awtarchy/QuickSettings.qml
+
+# Login Sound: optional audio setting in the established Quickshell readiness helper.
+888bc2ec84ea65a2dd2524e5411045a4aaf541882cb430b7fd3843ee0c55a5fc	.config/hypr/scripts/quickshell_ready_sound.sh
