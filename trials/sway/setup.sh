@@ -11,10 +11,11 @@ config="${XDG_CONFIG_HOME:-$HOME/.config}"
 trial="$config/sway/awtarchy-trial"
 shell_dir="$config/quickshell/awtarchy-sway"
 portal="$config/xdg-desktop-portal/sway-portals.conf"
-for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal"; do
+screencast_chooser="$config/xdg-desktop-portal-wlr/sway"
+for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal" "$config/xdg-desktop-portal-wlr"; do
     [[ ! -L "$directory" && ( ! -e "$directory" || -d "$directory" ) ]] || { fail "Unsafe directory: $directory"; exit 1; }
 done
-for bin in sway swaymsg qs foot python3 jq flock grim slurp wl-copy; do
+for bin in sway swaymsg qs foot fuzzel python3 jq flock grim slurp wl-copy; do
     command -v "$bin" >/dev/null 2>&1 || { fail "Missing package tool $bin"; exit 1; }
 done
 temp="$(mktemp -d)"
@@ -23,11 +24,15 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
-    if [[ "$name" == sway-portals.conf ]]; then target="$portal"; else target="$trial/$name"; fi
+    case "$name" in
+        sway-portals.conf) target="$portal" ;;
+        screencast-chooser.conf) target="$screencast_chooser" ;;
+        *) target="$trial/$name" ;;
+    esac
     targets+=("$target")
     if [[ -e "$target" || -L "$target" ]]; then
         [[ -f "$target" && ! -L "$target" ]] || { fail "Unsafe destination $target"; exit 1; }
@@ -55,7 +60,7 @@ if [[ "$action" == --check ]]; then
     printf 'PASS: Sway config accepted, isolated UI generated, paths checked\n'
     exit 0
 fi
-for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal"; do
+for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal" "$config/xdg-desktop-portal-wlr"; do
     [[ -d "$directory" ]] || mkdir -m 0700 -- "$directory"
 done
 for i in "${!sources[@]}"; do
