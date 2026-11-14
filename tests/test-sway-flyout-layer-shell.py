@@ -103,6 +103,54 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
         ) in rendered, filename
         assert f"function {owner_method}(width, height)" in rendered, filename
 
+        # The Sway window's Qt mapped width/height can lag or differ from
+        # the requested layer-shell geometry. The owner must use the same
+        # authoritative dimensions for dirty state, Save, Copy and Restore.
+        if filename == "Launcher.qml":
+            assert (
+                "readonly property int liveWidth: "
+                "Math.round(launcherWindow.implicitWidth)"
+            ) in rendered, filename
+            assert (
+                "readonly property int liveHeight: "
+                "Math.round(launcherWindow.implicitHeight)"
+            ) in rendered, filename
+            assert "Math.round(launcherWindow.width)" not in rendered, filename
+            assert "Math.round(launcherWindow.height)" not in rendered, filename
+            assert '"save-view",' in rendered, filename
+            assert "String(liveWidth)" in rendered, filename
+            assert "String(liveHeight)" in rendered, filename
+        else:
+            assert (
+                "readonly property int livePanelWidth: configuredPanelWidth"
+            ) in rendered, filename
+            assert (
+                "readonly property int livePanelHeight: configuredPanelHeight"
+            ) in rendered, filename
+            assert (
+                f"Math.round({window_id}.width)"
+            ) not in rendered, filename
+            assert (
+                f"Math.round({window_id}.height)"
+            ) not in rendered, filename
+            assert '"save-flyout",' in rendered, filename
+            assert "String(livePanelWidth)" in rendered, filename
+            assert "String(livePanelHeight)" in rendered, filename
+            assert "savedView.width !== livePanelWidth" in rendered, filename
+            assert "savedView.height !== livePanelHeight" in rendered, filename
+
+        assert "function saveDisplaySettings()" in rendered, filename
+        assert "function discardDraft()" in rendered, filename
+
+        # The shared Hyprland implementation must still read its actual
+        # floating toplevel size and retain the original save semantics.
+        if filename == "Launcher.qml":
+            assert "Math.round(launcherWindow.width)" in original
+            assert "Math.round(launcherWindow.height)" in original
+        else:
+            assert f"Math.round({window_id}.width)" in original
+            assert f"Math.round({window_id}.height)" in original
+
     # Native notification popups already use layer-shell; only the
     # notification center should be replaced.
     notifications = (output / "Notifications.qml").read_text(encoding="utf-8")
