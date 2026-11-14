@@ -113,7 +113,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] `swaymsg -r -t get_outputs` confirms `allow_tearing` on both active outputs.
 - [ ] Fullscreen Steam/Proton and gamescope windows are eligible for immediate page flips; confirm behavior with real GPU/display measurements.
 - [ ] VRR remains opt-in and must be assessed independently of tearing.
-- [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work, with the Sway-specific Fuzzel selector (no ugly default portal picker) after restarting xdg-desktop-portal-wlr.
+- [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work, with the Sway Quickshell selector (no Fuzzel) after restarting xdg-desktop-portal-wlr without interrupting an active recording. Check keyboard/mouse source selection, Escape cancellation, and fullscreen overlays on both monitors.
 - [ ] Clipboard, screenshots, file dialog and desktop portals work after reboot.
 - [ ] Sway's folder MIME association matches the file manager selected in Awtarchy (PCManFM-Qt by default), without overriding any unrelated MIME defaults.
 - [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser. PCManFM-Qt must inherit the same qt5ct/qt6ct/Kvantum dark theme as Hyprland after updating the Ly Sway wrapper and relogging.

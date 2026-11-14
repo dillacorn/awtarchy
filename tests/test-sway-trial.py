@@ -124,7 +124,8 @@ assert "mako" not in sway_manager_install.split()
 assert "swaybg swayidle swaylock" in MANAGER
 screencast = (TRIAL / "screencast-chooser.conf").read_text()
 assert "chooser_type=dmenu" in screencast
-assert "chooser_cmd=fuzzel --dmenu" in screencast
+assert "portal-chooser.py" in screencast
+assert "chooser_cmd=fuzzel" not in screencast
 assert '.config/xdg-desktop-portal-wlr/sway' in (TRIAL / "sync.py").read_text()
 
 # Every Hyprland explicitly-floating utility must float in Sway on native

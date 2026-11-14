@@ -116,6 +116,9 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     assert "/quickshell/awtarchy-sway/theme.json" in theme
     assert "/sway/awtarchy-trial/theme-apply.sh" in picker
     assert (shell / "SwayDragBridge.qml").is_file()
+    assert (shell / "ScreenSharePicker.qml").is_file()
+    assert 'target: "screenshare"' in qml_shell
+    assert 'ScreenSharePicker.open(requestFile)' in qml_shell
     assert "SwayBridge" in qml_shell
     # Sway does not have toplevel title at initial map; pre-float by app ID.
     assert 'for_window [app_id="(?i)^(quickshell|awtarchy-sway|awtarchy-sway-quickshell)$"] floating enable' in config.decode()

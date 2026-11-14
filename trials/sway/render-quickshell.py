@@ -10,7 +10,7 @@ import re
 import shutil
 import sys
 
-BRIDGE_FILES = ("SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml", "SwayDragBridge.qml", "SwayFlyoutWindow.qml")
+BRIDGE_FILES = ("ScreenSharePicker.qml", "SwayBridge.qml", "SwayFocusGrab.qml", "ScreenShareGuardCard.qml", "SwayDragBridge.qml", "SwayFlyoutWindow.qml")
 # The shared Awtarchy UI has per-flyout capture exclusion controls.
 # Sway does not provide a verified equivalent to Hyprland's capture rules.
 # Never advertise those controls as effective, or corrupt shared Hyprland
@@ -247,6 +247,18 @@ def render(source: Path, destination: Path, trial: Path):
                 if path.name == "shell.qml":
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-sway")
                     text = text.replace("awtarchy-quickshell", "awtarchy-sway-quickshell")
+                    # IPC only in the private Sway shell; Hyprland stays untouched.
+                    if not text.endswith("\n}\n"):
+                        raise ValueError("Unexpected Sway shell root ending")
+                    text = text[:-2] + ("\\n"
+                        '    IpcHandler {\\n'
+                        '        target: "screenshare"\\n'
+                        '        function open(requestFile: string): bool {\\n'
+                        '            return ScreenSharePicker.open(requestFile);\\n'
+                        '        }\\n'
+                        '    }\\n'
+                        '}\\n'
+                    ).replace('\\n', '\n')
                 if path.name == "BarButton.qml":
                     text = prefer_sway_discrete_wheel(text)
                 if path.name == "Bar.qml":

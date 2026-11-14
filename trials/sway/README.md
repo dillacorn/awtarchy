@@ -21,7 +21,7 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - Ly session: Sway (Awtarchy Trial)
 - System session launcher: /usr/local/bin/awtarchy-sway-session
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
-- Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Fuzzel dmenu)
+- Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Quickshell overlay with exact portal-source protocol; Fuzzel not used by OBS)
 - Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock or Mako installed for this Quickshell-based session)
 - Hyprland config, Quickshell profile and Hyprland Ly session remain installed.
 
@@ -56,6 +56,7 @@ Implemented means committed source, **not live verified**.
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; power menu plus secondary shades use overlay layer to cover fullscreen windows; live testing required |
 | Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. No swaylock shortcut or fallback; unavailable/failed WlSessionLock returns failure. |
 | Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly session wrapper now exports the same qt5ct/qt6ct, Kvantum-compatible and GTK dark-theme environment as Hyprland; the installed root-owned wrapper must also be updated before relogin takes effect. |
+| OBS screencast source picker | Quickshell theme-aware fullscreen overlay with keyboard/mouse selection and Escape cancellation. The chooser returns only exact monitor/window entries provided by xdg-desktop-portal-wlr. Restart the Sway portal service after applying this config when no live capture is active; never auto-approve screen sharing. |
 | Clipboard screenshots | grim/slurp/wl-copy; Super+Shift+D copies a selected output without an editor, while Super+Shift+F opens Satty |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |

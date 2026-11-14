@@ -314,6 +314,7 @@ def main():
                 ".config/sway/awtarchy-trial/mime-parity.py",
                 ".config/sway/awtarchy-trial/focus-cycle.py",
                 ".config/sway/awtarchy-trial/mode-control.sh",
+                ".config/sway/awtarchy-trial/portal-chooser.py",
                 ".config/xdg-desktop-portal-wlr/sway",
             )
             if not (generated_qml or new_helper):
@@ -370,6 +371,9 @@ def main():
     print("Personal config and user-modified files were never overwritten.")
     if args.mode == "apply":
         activate_in_running_sway(home, desired, changed_keys)
+        if ".config/xdg-desktop-portal-wlr/sway" in changed_keys:
+            print("Portal source picker updated. When no screencast is active, "
+                  "run: systemctl --user restart xdg-desktop-portal-wlr")
 
 if __name__ == "__main__":
     try:
