@@ -19,6 +19,9 @@ assert "WlSessionLock {" in SOURCE_LOCK.read_text()
 assert "return sessionLock.secure" in SOURCE_LOCK.read_text()
 assert "PamContext {" in AUTH.read_text()
 assert "password.conf" in AUTH.read_text()
+manager_source = (ROOT / "config/hypr/scripts/awtarchy_lock.sh").read_text()
+assert "wait_secure 5 || return $?" in manager_source, (
+    "Power manager must not sleep before compositor confirms WlSessionLock.secure")
 
 with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
     home = Path(t)
@@ -33,7 +36,8 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
         "printf 'manager:%s\\n' \"$*\" >>\"$AWTARCHY_LOCK_TEST_LOG\"\n"
         "case \"$1\" in\n"
         "  status) printf 'secure\\n' ;;\n"
-        "  lock|wait-secure|suspend|hibernate) true ;;\n"
+        "  wait-secure) [[ \"${AWTARCHY_LOCK_TEST_FAIL_WAIT:-0}\" != 1 ]] ;;\n"
+        "  lock|suspend|hibernate) true ;;\n"
         "  *) false ;;\n"
         "esac\n"
     )
@@ -80,6 +84,14 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
     assert log.read_text().splitlines() == [
         "manager:status", "manager:wait-secure 7",
     ]
+
+    failed_wait = env.copy()
+    failed_wait["AWTARCHY_LOCK_TEST_FAIL_WAIT"] = "1"
+    log.write_text("")
+    assert run("lock", environment=failed_wait).returncode != 0
+    assert log.read_text().splitlines() == [
+        "manager:lock", "manager:wait-secure 5",
+    ], "Do not report success or spawn swaylock over a pending Quickshell lock"
 
     # The fallback can only be used for an explicit lock request.
     manager.unlink()
