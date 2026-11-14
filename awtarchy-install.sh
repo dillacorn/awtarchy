@@ -415,6 +415,25 @@ repair_target_ownership() {
   done
 }
 
+# Register the exact unreleased checkout only when explicitly selected.
+# Installing this command does not install packages or replace managed configs.
+install_trial_compositor_command() {
+  [[ "$(source_branch)" == SwayWM_Migration_Trial_Investigation ]] || return 0
+  local helper="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local dest="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local source_marker="$TARGET_HOME/.local/state/awtarchy/compositor-trial-source"
+  [[ -f "$helper" && ! -L "$helper" ]] || {
+    printf 'ERROR: Sway trial management backend missing.\n' >&2
+    return 1
+  }
+  bash -n "$helper" || return 1
+  run_as_target install -d -m 0755 "$TARGET_HOME/.local/share/awtarchy" "$TARGET_HOME/.local/state/awtarchy"
+  run_as_target install -m 0755 "$helper" "$dest"
+  printf '%s\n' "$SCRIPT_DIR" | run_as_target tee "$source_marker" >/dev/null
+  run_as_target chmod 0644 "$source_marker"
+  printf 'Registered Sway trial compositor menu from %s\n' "$SCRIPT_DIR"
+}
+
 refresh_existing_command() {
   local bin_dir="${TARGET_HOME}/.local/bin"
   local data_dir="${TARGET_HOME}/.local/share/awtarchy"
@@ -434,6 +453,8 @@ refresh_existing_command() {
   run_as_target install -d -m 0755 "$bin_dir" "$data_dir" "$state_dir"
   run_as_target install -m 0755 "$LAUNCHER_SOURCE" "${bin_dir}/awtarchy"
   run_as_target install -m 0755 "$RUNTIME_SOURCE" "${data_dir}/awtarchy-runtime.sh"
+
+  install_trial_compositor_command
 
   command_tag="$(source_release_tag)"
   revision="$(source_revision)"

@@ -237,7 +237,7 @@ print_status_for_monitor() {
   fi
   tooltip+="
 Hover briefly, then scroll to adjust this display
-Left/right click to toggle Hypr Quick Settings"
+Left/right click to toggle Quick Settings"
 
   jq -cn \
     --arg text " ${percent}%" \
@@ -301,12 +301,13 @@ def owner_is_alive():
         return True
     return True
 
-IN_ATTRIB = 0x00000004
 IN_CLOSE_WRITE = 0x00000008
 IN_MOVED_TO = 0x00000080
-IN_CREATE = 0x00000100
 IN_DELETE = 0x00000200
-mask = IN_ATTRIB | IN_CLOSE_WRITE | IN_MOVED_TO | IN_CREATE | IN_DELETE
+# IN_CREATE fires before the writer has finished the record. Reading at
+# creation can falsely retry DDC while the startup status is being written.
+# IN_CLOSE_WRITE and IN_MOVED_TO cover completed writes (direct or atomic).
+mask = IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE
 
 libc = ctypes.CDLL(None, use_errno=True)
 init = libc.inotify_init1
@@ -454,15 +455,21 @@ adjust() {
 }
 
 toggle_quick_settings() {
-  local quickshell_manager
-  quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/quickshell.sh"
+  local quickshell_manager profile
+  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then
+    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/sway/awtarchy-trial/quickshell.sh"
+    profile="awtarchy-sway"
+  else
+    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/quickshell.sh"
+    profile="awtarchy"
+  fi
 
-  if qs -c awtarchy ipc call quicksettings toggle >/dev/null 2>&1; then
+  if qs -c "$profile" ipc call quicksettings toggle >/dev/null 2>&1; then
     return 0
   fi
 
   "$quickshell_manager" start >/dev/null 2>&1 || true
-  qs -c awtarchy ipc call quicksettings toggle >/dev/null
+  qs -c "$profile" ipc call quicksettings toggle >/dev/null
 }
 
 case "${1:-status}" in

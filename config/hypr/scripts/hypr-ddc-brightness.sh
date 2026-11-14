@@ -81,16 +81,26 @@ need_cmd() {
 }
 
 get_focused_monitor_tsv() {
-  if [[ -n "${TARGET_CONN:-}" ]]; then
-    hyprctl -j monitors 2>/dev/null | jq -r --arg conn "$TARGET_CONN" '
-      .[] | select(.name == $conn) |
-      [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
-    ' | head -n1
+  local inventory
+  # Sway exposes the same DRM connector and monitor identity through its own
+  # IPC. The DDC and kernel backlight controllers are compositor-independent.
+  # Keep the Hyprland path unchanged for normal Awtarchy sessions.
+  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then
+    inventory="$(swaymsg -r -t get_outputs 2>/dev/null)" || return 1
   else
-    hyprctl -j monitors 2>/dev/null | jq -r '
-      .[] | select(.focused==true or .focused=="yes") |
+    inventory="$(hyprctl -j monitors 2>/dev/null)" || return 1
+  fi
+
+  if [[ -n "${TARGET_CONN:-}" ]]; then
+    jq -r --arg conn "$TARGET_CONN" '
+      .[] | select(.name == $conn and .active != false) |
       [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
-    ' | head -n1
+    ' <<<"$inventory" | head -n1
+  else
+    jq -r '
+      .[] | select((.focused==true or .focused=="yes") and .active != false) |
+      [(.name//""),(.make//""),(.model//""),(.serial//""),(.description//"")] | @tsv
+    ' <<<"$inventory" | head -n1
   fi
 }
 
@@ -165,7 +175,11 @@ EOF
     ;;
 esac
 
-need_cmd hyprctl
+if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then
+  need_cmd swaymsg
+else
+  need_cmd hyprctl
+fi
 need_cmd jq
 need_cmd timeout
 

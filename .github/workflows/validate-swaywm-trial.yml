@@ -1,0 +1,121 @@
+name: Validate SwayWM experimental trial
+
+on:
+  push:
+    branches: [SwayWM_Migration_Trial_Investigation]
+    paths:
+      - ".github/workflows/validate-swaywm-trial.yml"
+      - "trials/sway/**"
+      - "tests/test-sway-*.py"
+      - "config/hypr/hyprland.lua"
+      - "config/hypr/scripts/quickshell.sh"
+      - "config/quickshell/awtarchy/**"
+      - "config/quickshell/awtarchy-lock/**"
+      - "awtarchy-install.sh"
+      - "local/bin/awtarchy"
+      - "local/share/awtarchy/awtarchy-runtime.sh"
+      - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/validate-swaywm-trial.yml"
+      - "trials/sway/**"
+      - "tests/test-sway-*.py"
+      - "config/hypr/hyprland.lua"
+      - "config/hypr/scripts/quickshell.sh"
+      - "config/quickshell/awtarchy/**"
+      - "config/quickshell/awtarchy-lock/**"
+      - "awtarchy-install.sh"
+      - "local/bin/awtarchy"
+      - "local/share/awtarchy/awtarchy-runtime.sh"
+      - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+
+permissions:
+  contents: read
+
+jobs:
+  static-and-compositor-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    container: archlinux:latest
+    steps:
+      - name: Install current Arch Sway and validation tools
+        run: |
+          pacman -Syu --noconfirm --needed git python bash sway jq qt6-declarative
+
+      - name: Check out exact trial commit
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Run Sway regression checks
+        run: |
+          python tests/test-sway-trial.py
+          python tests/test-sway-ipc.py
+          python tests/test-sway-monitors.py
+          python tests/test-sway-quickshell-parity.py
+          python tests/test-sway-flyout-layer-shell.py
+          python tests/test-sway-lock.py
+          python tests/test-sway-lock-capture.py
+          python tests/test-sway-mime-parity.py
+          python tests/test-sway-sync.py
+          python tests/test-sway-satty.py
+          python tests/test-sway-ddc.py
+          python tests/test-sway-utility-toggle.py
+          python tests/test-sway-theme-colors.py
+
+      - name: Parse generated Sway Quickshell layer-shell QML
+        run: |
+          generated="$(mktemp -d)"
+          python3 trials/sway/render-quickshell.py \
+            --source config/quickshell/awtarchy \
+            --dest "$generated/awtarchy-sway" \
+            --bridge-dir trials/sway
+          for filename in \
+              SwayFlyoutWindow.qml Launcher.qml ClipboardMenu.qml \
+              Notifications.qml QuickSettings.qml NetworkMenu.qml \
+              BluetoothMenu.qml BatteryMenu.qml; do
+            /usr/lib/qt6/bin/qmlformat \
+              "$generated/awtarchy-sway/$filename" >/dev/null
+          done
+
+      - name: Parse configuration using current Arch Sway
+        env:
+          WLR_BACKENDS: headless
+          XDG_RUNTIME_DIR: /tmp/awtarchy-sway-ci-runtime
+        run: |
+          install -d -m 0700 "$XDG_RUNTIME_DIR"
+          # Arch Sway carries file capabilities that GitHub container policy
+          # cannot grant. A non-capability copy can still validate config.
+          install -m 0755 "$(command -v sway)" "$XDG_RUNTIME_DIR/sway-validator"
+          "$XDG_RUNTIME_DIR/sway-validator" -C -c trials/sway/config
+          # Validate the precise two-monitor profile with the real compositor.
+          python - "$XDG_RUNTIME_DIR/sway-monitors.config" <<'PY'
+          import importlib.util
+          from pathlib import Path
+          import sys
+          root = Path.cwd()
+          module_path = root / "trials/sway/import-hypr-monitors.py"
+          spec = importlib.util.spec_from_file_location("sway_import", module_path)
+          mod = importlib.util.module_from_spec(spec)
+          spec.loader.exec_module(mod)
+          base = (root / "trials/sway/config").read_text(encoding="utf-8")
+          modes = [
+              "output DP-1 mode 1920x1080@400.002Hz position 0 1080 scale 1.0",
+              "output DP-3 mode 1920x1080@239.761Hz position 0 0 scale 1.0",
+          ]
+          Path(sys.argv[1]).write_text(mod.insert_profile(base, modes), encoding="utf-8")
+          PY
+          "$XDG_RUNTIME_DIR/sway-validator" -C -c "$XDG_RUNTIME_DIR/sway-monitors.config"
+
+
+  patch-consistency:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check trial changes for whitespace errors
+        run: git diff --check origin/main...HEAD

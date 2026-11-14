@@ -27,6 +27,11 @@ fail() {
 command -v python3 >/dev/null 2>&1 || fail "python3 is required"
 command -v pgrep >/dev/null 2>&1 || fail "pgrep is required"
 command -v jq >/dev/null 2>&1 || fail "jq is required"
+# Inotify must not read an incomplete state file on IN_CREATE. A startup
+# controller could otherwise be queried again before its write is finished.
+grep -Fq 'mask = IN_CLOSE_WRITE | IN_MOVED_TO | IN_DELETE' "$WATCHER" \
+  || fail "DDC watcher must refresh only after a completed state write"
+
 
 fakebin="${TMP}/fakebin"
 cache_dir="${TMP}/cache/hypr-ddc-brightness"
