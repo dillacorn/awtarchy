@@ -253,6 +253,15 @@ def main():
             print(("INSTALL: " if args.mode == "apply" else "WOULD INSTALL: ")
                   + key + " (" + label + ")")
             if args.mode == "apply":
+                if key == ".config/xdg-desktop-portal-wlr/sway":
+                    # Only create the Sway-specific portal configuration
+                    # directory; preserve all existing files and symlinks.
+                    directory = path.parent
+                    if directory.is_symlink() or (
+                        directory.exists() and not directory.is_dir()
+                    ):
+                        raise ValueError("Unsafe Sway portal configuration directory")
+                    directory.mkdir(mode=0o700, exist_ok=True)
                 atomic_replace(path, body)
                 updated[key] = target
             continue
