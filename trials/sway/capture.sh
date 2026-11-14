@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
-# Sway: grim/slurp capture -> clipboard + Satty. Editing is never lock-held.
+# Sway: select/copy a display without opening Satty, or capture to Satty.
 set -euo pipefail
 [[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" &&
    -n "${WAYLAND_DISPLAY:-}" ]] || {
     printf 'Capture requires an active Sway session\n' >&2; exit 1;
 }
-[[ $# -eq 1 ]] || { printf 'Usage: capture.sh area|window|display|output\n' >&2; exit 2; }
+[[ $# -eq 1 ]] || { printf 'Usage: capture.sh area|window|display|display-copy|output\n' >&2; exit 2; }
 mode="$1"
-case "$mode" in area|window|display|output) ;; *) printf 'Invalid capture mode\n' >&2; exit 2 ;; esac
+case "$mode" in area|window|display|display-copy|output) ;; *) printf 'Invalid capture mode\n' >&2; exit 2 ;; esac
 for tool in grim slurp wl-copy satty flock mktemp; do
     command -v "$tool" >/dev/null 2>&1 || {
         printf 'Missing capture dependency: %s\n' "$tool" >&2; exit 127;
@@ -33,7 +33,7 @@ capture() {
     }
     case "$mode" in
         area) geometry="$(slurp -b '#ffffff20' -c '#00000040' 9>&-)" || return 1 ;;
-        display|output) geometry="$(slurp -o -r -c '#00000000' 9>&-)" || return 1 ;;
+        display|display-copy|output) geometry="$(slurp -o -r -c '#00000000' 9>&-)" || return 1 ;;
         window)
             rectangles="$(swaymsg -r -t get_tree 9>&- | jq -r '
                 .. | objects
@@ -68,6 +68,10 @@ fi
 [[ -n "$image" ]] || exit 0
 [[ -f "$image" && ! -L "$image" ]] || exit 1
 trap 'rm -f -- "$image"' EXIT
+# Super+Shift+D is clipboard-only; do not launch an editor for this path.
+if [[ "$mode" == display-copy ]]; then
+    exit 0
+fi
 directory="$HOME/Pictures/Screenshots"
 mkdir -p -- "$directory"
 satty --filename "$image" \
