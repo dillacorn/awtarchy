@@ -61,6 +61,18 @@ nested["nodes"][0]["nodes"][0]["nodes"][0]["nodes"][0]["focused"] = False
 nested["nodes"][0]["nodes"][0]["nodes"][0]["nodes"][1]["focused"] = True
 assert module.choice(nested, focus, "next") == 21
 
+# Preserve Sway's own focus next/prev for tiling-only workspaces.
+tiled_only = tree([leaf(11, "firefox", focused=True), leaf(12, "foot")], [])
+assert module.choice(tiled_only, focus, "next") == "native"
+assert module.choice(tiled_only, focus, "prev") == "native"
+with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "sway",
+                             "SWAYSOCK": "/tmp/fake-sway"}), \\
+     patch.object(module, "ipc", side_effect=[
+         tiled_only, focus, [{"success": True}]
+     ]) as ipc, patch.object(module.sys, "argv", ["focus-cycle.py", "next"]):
+    module.main()
+    assert ipc.call_args.args == ("-t", "command", "focus next")
+
 assert module.choice(tree([leaf(1, "only")], []), focus, "next") is None
 assert module.choice(tree([], []), focus, "prev") is None
 try:
