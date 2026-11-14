@@ -19,14 +19,26 @@ assert "WlSessionLock {" in SOURCE_LOCK.read_text()
 assert "return sessionLock.secure" in SOURCE_LOCK.read_text()
 assert "PamContext {" in AUTH.read_text()
 assert "password.conf" in AUTH.read_text()
-manager_source = (ROOT / "config/hypr/scripts/awtarchy_lock.sh").read_text()
+manager_source = (ROOT / "trials/sway/lock-manager.sh").read_text()
+upstream_manager = (ROOT / "config/hypr/scripts/awtarchy_lock.sh").read_text()
+capture_source = (ROOT / "trials/sway/lock-capture.sh").read_text()
+assert manager_source.replace('CAPTURE_HELPER="${SCRIPT_DIR}/lock-capture.sh"',
+    'CAPTURE_HELPER="${SCRIPT_DIR}/quickshell_lockscreen_capture.sh"').splitlines()[3:] == (
+        upstream_manager.splitlines()[2:]), (
+    "Sway manager must retain the same secure lock/power semantics as Hyprland")
 assert "wait_secure 5 || return $?" in manager_source, (
     "Power manager must not sleep before compositor confirms WlSessionLock.secure")
+assert 'CAPTURE_HELPER="${SCRIPT_DIR}/lock-capture.sh"' in manager_source
+assert "swaymsg -r -t get_outputs" in capture_source
+assert "hyprctl" not in capture_source
+assert "stage-promote-clean)" in capture_source
+assert "stage-complete)" in capture_source
+assert "consume-prepared)" in capture_source
 
 with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
     home = Path(t)
     config = home / "config"
-    manager = config / "hypr/scripts/awtarchy_lock.sh"
+    manager = config / "sway/awtarchy-trial/lock-manager.sh"
     manager.parent.mkdir(parents=True)
     bin_path = home / "bin"
     bin_path.mkdir()
