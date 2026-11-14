@@ -79,6 +79,50 @@ assert re.search(r"input type:pointer \{\s*accel_profile flat\s*pointer_accel 0\
     "Sway must explicitly disable libinput mouse acceleration")
 assert "input type:touchpad {" in CONFIG
 
+# Every Hyprland explicitly-floating utility must float in Sway on native
+# Wayland and XWayland. Keep class/app_id rules exact to avoid floating games.
+HYPRLAND = (ROOT / "config/hypr/hyprland.lua").read_text(encoding="utf-8")
+floating_utility_sizes = {
+    "btop": "80 ppt 85 ppt",
+    "maccel": "90 ppt 96 ppt",
+    "hyprmoncfg": "85 ppt 90 ppt",
+    "smtty": "50 ppt 65 ppt",
+    "smtty-O": "50 ppt 65 ppt",
+    "wallpicker": "85 ppt 90 ppt",
+    "awtarchy-qalc": "347 px 510 px",
+    "awtarchy-default-apps": "540 px 460 px",
+    "Wiremix": "65 ppt 70 ppt",
+    "org.pulseaudio.pavucontrol": "55 ppt 70 ppt",
+    "Pulsemixer": "55 ppt 70 ppt",
+    "hypr_quicksettings": "70 ppt 50 ppt",
+    "awtarchy-tips-tui": "50 ppt 50 ppt",
+    "hyprbars": "30 ppt 10 ppt",
+}
+for utility, geometry in floating_utility_sizes.items():
+    hypr_class = utility.replace(".", "\\\\.")
+    assert f'match = {{ class = "^{hypr_class}$" }}, float = true' in HYPRLAND, (
+        "Hyprland reference removed or changed its floating class: " + utility)
+    sway_pattern = utility.replace(".", "[.]")
+    for criterion in ("app_id", "class"):
+        rule = (f'for_window [{criterion}="^{sway_pattern}$"] floating enable, '
+                f'resize set {geometry}, move position center')
+        assert rule in CONFIG, "Missing Sway floating parity: " + rule
+
+# The Qt main window carries this exact upstream title, while dialogs have
+# different titles. Match all ProtonUp-Qt children for floating, but never
+# apply 45%-by-45% main-window sizing to each child window.
+for criterion in ("app_id", "class"):
+    assert (f'for_window [{criterion}="' +
+            '^(net[.]davidotek[.]pupgui2|pupgui2|ProtonUp-Qt)$"] floating enable') in CONFIG
+assert ('for_window [title="^ProtonUp-Qt( - Wine/Proton Installer)?$"] '
+        'floating enable, resize set 45 ppt 45 ppt, move position center') in CONFIG
+assert 'for_window [window_type="dialog"] floating enable' in CONFIG
+assert 'for_window [window_role="^(dialog|pop-up|task_dialog)$"] floating enable' in CONFIG
+for line in CONFIG.splitlines():
+    if line.startswith("for_window ") and "floating enable" in line:
+        assert '[app_id=".*"]' not in line and '[class=".*"]' not in line, (
+            "Do not turn utility float parity into global app floating")
+
 # Immediate page flips need output AND application permission; a fullscreen
 # window remains required and ordinary desktop apps are not opted in.
 assert "output * allow_tearing yes" in CONFIG
