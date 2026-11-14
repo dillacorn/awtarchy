@@ -65,7 +65,51 @@ def render_layer_flyout(text: str, filename: str) -> str:
         raise ValueError(f"Missing exact Sway flyout window: {filename}:{window_id}")
     if text.count("FloatingWindow {") != 1:
         raise ValueError(f"Unexpected extra toplevel windows in {filename}")
-    return text.replace(source, target, 1)
+    # The Hyprland owners read QWindow.width/height, where the compositor
+    # reports the resized floating toplevel dimensions. Under Sway's layer
+    # shell the requested geometry is instead driven by implicitWidth/Height,
+    # or by each popup's configuredPanelWidth/Height. Reading the mapped
+    # PanelWindow geometry for Save can silently persist the old dimensions
+    # (and leave settingsDirty false after a successful drag).
+    #
+    # Keep the existing owner save/cancel/restore logic intact, but make its
+    # "live" dimension source authoritative for Sway alone.
+    if filename == "Launcher.qml":
+        substitutions = {
+            "readonly property int liveWidth: Math.round(launcherWindow.width)":
+                "readonly property int liveWidth: Math.round(launcherWindow.implicitWidth)",
+            "readonly property int liveHeight: Math.round(launcherWindow.height)":
+                "readonly property int liveHeight: Math.round(launcherWindow.implicitHeight)",
+        }
+    else:
+        expected_width = (
+            f"readonly property int livePanelWidth: {window_id}.visible "
+            f"&& {window_id}.width > 0\\n"
+            f"        ? clampWidth(Math.round({window_id}.width)) : configuredPanelWidth"
+        ).replace('\\n', '\n')
+        if filename == "QuickSettings.qml":
+            expected_height = (
+                f"readonly property int livePanelHeight: {window_id}.visible "
+                f"&& !root.settingsOpen\\n"
+                f"        && {window_id}.height > 0\\n"
+                f"        ? clampHeight(Math.round({window_id}.height)) : configuredPanelHeight"
+            ).replace('\\n', '\n')
+        else:
+            expected_height = (
+                f"readonly property int livePanelHeight: {window_id}.visible "
+                f"&& {window_id}.height > 0\\n"
+                f"        ? clampHeight(Math.round({window_id}.height)) : configuredPanelHeight"
+            ).replace('\\n', '\n')
+        substitutions = {
+            expected_width: "readonly property int livePanelWidth: configuredPanelWidth",
+            expected_height: "readonly property int livePanelHeight: configuredPanelHeight",
+        }
+    rendered = text.replace(source, target, 1)
+    for original, replacement in substitutions.items():
+        if rendered.count(original) != 1:
+            raise ValueError(f"Sway flyout live geometry source changed: {filename}")
+        rendered = rendered.replace(original, replacement, 1)
+    return rendered
 
 
 def disable_unavailable_capture_controls(text: str, surface: str) -> str:
