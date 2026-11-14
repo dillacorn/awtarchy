@@ -105,7 +105,8 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
         "manager:lock", "manager:wait-secure 5",
     ], "Do not report success or spawn swaylock over a pending Quickshell lock"
 
-    # The fallback can only be used for an explicit lock request.
+    # No fallback path: when Quickshell is missing, lock and power commands
+    # refuse the operation rather than showing the unthemed swaylock screen.
     manager.unlink()
     capture = config / "sway/awtarchy-trial/lock-capture.sh"
     capture.write_text(
@@ -113,19 +114,18 @@ with tempfile.TemporaryDirectory(prefix="sway-lock-test-") as t:
         "printf 'capture:%s\\n' \"$*\" >>\"$AWTARCHY_LOCK_TEST_LOG\"\n"
     )
     log.write_text("")
-    assert run("lock").returncode == 0
-    assert log.read_text().splitlines() == [
-        "capture:discard-prepared", "swaylock:-f -c 10151c",
-    ]
-    log.write_text("")
+    assert run("lock").returncode != 0
+    assert run("lock-prepared").returncode != 0
     assert run("suspend").returncode != 0
     assert run("hibernate").returncode != 0
-    assert not log.exists() or log.read_text() == ""
     assert run("wait-secure").returncode != 0
+    assert log.read_text() == "", (
+        "Missing Quickshell manager must not start swaylock or fall back")
+    assert "swaylock" not in LOCK.read_text()
 
     # Never run a real lock outside an active Sway session.
     invalid = env.copy()
     invalid["XDG_CURRENT_DESKTOP"] = "Hyprland"
     assert run("lock", environment=invalid).returncode != 0
 
-print("PASS: Sway uses secure Quickshell lock manager; fallback cannot authorize suspend")
+print("PASS: Sway locks only with verified Quickshell and fails closed without swaylock")
