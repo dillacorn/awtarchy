@@ -158,6 +158,26 @@ def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
                              + (reply.stderr.strip() or reply.stdout.strip()))
         print("LIVE: Sway configuration reloaded; applications and workspaces retained.")
 
+    # Activate the newly installed daemon without a logout. The manager
+    # checks the exact Sway socket and rejects unrelated compositor sessions.
+    idle_keys = {
+        '.config/sway/awtarchy-trial/idle-manager.py',
+        '.config/sway/awtarchy-trial/idle-action.sh',
+        '.config/sway/awtarchy-trial/swayidle.conf',
+    }
+    if changed_keys & idle_keys:
+        idle = home / '.config/sway/awtarchy-trial/idle-manager.py'
+        if (idle.is_symlink() or not idle.is_file()
+                or expected.get(idle) != idle.read_bytes()):
+            print('Sway idle manager is customized/missing; automatic startup skipped.',
+                  file=sys.stderr)
+        else:
+            result = subprocess.run(['python3', str(idle), 'start'], timeout=16)
+            if result.returncode:
+                raise ValueError('Sway idle files installed but swayidle could not start; '
+                                 'check ~/.cache/awtarchy/swayidle.log')
+            print('LIVE: Sway idle daemon checked and activated without logout.')
+
     needs_shell_restart = any(
         key.startswith(".config/quickshell/awtarchy-sway/")
         or key == ".config/sway/awtarchy-trial/quickshell.sh"
@@ -315,6 +335,9 @@ def main():
                 ".config/sway/awtarchy-trial/focus-cycle.py",
                 ".config/sway/awtarchy-trial/mode-control.sh",
                 ".config/sway/awtarchy-trial/portal-chooser.py",
+                ".config/sway/awtarchy-trial/idle-manager.py",
+                ".config/sway/awtarchy-trial/idle-action.sh",
+                ".config/sway/awtarchy-trial/swayidle.conf",
                 ".config/xdg-desktop-portal-wlr/sway",
             )
             if not (generated_qml or new_helper):

@@ -41,7 +41,7 @@ jobs:
     steps:
       - name: Install current Arch Sway and validation tools
         run: |
-          pacman -Syu --noconfirm --needed git python bash sway jq qt6-declarative
+          pacman -Syu --noconfirm --needed git python bash sway swayidle jq qt6-declarative
 
       - name: Check out exact trial commit
         uses: actions/checkout@v4
@@ -55,6 +55,7 @@ jobs:
           python tests/test-sway-focus-cycle.py
           python tests/test-sway-modes.py
           python tests/test-sway-screen-picker.py
+          python tests/test-sway-idle.py
           python tests/test-sway-monitors.py
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py

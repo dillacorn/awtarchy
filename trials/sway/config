@@ -66,6 +66,8 @@ exec bash $trial/session.sh
 # Reapply the selected border palette after every Sway config reload.
 exec_always bash $trial/theme-colors.sh
 exec_always bash $trial/mode-state.sh sync
+# One validated swayidle per Sway socket; no session logout/restart required.
+exec_always python3 $trial/idle-manager.py start
 
 # App shortcuts (match the existing Hyprland combinations).
 bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle

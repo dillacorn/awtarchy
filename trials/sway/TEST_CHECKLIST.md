@@ -119,6 +119,13 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser. PCManFM-Qt must inherit the same qt5ct/qt6ct/Kvantum dark theme as Hyprland after updating the Ly Sway wrapper and relogging.
 - [ ] A user-provided `sway-mimeapps.list` folder override is preserved and produces an explicit warning instead of being overwritten.
 - [ ] Power menu lock, suspend and shutdown have correct safeguards.
+- [ ] `python3 ~/.config/sway/awtarchy-trial/idle-manager.py status` reports `running` without duplicates after Sway reload or managed update.
+- [ ] Idle after 3 minutes locks using the existing secure Quickshell lockscreen (never swaylock).
+- [ ] Idle after 4 minutes powers displays off; input wakes the displays to the secure lockscreen.
+- [ ] Idle after 9 minutes attempts suspend without overriding systemd/logind sleep inhibitors, and returns to usable displays upon wake.
+- [ ] Enable the bar's Keep Awake control: no 3/4/9 minute actions occur. Disable it and verify idle returns after new user activity.
+- [ ] Active OBS recording/streaming/replay and fullscreen games protect idle actions; Teams call sleep inhibitors remain honored. Vesktop/Telegram are not granted unconditional Keep Awake.
+- [ ] A failed/unavailable Quickshell secure lock prevents automatic display-off or automatic suspend.
 - [ ] Idle inhibition during fullscreen games and calls behaves as intended.
 - [ ] Sway logout returns to Ly without affecting Hyprland startup.
 - [ ] Hyprland still starts with its original Quickshell and monitor settings.

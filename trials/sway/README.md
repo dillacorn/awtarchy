@@ -56,6 +56,7 @@ Implemented means committed source, **not live verified**.
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; power menu plus secondary shades use overlay layer to cover fullscreen windows; live testing required |
 | Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. No swaylock shortcut or fallback; unavailable/failed WlSessionLock returns failure. |
 | Directory default application | Sway reconciles `inode/directory` with Awtarchy's file-manager choice and preserves custom overrides. The Sway Ly session wrapper now exports the same qt5ct/qt6ct, Kvantum-compatible and GTK dark-theme environment as Hyprland; the installed root-owned wrapper must also be updated before relogin takes effect. |
+| Automatic Sway idle/suspend | Native swayidle daemon, started once per actual Sway socket and refreshed on managed updates/reloads. 3-minute secure Quickshell lock, 4-minute display power-off, 9-minute suspend (no bypass of logind sleep inhibitors). Keep Awake and active OBS output block these actions. Sway-native idle inhibitors protect fullscreen games and media; personal-app inhibition differences from Hyprland still need live testing. |
 | OBS screencast source picker | Quickshell theme-aware fullscreen overlay with keyboard/mouse selection and Escape cancellation. The chooser returns only exact monitor/window entries provided by xdg-desktop-portal-wlr. Restart the Sway portal service after applying this config when no live capture is active; never auto-approve screen sharing. |
 | Clipboard screenshots | grim/slurp/wl-copy; Super+Shift+D copies a selected output without an editor, while Super+Shift+F opens Satty |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
@@ -70,6 +71,33 @@ Implemented means committed source, **not live verified**.
 Do not advertise unimplemented capture protection, shader effects, or input
 modes. Where a feature is unsupported, return an explicit error or hide the
 unsafe UI instead of acknowledging a no-op.
+
+## Sway idle policy (experimental)
+
+Awtarchy now starts swayidle with the Sway-specific managed policy at
+`~/.config/sway/awtarchy-trial/swayidle.conf`; no swaylock is used.
+The manager checks the exact active Sway session and PID identity so config
+reloads do not spawn duplicate daemons or affect Hyprland. New managed idle
+files activate during the Sway updater without logging out.
+
+The idle timers use 180 seconds to lock (secure awtarchy-lock), 240 seconds to
+switch displays off, and 540 seconds to request suspend. Before and after
+system sleep the same lock and display handlers run. If the lock cannot be
+verified secure, automatic display-off and suspend refuse to proceed. The
+suspend action honors logind sleep inhibitors, unlike the manual power menu's
+force-allowed suspend. The existing Awtarchy Keep Awake indicator and active
+OBS recording/streaming/replay protect idle actions; Teams sleep inhibitors
+are preserved. Sway's native visible-window idle inhibition remains active,
+including fullscreen games. This is not identical to Hyprland's custom
+60-second bar hide, 120-second dim, or 4-hour protected-session safeguard.
+
+For read-only diagnostics in the Sway session:
+
+```bash
+python3 "$HOME/.config/sway/awtarchy-trial/idle-manager.py" status
+bash "$HOME/.config/sway/awtarchy-trial/idle-action.sh" check
+systemd-inhibit --list --no-pager
+```
 
 ## Sway Quickshell window model (experimental)
 
