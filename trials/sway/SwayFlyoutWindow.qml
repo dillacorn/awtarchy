@@ -17,6 +17,10 @@ PanelWindow {
     property string title: ""
     property string placement: "center"
     property string surfaceRole: ""
+    // Emit the completed resize to the original flyout state owner. Assigning
+    // implicitWidth here would sever its binding to root.configuredPanelWidth,
+    // so the Save button would read an obsolete per-monitor size.
+    signal resizeCommitted(int resizedWidth, int resizedHeight)
     // Notification Center anchors to the clicked bar button, not screen center.
     property real edgeAnchor: -1
     property size minimumSize: Qt.size(1, 1)
@@ -152,10 +156,11 @@ PanelWindow {
                     popup.resizeInProgress = true;
                 } else if (popup.resizeInProgress) {
                     popup.resizeInProgress = false;
-                    // Commit only after the release. Resizing mid-gesture
-                    // invalidated Sway's Wayland pointer grab.
-                    popup.implicitWidth = popup.resizePreviewWidth;
-                    popup.implicitHeight = popup.resizePreviewHeight;
+                    // Tell the original flyout owner to update its dimension
+                    // overrides; this preserves the normal Save/Restore path.
+                    // Commit only on release to keep the Wayland pointer grab.
+                    popup.resizeCommitted(popup.resizePreviewWidth,
+                        popup.resizePreviewHeight);
                 }
             }
             onActiveTranslationChanged: {
