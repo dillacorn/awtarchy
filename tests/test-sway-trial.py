@@ -91,6 +91,11 @@ for key, value in (
     ("XCURSOR_THEME", "Bibata-Modern-Ice"),
 ):
     assert f"export {key}={value}" in SESSION_LAUNCH
+# D-Bus activated apps must see the same dark theme as direct Sway exec.
+SESSION = (TRIAL / "session.sh").read_text(encoding="utf-8")
+assert "QT_QPA_PLATFORMTHEME" in SESSION
+assert "QT6CT_PLATFORM_PLUGIN" in SESSION
+assert 'session_environment[@]' in SESSION
 assert "swaybg_command -" in CONFIG
 assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
