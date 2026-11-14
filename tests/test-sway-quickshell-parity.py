@@ -146,6 +146,7 @@ assert "client.focused" in (TRIAL / "theme-colors.sh").read_text()
 assert "theme-colors.sh" in (TRIAL / "theme-apply.sh").read_text()
 assert 'themes:toggle' in (TRIAL / "ipc.sh").read_text()
 assert 'toggle-utility.py' in (TRIAL / "SwayBridge.qml").read_text()
-assert 'for_window [app_id="maccel"] floating enable' in config.decode()
+assert 'for_window [app_id="^maccel$"] floating enable' in config.decode()
+assert 'for_window [class="^maccel$"] floating enable' in config.decode()
 
 print("PASS: Sway hidden workspace occupancy, scratchpad filtering, UI positioning, gestures, theme and Satty")
