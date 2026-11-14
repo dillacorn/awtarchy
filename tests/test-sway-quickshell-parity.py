@@ -88,6 +88,9 @@ with tempfile.TemporaryDirectory(prefix="sway-ui-regression-") as directory:
     assert bar.count("SwayDragBridge.beginBarDrag") == 1
     assert bar.count("onActiveTranslationChanged:") == 2
     assert qml_shell.count("target: SwayDragBridge") == 1
+    assert "root.barDropPending && root.barDragMonitor === monitorName ? 5 : 0" in qml_shell, (
+        "Sway bar must keep layer-shell geometry stable throughout ALT+left drag")
+    assert "dragVisualActive ? 5 : 0" not in qml_shell
     assert "SwayBridge.moveWorkspace" in bar
     assert 'return workspace.focused || workspace.active || workspace.toplevels.values.length > 0;' in bar
     assert '/sway/awtarchy-trial/ddc.sh' in bar
