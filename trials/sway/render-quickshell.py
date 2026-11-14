@@ -487,6 +487,26 @@ Qs.Singleton {
                         raise ValueError("CaptureEyeButton changed")
                     text = text.replace('enabled: !root.locked', 'enabled: false')
                 if path.name == "QuickSettings.qml":
+                    # The Sway backend accepts panel output and selected
+                    # brightness output separately. The shared QML originally
+                    # sends the panel name twice; that makes the brightness
+                    # slider read the wrong display after a DP-1/DP-3 switch,
+                    # even though brightness-percent writes the selected one.
+                    # Keep Hyprland QML untouched and fail on source drift.
+                    old_targets = (
+                        '            "--status-json",\n'
+                        '            monitorName,\n'
+                        '            monitorName\n'
+                    )
+                    new_targets = (
+                        '            "--status-json",\n'
+                        '            monitorName,\n'
+                        '            (brightnessTarget.length > 0 '
+                        '? brightnessTarget : monitorName)\n'
+                    )
+                    if text.count(old_targets) != 1:
+                        raise ValueError("Sway Quick Settings monitor status arguments changed")
+                    text = text.replace(old_targets, new_targets, 1)
                     text = text.replace(
                         '/hypr/scripts/default_applications.sh',
                         '/sway/awtarchy-trial/default-apps.sh')
