@@ -146,6 +146,7 @@ assert re.search(r'(?m)^\\s*output\\s+[^#\\n]*\\s+(?:bg|background)\\s+', CONFIG
     "Sway's output background must not compete with Awtwall")
 assert 'awww-daemon' in session
 assert 'awtwall --restore' in session
+assert "swaybg_command -" in CONFIG
 
 
 for path, fragments in (
