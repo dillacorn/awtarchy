@@ -21,7 +21,9 @@ runtime="${XDG_RUNTIME_DIR:-}"
   exit 1
 }
 lock_dir="$runtime/awtarchy-locks"
-mkdir -p -m 0700 -- "$lock_dir"
+# XDG_RUNTIME_DIR itself is private; the screenshot lock file contains no data.
+# mkdir -p handles concurrent first invocations safely without a chmod race.
+mkdir -p -- "$lock_dir"
 [[ -d "$lock_dir" && ! -L "$lock_dir" ]] || {
   printf 'Unsafe screenshot lock directory\n' >&2
   exit 1
