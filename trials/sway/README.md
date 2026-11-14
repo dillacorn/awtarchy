@@ -85,10 +85,15 @@ sources are not edited.
 This removes the **regular tiled-window code path** by construction.
 Sway flyouts now use Alt+right-drag with a dimension preview, committing the
 layer-shell resize on release to avoid breaking the pressed-pointer grab.
-The resize callback goes through the original launcher/menu size override so
-per-monitor Save/Restore behavior uses the real resized dimensions. This is
-not yet a live animated surface resize, which would need a verified way to
-retain the pointer grab while changing layer-shell geometry.
+The resize callback goes through the original launcher/menu size override.
+Sway's generated owners now treat the requested layer-shell dimensions as
+the authoritative live values for Save, Copy, Restore and the unsaved-change
+indicator. The original floating-window owners on Hyprland still measure the
+compositor-reported window size. These paths share the existing persistent
+per-monitor settings backend, without introducing separate Sway geometry
+state. Live reopen/relogin verification is still required.
+This is not yet a live animated surface resize, which would need a verified
+way to retain the pointer grab while changing layer-shell geometry.
 The shortcut-opened launcher and power menu request immediate keyboard focus.
 Sway's Alt+left bar drag keeps layer-shell margins unchanged until pointer
 release; changing the bar geometry during an active grab had cut the gesture short.
