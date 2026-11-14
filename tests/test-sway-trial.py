@@ -49,6 +49,10 @@ for line in CONFIG.splitlines():
         _, key, action = line.split(maxsplit=2)
         bindings.setdefault(key, []).append(action)
 for key, expected in {
+    "Mod1+Tab": "focus-cycle.py next",
+    "Mod1+Shift+Tab": "focus-cycle.py prev",
+    "Mod4+Shift+d": "capture.sh display-copy",
+    "Mod4+Shift+f": "capture.sh display",
     "Mod1+p": "ipc.sh launcher toggle",
     "Mod4+d": "ipc.sh launcher toggle",
     "Mod4+p": "ipc.sh powermenu begin",
@@ -77,6 +81,29 @@ for rule in (
 assert re.search(r"input type:pointer \{\s*accel_profile flat\s*pointer_accel 0\s*\}", CONFIG), (
     "Sway must explicitly disable libinput mouse acceleration")
 assert "input type:touchpad {" in CONFIG
+
+# Discrete Sway controls must honor the same Qt style configuration as
+# Hyprland. Ly starts the root-owned wrapper, not a login shell, so theme
+# variables must be exported before it launches the compositor.
+SESSION_LAUNCH = (TRIAL / "session-launch.sh").read_text(encoding="utf-8")
+for key, value in (
+    ("QT_QPA_PLATFORMTHEME", "qt5ct"),
+    ("QT6CT_PLATFORM_PLUGIN", "qt6ct"),
+    ("GTK_THEME", "Materia-dark"),
+    ("XCURSOR_THEME", "Bibata-Modern-Ice"),
+):
+    assert f"export {key}={value}" in SESSION_LAUNCH
+assert "swaybg_command -" in CONFIG
+assert "swaylock -f" not in CONFIG
+assert "Mod4+Control+l exec swaylock" not in CONFIG
+assert "swaylock" not in (TRIAL / "setup.sh").read_text()
+assert "swaylock" not in RUNTIME.split(
+    "install_sway_repo_dependencies_stage() {", 1
+)[1].split("\\n}\n", 1)[0].split("install_arch_repo_apps_stage", 1)[0]
+screencast = (TRIAL / "screencast-chooser.conf").read_text()
+assert "chooser_type=dmenu" in screencast
+assert "chooser_cmd=fuzzel --dmenu" in screencast
+assert '.config/xdg-desktop-portal-wlr/sway' in (TRIAL / "sync.py").read_text()
 
 # Every Hyprland explicitly-floating utility must float in Sway on native
 # Wayland and XWayland. Keep class/app_id rules exact to avoid floating games.
