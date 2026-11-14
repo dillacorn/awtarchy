@@ -17,8 +17,12 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] DP-3 activates 1920×1080 at approximately 239.761 Hz.
 - [ ] Monitor positions match Hyprland after a logout/relogin.
 - [ ] Mouse sensitivity, keyboard layout, repeat, and input device discovery work.
+- [ ] `swaymsg -r -t get_inputs` shows flat acceleration and zero pointer gain; compare feel to Hyprland at the same hardware DPI and maccel profile.
 - [ ] No unexpected title bars; 6 px inner and 9 px outer gaps.
-- [ ] Screen locking via Sway's secure fallback works; unlock restores input.
+- [ ] Power menu lock launches the **existing Quickshell awtarchy-lock** UI, not plain swaylock, and authenticates with PAM.
+- [ ] `qs -c awtarchy-lock ipc call lock state` reports `secure` only after the compositor confirms the WlSessionLock.
+- [ ] Emergency Super+Ctrl+L remains available to invoke swaylock without requiring Quickshell.
+- [ ] Suspend and hibernate refuse to proceed if the secure Quickshell lock cannot be verified.
 - [ ] Suspend/return does not corrupt monitors, cursor, or shell.
 
 ## 2. Window management and workspaces
@@ -59,6 +63,8 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Clipboard, notifications, quick settings, network, Bluetooth and battery
   flyouts float, are positioned correctly and **do not close immediately**.
 - [ ] Flyout position/size adjustments and monitor targeting work.
+- [ ] Alt+Mouse2 resizes a flyout; Save records the new dimensions and reopen/relogin restores them on the same monitor.
+- [ ] Reset and copy-to-other-monitor still use the original Quickshell state, not a competing Sway geometry cache.
 - [ ] Switching workspaces dismisses relevant floating panels without stale state.
 - [ ] Theme picker opens as an overlay and applies a theme to **awtarchy-sway**.
 - [ ] Escape dismisses the focused theme picker directly without closing any underlying Quick Settings flyout.
@@ -91,7 +97,9 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 
 - [ ] Steam, Proton, gamescope and native Wayland games launch as expected.
 - [ ] Fullscreen, input focus, Alt+Tab, frame pacing and display refresh remain stable.
-- [ ] VRR and any tearing setting are tested separately, not assumed enabled.
+- [ ] `swaymsg -r -t get_outputs` confirms `allow_tearing` on both active outputs.
+- [ ] Fullscreen Steam/Proton and gamescope windows are eligible for immediate page flips; confirm behavior with real GPU/display measurements.
+- [ ] VRR remains opt-in and must be assessed independently of tearing.
 - [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work.
 - [ ] Clipboard, screenshots, file dialog and desktop portals work after reboot.
 - [ ] Power menu lock, suspend and shutdown have correct safeguards.
