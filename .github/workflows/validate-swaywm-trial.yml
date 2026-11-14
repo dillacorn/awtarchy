@@ -10,6 +10,7 @@ on:
       - "config/hypr/hyprland.lua"
       - "config/hypr/scripts/quickshell.sh"
       - "config/quickshell/awtarchy/**"
+      - "config/quickshell/awtarchy-lock/**"
       - "awtarchy-install.sh"
       - "local/bin/awtarchy"
       - "local/share/awtarchy/awtarchy-runtime.sh"
@@ -23,6 +24,7 @@ on:
       - "config/hypr/hyprland.lua"
       - "config/hypr/scripts/quickshell.sh"
       - "config/quickshell/awtarchy/**"
+      - "config/quickshell/awtarchy-lock/**"
       - "awtarchy-install.sh"
       - "local/bin/awtarchy"
       - "local/share/awtarchy/awtarchy-runtime.sh"
@@ -53,6 +55,7 @@ jobs:
           python tests/test-sway-monitors.py
           python tests/test-sway-quickshell-parity.py
           python tests/test-sway-flyout-layer-shell.py
+          python tests/test-sway-lock.py
           python tests/test-sway-sync.py
           python tests/test-sway-satty.py
           python tests/test-sway-ddc.py
