@@ -51,7 +51,7 @@ Implemented means committed source, **not live verified**.
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; first-frame behavior and keyboard focus need live verification |
 | Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. Emergency swaylock remains. |
-| Directory default application | Sway reconciles `inode/directory` in the shared XDG `mimeapps.list` with the existing Awtarchy file-manager choice, leaving unrelated MIME associations unchanged and preserving an explicit `sway-mimeapps.list` override | 
+| Directory default application | Sway reconciles `inode/directory` in the shared XDG `mimeapps.list` with the existing Awtarchy file-manager choice, leaving unrelated MIME associations unchanged and preserving an explicit `sway-mimeapps.list` override |
 | Clipboard screenshots | grim/slurp/wl-copy |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |
