@@ -46,9 +46,11 @@ Implemented means committed source, **not live verified**.
 | Theme picker and window borders | Super+T toggles Sway Quickshell picker; selected active/inactive theme border colors apply through Sway IPC and on compositor reload |
 | Persistent monitor modes | Guarded one-time Hyprland import |
 | Cursor image/theme/size | Native Sway seat settings |
+| Mouse acceleration | Explicit `accel_profile flat`, `pointer_accel 0`, matching Hyprland; maccel remains independent |
+| Fullscreen game tearing | `output * allow_tearing yes`, `max_render_time off`, app-level allow for Steam/Proton/gamescope and matched game classes; hardware/runtime verification required |
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; first-frame behavior and keyboard focus need live verification |
-| Sway session lock | swaylock fallback; Quickshell-specific extras limited |
+| Sway session lock | Reuses installed Awtarchy `awtarchy-lock` WlSessionLock + PAM; secure-confirmed suspend/hibernate; emergency swaylock retained |
 | Clipboard screenshots | grim/slurp/wl-copy |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |
@@ -82,6 +84,10 @@ sources are not edited.
 This removes the **regular tiled-window code path** by construction.
 Sway flyouts now use Alt+right-drag with a dimension preview, committing the
 layer-shell resize on release to avoid breaking the pressed-pointer grab.
+The resize callback goes through the original launcher/menu size override so
+per-monitor Save/Restore behavior uses the real resized dimensions. This is
+not yet a live animated surface resize, which would need a verified way to
+retain the pointer grab while changing layer-shell geometry.
 The shortcut-opened launcher and power menu request immediate keyboard focus.
 Sway no longer launches a native swaybar or Mako fallback that competes with
 the Awtarchy bar and notifications.
@@ -115,7 +121,7 @@ review the compositor manager's installation plan, and preserve Hyprland.
 5. Confirm native Quickshell workspace bar and control IPC. From a Sway terminal,
    run: qs -c awtarchy-sway ipc call control ping
    Expected: ok. Check ALT+P, SUPER+D, SUPER+P, clipboard, notifications.
-6. Verify fullscreen gaming, frame pacing, VRR and portals independently.
+6. Verify fullscreen gaming, immediate page flips/tearing, frame pacing, VRR and portals independently. Tearing permissions do not prove that the driver actually presented a torn frame.
    Screen Share Guard remains explicitly unavailable.
 
 Use swaymsg exit in a Sway terminal to return to Ly, then select Hyprland.
