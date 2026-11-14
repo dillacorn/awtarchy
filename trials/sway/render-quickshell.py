@@ -568,6 +568,7 @@ Qs.Singleton {
                     power_focus = (
                         '    PanelWindow {\\n'
                         '        id: powerWindow\\n'
+                        '        WlrLayershell.layer: WlrLayer.Overlay\\n'
                         '        WlrLayershell.keyboardFocus: WlrKeyboardFocus.Exclusive\\n'
                         '        onVisibleChanged: {\\n'
                         '            if (visible)\\n'
@@ -578,14 +579,26 @@ Qs.Singleton {
                         '        }\\n'
                     ).replace('\\n', '\n')
                     text = text.replace(power, power_focus, 1)
+                    secondary = (
+                        '    PanelWindow {\\n'
+                        '            id: secondaryShadeWindow\\n'
+                    ).replace('\\n', '\n')
+                    secondary_overlay = (
+                        '    PanelWindow {\\n'
+                        '            id: secondaryShadeWindow\\n'
+                        '            WlrLayershell.layer: WlrLayer.Overlay\\n'
+                    ).replace('\\n', '\n')
+                    # Secondary shades must also cover fullscreen clients
+                    # so a game on any output cannot bleed through the menu.
+                    if text.count(secondary) != 1:
+                        raise ValueError("Sway secondary power shade changed")
+                    text = text.replace(secondary, secondary_overlay, 1)
                     text = text.replace(
                         "/hypr/scripts/awtarchy_lock.sh",
                         "/sway/awtarchy-trial/lock.sh")
-                    # Sway's lock.sh itself waits for a secure Quickshell lock
-                    # or returns only after swaylock -f confirms locking.
-                    # Do not make fallback success depend on Quickshell IPC.
-                    text = text.replace(
-                        " && ~/.config/sway/awtarchy-trial/lock.sh wait-secure 5", "")
+                    # Preserve the original secure-lock verification:
+                    # Sway has no swaylock fallback and must wait for the
+                    # Quickshell WlSessionLock confirmation before success.
                     text = text.replace(
                         "/hypr/scripts/quickshell_lockscreen_capture.sh",
                         "/sway/awtarchy-trial/lock-capture.sh")
