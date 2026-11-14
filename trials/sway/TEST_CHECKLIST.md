@@ -16,6 +16,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] DP-1 activates 1920×1080 at approximately 400.002 Hz.
 - [ ] DP-3 activates 1920×1080 at approximately 239.761 Hz.
 - [ ] Monitor positions match Hyprland after a logout/relogin.
+- [ ] Saved Awtwall/awww wallpaper is visible on both monitors after login and after `swaymsg reload`; Sway must not overlay it with a solid-color swaybg background.
 - [ ] Mouse sensitivity, keyboard layout, repeat, and input device discovery work.
 - [ ] `swaymsg -r -t get_inputs` shows flat acceleration and zero pointer gain; compare feel to Hyprland at the same hardware DPI and maccel profile.
 - [ ] No unexpected title bars; 6 px inner and 9 px outer gaps.
