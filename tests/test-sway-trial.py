@@ -50,6 +50,9 @@ for line in CONFIG.splitlines():
         bindings.setdefault(key, []).append(action)
 for key, expected in {
     "Mod1+Tab": "focus-cycle.py next",
+    "Mod4+Mod1+n": "mode-control.sh toggle noalt",
+    "Mod4+Mod1+m": "mode-control.sh toggle mouse",
+    "Mod4+Mod1+v": "mode-control.sh toggle vm",
     "Mod1+Shift+Tab": "focus-cycle.py prev",
     "Mod4+Shift+d": "capture.sh display-copy",
     "Mod4+Shift+f": "capture.sh display",

@@ -65,6 +65,7 @@ output * max_render_time off
 exec bash $trial/session.sh
 # Reapply the selected border palette after every Sway config reload.
 exec_always bash $trial/theme-colors.sh
+exec_always bash $trial/mode-state.sh sync
 
 # App shortcuts (match the existing Hyprland combinations).
 bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle
@@ -105,6 +106,11 @@ bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirst
 bindsym Mod4+Shift+space exec fuzzel
 bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+
+# Native Sway modes (Super+Alt+N/M/V).
+bindsym --inhibited Mod4+Mod1+n exec bash $trial/mode-control.sh toggle noalt
+bindsym --inhibited Mod4+Mod1+m exec bash $trial/mode-control.sh toggle mouse
+bindsym --inhibited Mod4+Mod1+v exec bash $trial/mode-control.sh toggle vm
 
 # Cycle actual application toplevels in the focused workspace, across
 # Sway's separate tiling and floating container trees.
@@ -349,6 +355,170 @@ assign [class="(?i)^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-scree
 for_window [app_id="^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|chiaki|moonlight|com[.]moonlight_stream[.]Moonlight|.*[.]exe)$"] allow_tearing yes
 for_window [class="(?i)^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"] allow_tearing yes
 for_window [app_id="^(gamescope|steam_app_.*)$"] inhibit_idle fullscreen
+
+
+# Native Sway modes deliberately do not modify the Hyprland configuration.
+# Keep toggles accessible in every mode, even behind a keyboard inhibitor.
+mode "noalt" {
+    bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle
+    bindsym Mod4+d exec bash $trial/ipc.sh launcher toggle
+    bindsym Mod4+p exec bash $trial/ipc.sh powermenu begin
+    bindsym Mod4+n exec bash $trial/ipc.sh notifications toggle
+    bindsym Mod4+c exec bash $trial/ipc.sh clipboard toggle
+    bindsym Mod4+Mod1+BackSpace exec bash $trial/ipc.sh quicksettings toggle
+    bindsym Mod4+Return exec foot
+    bindsym Mod1+Shift+Return exec foot
+    bindsym Mod4+Shift+Return exec foot
+    bindsym Mod1+Shift+b exec python3 $trial/toggle-utility.py btop
+    bindsym Mod4+Shift+b exec python3 $trial/toggle-utility.py btop
+    bindsym Mod1+Shift+m exec python3 $trial/toggle-utility.py maccel
+    bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
+    bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
+    bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
+    bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py hyprmoncfg
+    bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
+    bindsym Mod4+Mod1+l exec smtty -S -l
+    bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
+    bindsym Mod4+Mod1+k exec smtty -k
+    bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
+    bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
+    bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
+    bindsym Mod4+e exec python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
+    bindsym Mod4+Shift+e exec foot yazi
+    bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
+    bindsym Mod4+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod1+Control+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod1+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod4+Shift+space exec fuzzel
+    bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+    bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+    bindsym Mod1+Tab exec python3 $trial/focus-cycle.py next
+    bindsym Mod1+Shift+Tab exec python3 $trial/focus-cycle.py prev
+    bindsym Mod4+q kill
+    bindsym Mod4+Shift+q kill
+    bindsym Mod1+Shift+q kill
+    bindsym Mod1+F4 kill
+    bindsym Mod4+f floating toggle
+    bindsym Mod4+Control+f fullscreen toggle
+    bindsym Mod4+r split toggle
+    bindsym Mod4+Shift+r split toggle
+    bindsym Mod4+x scratchpad show
+    bindsym Mod4+Control+x move scratchpad
+    bindsym Mod4+y sticky toggle
+    bindsym Mod4+Left focus left
+    bindsym Mod4+h focus left
+    bindsym Mod4+Shift+Left move left
+    bindsym Mod4+Shift+h move left
+    bindsym Mod4+Control+Shift+Left move workspace to output left
+    bindsym Mod4+Down focus down
+    bindsym Mod4+j focus down
+    bindsym Mod4+Shift+Down move down
+    bindsym Mod4+Shift+j move down
+    bindsym Mod4+Control+Shift+Down move workspace to output down
+    bindsym Mod4+Up focus up
+    bindsym Mod4+k focus up
+    bindsym Mod4+Shift+Up move up
+    bindsym Mod4+Shift+k move up
+    bindsym Mod4+Control+Shift+Up move workspace to output up
+    bindsym Mod4+Right focus right
+    bindsym Mod4+l focus right
+    bindsym Mod4+Shift+Right move right
+    bindsym Mod4+Shift+l move right
+    bindsym Mod4+Control+Shift+Right move workspace to output right
+    bindsym Mod4+Control+Left resize shrink width 30 px
+    bindsym Mod4+Control+Right resize grow width 30 px
+    bindsym Mod4+Control+Up resize shrink height 30 px
+    bindsym Mod4+Control+Down resize grow height 30 px
+    bindsym Mod4+1 workspace number 1
+    bindsym Mod4+Shift+1 move container to workspace number 1
+    bindsym Mod4+2 workspace number 2
+    bindsym Mod4+Shift+2 move container to workspace number 2
+    bindsym Mod4+3 workspace number 3
+    bindsym Mod4+Shift+3 move container to workspace number 3
+    bindsym Mod4+4 workspace number 4
+    bindsym Mod4+Shift+4 move container to workspace number 4
+    bindsym Mod4+5 workspace number 5
+    bindsym Mod4+Shift+5 move container to workspace number 5
+    bindsym Mod4+6 workspace number 6
+    bindsym Mod4+Shift+6 move container to workspace number 6
+    bindsym Mod4+7 workspace number 7
+    bindsym Mod4+Shift+7 move container to workspace number 7
+    bindsym Mod4+8 workspace number 8
+    bindsym Mod4+Shift+8 move container to workspace number 8
+    bindsym Mod4+9 workspace number 9
+    bindsym Mod4+Shift+9 move container to workspace number 9
+    bindsym Mod4+0 workspace number 10
+    bindsym Mod4+Shift+0 move container to workspace number 10
+    bindsym Mod4+bracketleft workspace prev
+    bindsym Mod4+bracketright workspace next
+    bindsym Mod4+m exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+    bindsym XF86AudioMute exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
+    bindsym XF86AudioRaiseVolume exec wpctl set-volume -l 1.0 @DEFAULT_AUDIO_SINK@ 5%+
+    bindsym XF86AudioLowerVolume exec wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-
+    bindsym XF86AudioMicMute exec wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle
+    bindsym XF86MonBrightnessUp exec brightnessctl -e4 -n2 set 5%+
+    bindsym XF86MonBrightnessDown exec brightnessctl -e4 -n2 set 5%-
+    bindsym XF86AudioPlay exec playerctl play-pause
+    bindsym XF86AudioNext exec playerctl next
+    bindsym XF86AudioPrev exec playerctl previous
+    bindsym Mod4+Shift+f exec bash $trial/capture.sh display
+    bindsym Mod4+Shift+d exec bash $trial/capture.sh display-copy
+    bindsym Mod4+Shift+x exec bash $trial/capture.sh area
+    bindsym Mod4+Shift+s exec bash $trial/capture.sh window
+    bindsym Print exec bash $trial/capture.sh output
+    bindsym Mod4+Control+Alt+Shift+q exec swaymsg exit
+    bindsym --inhibited Mod4+Mod1+n exec bash $trial/mode-control.sh toggle noalt
+    bindsym --inhibited Mod4+Mod1+m exec bash $trial/mode-control.sh toggle mouse
+    bindsym --inhibited Mod4+Mod1+v exec bash $trial/mode-control.sh toggle vm
+}
+
+# Stock Sway cannot dynamically change floating_modifier per input mode.
+# Unmodified mouse clicks must remain functional; Alt+drag/resize persists.
+mode "mouse" {
+    bindsym --inhibited Mod4+Mod1+n exec bash $trial/mode-control.sh toggle noalt
+    bindsym --inhibited Mod4+Mod1+m exec bash $trial/mode-control.sh toggle mouse
+    bindsym --inhibited Mod4+Mod1+v exec bash $trial/mode-control.sh toggle vm
+}
+
+# Pass normal Super and Alt shortcuts into VM software; keep host escapes.
+mode "vm" {
+    bindsym Mod4+Mod1+q kill
+    bindsym Mod4+Mod1+f floating toggle
+    bindsym Mod4+Mod1+p exec bash $trial/ipc.sh launcher toggle
+    bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
+    bindsym Mod4+Mod1+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
+    bindsym Mod4+Mod1+Control+v exec python3 $trial/toggle-utility.py wiremix
+    bindsym Mod4+Mod1+x exec bash $trial/capture.sh area
+    bindsym Mod4+Mod1+s exec bash $trial/capture.sh window
+    bindsym Mod4+Mod1+d exec bash $trial/capture.sh display-copy
+    bindsym Mod4+Mod1+Return exec foot
+    bindsym Mod4+Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod4+Mod1+Control+f fullscreen toggle
+    bindsym Mod4+Mod1+1 workspace number 1
+    bindsym Mod4+Mod1+Shift+1 move container to workspace number 1
+    bindsym Mod4+Mod1+2 workspace number 2
+    bindsym Mod4+Mod1+Shift+2 move container to workspace number 2
+    bindsym Mod4+Mod1+3 workspace number 3
+    bindsym Mod4+Mod1+Shift+3 move container to workspace number 3
+    bindsym Mod4+Mod1+4 workspace number 4
+    bindsym Mod4+Mod1+Shift+4 move container to workspace number 4
+    bindsym Mod4+Mod1+5 workspace number 5
+    bindsym Mod4+Mod1+Shift+5 move container to workspace number 5
+    bindsym Mod4+Mod1+6 workspace number 6
+    bindsym Mod4+Mod1+Shift+6 move container to workspace number 6
+    bindsym Mod4+Mod1+7 workspace number 7
+    bindsym Mod4+Mod1+Shift+7 move container to workspace number 7
+    bindsym Mod4+Mod1+8 workspace number 8
+    bindsym Mod4+Mod1+Shift+8 move container to workspace number 8
+    bindsym Mod4+Mod1+9 workspace number 9
+    bindsym Mod4+Mod1+Shift+9 move container to workspace number 9
+    bindsym Mod4+Mod1+0 workspace number 10
+    bindsym Mod4+Mod1+Shift+0 move container to workspace number 10
+    bindsym --inhibited Mod4+Mod1+n exec bash $trial/mode-control.sh toggle noalt
+    bindsym --inhibited Mod4+Mod1+m exec bash $trial/mode-control.sh toggle mouse
+    bindsym --inhibited Mod4+Mod1+v exec bash $trial/mode-control.sh toggle vm
+}
 
 # No swaylock shortcut: the secure Awtarchy Quickshell session lock is
 # the only supported lock surface; failure to lock must fail closed.

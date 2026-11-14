@@ -242,6 +242,7 @@ def main():
                 ".config/sway/awtarchy-trial/lock-manager.sh",
                 ".config/sway/awtarchy-trial/mime-parity.py",
                 ".config/sway/awtarchy-trial/focus-cycle.py",
+                ".config/sway/awtarchy-trial/mode-control.sh",
                 ".config/xdg-desktop-portal-wlr/sway",
             )
             if not (generated_qml or new_helper):

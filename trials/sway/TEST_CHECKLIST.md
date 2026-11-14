@@ -30,6 +30,10 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 
 ## 2. Window management and workspaces
 
+- [ ] Super+Alt+N/M/V toggle noalt/mouse/vm natively, including same-shortcut reset and switching directly between modes.
+- [ ] Quickshell bar mouse icon toggles/resets the real mode; displayed state matches `swaymsg -r -t get_binding_state` after reload.
+- [ ] noalt keeps Super desktop shortcuts/Alt+Tab; vm reserves Super+Alt host shortcuts while passing other shortcuts to applications.
+- [ ] In Sway mouse mode, normal click/paste must remain intact; Alt is still required for drag/resize (documented stock-Sway limitation).
 - [ ] Alt+left mouse drag moves a floating window.
 - [ ] Alt+right mouse drag resizes a floating window.
 - [ ] Alt+Tab and Alt+Shift+Tab cycle across tiled and floating application windows on the same workspace, including ProtonUp-Qt dialogs above Firefox/Foot; do not change other monitors' focus.

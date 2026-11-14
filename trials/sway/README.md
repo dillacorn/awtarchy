@@ -62,7 +62,7 @@ Implemented means committed source, **not live verified**.
 | Digital vibrance via shaders | **No confirmed native equivalent** |
 | Hyprland blur/animations/rounding | **Not provided by standard Sway** |
 | Hyprland special-workspace geometry | Native Sway scratchpad differs |
-| noalt/mouse/vm submaps | Not yet fully ported |
+| noalt/mouse/vm submaps | Native Sway mode toggles via Super+Alt+N/M/V. `noalt` retains Super desktop shortcuts; `vm` reserves Super+Alt host controls. The bar mouse icon toggles/reset the compositor mode. Stock Sway cannot perform Hyprland-style unmodified mouse drag/resize through mode blocks: Alt+mouse remains required in `mouse` mode. |
 | Per-window Quickshell flyout placement | QML layer-shell anchors update without post-map Sway move/resize commands; live test required |
 | Hyprland-specific utilities | Must be handled individually, not dispatched blindly |
 

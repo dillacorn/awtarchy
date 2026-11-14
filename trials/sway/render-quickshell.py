@@ -270,19 +270,19 @@ def render(source: Path, destination: Path, trial: Path):
                         '')
                     text = text.replace(
                         '/hypr/scripts/toggle_mouse_submap.sh',
-                        '/sway/awtarchy-trial/mode-help.sh')
+                        '/sway/awtarchy-trial/mode-control.sh')
                     text = text.replace(
                         'tooltip: "Toggle mouse submap"',
-                        'tooltip: "Sway: press SUPER+ALT+M to toggle mouse mode"')
+                        'tooltip: "Toggle Sway mouse mode (Alt still required to drag/resize)"')
                     text = text.replace(
                         'tooltip: "Current submap: " + submapFile.text().trim() + " (click to reset)"',
-                        'tooltip: "Sway mode: " + submapFile.text().trim() + " (press SUPER+ALT+N/M/V to toggle)"')
+                        'tooltip: "Current mode: " + submapFile.text().trim() + " (click to reset)"')
                     text = text.replace(
                         '[bar.mouseSubmapScript, "reset"]',
-                        '[bar.mouseSubmapScript, "help"]')
+                        '[bar.mouseSubmapScript, "reset"]')
                     text = text.replace(
                         '[bar.mouseSubmapScript, "toggle"]',
-                        '[bar.mouseSubmapScript, "help"]')
+                        '[bar.mouseSubmapScript, "toggle", "mouse"]')
                     text = text.replace(
                         'Quickshell.env("HYPR_SUBMAP_STATE_FILE") || (runtimeHome + "/awtarchy-hypr-submap")',
                         '(runtimeHome + "/awtarchy-sway-submap")')
