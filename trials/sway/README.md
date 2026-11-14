@@ -50,7 +50,8 @@ Implemented means committed source, **not live verified**.
 | Fullscreen game tearing | `output * allow_tearing yes`, `max_render_time off`, app-level allow for Steam/Proton/gamescope and matched game classes; hardware/runtime verification required |
 | Quickshell workspace/monitor | Sway IPC tree counts hidden occupied workspaces; live test required |
 | Quickshell menus/power/notifications | Seven flyouts generated as layer-shell panels with output-local margins; first-frame behavior and keyboard focus need live verification |
-| Sway session lock | Reuses installed Awtarchy `awtarchy-lock` WlSessionLock + PAM; secure-confirmed suspend/hibernate; emergency swaylock retained |
+| Sway session lock | Uses the same installed `awtarchy-lock` QML, PAM authentication, per-monitor profiles, custom media and shared theme as Hyprland; private Sway capture/manager restore frozen-backdrop transitions. Emergency swaylock remains. |
+| Directory default application | Sway reconciles `inode/directory` in the shared XDG `mimeapps.list` with the existing Awtarchy file-manager choice, leaving unrelated MIME associations unchanged and preserving an explicit `sway-mimeapps.list` override | 
 | Clipboard screenshots | grim/slurp/wl-copy |
 | App workspace assignments | Ported initial rules; XWayland still needs verification |
 | Hyprland Screen Share Guard | **Unavailable; private panels fail closed** |
@@ -89,6 +90,8 @@ per-monitor Save/Restore behavior uses the real resized dimensions. This is
 not yet a live animated surface resize, which would need a verified way to
 retain the pointer grab while changing layer-shell geometry.
 The shortcut-opened launcher and power menu request immediate keyboard focus.
+Sway's Alt+left bar drag keeps layer-shell margins unchanged until pointer
+release; changing the bar geometry during an active grab had cut the gesture short.
 Sway no longer launches a native swaybar or Mako fallback that competes with
 the Awtarchy bar and notifications.
 It does not prove the actual first rendered frame, keyboard focus or
@@ -98,6 +101,22 @@ imported DP-1/DP-3 display profiles. New generated Sway QML components are
 installed automatically; exact copies manually staged during the earlier
 missing-component recovery are recognized and upgraded with a backup.
 Unknown or customized files remain protected.
+
+The Sway-only `lock-manager.sh` and `lock-capture.sh` use the existing
+`awtarchy-lock` Quickshell profile and its shared
+`~/.cache/awtarchy/quickshell-state.json` per-display settings. Only output
+capture discovery is compositor-specific (`swaymsg` instead of `hyprctl`).
+No lockscreen settings are copied or reset, and the Hyprland locker stays
+unchanged. Capture transition and secure lock confirmation still need a live
+test before treating this as complete security validation.
+
+Sway session startup also runs `mime-parity.py apply` for `inode/directory`.
+The script reads the existing user choice from
+`~/.config/awtarchy/default-applications.json`, backs up a changed
+`~/.config/mimeapps.list`, changes just the folder association, and refuses
+an explicit Sway-only override or unsafe existing file. This shared XDG MIME
+entry affects both desktops, as requested; no unrelated MIME types or
+per-application file chooser portal settings are changed.
 
 ## Validation requirements
 
