@@ -112,6 +112,43 @@ def render_layer_flyout(text: str, filename: str) -> str:
     return rendered
 
 
+
+def prefer_sway_discrete_wheel(text: str) -> str:
+    """Give a full mouse-wheel notch precedence over its pixel companion.
+
+    Sway exposes 120 axis-value units plus a 15-unit surface axis movement
+    per notch. If Qt forwards both deltas, upstream BarButton consumes the
+    15-unit pixel movement first and waits for its 24-pixel threshold, so the
+    brightness control may need two notches for one 5% adjustment. Only full
+    discrete angle steps take precedence: keep smooth touchpad gestures on
+    their existing pixel accumulator and preserve high-resolution fractions.
+    """
+    pixel_source = (
+        "        const rawPixelDelta = Number(wheel.pixelDelta.y);\n"
+        "        if (Number.isFinite(rawPixelDelta) && rawPixelDelta !== 0) {"
+    )
+    pixel_target = (
+        "        const angleDelta = Number(wheel.angleDelta.y);\n"
+        "        const rawPixelDelta = Number(wheel.pixelDelta.y);\n"
+        "        if (Number.isFinite(rawPixelDelta) && rawPixelDelta !== 0\n"
+        "                && !(Number.isFinite(angleDelta)\n"
+        "                     && Math.abs(angleDelta) >= wheelAngleStep)) {"
+    )
+    angle_source = (
+        "        const angleDelta = Number(wheel.angleDelta.y);\n"
+        "        if (Number.isFinite(angleDelta) && angleDelta !== 0) {"
+    )
+    angle_target = "        if (Number.isFinite(angleDelta) && angleDelta !== 0) {"
+    for source, replacement in (
+        (pixel_source, pixel_target),
+        (angle_source, angle_target),
+    ):
+        if text.count(source) != 1:
+            raise ValueError("Sway wheel source changed; refusing unverified rewrite")
+        text = text.replace(source, replacement, 1)
+    return text
+
+
 def disable_unavailable_capture_controls(text: str, surface: str) -> str:
     expr = (
         r'readonly property bool captureAllowed: captureAllowedOverride >= 0'
@@ -210,6 +247,8 @@ def render(source: Path, destination: Path, trial: Path):
                 if path.name == "shell.qml":
                     text = text.replace("//@ pragma ShellId awtarchy", "//@ pragma ShellId awtarchy-sway")
                     text = text.replace("awtarchy-quickshell", "awtarchy-sway-quickshell")
+                if path.name == "BarButton.qml":
+                    text = prefer_sway_discrete_wheel(text)
                 if path.name == "Bar.qml":
                     # Sway has a separate active workspace on every output;
                     # focused is true on only one output. Show each visible
