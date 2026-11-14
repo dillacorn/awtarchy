@@ -74,19 +74,19 @@ for rule in (
     "# AWTARCHY-SWAY-OUTPUTS-END",
 ):
     assert rule in CONFIG, rule
-# Flat pointer profile must match the Hyprland raw-input default.
-assert re.search(r"input type:pointer \\{\\s*accel_profile flat\\s*pointer_accel 0\\s*\\}", CONFIG), (
+# Flat pointer profile must match Hyprland's raw-input default.
+assert re.search(r"input type:pointer \{\s*accel_profile flat\s*pointer_accel 0\s*\}", CONFIG), (
     "Sway must explicitly disable libinput mouse acceleration")
 assert "input type:touchpad {" in CONFIG
 
-# Sway immediate page flips require output permission AND application
-# permission. The output rule applies only to fullscreen windows in Sway;
-# ordinary desktop windows are not forced to tear.
+# Immediate page flips need output AND application permission; a fullscreen
+# window remains required and ordinary desktop apps are not opted in.
 assert "output * allow_tearing yes" in CONFIG
 assert "output * max_render_time off" in CONFIG
-assert re.search(r"(?m)^for_window \\[app_id=.*steam_app_.*\\] allow_tearing yes$", CONFIG)
-assert re.search(r"(?m)^for_window \\[class=.*steam_app_.*\\] allow_tearing yes$", CONFIG)
-assert not re.search(r'(?m)^for_window \\[app_id=".*"\\] allow_tearing yes
+assert re.search(r'(?m)^for_window \[app_id=.*steam_app_.*\] allow_tearing yes$', CONFIG)
+assert re.search(r'(?m)^for_window \[class=.*steam_app_.*\] allow_tearing yes$', CONFIG)
+assert 'for_window [app_id=".*"] allow_tearing yes' not in CONFIG
+assert len(bindings) >= 70
 assert "swayfx" not in CONFIG.lower()
 # A native swaybar created during failed Quickshell startup was left visible
 # even after the shell recovered; Mako also competed with Quickshell's own
