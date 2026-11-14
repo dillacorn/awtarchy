@@ -24,7 +24,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Quickshell lockscreen in Sway matches Hyprland's saved per-monitor layout, background, custom images, clock and visualizer settings.
 - [ ] Secure desktop backdrop/transition capture works on both displays, and private capture files are removed after unlock.
 - [ ] `qs -c awtarchy-lock ipc call lock state` reports `secure` only after the compositor confirms the WlSessionLock.
-- [ ] Emergency Super+Ctrl+L remains available to invoke swaylock without requiring Quickshell.
+- [ ] No emergency swaylock shortcut is installed; the Sway lock action must refuse to succeed if the Quickshell WlSessionLock is unavailable.
 - [ ] Suspend and hibernate refuse to proceed if the secure Quickshell lock cannot be verified.
 - [ ] Suspend/return does not corrupt monitors, cursor, or shell.
 
@@ -32,7 +32,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 
 - [ ] Alt+left mouse drag moves a floating window.
 - [ ] Alt+right mouse drag resizes a floating window.
-- [ ] Alt+Tab and Alt+Shift+Tab move focus between windows on one workspace.
+- [ ] Alt+Tab and Alt+Shift+Tab cycle across tiled and floating application windows on the same workspace, including ProtonUp-Qt dialogs above Firefox/Foot; do not change other monitors' focus.
 - [ ] Keyboard focus, container move, and manual resize shortcuts work.
 - [ ] Alt/Super+1 through +0 switch numbered workspaces 1–10.
 - [ ] Workspace transfers up/down and left/right move the **whole** workspace.
@@ -45,7 +45,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Hidden occupied workspaces remain displayed by Quickshell.
 - [ ] Sway's internal `__i3_scratch` is not displayed as a numbered workspace.
 - [ ] Native scratchpad shortcuts show/hide and move utility windows as intended.
-- [ ] Fullscreen windows are not unexpectedly resized or moved.
+- [ ] Fullscreen windows are not unexpectedly resized or moved; Super+P power menu must be visible above a fullscreen game on the focused monitor (overlay layer), with normal Escape dismissal.
 
 ## 3. Quickshell bar and desktop utilities
 
@@ -95,7 +95,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] XWayland variants of Awtarchy floating utilities follow the same rule through WM_CLASS, and ordinary XWayland dialogs float without tiling unrelated applications or games.
 - [ ] Super+Shift+X selects an area, copies it and opens **Satty**.
 - [ ] Super+Shift+S selects a window, copies it and opens Satty.
-- [ ] Super+Shift+D/F selects a display and opens Satty.
+- [ ] Super+Shift+D selects a display and copies it to the clipboard **without** Satty; Super+Shift+F selects a display and opens Satty.
 - [ ] Satty can annotate, save and cancel without leaving stale capture locks.
 - [ ] Taking another screenshot while Satty is open works.
 - [ ] No Hyprland-only screenshot command is executed in Sway.
@@ -109,10 +109,10 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] `swaymsg -r -t get_outputs` confirms `allow_tearing` on both active outputs.
 - [ ] Fullscreen Steam/Proton and gamescope windows are eligible for immediate page flips; confirm behavior with real GPU/display measurements.
 - [ ] VRR remains opt-in and must be assessed independently of tearing.
-- [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work.
+- [ ] OBS/Discord screen sharing and their xdg-desktop-portal backends work, with the Sway-specific Fuzzel selector (no ugly default portal picker) after restarting xdg-desktop-portal-wlr.
 - [ ] Clipboard, screenshots, file dialog and desktop portals work after reboot.
 - [ ] Sway's folder MIME association matches the file manager selected in Awtarchy (PCManFM-Qt by default), without overriding any unrelated MIME defaults.
-- [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser.
+- [ ] Opening a directory from another application launches the selected file manager; distinguish this from an application's own GTK/Qt file chooser. PCManFM-Qt must inherit the same qt5ct/qt6ct/Kvantum dark theme as Hyprland after updating the Ly Sway wrapper and relogging.
 - [ ] A user-provided `sway-mimeapps.list` folder override is preserved and produces an explicit warning instead of being overwritten.
 - [ ] Power menu lock, suspend and shutdown have correct safeguards.
 - [ ] Idle inhibition during fullscreen games and calls behaves as intended.
