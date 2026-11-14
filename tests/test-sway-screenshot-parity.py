@@ -15,6 +15,8 @@ assert "hyprctl -j cursors" not in source
 assert "hyprctl -j monitors" in source
 assert "grim -o" in source
 assert "wl-copy --type image/png" in source
+assert "flock -w 5 9" in source
+assert "notify-send " not in source
 assert "satty" not in "\n".join(line for line in source.splitlines()
                                 if not line.lstrip().startswith("#")).lower()
 assert "display-copy" in SWAY.read_text()
@@ -27,6 +29,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-focused-screenshot-") as temp:
     home = root / "home"
     bin_dir.mkdir()
     home.mkdir()
+    (root / "run").mkdir()
     events = root / "events"
     events.touch()
 
@@ -49,6 +52,7 @@ set -euo pipefail
 [[ "$#" == 3 && "$1" == "-o" ]] || exit 2
 printf 'grim:%s\n' "$*" >> "$EVENTS"
 [[ "${GRIM_FAIL:-0}" != 1 ]] || exit 15
+sleep "${GRIM_DELAY:-0}"
 printf 'PNG-for-%s' "$2" > "$3"
 """,
         "wl-copy": r"""#!/usr/bin/env bash
@@ -68,7 +72,8 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
         path.chmod(0o755)
 
     env = dict(os.environ, PATH=str(bin_dir) + os.pathsep + os.environ["PATH"],
-               HOME=str(home), EVENTS=str(events))
+               HOME=str(home), XDG_RUNTIME_DIR=str(root / "run"),
+               EVENTS=str(events))
 
     def run(**overrides):
         events.write_text("")
@@ -86,12 +91,33 @@ printf 'notify:%s\n' "$*" >> "$EVENTS"
         assert lines[0] == "hyprctl:-j monitors", lines
         assert lines[1].startswith("grim:-o " + monitor + " "), lines
         assert lines[2] == "clipboard:PNG-for-" + monitor, lines
-        assert lines[3].startswith("notify:"), lines
+        assert len(lines) == 3, lines
         assert len(files()) == old_count + 1, files()
         assert sum(p.read_bytes() == ("PNG-for-" + monitor).encode()
                    for p in files()) >= 1
 
     assert len(set(p.name for p in files())) == 3, "Rapid captures overwrote"
+
+    # Overlapping keypresses are queued, neither dropped nor interleaved.
+    events.write_text("")
+    rapid_env = dict(env, FOCUSED_MONITOR="DP-3", GRIM_DELAY="0.35")
+    first = subprocess.Popen(
+        ["bash", str(HYPR)], env=rapid_env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    second = subprocess.Popen(
+        ["bash", str(HYPR)], env=rapid_env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    for capture in (first, second):
+        stdout, stderr = capture.communicate(timeout=10)
+        assert capture.returncode == 0, (stdout, stderr)
+    lines = events.read_text().splitlines()
+    assert len(lines) == 6, lines
+    assert lines[0] == lines[3] == "hyprctl:-j monitors", lines
+    assert lines[1].startswith("grim:-o DP-3 "), lines
+    assert lines[4].startswith("grim:-o DP-3 "), lines
+    assert lines[2] == lines[5] == "clipboard:PNG-for-DP-3", lines
+    assert len(files()) == 5
+    assert len(set(p.name for p in files())) == 5
 
     for monitor in ("none", "both", "malformed"):
         count = len(files())

@@ -34,11 +34,20 @@ mkdir -p -m 0700 -- "$lock_dir"
 
 capture() {
     local geometry="" rectangles="" focused_output="" image="" ok=0
-    flock -n 9 || {
-        command -v notify-send >/dev/null 2>&1 &&
-            notify-send 'Screenshot' 'Capture already running.' 9>&- || true
-        return 0
-    }
+    if [[ "$mode" == display-copy ]]; then
+        # Queue rapid direct captures instead of silently dropping presses.
+        # No visual confirmation overlay can contaminate the next image.
+        flock -w 5 9 || {
+            printf 'Screenshot queue timed out after 5 seconds\n' >&2
+            return 1
+        }
+    else
+        flock -n 9 || {
+            command -v notify-send >/dev/null 2>&1 &&
+                notify-send 'Screenshot' 'Capture already running.' 9>&- || true
+            return 0
+        }
+    fi
     case "$mode" in
         area) geometry="$(slurp -b '#ffffff20' -c '#00000040' 9>&-)" || return 1 ;;
         display|output) geometry="$(slurp -o -r -c '#00000000' 9>&-)" || return 1 ;;

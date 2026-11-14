@@ -21,6 +21,7 @@ with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:
 set -euo pipefail
 printf 'grim:%s\n' "$*" >>"$EVENTS"
 [[ "$1" == "-g" || "$1" == "-o" ]] || exit 2
+sleep "${GRIM_DELAY:-0}"
 printf 'fakePNG' > "$3"
 """,
         "slurp": r"""#!/usr/bin/env bash
@@ -132,6 +133,29 @@ esac
         assert not list((root / "run").glob("awtarchy-satty-*.png"))
     assert len(set(saved_files)) == 3, "Rapid captures must not overwrite"
 
+    # Two overlapping keypresses must both save. Previously the second
+    # process silently dropped the capture when flock was busy.
+    events.write_text("")
+    rapid_env = dict(env, FOCUSED_OUTPUT="DP-1", GRIM_DELAY="0.35")
+    first = subprocess.Popen(
+        ["bash", str(SCRIPT), "display-copy"], env=rapid_env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    second = subprocess.Popen(
+        ["bash", str(SCRIPT), "display-copy"], env=rapid_env,
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
+    )
+    for capture in (first, second):
+        stdout, stderr = capture.communicate(timeout=10)
+        assert capture.returncode == 0, (stdout, stderr)
+        assert "Saved screenshot and copied to clipboard" in stdout
+    lines = events.read_text().splitlines()
+    assert len(lines) == 6, lines
+    assert all(lines[index] == "swaymsg:get_outputs" for index in (0, 3)), lines
+    assert all(lines[index].startswith("grim:-o DP-1 ") for index in (1, 4)), lines
+    assert lines[2] == lines[5] == "clipboard", lines
+    assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 5
+
     # No focused output or invalid IPC must fail safely: no capture or save.
     for invalid in ("none", "both", "inactive", "malformed"):
         events.write_text("")
@@ -142,7 +166,7 @@ esac
         )
         assert failed.returncode != 0, (invalid, failed.stdout, failed.stderr)
         assert events.read_text().splitlines() == ["swaymsg:get_outputs"]
-        assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 3
+        assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 5
     # Super+Shift+F retains display picker and Satty (covered above).
 
     # A second screenshot must succeed while the previous clipboard provider
