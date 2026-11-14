@@ -249,16 +249,53 @@ bindsym Mod4+Shift+x exec bash $trial/capture.sh area
 bindsym Mod4+Shift+s exec bash $trial/capture.sh window
 bindsym Print exec bash $trial/capture.sh output
 
-# Awtarchy utility floating rules. Sway percentages remain relative to output.
-for_window [app_id="btop"] floating enable, resize set 80 ppt 85 ppt, move position center
-for_window [app_id="maccel"] floating enable, resize set 90 ppt 96 ppt, move position center
-for_window [app_id="hyprmoncfg"] floating enable, resize set 85 ppt 90 ppt, move position center
-for_window [app_id="smtty"] floating enable, resize set 50 ppt 65 ppt, move position center
-for_window [app_id="smtty-O"] floating enable, resize set 50 ppt 65 ppt, move position center
-for_window [app_id="wallpicker"] floating enable, resize set 85 ppt 90 ppt, move position center
-for_window [app_id="awtarchy-qalc"] floating enable, resize set 347 px 510 px, move position center
-for_window [app_id="awtarchy-default-apps"] floating enable, resize set 540 px 460 px, move position center
-for_window [app_id="Wiremix"] floating enable, resize set 950 px 700 px, move position center
+# Mirror Hyprland's explicitly floating utilities. Native Wayland applications
+# expose app_id; XWayland windows expose WM_CLASS instead. Match both without
+# enabling floating for unrelated windows (especially fullscreen games).
+# Sizes use the same per-output percentages as Hyprland.
+for_window [app_id="^btop$"] floating enable, resize set 80 ppt 85 ppt, move position center
+for_window [class="^btop$"] floating enable, resize set 80 ppt 85 ppt, move position center
+for_window [app_id="^maccel$"] floating enable, resize set 90 ppt 96 ppt, move position center
+for_window [class="^maccel$"] floating enable, resize set 90 ppt 96 ppt, move position center
+for_window [app_id="^hyprmoncfg$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [class="^hyprmoncfg$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [app_id="^smtty$"] floating enable, resize set 50 ppt 65 ppt, move position center
+for_window [class="^smtty$"] floating enable, resize set 50 ppt 65 ppt, move position center
+for_window [app_id="^smtty-O$"] floating enable, resize set 50 ppt 65 ppt, move position center
+for_window [class="^smtty-O$"] floating enable, resize set 50 ppt 65 ppt, move position center
+for_window [app_id="^wallpicker$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [class="^wallpicker$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [app_id="^awtarchy-qalc$"] floating enable, resize set 347 px 510 px, move position center
+for_window [class="^awtarchy-qalc$"] floating enable, resize set 347 px 510 px, move position center
+for_window [app_id="^awtarchy-default-apps$"] floating enable, resize set 540 px 460 px, move position center
+for_window [class="^awtarchy-default-apps$"] floating enable, resize set 540 px 460 px, move position center
+for_window [app_id="^Wiremix$"] floating enable, resize set 65 ppt 70 ppt, move position center
+for_window [class="^Wiremix$"] floating enable, resize set 65 ppt 70 ppt, move position center
+for_window [app_id="^org[.]pulseaudio[.]pavucontrol$"] floating enable, resize set 55 ppt 70 ppt, move position center
+for_window [class="^org[.]pulseaudio[.]pavucontrol$"] floating enable, resize set 55 ppt 70 ppt, move position center
+for_window [app_id="^Pulsemixer$"] floating enable, resize set 55 ppt 70 ppt, move position center
+for_window [class="^Pulsemixer$"] floating enable, resize set 55 ppt 70 ppt, move position center
+for_window [app_id="^hypr_quicksettings$"] floating enable, resize set 70 ppt 50 ppt, move position center
+for_window [class="^hypr_quicksettings$"] floating enable, resize set 70 ppt 50 ppt, move position center
+for_window [app_id="^awtarchy-tips-tui$"] floating enable, resize set 50 ppt 50 ppt, move position center
+for_window [class="^awtarchy-tips-tui$"] floating enable, resize set 50 ppt 50 ppt, move position center
+for_window [app_id="^hyprbars$"] floating enable, resize set 30 ppt 10 ppt, move position center
+for_window [class="^hyprbars$"] floating enable, resize set 30 ppt 10 ppt, move position center
+
+# ProtonUp-Qt: Qt's desktop file ID is net.davidotek.pupgui2. Float every
+# toplevel with this identity, including child dialogs/tool windows; assign
+# the 45% main-window dimensions ONLY to the application's actual main title.
+# Sizing all matching windows would enlarge its dialogs to main-window size.
+for_window [app_id="^(net[.]davidotek[.]pupgui2|pupgui2|ProtonUp-Qt)$"] floating enable
+for_window [class="^(net[.]davidotek[.]pupgui2|pupgui2|ProtonUp-Qt)$"] floating enable
+for_window [title="^ProtonUp-Qt( - Wine/Proton Installer)?$"] floating enable, resize set 45 ppt 45 ppt, move position center
+
+# XWayland dialogs may use a distinct WM_CLASS from their parent. Float the
+# standard dialog roles/types rather than relying on an application's title.
+# Native Wayland xdg_popups are already managed as child surfaces by Sway.
+for_window [window_type="dialog"] floating enable
+for_window [window_role="^(dialog|pop-up|task_dialog)$"] floating enable
+
 # Quickshell FloatingWindow surfaces are regular xdg_toplevels in Sway.
 # Title rules can apply after the first tile. Float known Quickshell app IDs
 # before their titles arrive, then apply precise per-title geometry below.
