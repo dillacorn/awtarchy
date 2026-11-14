@@ -112,6 +112,75 @@ def validate_sway_config(target: Path, content: bytes):
         temp_path.unlink(missing_ok=True)
 
 
+def activate_in_running_sway(home: Path, expected: dict, changed_keys: set):
+    """Activate managed updates without interrupting the compositor session.
+
+    Never send reload to a different Sway instance or restart a modified
+    Quickshell manager. A failed live refresh must not discard applied files.
+    """
+    if not changed_keys:
+        print("Sway managed files already current; no live reload needed.")
+        return
+    if (os.environ.get("XDG_CURRENT_DESKTOP", "").lower() != "sway"
+            or not os.environ.get("SWAYSOCK")
+            or not os.environ.get("WAYLAND_DISPLAY")):
+        print("Sway is not the current session; updates activate on next Sway login.")
+        return
+
+    version = subprocess.run(
+        ["swaymsg", "-r", "-t", "get_version"], capture_output=True,
+        text=True, timeout=8)
+    if version.returncode:
+        raise ValueError("Files updated, but Sway identity check failed: "
+                         + version.stderr.strip())
+    try:
+        running_config = json.loads(version.stdout)["loaded_config_file_name"]
+    except (ValueError, KeyError, TypeError):
+        raise ValueError("Files updated; Sway did not report its loaded config")
+    target_config = str(home / ".config/sway/awtarchy-trial/config")
+    if running_config != target_config:
+        print("Active Sway is not the Awtarchy trial; skipping unrelated session reload.")
+        return
+
+    config_key = ".config/sway/awtarchy-trial/config"
+    if config_key in changed_keys:
+        reply = subprocess.run(
+            ["swaymsg", "-r", "-t", "command", "reload"],
+            capture_output=True, text=True, timeout=15)
+        try:
+            result = json.loads(reply.stdout)
+        except (ValueError, TypeError):
+            result = None
+        if (reply.returncode or not isinstance(result, list) or not result
+                or any(not isinstance(item, dict) or item.get("success") is not True
+                       for item in result)):
+            raise ValueError("Files updated, but Sway config reload failed: "
+                             + (reply.stderr.strip() or reply.stdout.strip()))
+        print("LIVE: Sway configuration reloaded; applications and workspaces retained.")
+
+    needs_shell_restart = any(
+        key.startswith(".config/quickshell/awtarchy-sway/")
+        or key == ".config/sway/awtarchy-trial/quickshell.sh"
+        for key in changed_keys
+    )
+    if not needs_shell_restart:
+        return
+    manager = home / ".config/sway/awtarchy-trial/quickshell.sh"
+    if (manager.is_symlink() or not manager.is_file()
+            or expected.get(manager) != manager.read_bytes()):
+        print("Sway shell update installed; custom/missing Quickshell manager not "
+              "executed automatically. Restart the Sway shell manually after review.",
+              file=sys.stderr)
+        return
+    env = dict(os.environ, QUICKSHELL_CONFIG_NAME="awtarchy-sway")
+    restart = subprocess.run(["bash", str(manager), "restart"],
+                             env=env, timeout=30)
+    if restart.returncode:
+        raise ValueError("Files updated and Sway reloaded, but the Sway Quickshell "
+                         "restart failed; inspect the Quickshell-Sway log")
+    print("LIVE: Only the Awtarchy Sway Quickshell profile restarted.")
+
+
 def atomic_replace(target, body):
     if target.is_symlink() or target.parent.is_symlink():
         raise ValueError("Refusing symlinked Sway destination")
@@ -185,6 +254,7 @@ def main():
     if not isinstance(original, dict):
         raise ValueError("Invalid Sway baseline")
     updated = dict(original)
+    changed_keys = set()
     counts = dict(unchanged=0, update=0, preserve=0, missing=0)
     for path, body in sorted(desired.items(), key=lambda item: str(item[0])):
         key = str(path.relative_to(home))
@@ -222,6 +292,7 @@ def main():
                     raise ValueError("Sway config changed during update; refusing")
                 atomic_replace(path, candidate)
                 updated[key] = sha(candidate)
+                changed_keys.add(key)
             continue
         if current is None:
             # New QML emitted by our strict Sway renderer is managed source,
@@ -265,6 +336,7 @@ def main():
                     directory.mkdir(mode=0o700, exist_ok=True)
                 atomic_replace(path, body)
                 updated[key] = target
+                changed_keys.add(key)
             continue
         if (key not in original
                 and current in LEGACY_MANUAL_INSTALL_HASHES.get(key, ())):
@@ -280,6 +352,7 @@ def main():
                     raise ValueError("Sway manual hotfix changed during update; refusing")
                 atomic_replace(path, body)
                 updated[key] = target
+                changed_keys.add(key)
             continue
         if original.get(key) != current:
             counts["preserve"] += 1
@@ -290,12 +363,13 @@ def main():
         if args.mode == "apply":
             atomic_replace(path, body)
             updated[key] = target
+            changed_keys.add(key)
     if args.mode == "apply":
         atomic_replace(manifest, json.dumps(updated, indent=2, sort_keys=True).encode() + b"\n")
     print("Summary: " + ", ".join(f"{key}={value}" for key, value in counts.items()))
     print("Personal config and user-modified files were never overwritten.")
     if args.mode == "apply":
-        print("Re-login recommended to load the new Sway Quickshell helpers.")
+        activate_in_running_sway(home, desired, changed_keys)
 
 if __name__ == "__main__":
     try:

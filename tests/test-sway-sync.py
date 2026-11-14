@@ -102,4 +102,84 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     assert "PRESERVE modified file: " + key in report, report
     assert missing.read_bytes() == b"// personal Sway QML modification\n"
 
+
+# Hot activation must target exactly this Awtarchy Sway session. Mock the
+# compositor and Quickshell commands; do not touch any real running session.
+from types import SimpleNamespace
+
+with tempfile.TemporaryDirectory(prefix="sway-live-reload-test-") as tmp:
+    home = Path(tmp)
+    manager = home / ".config/sway/awtarchy-trial/quickshell.sh"
+    manager.parent.mkdir(parents=True)
+    manager.write_bytes(b"#!/bin/bash\n")
+    expected = {manager: manager.read_bytes()}
+    config_key = ".config/sway/awtarchy-trial/config"
+    shell_key = ".config/quickshell/awtarchy-sway/Bar.qml"
+    active = dict(os.environ, XDG_CURRENT_DESKTOP="sway", SWAYSOCK="/tmp/sway.sock",
+                  WAYLAND_DISPLAY="wayland-1")
+
+    def response(argv, **kwargs):
+        if argv[:3] == ["swaymsg", "-r", "-t"]:
+            if argv[3] == "get_version":
+                return SimpleNamespace(returncode=0, stdout=json.dumps({
+                    "loaded_config_file_name": str(home / config_key)
+                }), stderr="")
+            if argv[3] == "command":
+                assert argv[4] == "reload", argv
+                return SimpleNamespace(returncode=0, stdout='[{"success":true}]', stderr="")
+        if argv == ["bash", str(manager), "restart"]:
+            assert kwargs["env"]["QUICKSHELL_CONFIG_NAME"] == "awtarchy-sway"
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        raise AssertionError("Unexpected activation command: " + str(argv))
+
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=response) as proc:
+        sway_sync.activate_in_running_sway(home, expected, {config_key, shell_key})
+        assert proc.call_count == 3
+        assert proc.call_args_list[1].args[0][-1] == "reload"
+
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=response) as proc:
+        sway_sync.activate_in_running_sway(home, expected, {config_key})
+        assert proc.call_count == 2  # no unnecessary shell restart
+
+    def other_session(argv, **kwargs):
+        assert argv[-1] == "get_version", argv
+        return SimpleNamespace(returncode=0, stdout=json.dumps({
+            "loaded_config_file_name": str(home / ".config/sway/config")
+        }), stderr="")
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=other_session) as proc:
+        sway_sync.activate_in_running_sway(home, expected, {config_key, shell_key})
+        assert proc.call_count == 1  # foreign Sway compositor untouched
+
+    with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Hyprland"}), \
+         patch.object(sway_sync.subprocess, "run") as proc:
+        sway_sync.activate_in_running_sway(home, expected, {config_key, shell_key})
+        proc.assert_not_called()
+
+    # If a managed manager is user-modified, do not execute or terminate it.
+    manager.write_bytes(b"#!/bin/bash\n# user customized\n")
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=response) as proc:
+        sway_sync.activate_in_running_sway(home, expected, {shell_key})
+        assert proc.call_count == 1
+
+    # A failed reload is reported after writes, never disguised as success.
+    manager.write_bytes(expected[manager])
+    def rejected(argv, **kwargs):
+        if argv[-1] == "get_version":
+            return response(argv, **kwargs)
+        return SimpleNamespace(returncode=2, stdout='[{"success":false}]', stderr="invalid")
+    with patch.dict(os.environ, active), patch.object(sway_sync.subprocess, "run",
+                                                     side_effect=rejected):
+        try:
+            sway_sync.activate_in_running_sway(home, expected, {config_key, shell_key})
+        except ValueError as exc:
+            assert "reload failed" in str(exc), exc
+        else:
+            raise AssertionError("Rejected live reload must not report success")
+
+print("PASS: live Sway session reload, shell-only restart and foreign-session protection")
+
 print("PASS: missing generated Sway QML install, exact-file adoption, customized QML preservation")

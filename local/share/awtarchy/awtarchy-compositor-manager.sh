@@ -237,7 +237,7 @@ else
   fi
 fi
 if [[ "$operation" == update-sway ]]; then
-  printf 'Sway managed files updated. Log out and back into Sway to reload them.\n'
+  printf 'Sway managed update completed. The live trial session reloads changed Sway/Quickshell components when safe; no logout required.\n'
 else
   printf 'Reboot recommended to refresh Ly sessions. No automatic reboot.\n'
 fi
