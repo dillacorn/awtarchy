@@ -20,7 +20,7 @@ with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:
         "grim": r"""#!/usr/bin/env bash
 set -euo pipefail
 printf 'grim:%s\n' "$*" >>"$EVENTS"
-[[ "$1" == "-g" ]] || exit 2
+[[ "$1" == "-g" || "$1" == "-o" ]] || exit 2
 printf 'fakePNG' > "$3"
 """,
         "slurp": r"""#!/usr/bin/env bash
@@ -48,8 +48,30 @@ printf 'satty:%s\n' "$2" >>"$EVENTS"
 """,
         "swaymsg": r"""#!/usr/bin/env bash
 set -euo pipefail
-[[ "$1" == "-r" && "$2" == "-t" && "$3" == get_tree ]] || exit 2
-printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con","id":3,"name":"Example","app_id":"example","visible":true,"rect":{"x":10,"y":20,"width":300,"height":200}}]}]}'
+[[ "$1" == "-r" && "$2" == "-t" ]] || exit 2
+case "$3" in
+    get_tree)
+        printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con","id":3,"name":"Example","app_id":"example","visible":true,"rect":{"x":10,"y":20,"width":300,"height":200}}]}]}'
+        ;;
+    get_outputs)
+        printf 'swaymsg:get_outputs\n' >>"$EVENTS"
+        case "${FOCUSED_OUTPUT:-DP-3}" in
+            DP-1)
+                printf '%s\n' '[{"name":"DP-1","focused":true,"active":true},{"name":"DP-3","focused":false,"active":true}]' ;;
+            DP-3)
+                printf '%s\n' '[{"name":"DP-1","focused":false,"active":true},{"name":"DP-3","focused":true,"active":true}]' ;;
+            none)
+                printf '%s\n' '[{"name":"DP-1","focused":false,"active":true},{"name":"DP-3","focused":false,"active":true}]' ;;
+            both)
+                printf '%s\n' '[{"name":"DP-1","focused":true,"active":true},{"name":"DP-3","focused":true,"active":true}]' ;;
+            inactive)
+                printf '%s\n' '[{"name":"DP-1","focused":true,"active":false},{"name":"DP-3","focused":false,"active":true}]' ;;
+            malformed)
+                printf '%s\n' '{}' ;;
+            *) exit 2 ;;
+        esac ;;
+    *) exit 2 ;;
+esac
 """,
     }
     for name, code in mocks.items():
@@ -84,18 +106,44 @@ printf '%s\n' '{"type":"root","nodes":[{"type":"workspace","nodes":[{"type":"con
         if mode in ("display", "output"):
             assert "-o" in lines[0]
 
-    # Super+Shift+D selects the output and copies it, but never invokes
-    # Satty. Super+Shift+F retains the editor-enabled 'display' mode.
-    events.write_text("")
-    clip_only = subprocess.run(
-        ["bash", str(SCRIPT), "display-copy"], env=env,
-        capture_output=True, text=True, timeout=10
-    )
-    assert clip_only.returncode == 0, (clip_only.stdout, clip_only.stderr)
-    lines = events.read_text().splitlines()
-    assert len(lines) == 3, lines
-    assert "-o" in lines[0] and lines[1].startswith("grim:"), lines
-    assert lines[2] == "clipboard", lines
+    # Super+Shift+D: directly capture the focused output, save PNG AND
+    # clipboard, without slurp, Satty, or an output selection prompt.
+    saved_files = []
+    for selected in ("DP-1", "DP-3", "DP-3"):
+        events.write_text("")
+        clip_only = subprocess.run(
+            ["bash", str(SCRIPT), "display-copy"],
+            env=dict(env, FOCUSED_OUTPUT=selected),
+            capture_output=True, text=True, timeout=10
+        )
+        assert clip_only.returncode == 0, (
+            selected, clip_only.stdout, clip_only.stderr)
+        lines = events.read_text().splitlines()
+        assert lines[0] == "swaymsg:get_outputs", (selected, lines)
+        assert lines[1].startswith(f"grim:-o {selected} "), (selected, lines)
+        assert lines[2] == "clipboard", (selected, lines)
+        assert len(lines) == 3, (selected, lines)
+        assert all(not line.startswith(("slurp:", "satty:")) for line in lines)
+        saved = sorted((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))
+        assert len(saved) == len(saved_files) + 1
+        assert all(p.read_bytes() == b"fakePNG" for p in saved)
+        saved_files = saved
+        assert "Saved screenshot and copied to clipboard" in clip_only.stdout
+        assert not list((root / "run").glob("awtarchy-satty-*.png"))
+    assert len(set(saved_files)) == 3, "Rapid captures must not overwrite"
+
+    # No focused output or invalid IPC must fail safely: no capture or save.
+    for invalid in ("none", "both", "inactive", "malformed"):
+        events.write_text("")
+        failed = subprocess.run(
+            ["bash", str(SCRIPT), "display-copy"],
+            env=dict(env, FOCUSED_OUTPUT=invalid),
+            capture_output=True, text=True, timeout=10
+        )
+        assert failed.returncode != 0, (invalid, failed.stdout, failed.stderr)
+        assert events.read_text().splitlines() == ["swaymsg:get_outputs"]
+        assert len(list((root / "home/Pictures/Screenshots").glob("Screenshot-*.png"))) == 3
+    # Super+Shift+F retains display picker and Satty (covered above).
 
     # A second screenshot must succeed while the previous clipboard provider
     # remains running; the old inherited flock caused a false lock-busy.
