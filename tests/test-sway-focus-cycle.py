@@ -57,8 +57,8 @@ nested = tree([
 ], [leaf(21, "pupgui2", xwayland=True)])
 assert module.choice(nested, focus, "next") == 12
 assert module.choice(nested, focus, "prev") == 21
-nested["nodes"][0]["nodes"][0]["nodes"][0]["focused"] = False
-nested["nodes"][0]["nodes"][0]["nodes"][1]["focused"] = True
+nested["nodes"][0]["nodes"][0]["nodes"][0]["nodes"][0]["focused"] = False
+nested["nodes"][0]["nodes"][0]["nodes"][0]["nodes"][1]["focused"] = True
 assert module.choice(nested, focus, "next") == 21
 
 assert module.choice(tree([leaf(1, "only")], []), focus, "next") is None
