@@ -31,6 +31,14 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     with tempfile.TemporaryDirectory(prefix="sway-render-test-") as stage:
         desired = sway_sync.expected_files(ROOT, home, Path(stage))
 
+    # Screenshot audio is required by Sway capture and Sound Settings.
+    # This must be present in the updater inventory, not just setup.sh.
+    screenshot_helper = home / ".config/sway/awtarchy-trial/screenshot_sound.sh"
+    assert screenshot_helper in desired, "Sway update omitted screenshot_sound.sh"
+    assert desired[screenshot_helper] == (
+        ROOT / "config/hypr/scripts/screenshot_sound.sh"
+    ).read_bytes()
+
     manager_path = home / ".local/share/awtarchy/awtarchy-compositor-manager.sh"
     assert manager_path in desired
     missing = home / ".config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml"

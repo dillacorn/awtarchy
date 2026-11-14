@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 import subprocess
 import tempfile
@@ -18,6 +19,14 @@ EXPECTED_HASH = "baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692
 
 assert "screenshot_sound.sh" in SWAY_SETUP.read_text()
 assert "screenshot_sound.sh" in SWAY_SYNC.read_text()
+# Hyprland launches these scripts directly from keybinds/autostart.
+# Preserve executable mode when changing only their content.
+for executable in (
+    ROOT / "config/hypr/scripts/screenshot_area.sh",
+    ROOT / "config/hypr/scripts/screenshot_fullscreen.sh",
+    ROOT / "config/hypr/scripts/quickshell_ready_sound.sh",
+):
+    assert executable.stat().st_mode & stat.S_IXUSR, executable
 assert "play satty 9>&-" in HYPR_AREA.read_text()
 assert "play satty 9>&-" in HYPR_FULL.read_text()
 assert "ScreenshotSoundSettings" in (

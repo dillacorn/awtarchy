@@ -65,7 +65,7 @@ def expected_files(repo, home, temporary):
     # Sway uses private copies of shared helpers (DDC and screenshot audio).
     # Active ~/.config/hypr/scripts may be personalized or from an older
     # release, so Sway updates must not depend on replacing those files.
-    for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh"):
+    for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh", "screenshot_sound.sh"):
         source = repo / "config/hypr/scripts" / name
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe shared helper source: " + str(source))
