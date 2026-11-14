@@ -56,15 +56,18 @@ for required in (
     "grabPermissions: PointerHandler.CanTakeOverFromAnything",
     "resizePreviewWidth",
     "resizePreviewHeight",
-    "popup.implicitWidth = popup.resizePreviewWidth",
-    "popup.implicitHeight = popup.resizePreviewHeight",
+    "signal resizeCommitted(int resizedWidth, int resizedHeight)",
+    "popup.resizeCommitted(popup.resizePreviewWidth,",
+    "popup.resizePreviewHeight);",
     "popup.requestActivate()",
     'surfaceRole === "launcher"',
     "WlrKeyboardFocus.Exclusive",
 ):
     assert required in shell_helper, required
-assert shell_helper.index("popup.implicitWidth = popup.resizePreviewWidth") < shell_helper.index("onActiveTranslationChanged:"), (
-    "Sway resize must commit once on release, not during pointer motion")
+assert shell_helper.index("popup.resizeCommitted(popup.resizePreviewWidth,") < shell_helper.index("onActiveTranslationChanged:"), (
+    "Sway resize must notify original size owner only on release")
+assert "popup.implicitWidth = popup.resizePreviewWidth" not in shell_helper
+assert "popup.implicitHeight = popup.resizePreviewHeight" not in shell_helper
 
 with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
     output = Path(directory) / "awtarchy-sway"
@@ -94,6 +97,11 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-sway-flyout-") as directory:
         # toplevel type, instead of being mutated by Sway's renderer.
         assert "    FloatingWindow {" in original, filename
         assert "SwayFlyoutWindow" not in original, filename
+        owner_method = "setWindowSize" if filename == "Launcher.qml" else "applyWindowSize"
+        assert (
+            f"onResizeCommitted: (width, height) => root.{owner_method}(width, height)"
+        ) in rendered, filename
+        assert f"function {owner_method}(width, height)" in rendered, filename
 
     # Native notification popups already use layer-shell; only the
     # notification center should be replaced.
