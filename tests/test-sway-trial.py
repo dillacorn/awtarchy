@@ -114,6 +114,12 @@ assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
 assert "nwg-displays" in (TRIAL / "setup.sh").read_text()
+assert "tty-launch.sh" in (TRIAL / "setup.sh").read_text()
+assert "/usr/local/bin/awtarchy-sway-session" in (TRIAL / "tty-launch.sh").read_text()
+assert '/usr/bin/sway "$@"' in (TRIAL / "tty-launch.sh").read_text()
+assert ".local/bin/sway" in (TRIAL / "sync.py").read_text()
+assert "tty-launch.sh" in MANAGER
+
 sway_package_stage = RUNTIME.split(
     "install_sway_repo_dependencies_stage() {", 1
 )[1].split("install_arch_repo_apps_stage()", 1)[0]

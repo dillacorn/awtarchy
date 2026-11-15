@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
 
     assert home / ".config/sway/awtarchy-trial/outputs" in desired
     assert home / ".config/sway/workspaces" in desired
+    tty = home / ".local/bin/sway"
+    assert tty in desired
+    assert desired[tty] == (ROOT / "trials/sway/tty-launch.sh").read_bytes()
     # The source stub must remain separate from the user's saved output data.
     assert desired[home / ".config/sway/awtarchy-trial/outputs"].startswith(b"#")
     assert desired[home / ".config/sway/workspaces"].startswith(b"#")
@@ -76,7 +79,10 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     applied = run("apply")
     assert "INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in applied, applied
     assert missing.read_bytes() == desired[missing]
+    assert tty.read_bytes() == desired[tty]
+    assert tty.stat().st_mode & 0o111, "New Sway TTY command must be executable"
     updated = json.loads(manifest.read_text())
+    assert updated[str(tty.relative_to(home))] == digest(desired[tty])
     # Saved Sway outputs/workspaces belong to the user after customization.
     custom_outputs = home / ".config/sway/awtarchy-trial/outputs"
     custom_workspaces = home / ".config/sway/workspaces"
@@ -94,13 +100,16 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     # First-time Hyprmoncfg workspace import must not prevent the initial
     # baseline from being recorded or make a personal layout managed.
     old_baseline = manifest.read_text()
+    tty.write_bytes(b"#!/usr/bin/env bash\necho custom sway launcher\n")
     custom_workspaces.write_text("workspace 2 output DP-3\n")
     manifest.unlink()
     run("record")
     imported_baseline = json.loads(manifest.read_text())
     assert ".config/sway/workspaces" not in imported_baseline
+    assert ".local/bin/sway" not in imported_baseline
     assert ".config/sway/awtarchy-trial/outputs" not in imported_baseline
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+    assert tty.read_bytes().startswith(b"#!/usr/bin/env bash\necho custom")
     assert "PRESERVE modified file" in run("review")
     assert "PRESERVE modified file" in run("apply")
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
