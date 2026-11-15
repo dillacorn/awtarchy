@@ -1,9 +1,9 @@
-# SwayWM experimental Awtarchy integration
+# Maintained optional Sway compositor in Awtarchy v4.2.0
 
-Branch: SwayWM_Migration_Trial_Investigation
-
-**Not released or merged.** Sway is an optional second compositor;
-Hyprland remains the default and its existing session/configuration is preserved.
+Sway is an optional second compositor. Hyprland remains the default.
+Both can be installed at once with independently managed compositor and
+Quickshell profiles. Use `awtarchy compositor` to manage them.
+Older trial-specific paths remain for safe upgrades.
 SwayFX is deferred and must never be installed alongside Sway.
 
 ## Lesson from Jay and Mango
@@ -16,9 +16,9 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 
 ## Isolated installation
 
-- Trial config: ~/.config/sway/awtarchy-trial/config
+- Sway config (retained legacy path): ~/.config/sway/awtarchy-trial/config
 - Generated shell: ~/.config/quickshell/awtarchy-sway
-- Ly session: Sway (Awtarchy Trial)
+- Ly session: Sway (Awtarchy); older trial entries remain until upgraded
 - System session launcher: /usr/local/bin/awtarchy-sway-session
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
 - Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Quickshell overlay with exact portal-source protocol; Fuzzel not used by OBS)
@@ -33,9 +33,9 @@ pacman transactions. Shared packages are preserved.
 
 ## Compatibility matrix
 
-Implemented means committed source, **not live verified**.
+Automated checks cover source and configuration; hardware-specific behavior still needs live testing.
 
-| Hyprland feature | Sway trial |
+| Hyprland feature | Awtarchy Sway |
 | --- | --- |
 | 6px inner/9px outer gaps | Native config |
 | ALT+mouse drag and resize | Native Sway modifier |
