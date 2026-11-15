@@ -57,6 +57,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
         if path == missing:
             continue
         path.write_bytes(contents)
+        if path == tty:
+            # Real setup.sh uses install -m 0755, not a bare write.
+            path.chmod(0o755)
         baseline[str(path.relative_to(home))] = digest(contents)
     manifest = state / "sway-managed-baseline.json"
     manifest.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
