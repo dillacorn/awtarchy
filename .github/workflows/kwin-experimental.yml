@@ -41,6 +41,8 @@ jobs:
           bash tests/test-kwin-package-plan.sh
           python3 -m py_compile trials/kwin/prepare-session.py
           python3 tests/test-kwin-session-stage.py
+          python3 -m py_compile trials/kwin/monitor-info.py
+          python3 tests/test-kwin-monitor-info.py
       - name: Quickshell probe contract
         run: |
           python3 - <<'PY'

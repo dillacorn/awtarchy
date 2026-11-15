@@ -33,6 +33,21 @@ The script checks only local package metadata and existing configuration. It
 does not install, remove, rewrite, enable, start or stop anything. It does not
 need root. A missing optional package is a status, not a change request.
 
+## KWin monitor inspection
+
+KWin's `libkscreen` package provides `kscreen-doctor`, which can query
+monitor resolution, refresh rate, scale and position without the Plasma
+desktop shell. During a running KWin trial, this read-only summary is
+available via:
+
+```bash
+python3 trials/kwin/monitor-info.py
+```
+
+This *does not* save or configure monitors and should not be confused with
+Sway's `nwg-displays`. It reports an absent `enabled` JSON property as
+unknown rather than claiming a virtual monitor is off.
+
 ## Package dependency preview (no installation)
 
 On an Arch/CachyOS host, `bash trials/kwin/package-plan.sh` prints the

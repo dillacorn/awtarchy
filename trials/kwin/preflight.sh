@@ -20,7 +20,7 @@ main() {
     printf '\nInstalled packages:\n'
 
     local pkg state
-    for pkg in kwin xorg-xwayland kglobalacceld plasma-workspace plasma-meta \
+    for pkg in kwin xorg-xwayland libkscreen kglobalacceld plasma-workspace plasma-meta \
                quickshell foot xdg-desktop-portal-kde xdg-desktop-portal-hyprland \
                xdg-desktop-portal-wlr xdg-desktop-portal-gtk hyprland sway; do
         if pacman -Qq -- "$pkg" >/dev/null 2>&1; then
@@ -41,7 +41,7 @@ main() {
     done
 
     printf '\nExecutables:\n'
-    for pkg in kwin_wayland kwin_wayland_wrapper quickshell qs foot; do
+    for pkg in kwin_wayland kwin_wayland_wrapper kscreen-doctor quickshell qs foot; do
         if command -v "$pkg" >/dev/null 2>&1; then
             printf '  %-24s present\n' "$pkg"
         else
