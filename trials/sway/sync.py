@@ -508,6 +508,17 @@ def main():
                     ):
                         raise ValueError("Unsafe Sway portal configuration directory")
                     directory.mkdir(mode=0o700, exist_ok=True)
+                if key == ".local/bin/sway":
+                    # Existing v4.2.0 Sway users may not have this directory.
+                    # Never create through a symlink or touch another home.
+                    parent = home / ".local"
+                    bin_dir = parent / "bin"
+                    if parent.is_symlink() or not parent.is_dir():
+                        raise ValueError("Unsafe or missing ~/.local directory")
+                    if bin_dir.is_symlink() or (
+                            bin_dir.exists() and not bin_dir.is_dir()):
+                        raise ValueError("Unsafe ~/.local/bin destination")
+                    bin_dir.mkdir(mode=0o700, exist_ok=True)
                 atomic_replace(path, body)
                 updated[key] = target
                 changed_keys.add(key)
