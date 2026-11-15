@@ -4116,10 +4116,10 @@ install_awtarchy_command_stage() {
 
   # The remote self-updater tracks stable main. It must not silently downgrade
   # the Sway-aware installer/runtime during an unreleased compositor trial.
-  if [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]] &&
-     [[ "${REPO_DIR:-}" != */SwayWM_Migration_Trial_Investigation ]]; then
-    # The exact stable main runtime is always eligible for normal self-update.
-    # A trial checkout can explicitly request AWTARCHY_SKIP_SELF_UPDATE=1.
+  if compositor_has_sway && [[ -f "${HOME_DIR}/.local/state/awtarchy/compositor-trial-source" ]]; then
+    log "Existing branch-only Sway trial: leave branch updater installed until explicit stable update."
+  elif [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
+    # Release-based Sway and Hyprland installers use the same main updater.
     log "Verifying the installed Awtarchy command against the current main updater..."
     if ! run_as_target env -u XDG_DATA_HOME -u XDG_STATE_HOME \
       HOME="$HOME_DIR" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
@@ -10430,6 +10430,13 @@ main() {
 
   if (( REVIEW_ONLY == 1 )); then
     review_plan "$plan_file" review-only
+    if [[ -f "${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json" &&
+          ! -L "${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json" &&
+          -f "$repo_dir/trials/sway/sync.py" ]]; then
+      log "Reviewing Sway managed changes from the same immutable release..."
+      run_target python3 "$repo_dir/trials/sway/sync.py" review --repo "$repo_dir" ||
+        die "Sway review failed; no managed files were changed."
+    fi
     log "Review-only mode complete. No files were changed."
     return 0
   fi
@@ -10579,6 +10586,23 @@ main() {
 
   if ! confirm_live_update_result; then
     return 20
+  fi
+
+  # Awtarchy's Sway shell is generated from the same published release as
+  # the Hyprland assets. Update only installations that recorded a trusted
+  # Sway source baseline, using the existing backup/preserve policy.
+  if [[ -f "${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json" &&
+        ! -L "${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json" ]]; then
+    if [[ -f "$repo_dir/trials/sway/sync.py" &&
+          ! -L "$repo_dir/trials/sway/sync.py" ]]; then
+      log "Updating separately managed Sway configuration from ${source_label}..."
+      if ! run_target python3 "$repo_dir/trials/sway/sync.py" apply --repo "$repo_dir"; then
+        warn "Sway config update did not finish. Existing Sway customizations and baseline remain protected."
+        warn "Use awtarchy compositor after this update to review and retry the Sway component."
+      fi
+    else
+      warn "The selected release has no Sway updater. Existing Sway files were left unchanged."
+    fi
   fi
 
   # Do not mutate hardware/package state until the user accepts the live config.
