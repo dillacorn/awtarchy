@@ -7,6 +7,9 @@ case "$1" in --check|--install) action="$1" ;; *) fail 'Unknown action'; exit 2 
 [[ "$(id -u)" != 0 && -f /etc/arch-release ]] || { fail 'Use a normal Arch/CachyOS user'; exit 1; }
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 src="$repo/trials/sway"
+tty_source="$src/tty-launch.sh"
+tty_dir="$HOME/.local/bin"
+tty_launcher="$tty_dir/sway"
 config="${XDG_CONFIG_HOME:-$HOME/.config}"
 trial="$config/sway/awtarchy-trial"
 shell_dir="$config/quickshell/awtarchy-sway"
@@ -15,6 +18,13 @@ screencast_chooser="$config/xdg-desktop-portal-wlr/sway"
 for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal" "$config/xdg-desktop-portal-wlr"; do
     [[ ! -L "$directory" && ( ! -e "$directory" || -d "$directory" ) ]] || { fail "Unsafe directory: $directory"; exit 1; }
 done
+[[ -f "$tty_source" && ! -L "$tty_source" ]] && bash -n "$tty_source" ||
+    { fail "Missing or invalid Sway TTY entry"; exit 1; }
+for directory in "$HOME/.local" "$tty_dir"; do
+    [[ ! -L "$directory" && ( ! -e "$directory" || -d "$directory" ) ]] ||
+        { fail "Unsafe user launcher directory: $directory"; exit 1; }
+done
+[[ -x /usr/bin/sway ]] || { fail "Native /usr/bin/sway is unavailable"; exit 1; }
 for bin in sway swaymsg qs foot fuzzel nwg-displays python3 jq flock grim slurp wl-copy; do
     command -v "$bin" >/dev/null 2>&1 || { fail "Missing package tool $bin"; exit 1; }
 done
@@ -91,6 +101,17 @@ for i in "${!sources[@]}"; do
     install -m "$perms" -- "$src/$name" "$target"
 done
 [[ -e "$workspace_target" ]] || install -m 0644 -- "$workspace_source" "$workspace_target"
+# Leave package-owned /usr/bin/sway untouched and preserve custom commands.
+[[ -d "$HOME/.local" ]] || mkdir -m 0700 -- "$HOME/.local"
+[[ -d "$tty_dir" ]] || mkdir -m 0700 -- "$tty_dir"
+if [[ ! -e "$tty_launcher" && ! -L "$tty_launcher" ]]; then
+    install -m 0755 -- "$tty_source" "$tty_launcher"
+elif [[ -f "$tty_launcher" && ! -L "$tty_launcher" ]] &&
+     cmp -s -- "$tty_source" "$tty_launcher"; then
+    chmod u+x -- "$tty_launcher"
+else
+    printf 'PRESERVE: custom user sway command at %s; not overwritten.\n' "$tty_launcher"
+fi
 for name in "${ddc_sources[@]}"; do
     [[ -e "$trial/$name" ]] || install -m 0755 -- "$repo/config/hypr/scripts/$name" "$trial/$name"
 done
