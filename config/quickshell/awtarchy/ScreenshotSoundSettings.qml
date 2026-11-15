@@ -22,7 +22,7 @@ ColumnLayout {
                   : "/hypr/scripts/screenshot_sound.sh")
 
     Layout.fillWidth: true
-    spacing: 5
+    spacing: 3
 
     function refresh() {
         if (reader.running || writer.running)
@@ -82,47 +82,47 @@ ColumnLayout {
         spacing: 6
 
         Text {
-            Layout.fillWidth: true
-            text: "Login sound"
+            text: "Sound"
             color: Theme.foreground
             font.family: Theme.fontFamily
             font.pixelSize: root.textSize
+            font.bold: true
         }
+        Item { Layout.fillWidth: true }
 
+        Text {
+            text: "Login"
+            color: Theme.muted
+            font.family: Theme.fontFamily
+            font.pixelSize: root.textSize
+        }
         SettingsButton {
-            label: !root.loaded ? "Unavailable" : (root.values.login ? "On" : "Off")
+            label: !root.loaded ? "N/A" : (root.values.login ? "On" : "Off")
             active: root.loaded && root.values.login
             available: root.loaded && !reader.running && !writer.running
             textSize: root.textSize
             onClicked: root.change("login")
         }
-    }
-
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
 
         Text {
-            Layout.fillWidth: true
-            text: "Screenshot sounds"
-            color: Theme.foreground
+            text: "Screenshots"
+            color: Theme.muted
             font.family: Theme.fontFamily
             font.pixelSize: root.textSize
         }
-
         SettingsButton {
-            label: root.expanded ? "Fewer options" : "Options"
-            active: root.expanded
-            textSize: root.textSize
-            onClicked: root.expanded = !root.expanded
-        }
-
-        SettingsButton {
-            label: !root.loaded ? "Unavailable" : (root.values.enabled ? "On" : "Off")
+            label: !root.loaded ? "N/A" : (root.values.enabled ? "On" : "Off")
             active: root.loaded && root.values.enabled
             available: root.loaded && !reader.running && !writer.running
             textSize: root.textSize
             onClicked: root.change("enabled")
+        }
+
+        SettingsButton {
+            label: root.expanded ? "Less" : "Options"
+            active: root.expanded
+            textSize: root.textSize
+            onClicked: root.expanded = !root.expanded
         }
     }
 
@@ -130,15 +130,6 @@ ColumnLayout {
         Layout.fillWidth: true
         visible: root.expanded
         spacing: 5
-
-        Text {
-            Layout.fillWidth: true
-            text: "Choose which screenshot shortcuts play the shutter click."
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: root.textSize
-            wrapMode: Text.Wrap
-        }
 
         Repeater {
             model: [
@@ -171,14 +162,6 @@ ColumnLayout {
             }
         }
 
-        Text {
-            Layout.fillWidth: true
-            text: "Screenshot master switch mutes all capture sounds; login audio is controlled separately."
-            color: Theme.muted
-            font.family: Theme.fontFamily
-            font.pixelSize: root.textSize
-            wrapMode: Text.Wrap
-        }
     }
 
     Text {

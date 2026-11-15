@@ -42,8 +42,7 @@ Singleton {
     property bool barIconsOpen: false
     property bool barAppearanceOpen: false
     property bool barVisibilityOpen: false
-    // Awtarchy categories are independently expandable; no global edit mode.
-    property bool soundSectionExpanded: true
+    // Awtarchy retains compact, independently expandable categories.
     property bool cursorSectionExpanded: false
     property bool lockscreenSectionExpanded: false
     readonly property bool cursorSectionOpen: cursorSectionExpanded
@@ -2383,12 +2382,12 @@ Singleton {
                             ColumnLayout {
                                 id: awtarchyContent
                                 anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 5
+                                anchors.margins: 6
+                                spacing: 3
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 6
 
                                     Text {
                                         Layout.fillWidth: true
@@ -2405,41 +2404,9 @@ Singleton {
                                     }
                                 }
 
-                                RowLayout {
-                                    Layout.fillWidth: true
-                                    spacing: 8
-
-                                    Text {
-                                        text: "Sound"
-                                        color: Theme.foreground
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(10)
-                                        font.bold: true
-                                    }
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: !root.soundSectionExpanded
-                                        text: "Login and screenshot feedback"
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(8)
-                                        elide: Text.ElideRight
-                                    }
-                                    Item { Layout.fillWidth: root.soundSectionExpanded }
-                                    SettingsButton {
-                                        label: root.soundSectionExpanded ? "Hide" : "Show"
-                                        active: root.soundSectionExpanded
-                                        textSize: root.scaledText(9)
-                                        onClicked: root.soundSectionExpanded = !root.soundSectionExpanded
-                                    }
-                                }
-
                                 ScreenshotSoundSettings {
                                     id: screenshotSoundSettings
                                     Layout.fillWidth: true
-                                    Layout.leftMargin: 12
-                                    Layout.rightMargin: 4
-                                    visible: root.soundSectionExpanded
                                     textSize: root.scaledText(9)
                                 }
 
@@ -2460,16 +2427,7 @@ Singleton {
                                         font.pixelSize: root.scaledText(10)
                                         font.bold: true
                                     }
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: !root.cursorSectionOpen
-                                        text: "Pointer theme"
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(8)
-                                        elide: Text.ElideRight
-                                    }
-                                    Item { Layout.fillWidth: root.cursorSectionOpen }
+                                    Item { Layout.fillWidth: true }
                                     SettingsButton {
                                         label: root.cursorSectionOpen ? "Hide" : "Show"
                                         active: root.cursorSectionOpen
@@ -2506,16 +2464,7 @@ Singleton {
                                         font.pixelSize: root.scaledText(10)
                                         font.bold: true
                                     }
-                                    Text {
-                                        Layout.fillWidth: true
-                                        visible: !root.lockscreenSectionOpen
-                                        text: "Animation, appearance and layout"
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(8)
-                                        elide: Text.ElideRight
-                                    }
-                                    Item { Layout.fillWidth: root.lockscreenSectionOpen }
+                                    Item { Layout.fillWidth: true }
                                     SettingsButton {
                                         label: root.lockscreenSectionOpen ? "Hide" : "Show"
                                         active: root.lockscreenSectionOpen

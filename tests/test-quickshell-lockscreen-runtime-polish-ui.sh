@@ -38,10 +38,10 @@ require_text "$EDITOR" 'visible: root.activeDrawer === "background"' 'background
 require_text "$EDITOR" 'visible: root.activeDrawer === "weather"' 'weather controls are not isolated in their drawer'
 
 reject_text "$QUICK_SETTINGS" 'awtarchyEditMode' 'global Awtarchy Edit/Done mode should be retired'
-require_text "$QUICK_SETTINGS" 'property bool soundSectionExpanded: true' 'Sound toggles should be accessible by default'
+reject_text "$QUICK_SETTINGS" 'soundSectionExpanded' 'Sound controls should not reserve a second row'
 require_text "$QUICK_SETTINGS" 'property bool cursorSectionExpanded: false' 'Awtarchy Cursor section state missing'
 require_text "$QUICK_SETTINGS" 'property bool lockscreenSectionExpanded: false' 'Awtarchy Lockscreen section state missing'
-require_text "$QUICK_SETTINGS" 'root.soundSectionExpanded = !root.soundSectionExpanded' 'Sound section cannot expand independently'
+require_text "$QUICK_SETTINGS" 'id: screenshotSoundSettings' 'Sound toggle row missing from Awtarchy card'
 require_text "$QUICK_SETTINGS" 'text: "Cursor"' 'Awtarchy card lacks a Cursor category'
 require_text "$QUICK_SETTINGS" 'text: "Lockscreen"' 'Awtarchy card lacks a Lockscreen category'
 require_text "$QUICK_SETTINGS" 'visible: root.cursorSectionExpanded' 'Cursor controls are not tied to their section'

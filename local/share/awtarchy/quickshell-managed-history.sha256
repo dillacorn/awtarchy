@@ -1668,3 +1668,7 @@ ed6d8199c47a1640fc1f3df33396a2f0628fb65d457eeacffe70132ad588dda5	.config/quicksh
 # Awtarchy Quick Settings: independent Sound, Cursor and Lockscreen sections.
 01ce657925a3e07db70d0a87680c81db579d2b6b8ec5ecce271f8aa855e56624	.config/quickshell/awtarchy/QuickSettings.qml
 9ecd83b9b16b6ed27f51dd6285acfeb2e19cebd68964eb80d399de4fea1f998f	.config/quickshell/awtarchy/ScreenshotSoundSettings.qml
+
+# Compact Awtarchy Quick Settings: inline audio controls and shorter sections.
+8901df1a46c62b07607ec7783998bcd311405c358d22bc4d90ebc311aff09ea9	.config/quickshell/awtarchy/QuickSettings.qml
+633bcd90ce3d514470218803c7a9313724478f6e6110473159522b7ac45c8893	.config/quickshell/awtarchy/ScreenshotSoundSettings.qml
