@@ -62,6 +62,12 @@ def expected_files(repo, home, temporary):
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe Sway source file: " + str(source))
         result[target] = source.read_bytes()
+    # nwg-displays writes this Sway-only workspace file outside the trial
+    # directory. Keep an initial managed stub but preserve user-edited content.
+    workspace_source = repo / "trials/workspaces"
+    if workspace_source.is_symlink() or not workspace_source.is_file():
+        raise ValueError("Missing or unsafe Sway workspace stub")
+    result[home / ".config/sway/workspaces"] = workspace_source.read_bytes()
     # Sway uses private copies of shared helpers (DDC and screenshot audio).
     # Active ~/.config/hypr/scripts may be personalized or from an older
     # release, so Sway updates must not depend on replacing those files.
@@ -123,21 +129,30 @@ def prepare_config_update(old: bytes, new: bytes) -> bytes:
 
 
 def validate_sway_config(target: Path, content: bytes):
-    # Parse the *real* imported monitor profile with installed Sway before
-    # replacing the live config. This never starts a session.
-    with tempfile.NamedTemporaryFile(
-            prefix=".sway-config-check-", dir=target.parent,
-            delete=False) as stage:
-        temp_path = Path(stage.name)
-        stage.write(content)
-    try:
+    """Validate against the installed overrides without modifying user files.
+
+    Initial trial upgrades may not yet have nwg-displays' outputs/workspaces
+    stubs. A private staging tree provides empty includes only for that case.
+    """
+    sway_dir = target.parent.parent
+    candidates = (target.parent / "outputs", sway_dir / "workspaces")
+    overrides = []
+    for path in candidates:
+        if path.is_symlink() or (path.exists() and not path.is_file()):
+            raise ValueError("Unsafe Sway output/workspace override: " + str(path))
+        overrides.append(path.read_bytes() if path.exists() else b"")
+    with tempfile.TemporaryDirectory(prefix="sway-config-validate-") as temporary:
+        parent = Path(temporary) / "sway"
+        staged = parent / "awtarchy-trial"
+        staged.mkdir(parents=True)
+        (staged / "config").write_bytes(content)
+        (staged / "outputs").write_bytes(overrides[0])
+        (parent / "workspaces").write_bytes(overrides[1])
         result = subprocess.run(
-            ["sway", "-C", "-c", str(temp_path)], timeout=20,
+            ["sway", "-C", "-c", str(staged / "config")], timeout=20,
             capture_output=True, text=True)
         if result.returncode:
             raise ValueError("Sway rejected candidate config: " + result.stderr.strip())
-    finally:
-        temp_path.unlink(missing_ok=True)
 
 
 def refresh_sway_portal_if_safe():
@@ -427,6 +442,8 @@ def main():
                 and re.fullmatch(r"[A-Za-z0-9_-]+[.]qml", path.name) is not None
             )
             new_helper = key in (
+                ".config/sway/workspaces",
+                ".config/sway/awtarchy-trial/outputs",
                 ".config/sway/awtarchy-trial/awtarchy-login.mp3",
                 ".config/sway/awtarchy-trial/login-sound.sh",
                 ".config/sway/awtarchy-trial/screenshot_sound.sh",
