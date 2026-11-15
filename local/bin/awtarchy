@@ -805,10 +805,10 @@ self_update() {
     die "Downloaded Awtarchy package reconciler failed Bash syntax validation."
   }
   for source in "$new_compositor_stable" "$new_compositor_core"; do
-    [[ -f "$source" && ! -L "$source" ]] && bash -n "$source" || {
+    if [[ ! -f "$source" || -L "$source" ]] || ! bash -n "$source"; then
       rm -rf -- "$tmp"
       die "Downloaded compositor manager missing or invalid."
-    }
+    fi
   done
   atomic_install "$new_compositor_stable" "$INSTALL_DIR/awtarchy-compositor-stable.sh" 0755
   atomic_install "$new_compositor_core" "$INSTALL_DIR/awtarchy-compositor-core.sh" 0755

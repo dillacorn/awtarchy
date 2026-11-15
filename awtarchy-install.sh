@@ -459,10 +459,10 @@ refresh_existing_command() {
   local stable_compositor="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-stable.sh"
   local core_compositor="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
   for helper in "$stable_compositor" "$core_compositor"; do
-    [[ -f "$helper" && ! -L "$helper" ]] && bash -n "$helper" || {
+    if [[ ! -f "$helper" || -L "$helper" ]] || ! bash -n "$helper"; then
       printf 'ERROR: Invalid stable compositor source: %s\n' "$helper" >&2
       return 1
-    }
+    fi
   done
   run_as_target install -m 0755 "$stable_compositor" "${data_dir}/awtarchy-compositor-stable.sh"
   run_as_target install -m 0755 "$core_compositor" "${data_dir}/awtarchy-compositor-core.sh"

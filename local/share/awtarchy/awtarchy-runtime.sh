@@ -4079,8 +4079,9 @@ install_awtarchy_command_stage() {
   local stable_manager_src="${REPO_DIR}/local/share/awtarchy/awtarchy-compositor-stable.sh"
   local core_manager_src="${REPO_DIR}/local/share/awtarchy/awtarchy-compositor-manager.sh"
   for helper in "$stable_manager_src" "$core_manager_src"; do
-    [[ -f "$helper" && ! -L "$helper" ]] && bash -n "$helper" ||
+    if [[ ! -f "$helper" || -L "$helper" ]] || ! bash -n "$helper"; then
       die "Missing or invalid stable compositor manager: $helper"
+    fi
   done
   retry_command run_as_target install -m 0755 "$stable_manager_src" "${install_dir}/awtarchy-compositor-stable.sh"
   retry_command run_as_target install -m 0755 "$core_manager_src" "${install_dir}/awtarchy-compositor-core.sh"
