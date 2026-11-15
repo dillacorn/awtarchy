@@ -46,10 +46,116 @@ def outputs_from_hyprland():
     # leftmost/topmost origin at zero as the former Jay import did.
     min_x = min(row[3] for row in out)
     min_y = min(row[4] for row in out)
-    return [
+    lines = [
         f"output {name} mode {w}x{h}@{hz}Hz position {x-min_x} {y-min_y} scale {scale}"
         for name, w, h, x, y, hz, scale in out
     ]
+    # Hyprland/Hyprmoncfg's active transform and VRR become native Sway
+    # commands. Unset fields stay on Sway's normal defaults.
+    transforms = ("normal", "90", "180", "270", "flipped",
+                  "flipped-90", "flipped-180", "flipped-270")
+    for monitor in data:
+        name = monitor["name"]
+        transform = monitor.get("transform", 0)
+        if type(transform) is int and 1 <= transform < len(transforms):
+            lines.append(f"output {name} transform {transforms[transform]}")
+        if monitor.get("vrr") is True or monitor.get("vrr") == 1:
+            lines.append(f"output {name} adaptive_sync on")
+    return lines
+
+
+def active_hyprmoncfg_additions(live_lines):
+    """Transfer only representable extra settings from the active saved profile.
+
+    hyprctl owns the actual current modes/scale/positions. Never blindly apply
+    another saved profile with mismatched connected outputs or unsupported
+    mirror, color, rotation-auto or workspace strategy settings.
+    """
+    live = {match.group(1) for line in live_lines
+            if (match := re.match(r"^output ([A-Za-z0-9_.-]+) mode ", line))}
+    if not live:
+        return [], []
+    try:
+        status = subprocess.run(["hyprmoncfg", "status", "--json"],
+                                capture_output=True, text=True, timeout=5, check=True)
+        active = json.loads(status.stdout).get("active_profile")
+        name = active.get("name") if isinstance(active, dict) else None
+        if not isinstance(name, str) or not name:
+            return [], []
+        directory = Path(os.environ.get(
+            "XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "hyprmoncfg/profiles"
+        if directory.is_symlink() or not directory.is_dir():
+            return [], []
+        profile = None
+        for item in sorted(directory.glob("*.json"))[:128]:
+            if item.is_symlink() or not item.is_file() or item.stat().st_size > 262144:
+                continue
+            candidate = json.loads(item.read_text(encoding="utf-8"))
+            if isinstance(candidate, dict) and candidate.get("name") == name:
+                if profile is not None:
+                    return [], []  # Never select between duplicate names.
+                profile = candidate
+        if not isinstance(profile, dict):
+            return [], []
+        outputs = profile.get("outputs")
+        if not isinstance(outputs, list) or not 0 < len(outputs) <= 32:
+            return [], []
+        names, enabled, by_key = set(), set(), {}
+        for value in outputs:
+            if not isinstance(value, dict):
+                return [], []
+            output_name = value.get("name")
+            if (not isinstance(output_name, str)
+                    or not NAME.fullmatch(output_name) or output_name in names
+                    or type(value.get("enabled")) is not bool):
+                return [], []
+            names.add(output_name)
+            if value["enabled"]:
+                enabled.add(output_name)
+            key = value.get("key")
+            if isinstance(key, str):
+                by_key[key] = output_name
+        if enabled != live:
+            return [], []  # The saved profile is not the live layout.
+        extra = []
+        for value in outputs:
+            output_name = value["name"]
+            if not value["enabled"]:
+                extra.append(f"output {output_name} disable")
+                continue
+            # Hyprmoncfg's saved VRR=1 is a direct mapping. Its auto VRR=2
+            # and specialized HDR/color/mirroring settings are not portable.
+            if value.get("vrr") == 1 and not any(
+                    line == f"output {output_name} adaptive_sync on"
+                    for line in live_lines):
+                extra.append(f"output {output_name} adaptive_sync on")
+            transform = value.get("transform")
+            transforms = ("normal", "90", "180", "270", "flipped",
+                          "flipped-90", "flipped-180", "flipped-270")
+            if (type(transform) is int and 1 <= transform < len(transforms)
+                    and not any(line.startswith(f"output {output_name} transform ")
+                                for line in live_lines)):
+                extra.append(f"output {output_name} transform {transforms[transform]}")
+        workspaces = profile.get("workspaces") or {}
+        rules = []
+        if (isinstance(workspaces, dict) and workspaces.get("enabled") is True
+                and workspaces.get("strategy", "manual") == "manual"):
+            seen = set()
+            for rule in workspaces.get("rules", []):
+                if not isinstance(rule, dict):
+                    return extra, []
+                number = str(rule.get("workspace", ""))
+                output_name = rule.get("output_name") or by_key.get(rule.get("output_key"))
+                if (not number.isdecimal() or not 1 <= int(number) <= 10
+                        or number in seen or output_name not in enabled):
+                    return extra, []
+                seen.add(number)
+                rules.append(f"workspace {number} output {output_name}")
+        return extra, rules
+    except (OSError, ValueError, KeyError, TypeError, json.JSONDecodeError,
+            subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return [], []  # Live Hyprland geometry remains authoritative.
+
 
 def insert_profile(original, lines):
     if original.count(START) != 1 or original.count(END) != 1:
@@ -81,10 +187,29 @@ def main():
     if "# Awtarchy Sway dual-compositor trial. Does not touch Hyprland." not in previous:
         raise ValueError("Unknown Sway profile")
     lines = outputs_from_hyprland()
+    profile_extras, workspace_lines = active_hyprmoncfg_additions(lines)
+    lines.extend(profile_extras)
     result = insert_profile(previous, lines)
+    # nwg-displays owns this Sway-only file after the first customization.
+    # Import only into the untouched stock stub, never into user settings.
+    workspace_target = cfg.parent.parent / "workspaces"
+    stub = "# Sway workspace-to-output bindings saved by nwg-displays. This file belongs to the user after editing.\\n"
+    if workspace_target.is_symlink() or (workspace_target.exists()
+            and (not workspace_target.is_file()
+                 or workspace_target.stat().st_uid != os.geteuid())):
+        workspace_lines = []
+    previous_workspaces = (workspace_target.read_text(encoding="utf-8")
+                           if workspace_target.is_file() and not workspace_target.is_symlink()
+                           else "")
+    if previous_workspaces not in ("", stub):
+        workspace_lines = []
     print("Proposed Sway output profile:")
     for line in lines:
         print("  " + line)
+    if workspace_lines:
+        print("Proposed active Hyprmoncfg workspace assignments:")
+        for line in workspace_lines:
+            print("  " + line)
     if args.preview:
         return
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S-%f")
@@ -111,6 +236,32 @@ def main():
             os.unlink(temp_name)
     if cfg.read_text(encoding="utf-8") != result:
         raise ValueError("Written Sway output profile was not verified")
+    if workspace_lines:
+        # Guard against concurrent nwg-displays edits during the import.
+        if (workspace_target.is_symlink()
+                or (workspace_target.exists() and
+                    workspace_target.read_text(encoding="utf-8") != previous_workspaces)):
+            print("PRESERVE: Sway workspaces changed during import", file=sys.stderr)
+        else:
+            if workspace_target.exists():
+                ws_backup = workspace_target.with_name("workspaces.backup-" + stamp)
+                with ws_backup.open("xb") as handle:
+                    os.fchmod(handle.fileno(), 0o600)
+                    handle.write(previous_workspaces.encode())
+                    handle.flush()
+                    os.fsync(handle.fileno())
+            with tempfile.NamedTemporaryFile(dir=workspace_target.parent,
+                    prefix=".sway-workspaces-", delete=False) as handle:
+                workspace_temp = Path(handle.name)
+                handle.write(("\\n".join(workspace_lines) + "\\n").encode())
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                workspace_temp.chmod(0o600)
+                os.replace(workspace_temp, workspace_target)
+            finally:
+                workspace_temp.unlink(missing_ok=True)
+            print("Imported active Hyprmoncfg workspace-to-output rules")
     print("PASS: one-time Sway monitor import; backup: " + str(backup))
 
 if __name__ == "__main__":
