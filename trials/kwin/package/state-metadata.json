@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "awtarchy-kwin-state",
+    "Name": "Awtarchy KWin workspace publisher",
+    "Description": "Isolated KWin workspace state published to a private session-only bridge",
+    "Version": "0.1.0",
+    "License": "MIT",
+    "Website": "https://github.com/dillacorn/awtarchy"
+  },
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js",
+  "KPackageStructure": "KWin/Script"
+}
