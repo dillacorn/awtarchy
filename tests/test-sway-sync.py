@@ -124,6 +124,21 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     assert "PRESERVE modified file" in run("review")
     assert "PRESERVE modified file" in run("apply")
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+
+    # A user-defined sway symlink is preserved, never followed or adopted.
+    tty.unlink()
+    custom_entry = home / "personal-sway-entry"
+    custom_entry.write_bytes(b"#!/usr/bin/env bash\necho personal\n")
+    tty.symlink_to(custom_entry)
+    manifest.unlink()
+    run("record")
+    assert ".local/bin/sway" not in json.loads(manifest.read_text())
+    assert "PRESERVE custom Sway command symlink" in run("review")
+    assert "PRESERVE custom Sway command symlink" in run("apply")
+    assert tty.is_symlink() and tty.resolve() == custom_entry
+    assert custom_entry.read_bytes() == b"#!/usr/bin/env bash\necho personal\n"
+    tty.unlink()
+    tty.write_bytes(b"#!/usr/bin/env bash\necho custom sway launcher\n")
     manifest.write_text(old_baseline)
 
     # Manually installed exact source from an earlier broken updater must be
