@@ -23,10 +23,10 @@ UTILITIES = {
         ("foot", "--app-id", "awtarchy-default-apps", "--title",
          "awtarchy-default-apps", "python3", str(HYPR_SCRIPTS / "default_applications.py"), "tui"),
         True),
-    "hyprmoncfg": (
-        ("hyprmoncfg",),
-        (str(HYPR_SCRIPTS / "default_terminal.sh"), "--class", "hyprmoncfg",
-         "--", "hyprmoncfg"), True),
+    "displays": (
+        ("nwg-displays",),
+        ("nwg-displays", "--outputs_path",
+         str(CONFIG / "sway/awtarchy-trial/outputs"), "--num_ws", "10"), True),
     "smtty": (
         ("smtty",), (str(HYPR_SCRIPTS / "default_terminal.sh"),
                     "--class", "smtty", "--", "smtty"), False),

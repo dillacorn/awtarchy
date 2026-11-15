@@ -44,6 +44,10 @@ xwayland enable
 # AWTARCHY-SWAY-OUTPUTS-BEGIN
 # Imported from active Hyprland by import-hypr-monitors.py, one time only.
 # AWTARCHY-SWAY-OUTPUTS-END
+# Saved Sway-only overrides take precedence over the one-time Hyprland import.
+include outputs
+# nwg-displays writes workspace-to-output bindings separately from displays.
+include ../workspaces
 # Do not configure "output * bg" here. Sway invokes swaybg for this
 # directive; on a compositor reload its solid-color layer can cover the
 # Awtwall/awww wallpaper restored by session.sh. Leave background ownership
@@ -87,7 +91,7 @@ bindsym Mod1+Shift+m exec python3 $trial/toggle-utility.py maccel
 bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
 bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
-bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py hyprmoncfg
+bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
 bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
 bindsym Mod4+Mod1+l exec smtty -S -l
 bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
@@ -271,8 +275,8 @@ for_window [app_id="^btop$"] floating enable, resize set 80 ppt 85 ppt, move pos
 for_window [class="^btop$"] floating enable, resize set 80 ppt 85 ppt, move position center
 for_window [app_id="^maccel$"] floating enable, resize set 90 ppt 96 ppt, move position center
 for_window [class="^maccel$"] floating enable, resize set 90 ppt 96 ppt, move position center
-for_window [app_id="^hyprmoncfg$"] floating enable, resize set 85 ppt 90 ppt, move position center
-for_window [class="^hyprmoncfg$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [app_id="^nwg-displays$"] floating enable, resize set 85 ppt 90 ppt, move position center
+for_window [class="^nwg-displays$"] floating enable, resize set 85 ppt 90 ppt, move position center
 for_window [app_id="^smtty$"] floating enable, resize set 50 ppt 65 ppt, move position center
 for_window [class="^smtty$"] floating enable, resize set 50 ppt 65 ppt, move position center
 for_window [app_id="^smtty-O$"] floating enable, resize set 50 ppt 65 ppt, move position center
@@ -377,7 +381,7 @@ mode "noalt" {
     bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
     bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
     bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
-    bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py hyprmoncfg
+    bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
     bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
     bindsym Mod4+Mod1+l exec smtty -S -l
     bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O

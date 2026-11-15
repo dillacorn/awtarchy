@@ -24,7 +24,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf outputs)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
@@ -41,6 +41,15 @@ for name in "${sources[@]}"; do
         fi
     fi
 done
+workspace_source="$repo/trials/workspaces"
+workspace_target="$config/sway/workspaces"
+[[ -f "$workspace_source" && ! -L "$workspace_source" ]] || {
+    fail "Missing Sway workspace source"; exit 1;
+}
+[[ ! -e "$workspace_target" && ! -L "$workspace_target" ||
+   ( -f "$workspace_target" && ! -L "$workspace_target" ) ]] || {
+    fail "Unsafe Sway workspace destination"; exit 1;
+}
 # Sway-only installations must receive the exact Awtarchy login MP3.
 # Never depend on the user's installed Hyprland configuration.
 login_audio_source="$repo/config/hypr/sounds/awtarchy-login.mp3"
@@ -81,6 +90,7 @@ for i in "${!sources[@]}"; do
     case "$name" in *.sh) perms=0755 ;; *) perms=0644 ;; esac
     install -m "$perms" -- "$src/$name" "$target"
 done
+[[ -e "$workspace_target" ]] || install -m 0644 -- "$workspace_source" "$workspace_target"
 for name in "${ddc_sources[@]}"; do
     [[ -e "$trial/$name" ]] || install -m 0755 -- "$repo/config/hypr/scripts/$name" "$trial/$name"
 done
