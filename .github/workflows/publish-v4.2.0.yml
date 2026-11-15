@@ -22,13 +22,28 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
+      - name: Skip once v4.2.0 is already published
+        id: publication_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          if gh release view v4.2.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'create=false\n' >> "$GITHUB_OUTPUT"
+            printf 'v4.2.0 is already published; this workflow is complete.\n'
+          else
+            printf 'create=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check out the exact validated revision
+        if: steps.publication_state.outputs.create == 'true'
         uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
           persist-credentials: false
 
       - name: Require successful release checks on the exact main revision
+        if: steps.publication_state.outputs.create == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
@@ -79,6 +94,7 @@ jobs:
           }
 
       - name: Publish exact v4.2.0 release once
+        if: steps.publication_state.outputs.create == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
