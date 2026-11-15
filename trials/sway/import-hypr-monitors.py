@@ -193,7 +193,7 @@ def main():
     # nwg-displays owns this Sway-only file after the first customization.
     # Import only into the untouched stock stub, never into user settings.
     workspace_target = cfg.parent.parent / "workspaces"
-    stub = "# Sway workspace-to-output bindings saved by nwg-displays. This file belongs to the user after editing.\\n"
+    stub = "# Sway workspace-to-output bindings saved by nwg-displays. This file belongs to the user after editing.\n"
     if workspace_target.is_symlink() or (workspace_target.exists()
             and (not workspace_target.is_file()
                  or workspace_target.stat().st_uid != os.geteuid())):
@@ -253,7 +253,7 @@ def main():
             with tempfile.NamedTemporaryFile(dir=workspace_target.parent,
                     prefix=".sway-workspaces-", delete=False) as handle:
                 workspace_temp = Path(handle.name)
-                handle.write(("\\n".join(workspace_lines) + "\\n").encode())
+                handle.write(("\n".join(workspace_lines) + "\n").encode())
                 handle.flush()
                 os.fsync(handle.fileno())
             try:
