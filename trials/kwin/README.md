@@ -62,6 +62,16 @@ preferences are installed or changed. A user D-Bus bus is still shared and
 its effects must be observed, so do not use this concurrently with another
 desktop session.
 
+## Experimental shortcuts loaded by the TTY smoke test
+
+The private KWin script package registers `Super+1..0`, `Super+Shift+1..0`,
+`Super+[`, `Super+]`, `Super+H/J/K/L` (directional focus), `Super+Q` (close)
+and `Super+Ctrl+F` (fullscreen). KWin's native Alt+Tab is left alone. The
+bindings rely on KWin 6's documented scripting API; CI exercises API stubs,
+**not** actual KGlobalAccel registration or input delivery. KWin's stock
+`Super+Arrow` quick-tiling shortcuts are deliberately not overridden yet.
+No attempt is made to pass off the stacking compositor as dynamically tiled.
+
 ## Integration constraints
 
 1. Keep Hyprland's `hyprland.lua`, Hyprland Quickshell profile and all Sway
