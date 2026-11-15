@@ -53,6 +53,9 @@ main() {
     private="$(mktemp -d -- "$state/kwin-smoke.XXXXXX")" || return 1
     local origin
     origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
+    [[ -f "$origin/bridge-client.py" && ! -L "$origin/bridge-client.py" ]] || {
+        fail 'KWin bridge client script is missing or unsafe.'; return 1;
+    }
     [[ -f "$origin/probe-session.sh" && ! -L "$origin/probe-session.sh" ]] || {
         fail 'KWin probe session script is missing or unsafe.'; return 1;
     }

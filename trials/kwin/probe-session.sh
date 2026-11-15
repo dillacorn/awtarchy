@@ -18,12 +18,24 @@ config="$XDG_CONFIG_HOME/quickshell/awtarchy-kwin-smoke/shell.qml"
     printf 'KWin probe: missing private Quickshell panel.\n' >&2
     return 1 2>/dev/null || false
 }
-for binary in /usr/bin/foot /usr/bin/qs; do
+for binary in /usr/bin/foot /usr/bin/qs /usr/bin/python3; do
     [[ -x "$binary" ]] || {
         printf 'KWin probe: missing %s\n' "$binary" >&2
         return 1 2>/dev/null || false
     }
 done
+
+origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)"
+[[ -f "$origin/bridge-client.py" && ! -L "$origin/bridge-client.py" ]] || {
+    printf 'KWin probe: private bridge client is missing.\n' >&2
+    return 1 2>/dev/null || false
+}
+# The receiver started before KWin, but needs this child's exact Wayland
+# socket for launching allowlisted applications.
+python3 "$origin/bridge-client.py" "$WAYLAND_DISPLAY" || {
+    printf 'KWin probe: workspace bridge refused the active Wayland socket.\n' >&2
+    return 1 2>/dev/null || false
+}
 
 shell_pid=''
 cleanup() {

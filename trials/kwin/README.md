@@ -105,6 +105,13 @@ supported current KWin configuration keys rather than invented options.
 
 ## Experimental shortcuts loaded by the TTY smoke test
 
+The trial shortcuts also expose `Super+Return` (Foot), `Super+D`
+and `Alt+P` (Fuzzel). Those actions go through an allowlisted D-Bus
+receiver, which refuses arbitrary commands and requires the current local
+Wayland socket to be registered from the KWin child session.
+The prototype opens at most one live instance of each action; it does
+not install KRunner or modify desktop-wide KDE shortcuts.
+
 The private KWin script package registers `Super+1..0`, `Super+Shift+1..0`,
 `Super+[`, `Super+]`, `Super+H/J/K/L` (directional focus), `Super+Q` (close)
 and `Super+Ctrl+F` (fullscreen). KWin's native Alt+Tab is left alone. The

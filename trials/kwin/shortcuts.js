@@ -60,6 +60,18 @@
         }
     }
 
+    function launch(action) {
+        callDBus("org.awtarchy.KWinTrial1", "/org/awtarchy/KWinTrial1",
+            "org.awtarchy.KWinTrial1", "Launch", action);
+    }
+
+    bind("terminal", "Awtarchy: open terminal", "Meta+Return",
+        function () { launch("terminal"); });
+    bind("launcher", "Awtarchy: open launcher", "Meta+D",
+        function () { launch("launcher"); });
+    bind("launcher-alt", "Awtarchy: open launcher (Alt)", "Alt+P",
+        function () { launch("launcher"); });
+
     for (let number = 1; number <= 10; number++) {
         const key = number === 10 ? "0" : String(number);
         bind("workspace-show-" + number, "Awtarchy: show workspace " + number,

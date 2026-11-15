@@ -12,6 +12,7 @@ const output = { name: "DP-1" };
 const window = { output, normalWindow: true, desktops: [desktops[0]] };
 const changes = [];
 const actions = [];
+const dbusCalls = [];
 const shortcuts = new Map();
 const workspace = {
     activeWindow: window, activeScreen: output, desktops,
@@ -33,6 +34,7 @@ const workspace = {
 };
 vm.runInNewContext(source, {
     workspace,
+    callDBus(...args) { dbusCalls.push(args); },
     registerShortcut(id, title, keys, callback) {
         assert.equal(shortcuts.has(id), false);
         assert.equal([...shortcuts.values()].some(s => s.keys === keys), false);
@@ -40,7 +42,7 @@ vm.runInNewContext(source, {
         return true;
     }
 }, { filename: "shortcuts.js" });
-assert.equal(shortcuts.size, 28);
+assert.equal(shortcuts.size, 31);
 assert.equal(shortcuts.get("awtarchy-workspace-show-10").keys, "Meta+0");
 assert.equal(shortcuts.get("awtarchy-workspace-move-10").keys, "Meta+Shift+0");
 
@@ -77,5 +79,11 @@ shortcuts.get("awtarchy-window-close").callback();
 shortcuts.get("awtarchy-window-fullscreen").callback();
 assert.deepEqual(actions, [
     "focus-left", "focus-down", "focus-up", "focus-right", "close", "fullscreen"
+]);
+shortcuts.get("awtarchy-terminal").callback();
+shortcuts.get("awtarchy-launcher").callback();
+shortcuts.get("awtarchy-launcher-alt").callback();
+assert.deepEqual(dbusCalls.map(call => call.at(-1)), [
+    "terminal", "launcher", "launcher"
 ]);
 console.log("PASS: KWin workspace and window shortcut API stub");

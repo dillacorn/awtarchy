@@ -11,6 +11,8 @@ import argparse
 import asyncio
 import json
 import os
+import re
+import subprocess
 from pathlib import Path
 import stat
 import sys
@@ -103,6 +105,54 @@ async def serve(root: Path) -> None:
     class Receiver(ServiceInterface):
         def __init__(self):
             super().__init__(INTERFACE)
+            self.display = None
+            self.active = {}
+
+        @method()
+        def RegisterDisplay(self, display: "s") -> "b":
+            # A KWin session must register the actual owned Wayland socket.
+            # Never accept absolute paths, nested traversal, or a second session.
+            if not isinstance(display, str) or not re.fullmatch(r"wayland-[0-9]+", display):
+                return False
+            runtime = os.environ.get("XDG_RUNTIME_DIR", "")
+            if not runtime or not os.path.isabs(runtime):
+                return False
+            socket = Path(runtime) / display
+            if socket.is_symlink() or not socket.is_socket() or socket.stat().st_uid != os.geteuid():
+                return False
+            if self.display is not None and self.display != display:
+                return False
+            self.display = display
+            return True
+
+        @method()
+        def Launch(self, action: "s") -> "b":
+            commands = {"terminal": ("/usr/bin/foot",),
+                        "launcher": ("/usr/bin/fuzzel",)}
+            command = commands.get(action)
+            if self.display is None or command is None or not os.access(command[0], os.X_OK):
+                return False
+            previous = self.active.get(action)
+            if previous is not None and previous.poll() is None:
+                return True
+            env = os.environ.copy()
+            env.update({
+                "WAYLAND_DISPLAY": self.display,
+                "XDG_CURRENT_DESKTOP": "awtarchy-kwin-smoke",
+                "XDG_SESSION_DESKTOP": "awtarchy-kwin-smoke",
+                "XDG_SESSION_TYPE": "wayland",
+                "XDG_CONFIG_HOME": str(root.parent / "config"),
+                "XDG_DATA_HOME": str(root.parent / "data"),
+            })
+            try:
+                self.active[action] = subprocess.Popen(
+                    command, env=env, stdin=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    close_fds=True,
+                )
+            except OSError:
+                return False
+            return True
 
         @method()
         def UpdateState(self, state: "s") -> "b":
