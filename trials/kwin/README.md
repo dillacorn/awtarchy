@@ -33,6 +33,23 @@ The script checks only local package metadata and existing configuration. It
 does not install, remove, rewrite, enable, start or stop anything. It does not
 need root. A missing optional package is a status, not a change request.
 
+## Standalone DRM smoke test (not the Awtarchy session)
+
+For testers who **already have** the official `kwin` and `foot` packages,
+`tty-smoke.sh` can open an isolated KWin instance and one Foot terminal from
+an otherwise unused local TTY. It requires the explicit
+`AWTARCHY_KWIN_SMOKE=yes` opt-in. It refuses root, terminal emulators, nested
+Wayland/X11 sessions, and detected concurrently running Hyprland/Sway/KWin
+processes. This is **not** a production desktop, does not load Quickshell or
+the workspace script and intentionally disables the unverified lockscreen.
+Do not leave sensitive content unattended. Closing Foot should cause KWin
+to stop and return to the TTY; actual KWin/driver behavior needs testing.
+Settings use a newly created private directory under
+`~/.local/state/awtarchy/kwin-smoke.*`; no desktop sessions or global portal
+preferences are installed or changed. A user D-Bus bus is still shared and
+its effects must be observed, so do not use this concurrently with another
+desktop session.
+
 ## Integration constraints
 
 1. Keep Hyprland's `hyprland.lua`, Hyprland Quickshell profile and all Sway

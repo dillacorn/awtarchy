@@ -30,6 +30,9 @@ jobs:
           bash -n trials/kwin/preflight.sh
           bash -n tests/test-kwin-preflight.sh
           bash tests/test-kwin-preflight.sh
+          bash -n trials/kwin/tty-smoke.sh
+          bash -n tests/test-kwin-tty-smoke.sh
+          bash tests/test-kwin-tty-smoke.sh
       - name: KWin scripting stub verification
         run: |
           node --check trials/kwin/shortcuts.js
