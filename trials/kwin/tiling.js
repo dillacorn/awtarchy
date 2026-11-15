@@ -12,6 +12,8 @@
         "awtarchy-default-apps", "pavucontrol", "pulsemixer", "hypr_quicksettings"
     ]);
     const order = new Map();
+    const floating = new Set();
+    const originalGeometry = new Map();
     let nextOrder = 0;
 
     function identity(window) {
@@ -40,6 +42,7 @@
         if (!window || !window.normalWindow || window.deleted ||
             window.minimized || window.fullScreen || window.onAllDesktops ||
             window.keepAbove || window.keepBelow || window.specialWindow ||
+            floating.has(identity(window)) ||
             !sameOutput(window.output, output) || !sameDesktop(window, desktop)) {
             return false;
         }
@@ -132,6 +135,10 @@
                         current.width === target.width && current.height === target.height) {
                         continue;
                     }
+                    const id = identity(window);
+                    if (id && !originalGeometry.has(id) && current) {
+                        originalGeometry.set(id, current);
+                    }
                     window.frameGeometry = target;
                 }
             }
@@ -139,6 +146,26 @@
             tiling = false;
         }
     }
+
+    function toggleFloating() {
+        const window = workspace.activeWindow;
+        if (!window || !window.normalWindow || window.fullScreen) return;
+        const id = identity(window);
+        if (!id) return;
+        if (floating.has(id)) {
+            floating.delete(id);
+        } else {
+            floating.add(id);
+            const original = originalGeometry.get(id);
+            if (original) window.frameGeometry = { ...original };
+        }
+        arrange();
+    }
+
+    registerShortcut("awtarchy-kwin-floating-meta",
+        "Awtarchy: toggle window floating (Meta)", "Meta+F", toggleFloating);
+    registerShortcut("awtarchy-kwin-floating-alt",
+        "Awtarchy: toggle window floating (Alt)", "Alt+F", toggleFloating);
 
     function attach(window) {
         if (!window) return;
@@ -161,7 +188,11 @@
     });
     workspace.windowRemoved.connect(function (window) {
         const key = identity(window);
-        if (key) order.delete(key);
+        if (key) {
+            order.delete(key);
+            floating.delete(key);
+            originalGeometry.delete(key);
+        }
         arrange();
     });
     workspace.desktopsChanged.connect(arrange);

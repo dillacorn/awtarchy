@@ -93,7 +93,10 @@ geometry with 9 px outer gaps and 6 px inner gaps. It uses KWin's actual
 `workspace.clientArea` per output and per virtual desktop, and ignores
 fullscreen windows, recognized games, utility windows, minimized windows and
 always-on-top windows. A layout that cannot fit minimum tile sizes is left
-untouched rather than placing windows offscreen. This is not feature parity
+untouched rather than placing windows offscreen. `Super+F` and `Alt+F`
+toggle an ordinary window out of tiling, restoring its previous geometry;
+toggling again retiles it. This is trial-only and its live KWin shortcuts
+still need verification. This is not feature parity
 with Hyprland's full dwindle layout: interactive split ratios, rearrangement,
 scratchpads, and reliable fullscreen gaming still require live validation.
 

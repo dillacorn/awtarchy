@@ -37,7 +37,9 @@ full.fullScreen = true;
 const initialFloat = { ...float.frameGeometry };
 const initialGame = { ...game.frameGeometry };
 const initialFull = { ...full.frameGeometry };
+const shortcuts = new Map();
 const workspace = {
+    activeWindow: a,
     screens: [dp1, dp3],
     stackingOrder: [a, b, c, float, game, full],
     currentDesktop: d1,
@@ -51,7 +53,15 @@ const workspace = {
     currentDesktopChanged: signal()
 };
 
-vm.runInNewContext(source, { workspace, KWin: { MaximizeArea: 2 } }, {
+vm.runInNewContext(source, {
+    workspace,
+    KWin: { MaximizeArea: 2 },
+    registerShortcut(id, label, key, callback) {
+        assert.equal(shortcuts.has(key), false);
+        shortcuts.set(key, callback);
+        return true;
+    }
+}, {
     filename: "tiling.js"
 });
 assert.equal(a.frameGeometry.x, 9);
@@ -66,6 +76,18 @@ assert.equal(c.frameGeometry.height, 882);
 assert.deepEqual(float.frameGeometry, initialFloat);
 assert.deepEqual(game.frameGeometry, initialGame);
 assert.deepEqual(full.frameGeometry, initialFull);
+assert.equal(shortcuts.size, 2);
+assert.equal(shortcuts.has("Meta+F"), true);
+assert.equal(shortcuts.has("Alt+F"), true);
+
+// Toggle one window out of the managed layout and restore its original size.
+shortcuts.get("Meta+F")();
+assert.equal(a.frameGeometry.width, 100);
+assert.equal(a.frameGeometry.height, 100);
+assert.equal(b.frameGeometry.width, 1902);
+shortcuts.get("Alt+F")();
+assert.equal(a.frameGeometry.width, 948);
+assert.equal(b.frameGeometry.width, 948);
 
 // Third tile splits remaining output vertically; existing order remains stable.
 const d = window("d", dp1);
