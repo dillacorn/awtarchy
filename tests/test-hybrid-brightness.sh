@@ -133,7 +133,11 @@ case "$operation" in
     percent="${value%%%}"
     (( percent >= 0 && percent <= 100 )) || exit 5
     current=$(( (maximum * percent + 50) / 100 ))
-    printf '%s %s\n' "$current" "$maximum" >"${AWTARCHY_TEST_BRIGHTNESS_STATE:?}"
+    # The fake sysfs state is a regular file. Atomic replacement prevents
+    # readers from seeing a truncated file during concurrent worker writes.
+    state_tmp="$(mktemp "${AWTARCHY_TEST_BRIGHTNESS_STATE:?}.tmp.XXXXXXXX")"
+    printf '%s %s\n' "$current" "$maximum" >"$state_tmp"
+    mv -f -- "$state_tmp" "${AWTARCHY_TEST_BRIGHTNESS_STATE:?}"
     ;;
   *)
     exit 6
@@ -159,7 +163,9 @@ for index in "${!args[@]}"; do
       target="${args[$((index + 2))]:-}"
       [[ "$target" =~ ^[0-9]+$ ]] || exit 7
       read -r _current maximum <"${AWTARCHY_TEST_DDC_STATE:?}"
-      printf '%s %s\n' "$target" "$maximum" >"${AWTARCHY_TEST_DDC_STATE:?}"
+      state_tmp="$(mktemp "${AWTARCHY_TEST_DDC_STATE:?}.tmp.XXXXXXXX")"
+      printf '%s %s\n' "$target" "$maximum" >"$state_tmp"
+      mv -f -- "$state_tmp" "${AWTARCHY_TEST_DDC_STATE:?}"
       exit 0
       ;;
   esac
