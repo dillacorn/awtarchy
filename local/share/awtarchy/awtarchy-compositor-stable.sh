@@ -22,8 +22,7 @@ core="$here/awtarchy-compositor-core.sh"
 bash -n "$core"
 if [[ $operation == status ]]; then
     bash "$core" status plan no
-    return_code=$?
-    (exit "$return_code")
+    exit $?
 fi
 version_file="$HOME/.local/state/awtarchy/config-version"
 [[ -f $version_file && ! -L $version_file && -O $version_file ]] || {

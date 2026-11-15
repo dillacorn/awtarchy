@@ -10,6 +10,7 @@ remove_deps="$3"
 [[ "$remove_deps" == yes || "$remove_deps" == no ]] || { printf 'Invalid dependency choice.\n' >&2; exit 2; }
 ledger=/var/lib/awtarchy/managed-packages
 source_file="$HOME/.local/state/awtarchy/compositor-trial-source"
+release_source="${AWTARCHY_COMPOSITOR_RELEASE_SOURCE:-}"
 session_file=/usr/share/wayland-sessions/awtarchy-sway-trial.desktop
 fail() { printf 'Awtarchy compositor: %s\n' "$*" >&2; return 1; }
 installed() { pacman -Qq "$1" >/dev/null 2>&1; }
@@ -29,15 +30,21 @@ case "$operation" in
   install-sway|install-hyprland|remove-sway|remove-hyprland|update-sway) ;;
   *) fail 'Unknown operation'; exit 2 ;;
 esac
-[[ -f "$source_file" && ! -L "$source_file" && -O "$source_file" ]] ||
-  { fail 'Source not registered; refresh command from Sway trial checkout'; exit 1; }
-IFS= read -r repo < "$source_file" || :
-[[ "$repo" == /* && -d "$repo/.git" && ! -L "$repo" ]] ||
-  { fail 'Trial source checkout no longer available'; exit 1; }
-[[ "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] ||
-  { fail 'Trial source changed branch'; exit 1; }
+if [[ -n "$release_source" ]]; then
+  [[ "$release_source" == /* && -d "$release_source" && ! -L "$release_source" ]] ||
+    { fail 'Invalid stable release checkout'; exit 1; }
+  repo="$release_source"
+else
+  [[ -f "$source_file" && ! -L "$source_file" && -O "$source_file" ]] ||
+    { fail 'Source not registered; refresh command from Sway trial checkout'; exit 1; }
+  IFS= read -r repo < "$source_file" || :
+  [[ "$repo" == /* && -d "$repo/.git" && ! -L "$repo" ]] ||
+    { fail 'Trial source checkout no longer available'; exit 1; }
+  [[ "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] ||
+    { fail 'Trial source changed branch'; exit 1; }
+fi
 [[ -f "$repo/trials/sway/setup.sh" && -f "$repo/config/hypr/hyprland.lua" ]] ||
-  { fail 'Trial source incomplete'; exit 1; }
+  { fail 'Compositor source incomplete'; exit 1; }
 printf 'Action: %s\n' "$operation"
 printf 'Personal configs are preserved. Shared packages are preserved.\n'
 if [[ "$operation" == update-sway ]]; then
@@ -68,7 +75,9 @@ if [[ "$mode" == plan ]]; then
     update-sway)
       # Review must remain read-only and never misreport an old checkout as
       # "already up to date". Only apply can change the registered Git tree.
-      bash "$repo/trials/sway/source-refresh.sh" check "$repo"
+      if [[ -z "$release_source" ]]; then
+        bash "$repo/trials/sway/source-refresh.sh" check "$repo"
+      fi
       python3 "$repo/trials/sway/sync.py" review --repo "$repo"
       bash "$repo/trials/sway/session-wrapper-update.sh" plan "$repo" ;;
     install-hyprland)
@@ -174,7 +183,9 @@ elif [[ "$operation" == update-sway ]]; then
   # Update exactly the registered trial branch, never main or another repo.
   # Only fast-forward a clean worktree; preserve all local edits/history.
   # This happens after the existing interactive update-sway confirmation.
-  bash "$repo/trials/sway/source-refresh.sh" apply "$repo"
+  if [[ -z "$release_source" ]]; then
+    bash "$repo/trials/sway/source-refresh.sh" apply "$repo"
+  fi
   # Install the Sway-native monitor editor before its shortcut becomes active.
   add_pkg nwg-displays
   # Apply the branch-current diff; no package operations or compositor
