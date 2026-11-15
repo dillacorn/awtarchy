@@ -30,6 +30,10 @@ tiled_here = {"type": "root", "nodes": [ws("1", nodes=[window("maccel", 31, tile
 assert module.classify(tiled_here, focused, ("maccel",), False) == ((), True)
 assert module.classify(tiled_here, focused, ("maccel",), True) == ((), False)
 assert module.classify(tiled_here, focused, ("Wiremix",), False) == ((), True)
+assert "hyprmoncfg" not in module.UTILITIES
+assert module.UTILITIES["displays"][1][0] == "nwg-displays"
+assert module.UTILITIES["displays"][1][-2:] == ("--num_ws", "10")
+assert module.UTILITIES["displays"][1][-3].endswith("sway/awtarchy-trial/outputs")
 hidden_scratchpad = {"type": "root", "nodes": [ws("1"), ws("__i3_scratch", floating_nodes=[
     window("maccel", 999)])]}
 assert module.classify(hidden_scratchpad, focused, ("maccel",), False) == ((), True)

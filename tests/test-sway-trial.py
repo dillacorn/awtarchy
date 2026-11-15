@@ -39,7 +39,7 @@ for phrase in ('COMPOSITOR_SELECTION="hyprland"', 'compositor_has_hyprland()',
                'install_sway_session_stage()', 'copy_awtarchy_configs_stage'):
     assert phrase in RUNTIME, phrase
 assert "packages_to_install+=(sway)" not in RUNTIME
-assert "for package in sway swaybg swayidle xdg-desktop-portal-wlr" in RUNTIME
+assert "for package in sway swaybg swayidle nwg-displays xdg-desktop-portal-wlr" in RUNTIME
 assert "sway via aur-scan" not in RUNTIME
 assert "JayWM_Migration_Trial_Investigation" not in RUNTIME
 
@@ -69,7 +69,7 @@ for key, expected in {
     "Mod4+Shift+b": "toggle-utility.py btop",
     "Mod4+t": "ipc.sh themes toggle",
     "Mod4+w": "toggle-utility.py wallpicker",
-    "Mod4+Control+m": "toggle-utility.py hyprmoncfg",
+    "Mod4+Control+m": "toggle-utility.py displays",
     "Mod1+Control+Shift+Down": "move workspace to output down",
     "Mod1+Control+Shift+Up": "move workspace to output up",
 }.items():
@@ -123,6 +123,10 @@ sway_manager_install = MANAGER.split(
 )[1].split("; do", 1)[0]
 assert "swaylock" not in sway_manager_install.split()
 assert "mako" not in sway_manager_install.split()
+assert "nwg-displays" in sway_manager_install.split()
+assert 'include outputs' in CONFIG and 'include ../workspaces' in CONFIG
+assert "toggle-utility.py hyprmoncfg" not in CONFIG
+assert 'for_window [app_id="^nwg-displays$"] floating enable, resize set 85 ppt 90 ppt, move position center' in CONFIG
 # Historical, explicitly owned swaylock remains eligible for removal,
 # without removing anything the user installed independently.
 assert "swaybg swayidle swaylock" in MANAGER
@@ -138,7 +142,6 @@ HYPRLAND = (ROOT / "config/hypr/hyprland.lua").read_text(encoding="utf-8")
 floating_utility_sizes = {
     "btop": "80 ppt 85 ppt",
     "maccel": "90 ppt 96 ppt",
-    "hyprmoncfg": "85 ppt 90 ppt",
     "smtty": "50 ppt 65 ppt",
     "smtty-O": "50 ppt 65 ppt",
     "wallpicker": "85 ppt 90 ppt",

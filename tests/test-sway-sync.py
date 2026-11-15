@@ -39,6 +39,8 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
         ROOT / "config/hypr/scripts/screenshot_sound.sh"
     ).read_bytes()
 
+    assert home / ".config/sway/awtarchy-trial/outputs" in desired
+    assert home / ".config/sway/workspaces" in desired
     manager_path = home / ".local/share/awtarchy/awtarchy-compositor-manager.sh"
     assert manager_path in desired
     missing = home / ".config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml"

@@ -49,7 +49,7 @@ elif [[ "$operation" == install-hyprland ]]; then
 else
   if [[ "$operation" == remove-sway ]]; then
     if [[ "$remove_deps" == yes ]]; then
-      packages='swaybg swayidle swaylock xdg-desktop-portal-wlr lxqt-policykit sway'
+      packages='swaybg swayidle swaylock nwg-displays xdg-desktop-portal-wlr lxqt-policykit sway'
     else packages='sway'; fi
   else
     if [[ "$remove_deps" == yes ]]; then
@@ -120,7 +120,7 @@ drop_pkg() {
   printf 'Removed: %s\n' "$pkg"
 }
 if [[ "$operation" == install-sway ]]; then
-  for pkg in sway swaybg swayidle xdg-desktop-portal-wlr \
+  for pkg in sway swaybg swayidle nwg-displays xdg-desktop-portal-wlr \
       quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel \
       grim slurp satty wl-clipboard cliphist xdg-desktop-portal-gtk \
       libnotify jq python pipewire lxqt-policykit playerctl; do
@@ -175,6 +175,8 @@ elif [[ "$operation" == update-sway ]]; then
   # Only fast-forward a clean worktree; preserve all local edits/history.
   # This happens after the existing interactive update-sway confirmation.
   bash "$repo/trials/sway/source-refresh.sh" apply "$repo"
+  # Install the Sway-native monitor editor before its shortcut becomes active.
+  add_pkg nwg-displays
   # Apply the branch-current diff; no package operations or compositor
   # removals are reachable through this branch.
   python3 "$repo/trials/sway/sync.py" apply --repo "$repo"

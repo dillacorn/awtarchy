@@ -94,7 +94,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Alt+Shift+M or Super+Shift+M toggles floating maccel at ~90% × 96%, without spawning duplicates.
 - [ ] Pressing a utility shortcut again closes its floating instance on the active workspace; a floating instance on another workspace is closed and reopened locally.
 - [ ] A manually tiled utility is never killed by its toggle shortcut.
-- [ ] Super+W toggles floating wallpicker; Super+Ctrl+M and Super+Alt+G/O toggle their Hyprland-equivalent utilities.
+- [ ] Super+W toggles floating wallpicker; Super+Ctrl+M opens nwg-displays (never Hyprmoncfg), and Super+Alt+G/O toggle their shared utilities. Save Sway display/workspace settings, relogin, and verify that Hyprland/Hyprmoncfg files remain untouched.
 - [ ] Super+T opens/closes the Sway-only theme picker; selecting a theme recolors active and inactive window borders immediately and after relogin/reload.
 - [ ] Wiremix, Qalc, default-applications TUI and Foot/Yazi launch correctly.
 - [ ] ProtonUp-Qt launches floating and centered at approximately 45% × 45% of the active output; its Add Version, About and other child dialogs float without being forced to main-window size.
