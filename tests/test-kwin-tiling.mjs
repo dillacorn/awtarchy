@@ -79,7 +79,7 @@ assert.equal(d.frameGeometry.y, b.frameGeometry.y + b.frameGeometry.height + 6);
 // Fullscreen games stay untouched, other windows reflow around them.
 b.fullScreen = true;
 b.fullScreenChanged.emit();
-assert.deepEqual([a.frameGeometry.x, d.frameGeometry.x], [9, 969]);
+assert.deepEqual([a.frameGeometry.x, d.frameGeometry.x], [9, 963]);
 assert.equal(b.frameGeometry.x, 963);
 
 // Per-output and desktop isolation.

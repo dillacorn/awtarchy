@@ -52,6 +52,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-kwin-test-") as directory:
     assert "Number=10" in config.read_text()
     assert "awtarchy-kwinEnabled=true" in config.read_text()
     assert "awtarchy-kwin-tilingEnabled=true" in config.read_text()
+    assert "awtarchy-kwinEnabled=true\\nawtarchy-kwin-tilingEnabled=true\\n" in config.read_text()
     recorded = {config: sha(config), installed: sha(installed), tiling: sha(tiling)}
     run("--stage")
     assert recorded == {path: sha(path) for path in recorded}

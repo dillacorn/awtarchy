@@ -20,7 +20,7 @@ KWINRC = (
     "Rows=1\n"
     "\n"
     "[Plugins]\n"
-    "".join(f"{plugin}Enabled=true\\n" for plugin in PLUGIN_IDS)
+    "".join(f"{plugin}Enabled=true\n" for plugin in PLUGIN_IDS)
 )
 
 
