@@ -104,7 +104,7 @@ esac
 command -v pw-play >/dev/null 2>&1 || exit 0
 command -v python3 >/dev/null 2>&1 || exit 0
 
-# Exact user-selected 180ms "Classic: tighter double-click" at 80% volume.
+# Exact user-selected 180ms "Classic: tighter double-click" at 35% volume.
 # Fully detached playback cannot delay captures or inherit compositor locks.
 (
     python3 -c '
@@ -149,5 +149,5 @@ for value in samples:
     pcm.extend(struct.pack("<h", sample))
 sys.stdout.buffer.write(pcm)
 ' | pw-play --raw --format=s16 --rate=48000 --channels=1 \
-    --volume=0.80 --latency=20ms - >/dev/null 2>&1
+    --volume=0.35 --latency=20ms - >/dev/null 2>&1
 ) 8>&- 9>&- </dev/null >/dev/null 2>&1 &

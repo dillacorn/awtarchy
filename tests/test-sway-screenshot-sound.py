@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="screenshot-sound-contract-") as temp:
     pw_mock = tools / "pw-play"
     pw_mock.write_text(r"""#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.80 --latency=20ms -" ]] || exit 9
+[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.35 --latency=20ms -" ]] || exit 9
 hash="$(python3 -c 'import hashlib,sys; data=sys.stdin.buffer.read(); print(len(data), hashlib.sha256(data).hexdigest())')"
 printf '%s\n' "$hash" >>"$EVENTS"
 """)
