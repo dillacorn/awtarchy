@@ -81,12 +81,12 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     custom_outputs = home / ".config/sway/awtarchy-trial/outputs"
     custom_workspaces = home / ".config/sway/workspaces"
     custom_outputs.write_text(
-        "output DP-1 mode 1920x1080@400.002Hz position 0 1080 scale 1\\n")
-    custom_workspaces.write_text("workspace 1 output DP-1\\n")
+        "output DP-1 mode 1920x1080@400.002Hz position 0 1080 scale 1\n")
+    custom_workspaces.write_text("workspace 1 output DP-1\n")
     assert "PRESERVE modified file" in run("review")
     run("apply")
     assert custom_outputs.read_text().startswith("output DP-1 mode 1920")
-    assert custom_workspaces.read_text() == "workspace 1 output DP-1\\n"
+    assert custom_workspaces.read_text() == "workspace 1 output DP-1\n"
     key = str(missing.relative_to(home))
     assert updated[key] == digest(desired[missing])
 
