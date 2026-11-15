@@ -62,6 +62,11 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
             path.chmod(0o755)
         baseline[str(path.relative_to(home))] = digest(contents)
     manifest = state / "sway-managed-baseline.json"
+    # Simulate an existing v4.2.0 Sway installation with no TTY shim and
+    # no ~/.local/bin directory. The updater must create the command safely.
+    tty.unlink()
+    tty.parent.rmdir()
+    baseline.pop(str(tty.relative_to(home)))
     manifest.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
 
     def run(mode):
@@ -79,8 +84,11 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     report = run("review")
     assert "WOULD INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in report, report
     assert not missing.exists()
+    assert "WOULD INSTALL: .local/bin/sway" in report
+    assert not tty.parent.exists()
     applied = run("apply")
     assert "INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in applied, applied
+    assert "INSTALL: .local/bin/sway" in applied, applied
     assert missing.read_bytes() == desired[missing]
     assert tty.read_bytes() == desired[tty]
     assert tty.stat().st_mode & 0o111, "New Sway TTY command must be executable"
