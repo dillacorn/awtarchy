@@ -1,5 +1,5 @@
 #!/usr/bin/bash
-# Root-owned Ly session wrapper, configured per login user.
+# Root-owned session wrapper used by Ly and the short TTY sway command.
 set -euo pipefail
 [[ -n "${HOME:-}" && "$HOME" == /* ]] || {
     printf 'Missing absolute login HOME for Sway trial\n' >&2; exit 1;

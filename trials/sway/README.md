@@ -249,7 +249,7 @@ review the compositor manager's installation plan, and preserve Hyprland.
 6. Verify fullscreen gaming, immediate page flips/tearing, frame pacing, VRR and portals independently. Tearing permissions do not prove that the driver actually presented a torn frame.
    Screen Share Guard remains explicitly unavailable.
 
-Use swaymsg exit in a Sway terminal to return to Ly, then select Hyprland.
+Use `swaymsg exit` in a Sway terminal to return to Ly or your original TTY. If using a TTY, start Hyprland with `hypr`; if using Ly, select Hyprland from the session list.
 Do not remove Hyprland, merge the trial, or release it based only on CI.
 
 Extended checklist: [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Satty screenshot annotation,
