@@ -119,7 +119,14 @@ async def serve(root: Path) -> None:
     if result != RequestNameReply.PRIMARY_OWNER:
         raise RuntimeError("An existing KWin state bridge owns the D-Bus name")
     check_root(root)
-    # Ready is published only after the D-Bus service name is exclusively owned.
+    # Create a real file before Quickshell starts watching its path.
+    # The KWin publisher replaces this with the exact live workspace state.
+    initial = {"version": 1,
+               "desktops": [{"id": str(n), "name": str(n)} for n in range(1, 11)],
+               "outputs": []}
+    publish(root, validate(json.dumps(initial)))
+    # Ready is published only after the D-Bus service name is exclusively owned
+    # and the initial workspace state file is present.
     (root / "ready").write_text("ready\n", encoding="utf-8")
     os.chmod(root / "ready", 0o600)
     await bus.wait_for_disconnect()

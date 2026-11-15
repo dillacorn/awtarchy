@@ -94,8 +94,10 @@ A separate KWin script publishes desktop/occupancy snapshots over a
 session-only D-Bus name (`org.awtarchy.KWinTrial1`) to a private Python
 `python-dbus-next` receiver. The receiver rejects invalid/oversized state
 and atomically writes a private JSON file watched by Quickshell `FileView`.
-The service starts before KWin and is terminated when the TTY smoke test
-ends. No existing user service or Sway/Hyprland IPC is modified.
+The service starts before KWin, writes a complete placeholder JSON file
+before declaring readiness, and is terminated when the TTY smoke test ends.
+CI includes a real isolated D-Bus roundtrip, not just a JSON validation
+stub. No existing user service or Sway/Hyprland IPC is modified.
 
 The private `kwinrc` also enables per-output virtual desktops,
 focus-follows-mouse, and Alt+left/right pointer move/resize. This matches

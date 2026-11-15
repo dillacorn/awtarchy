@@ -70,5 +70,11 @@ jobs:
           node --check trials/kwin/shortcuts.js
           node --check tests/test-kwin-shortcuts.mjs
           node tests/test-kwin-shortcuts.mjs
+      - name: Session D-Bus receiver roundtrip
+        run: |
+          python3 -m pip install --disable-pip-version-check --no-input \
+            --target "$RUNNER_TEMP/kwin-test-deps" dbus-next==0.2.3
+          PYTHONPATH="$RUNNER_TEMP/kwin-test-deps" \
+            dbus-run-session -- python3 tests/test-kwin-state-dbus.py
       - name: Whitespace validation
         run: git diff --check HEAD^ HEAD
