@@ -39,6 +39,15 @@ After installation, use:
 awtarchy
 ```
 
+Ly is optional. From a TTY, type `hypr` for Awtarchy Hyprland or `sway`
+for Awtarchy Sway if each compositor is installed. Awtarchy creates a
+user-local `~/.local/bin/sway` entry only when installing Sway. With no
+arguments from a TTY, it launches the same Sway session as Ly; native
+`/usr/bin/sway` is never replaced, and Sway CLI arguments still use its
+original executable. The login greeting lists available compositor commands.
+For a custom login shell, keep `~/.local/bin` before `/usr/bin` in `PATH`.
+
+
 The installed maintenance command lives at `~/.local/bin/awtarchy`.
 
 ## Preview before installing
