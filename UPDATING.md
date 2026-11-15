@@ -20,7 +20,15 @@ Awtarchy-owned packages). The stable manager uses the exact published
 configuration release instead of requiring the old experimental checkout.
 Hyprland remains the default and is not removed when Sway is added.
 
- The maintenance command/runtime itself can refresh from `main` independently so updater-only fixes do not require a new configuration release. Changes to release-managed configuration are available to normal stable updates only after a new published stable release includes them; editing release notes does not change the configuration payload users receive. Optional package choices remain separate.
+### Migrating an existing Sway trial
+
+The older trial launcher blocks ordinary stable updates until it is refreshed.
+From the trial installation, run `awtarchy self-update` and then
+`awtarchy update` to adopt v4.2.0. Awtarchy preserves the recorded Sway
+baseline and your personal display settings. Do not delete the old checkout
+or rerun the full installer as an upgrade shortcut.
+
+The maintenance command/runtime itself can refresh from `main` independently so updater-only fixes do not require a new configuration release. Changes to release-managed configuration are available to normal stable updates only after a new published stable release includes them; editing release notes does not change the configuration payload users receive. Optional package choices remain separate.
 
 When a Hyprland package upgrade is detected after you approve the config update, Awtarchy offers a **separate, optional full system upgrade** before changing managed files. It never installs Hyprland alone or upgrades the system without an interactive yes/no response. This uses Awtarchy's existing NVIDIA/kernel rollback safeguards, but a managed-config rollback does not reverse a system package upgrade. For a fresh, read-only upgrade check, install `pacman-contrib` (which provides `checkupdates`); otherwise Awtarchy consults the local pacman database, which might be stale. On Arch and CachyOS, use full system upgrades instead of partial package upgrades.
 
