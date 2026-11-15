@@ -375,6 +375,11 @@ def main():
         desired = expected_files(repo, home, Path(stage))
     actual = {}
     for path, body in desired.items():
+        key = str(path.relative_to(home))
+        # An existing user sway symlink is explicitly outside our ownership.
+        # Never read its destination or treat it as an error for other updates.
+        if path.is_symlink() and key == ".local/bin/sway":
+            continue
         if path.is_symlink() or path.parent.is_symlink():
             raise ValueError("Refusing linked installed Sway path: " + str(path))
         if path.is_file():
@@ -398,8 +403,8 @@ def main():
                 baseline.pop(key, None)
                 print("PRESERVE: custom Sway display/workspace file not added to stock baseline: " + key)
             elif key == ".local/bin/sway" and actual.get(key) != sha(body):
-                # Never take ownership of a pre-existing custom sway command.
-                if key not in actual:
+                # Never take ownership of a pre-existing command or symlink.
+                if key not in actual and not path.is_symlink():
                     raise ValueError("Sway TTY command not staged during installation")
                 baseline.pop(key, None)
                 print("PRESERVE: existing custom Sway TTY command: " + key)
@@ -421,6 +426,10 @@ def main():
     counts = dict(unchanged=0, update=0, preserve=0, missing=0)
     for path, body in sorted(desired.items(), key=lambda item: str(item[0])):
         key = str(path.relative_to(home))
+        if key == ".local/bin/sway" and path.is_symlink():
+            counts["preserve"] += 1
+            print("PRESERVE custom Sway command symlink: " + key)
+            continue
         current = actual.get(key)
         target = sha(body)
         if current == target:
