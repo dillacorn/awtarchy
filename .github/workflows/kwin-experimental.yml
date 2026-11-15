@@ -43,6 +43,9 @@ jobs:
           python3 tests/test-kwin-session-stage.py
           python3 -m py_compile trials/kwin/monitor-info.py
           python3 tests/test-kwin-monitor-info.py
+          python3 -m py_compile trials/kwin/setup-trial.py
+          python3 tests/test-kwin-setup-trial.py
+          bash -n trials/kwin/tty-command.sh
           python3 -m py_compile trials/kwin/state-bridge.py
           python3 tests/test-kwin-state-bridge.py
       - name: Quickshell probe contract

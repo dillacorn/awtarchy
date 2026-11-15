@@ -4,11 +4,12 @@ This is an **isolated, read-only investigation** for a minimal KWin Wayland
 session in Awtarchy. Hyprland remains the default; the existing optional Sway
 implementation and all of its configuration remain unchanged.
 
-This directory deliberately has **no session launcher or package installer**.
-KWin can launch without Plasma, but Awtarchy's existing Quickshell/IPC/lock/
-workspace wiring cannot currently be reused unchanged. Do not advertise the
-KWin profile in the compositor menu or create a Ly entry until a functioning,
-safely removable profile has been built and tested.
+This directory contains an **opt-in, user-local experimental session**,
+not a production Awtarchy profile. It never changes Hyprland or Sway, and
+it deliberately does not create a Ly entry. KWin can run without Plasma,
+but the production Quickshell UI, secure session lock and screencast portal
+have not yet been ported and verified. Do not advertise this as a finished
+compositor choice in the stable Awtarchy menu.
 
 ## Why KWin
 
@@ -58,19 +59,46 @@ default compositor. The preview refuses a transaction containing
 includes the tiny official `python-dbus-next` package required by the
 trial's workspace-state bridge. The
 staging/smoke scripts assume `kwin` and `foot` are already installed;
-there is still no production installer or package remover in this branch.
+there is still no production installer or system package remover in this branch.
+
+## Install the user-local KWin test command (no system packages changed)
+
+From a checkout of this exact experiment branch:
+
+```bash
+python3 trials/kwin/setup-trial.py --plan
+python3 trials/kwin/setup-trial.py --install
+```
+
+This stages only Awtarchy-owned experiment files under
+`~/.local/share/awtarchy-kwin-trial/` and the short `~/.local/bin/kwin`
+TTY entry. The installer refuses an existing untracked `kwin` command
+or any modified trial files. It records hashes of every installed file.
+To remove **only the exact installed files**, run:
+
+```bash
+python3 trials/kwin/setup-trial.py --remove
+```
+
+Changes made to a trial file are preserved. The trial installer does not
+remove packages or touch Hyprland, Sway, Ly, or any KDE settings. There is
+not yet a safe automated in-place trial upgrade; it refuses unknown source
+changes instead of overwriting user edits.
 
 ## Standalone DRM smoke test (not the Awtarchy session)
 
-For testers who **already have** the official `kwin`, `quickshell`,
-`python-dbus-next` and `foot` packages,
+For testers who **already have** the official `kwin`, `xorg-xwayland`,
+`quickshell`, `python-dbus-next`, `fuzzel` and `foot` packages,
 `tty-smoke.sh` can open an isolated KWin instance and one Foot terminal from
 an otherwise unused local TTY. It requires the explicit
 `AWTARCHY_KWIN_SMOKE=yes` opt-in. It refuses root, terminal emulators, nested
 Wayland/X11 sessions, and detected concurrently running Hyprland/Sway/KWin
 processes. This is **not** a production desktop. It starts a minimal Quickshell trial bar.
 It stages a private KWin script package and enables 10 numbered workspaces,
-but intentionally disables the unverified lockscreen. Workspace shortcuts
+but intentionally disables the unverified lockscreen. When the user-local
+trial has been explicitly installed, login at a free TTY and type
+`kwin` to start the guarded experiment. KWin is not added to Ly.
+Workspace shortcuts
 must still be confirmed live on KWin; offline tests only simulate the API.
 Do not leave sensitive content unattended. Closing Foot should cause KWin
 to stop and return to the TTY; actual KWin/driver behavior needs testing.
