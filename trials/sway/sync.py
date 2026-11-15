@@ -371,18 +371,28 @@ def main():
         if path.is_file():
             actual[str(path.relative_to(home))] = sha(path.read_bytes())
     if args.mode == "record":
+        # Hyprmoncfg's first-time workspace import (or a user-owned Sway
+        # workspace file) may intentionally differ from our empty stub.
+        # Keep it out of the stock baseline so later updates never take
+        # ownership of those user settings.
+        baseline = dict(actual)
         for path, body in desired.items():
             key = str(path.relative_to(home))
             if key == ".config/sway/awtarchy-trial/config":
                 # Includes the one-time imported monitor profile, not base defaults.
                 if key not in actual:
                     raise ValueError("No installed Sway configuration")
+            elif key == ".config/sway/workspaces" and actual.get(key) != sha(body):
+                if key not in actual:
+                    raise ValueError("Missing initial Sway workspace file")
+                baseline.pop(key, None)
+                print("PRESERVE: imported/custom Sway workspaces not added to stock baseline")
             elif actual.get(key) != sha(body):
                 raise ValueError("Installed Sway stage does not match source: " + key)
         state.mkdir(parents=True, exist_ok=True)
         if manifest.exists():
             raise ValueError("Existing Sway baseline cannot be silently adopted")
-        atomic_replace(manifest, json.dumps(actual, indent=2, sort_keys=True).encode() + b"\n")
+        atomic_replace(manifest, json.dumps(baseline, indent=2, sort_keys=True).encode() + b"\n")
         print("PASS: recorded exact initial Sway source baseline")
         return
     if not manifest.is_file():

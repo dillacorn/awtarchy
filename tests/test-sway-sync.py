@@ -90,6 +90,21 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     key = str(missing.relative_to(home))
     assert updated[key] == digest(desired[missing])
 
+
+    # First-time Hyprmoncfg workspace import must not prevent the initial
+    # baseline from being recorded or make a personal layout managed.
+    old_baseline = manifest.read_text()
+    custom_workspaces.write_text("workspace 2 output DP-3\n")
+    manifest.unlink()
+    run("record")
+    imported_baseline = json.loads(manifest.read_text())
+    assert ".config/sway/workspaces" not in imported_baseline
+    assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+    assert "PRESERVE modified file" in run("review")
+    assert "PRESERVE modified file" in run("apply")
+    assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+    manifest.write_text(old_baseline)
+
     # Manually installed exact source from an earlier broken updater must be
     # adopted into the baseline without rewriting the user's copy.
     updated.pop(key)
