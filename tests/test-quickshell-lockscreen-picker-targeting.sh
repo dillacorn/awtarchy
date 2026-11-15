@@ -124,26 +124,26 @@ require_text "$TMP/hypr.log" 'mode = "fullscreen"' \
 reject_text "$TMP/hypr.log" 'class:^(awtarchy-lock-wallpaper)$' \
     'picker still targets a class match instead of the exact mapped client'
 
-# Edit Layout is a persistent right-side action directly beneath the Lockscreen
-# Expand/Collapse action, rather than being buried inside expanded precision UI.
-require_text "$QUICK_SETTINGS" 'id: lockscreenSectionActions' \
-    'Lockscreen header has no right-side action column'
+# Edit Layout belongs to the expanded Lockscreen subsection, not its header.
+# Do not accidentally make it invisible behind the removed global Edit mode.
+require_text "$QUICK_SETTINGS" 'visible: root.lockscreenSectionExpanded' \
+    'Lockscreen no longer has its independent expansion state'
 python3 - "$QUICK_SETTINGS" <<'PY'
 from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-anchor = text.find("id: lockscreenSectionActions")
-if anchor < 0:
-    raise SystemExit("missing lockscreenSectionActions")
-end = text.find("\n                                }", anchor)
-if end < 0:
-    raise SystemExit("could not bound lockscreenSectionActions")
-block = text[anchor:end]
-collapse = block.find('label: root.lockscreenSectionOpen ? "Collapse Lockscreen" : "Expand Lockscreen"')
-edit = block.find('label: "Edit Layout"')
-if collapse < 0 or edit < 0 or edit <= collapse:
-    raise SystemExit("Edit Layout is not directly below Expand/Collapse in the right-side action column")
+start = text.index('id: awtarchyContent')
+end = text.index('Layout.row: root.quickSettingsSectionRow("smtty")', start)
+card = text[start:end]
+header = card.find('text: "Lockscreen"')
+opened = card.find('visible: root.lockscreenSectionExpanded', header)
+layout = card.find('label: "Edit Layout"', opened)
+animation = card.find('text: "Lockscreen Animation"', opened)
+if min(header, opened, layout, animation) < 0 or not header < opened < layout < animation:
+    raise SystemExit("Edit Layout must be inside the expanded Lockscreen category")
+if 'onClicked: root.openLockscreenEditor()' not in card[layout:animation]:
+    raise SystemExit("Lockscreen Edit Layout no longer opens the editor")
 PY
 
 printf '%s\n' 'PASS: exact mapped Awtwall fullscreen targeting and Lockscreen Edit Layout placement'
