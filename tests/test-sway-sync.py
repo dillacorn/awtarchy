@@ -99,6 +99,7 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     run("record")
     imported_baseline = json.loads(manifest.read_text())
     assert ".config/sway/workspaces" not in imported_baseline
+    assert ".config/sway/awtarchy-trial/outputs" not in imported_baseline
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
     assert "PRESERVE modified file" in run("review")
     assert "PRESERVE modified file" in run("apply")

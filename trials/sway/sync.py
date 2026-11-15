@@ -382,11 +382,12 @@ def main():
                 # Includes the one-time imported monitor profile, not base defaults.
                 if key not in actual:
                     raise ValueError("No installed Sway configuration")
-            elif key == ".config/sway/workspaces" and actual.get(key) != sha(body):
+            elif key in (".config/sway/workspaces",
+                         ".config/sway/awtarchy-trial/outputs") and actual.get(key) != sha(body):
                 if key not in actual:
-                    raise ValueError("Missing initial Sway workspace file")
+                    raise ValueError("Missing initial Sway display/workspace file: " + key)
                 baseline.pop(key, None)
-                print("PRESERVE: imported/custom Sway workspaces not added to stock baseline")
+                print("PRESERVE: custom Sway display/workspace file not added to stock baseline: " + key)
             elif actual.get(key) != sha(body):
                 raise ValueError("Installed Sway stage does not match source: " + key)
         state.mkdir(parents=True, exist_ok=True)
