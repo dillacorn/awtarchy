@@ -340,7 +340,9 @@ done
   || fail "previous brightness worker did not settle before preview test"
 
 # Bar preview should advance immediately per wheel event, independently of the
-# hardware worker's delayed DDC/backlight write.
+# hardware worker's delayed DDC/backlight write. Use a longer test-only
+# debounce so loaded CI cannot run the first worker between two process
+# invocations; interactive runtime behavior and default delays are unchanged.
 env \
   PATH="${fakebin}:$PATH" \
   HOME="$TMP" \
@@ -350,8 +352,8 @@ env \
   HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
   HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
   AWTARCHY_OUTPUT_NAME=LVDS-1 \
-  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
-  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=3000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=4000 \
   AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
   AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
   AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
@@ -370,8 +372,8 @@ env \
   HYPR_BRIGHTNESS_SCRIPT="$CONTROLLER" \
   HYPR_BACKLIGHT_SYSFS_DIR="$backlight_root" \
   AWTARCHY_OUTPUT_NAME=LVDS-1 \
-  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=1000 \
-  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=2000 \
+  AWTARCHY_DDC_SCROLL_DEBOUNCE_MS=3000 \
+  AWTARCHY_DDC_SCROLL_MAX_WAIT_MS=4000 \
   AWTARCHY_TEST_MONITOR_JSON="$monitor_json" \
   AWTARCHY_TEST_BRIGHTNESS_STATE="$brightness_state" \
   AWTARCHY_TEST_BRIGHTNESS_LOG="$brightness_log" \
@@ -387,7 +389,7 @@ read -r preview_twice preview_max _preview_ts <"$preview_file"
 
 state_file="$cache_home/hypr-ddc-brightness/state_LVDS-1.tsv"
 settled=false
-for _ in {1..100}; do
+for _ in {1..160}; do
   if [[ -r "$state_file" ]]; then
     read -r settled_cur _settled_max _settled_ts <"$state_file" || true
     if [[ "${settled_cur:-}" == "$preview_twice" ]]; then

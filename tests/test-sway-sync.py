@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
 
     assert home / ".config/sway/awtarchy-trial/outputs" in desired
     assert home / ".config/sway/workspaces" in desired
+    tty = home / ".local/bin/sway"
+    assert tty in desired
+    assert desired[tty] == (ROOT / "trials/sway/tty-launch.sh").read_bytes()
     # The source stub must remain separate from the user's saved output data.
     assert desired[home / ".config/sway/awtarchy-trial/outputs"].startswith(b"#")
     assert desired[home / ".config/sway/workspaces"].startswith(b"#")
@@ -54,8 +57,16 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
         if path == missing:
             continue
         path.write_bytes(contents)
+        if path == tty:
+            # Real setup.sh uses install -m 0755, not a bare write.
+            path.chmod(0o755)
         baseline[str(path.relative_to(home))] = digest(contents)
     manifest = state / "sway-managed-baseline.json"
+    # Simulate an existing v4.2.0 Sway installation with no TTY shim and
+    # no ~/.local/bin directory. The updater must create the command safely.
+    tty.unlink()
+    tty.parent.rmdir()
+    baseline.pop(str(tty.relative_to(home)))
     manifest.write_text(json.dumps(baseline, indent=2) + "\n", encoding="utf-8")
 
     def run(mode):
@@ -73,10 +84,16 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     report = run("review")
     assert "WOULD INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in report, report
     assert not missing.exists()
+    assert "WOULD INSTALL: .local/bin/sway" in report
+    assert not tty.parent.exists()
     applied = run("apply")
     assert "INSTALL: .config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml" in applied, applied
+    assert "INSTALL: .local/bin/sway" in applied, applied
     assert missing.read_bytes() == desired[missing]
+    assert tty.read_bytes() == desired[tty]
+    assert tty.stat().st_mode & 0o111, "New Sway TTY command must be executable"
     updated = json.loads(manifest.read_text())
+    assert updated[str(tty.relative_to(home))] == digest(desired[tty])
     # Saved Sway outputs/workspaces belong to the user after customization.
     custom_outputs = home / ".config/sway/awtarchy-trial/outputs"
     custom_workspaces = home / ".config/sway/workspaces"
@@ -94,16 +111,34 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     # First-time Hyprmoncfg workspace import must not prevent the initial
     # baseline from being recorded or make a personal layout managed.
     old_baseline = manifest.read_text()
+    tty.write_bytes(b"#!/usr/bin/env bash\necho custom sway launcher\n")
     custom_workspaces.write_text("workspace 2 output DP-3\n")
     manifest.unlink()
     run("record")
     imported_baseline = json.loads(manifest.read_text())
     assert ".config/sway/workspaces" not in imported_baseline
+    assert ".local/bin/sway" not in imported_baseline
     assert ".config/sway/awtarchy-trial/outputs" not in imported_baseline
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+    assert tty.read_bytes().startswith(b"#!/usr/bin/env bash\necho custom")
     assert "PRESERVE modified file" in run("review")
     assert "PRESERVE modified file" in run("apply")
     assert custom_workspaces.read_text() == "workspace 2 output DP-3\n"
+
+    # A user-defined sway symlink is preserved, never followed or adopted.
+    tty.unlink()
+    custom_entry = home / "personal-sway-entry"
+    custom_entry.write_bytes(b"#!/usr/bin/env bash\necho personal\n")
+    tty.symlink_to(custom_entry)
+    manifest.unlink()
+    run("record")
+    assert ".local/bin/sway" not in json.loads(manifest.read_text())
+    assert "PRESERVE custom Sway command symlink" in run("review")
+    assert "PRESERVE custom Sway command symlink" in run("apply")
+    assert tty.is_symlink() and tty.resolve() == custom_entry
+    assert custom_entry.read_bytes() == b"#!/usr/bin/env bash\necho personal\n"
+    tty.unlink()
+    tty.write_bytes(b"#!/usr/bin/env bash\necho custom sway launcher\n")
     manifest.write_text(old_baseline)
 
     # Manually installed exact source from an earlier broken updater must be

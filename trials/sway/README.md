@@ -19,7 +19,9 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - Sway config (retained legacy path): ~/.config/sway/awtarchy-trial/config
 - Generated shell: ~/.config/quickshell/awtarchy-sway
 - Ly session: Sway (Awtarchy); older trial entries remain until upgraded
-- System session launcher: /usr/local/bin/awtarchy-sway-session
+- System session launcher (used internally by Ly and TTY): /usr/local/bin/awtarchy-sway-session
+- TTY command: `sway` (managed `~/.local/bin/sway`, no arguments). `sway -C` or any other arguments invoke native `/usr/bin/sway`.
+- Ly is optional. Existing personal `sway` launchers are preserved.
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
 - Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Quickshell overlay with exact portal-source protocol; Fuzzel not used by OBS)
 - Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock or Mako installed for this Quickshell-based session)
@@ -247,7 +249,7 @@ review the compositor manager's installation plan, and preserve Hyprland.
 6. Verify fullscreen gaming, immediate page flips/tearing, frame pacing, VRR and portals independently. Tearing permissions do not prove that the driver actually presented a torn frame.
    Screen Share Guard remains explicitly unavailable.
 
-Use swaymsg exit in a Sway terminal to return to Ly, then select Hyprland.
+Use `swaymsg exit` in a Sway terminal to return to Ly or your original TTY. If using a TTY, start Hyprland with `hypr`; if using Ly, select Hyprland from the session list.
 Do not remove Hyprland, merge the trial, or release it based only on CI.
 
 Extended checklist: [TEST_CHECKLIST.md](TEST_CHECKLIST.md). Satty screenshot annotation,

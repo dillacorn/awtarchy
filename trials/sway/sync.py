@@ -62,6 +62,11 @@ def expected_files(repo, home, temporary):
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe Sway source file: " + str(source))
         result[target] = source.read_bytes()
+    # The TTY command is managed as an ordinary user-local Sway file.
+    tty_source = trial / "tty-launch.sh"
+    if tty_source.is_symlink() or not tty_source.is_file():
+        raise ValueError("Missing or unsafe Sway TTY launcher source")
+    result[home / ".local/bin/sway"] = tty_source.read_bytes()
     # nwg-displays writes this Sway-only workspace file outside the trial
     # directory. Keep an initial managed stub but preserve user-edited content.
     workspace_source = repo / "trials/workspaces"
@@ -340,7 +345,11 @@ def atomic_replace(target, body):
             handle.write(body)
             handle.flush()
             os.fsync(handle.fileno())
-        mode = target.stat().st_mode & 0o777 if target.exists() else 0o755 if target.suffix == ".sh" else 0o644
+        executable = (target.suffix == ".sh" or
+                      (target.name == "sway" and target.parent.name == "bin"
+                       and target.parent.parent.name == ".local"))
+        mode = (target.stat().st_mode & 0o777 if target.exists()
+                else 0o755 if executable else 0o644)
         os.chmod(name, mode)
         os.replace(name, target)
     finally:
@@ -366,6 +375,11 @@ def main():
         desired = expected_files(repo, home, Path(stage))
     actual = {}
     for path, body in desired.items():
+        key = str(path.relative_to(home))
+        # An existing user sway symlink is explicitly outside our ownership.
+        # Never read its destination or treat it as an error for other updates.
+        if path.is_symlink() and key == ".local/bin/sway":
+            continue
         if path.is_symlink() or path.parent.is_symlink():
             raise ValueError("Refusing linked installed Sway path: " + str(path))
         if path.is_file():
@@ -388,6 +402,12 @@ def main():
                     raise ValueError("Missing initial Sway display/workspace file: " + key)
                 baseline.pop(key, None)
                 print("PRESERVE: custom Sway display/workspace file not added to stock baseline: " + key)
+            elif key == ".local/bin/sway" and actual.get(key) != sha(body):
+                # Never take ownership of a pre-existing command or symlink.
+                if key not in actual and not path.is_symlink():
+                    raise ValueError("Sway TTY command not staged during installation")
+                baseline.pop(key, None)
+                print("PRESERVE: existing custom Sway TTY command: " + key)
             elif actual.get(key) != sha(body):
                 raise ValueError("Installed Sway stage does not match source: " + key)
         state.mkdir(parents=True, exist_ok=True)
@@ -406,6 +426,10 @@ def main():
     counts = dict(unchanged=0, update=0, preserve=0, missing=0)
     for path, body in sorted(desired.items(), key=lambda item: str(item[0])):
         key = str(path.relative_to(home))
+        if key == ".local/bin/sway" and path.is_symlink():
+            counts["preserve"] += 1
+            print("PRESERVE custom Sway command symlink: " + key)
+            continue
         current = actual.get(key)
         target = sha(body)
         if current == target:
@@ -454,6 +478,7 @@ def main():
             )
             new_helper = key in (
                 ".config/sway/workspaces",
+                ".local/bin/sway",
                 ".config/sway/awtarchy-trial/outputs",
                 ".config/sway/awtarchy-trial/awtarchy-login.mp3",
                 ".config/sway/awtarchy-trial/login-sound.sh",
@@ -492,6 +517,17 @@ def main():
                     ):
                         raise ValueError("Unsafe Sway portal configuration directory")
                     directory.mkdir(mode=0o700, exist_ok=True)
+                if key == ".local/bin/sway":
+                    # Existing v4.2.0 Sway users may not have this directory.
+                    # Never create through a symlink or touch another home.
+                    parent = home / ".local"
+                    bin_dir = parent / "bin"
+                    if parent.is_symlink() or not parent.is_dir():
+                        raise ValueError("Unsafe or missing ~/.local directory")
+                    if bin_dir.is_symlink() or (
+                            bin_dir.exists() and not bin_dir.is_dir()):
+                        raise ValueError("Unsafe ~/.local/bin destination")
+                    bin_dir.mkdir(mode=0o700, exist_ok=True)
                 atomic_replace(path, body)
                 updated[key] = target
                 changed_keys.add(key)

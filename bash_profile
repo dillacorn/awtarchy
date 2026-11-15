@@ -13,8 +13,14 @@ export PATH="$HOME/.local/bin:$PATH"
 # Run fastfetch with a TTY-friendly config (system info tool)
 fastfetch --config ~/.config/fastfetch/tty_compatible.jsonc
 
-# Inform user how to start Hyprland (your Wayland compositor)
-echo -e "\033[1;34mTo start Hyprland, type: \033[1;31mhypr\033[0m"
+# Advertise only available compositor entrypoints when logging in from a TTY.
+if command -v hypr >/dev/null 2>&1; then
+  echo -e "\033[1;34mTo start Hyprland, type: \033[1;31mhypr\033[0m"
+fi
+if [[ -x "$HOME/.local/bin/sway" && -x /usr/bin/sway &&
+      -f "$HOME/.config/sway/awtarchy-trial/config" ]]; then
+  echo -e "\033[1;34mTo start Sway, type:     \033[1;31msway\033[0m"
+fi
 
 # --- Fun message function ---
 # Randomly suggests a fun terminal command to try on login

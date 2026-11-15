@@ -1,0 +1,132 @@
+name: Publish Awtarchy v4.2.1 after validated main merge
+
+on:
+  workflow_run:
+    workflows: [Validate Awtarchy, Validate Sway]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: awtarchy-v4.2.1-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.head_branch == 'main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - name: Skip outdated validation runs or completed v4.2.1
+        id: publication_state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          if [[ "$current_sha" != "$RELEASE_SHA" ]]; then
+            printf 'create=false\n' >> "$GITHUB_OUTPUT"
+            printf 'Main moved; skipping obsolete release validation for %s.\n' "$RELEASE_SHA"
+          elif gh release view v4.2.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            printf 'create=false\n' >> "$GITHUB_OUTPUT"
+            printf 'v4.2.1 is already published; this workflow is complete.\n'
+          else
+            printf 'create=true\n' >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the exact validated revision
+        if: steps.publication_state.outputs.create == 'true'
+        uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Require successful release checks on the exact main revision
+        if: steps.publication_state.outputs.create == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$RELEASE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ -f "RELEASE_NOTES/v4.2.1.md" ]]
+          grep -Fqx '# Awtarchy v4.2.1: Sway TTY Launch' RELEASE_NOTES/v4.2.1.md
+          for attempt in $(seq 1 90); do
+            main_head="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+            if [[ "$main_head" != "$RELEASE_SHA" ]]; then
+              printf 'Main moved from the validated revision; do not publish the old revision.\n' >&2
+              exit 1
+            fi
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$RELEASE_SHA&per_page=100" >"$RUNNER_TEMP/awtarchy-v421-checks.json"
+            state="$(python3 - "$RUNNER_TEMP/awtarchy-v421-checks.json" <<'PY'
+          import json, sys
+          from pathlib import Path
+          doc = json.loads(Path(sys.argv[1]).read_text())
+          if int(doc.get("total_count", 0)) > 100:
+              print("failed")
+              raise SystemExit(0)
+          runs = [r for r in doc.get("workflow_runs", [])
+                  if r.get("event") == "push" and r.get("head_branch") == "main"]
+          names = {"Validate Awtarchy", "Validate Sway"}
+          success = {r.get("name") for r in runs
+                     if r.get("conclusion") == "success"}
+          if any(r.get("status") == "completed" and
+                 r.get("conclusion") not in ("success", "skipped")
+                 for r in runs):
+              print("failed")
+          elif not names.issubset(success) or any(r.get("status") != "completed" for r in runs):
+              print("waiting")
+          else:
+              print("ready")
+          PY
+            )"
+            case "$state" in
+              ready) printf 'All main-branch workflows passed for %s\n' "$RELEASE_SHA"; break ;;
+              failed) printf 'A required main workflow failed or the validation set was incomplete.\n' >&2; exit 1 ;;
+              waiting) sleep 10 ;;
+              *) printf 'Unknown validation result.\n' >&2; exit 1 ;;
+            esac
+          done
+          [[ "$state" == ready ]] || {
+            printf 'Validation did not finish; no release published.\n' >&2
+            exit 1
+          }
+
+      - name: Publish exact v4.2.1 release once
+        if: steps.publication_state.outputs.create == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')" == "$RELEASE_SHA" ]]
+          if gh release view v4.2.1 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            published_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v4.2.1" --jq '.object.sha')"
+            [[ "$published_sha" == "$RELEASE_SHA" ]] || {
+              printf 'v4.2.1 already exists at another commit; refusing to retarget.\n' >&2
+              exit 1
+            }
+            printf 'v4.2.1 already published at the validated revision.\n'
+            exit 0
+          fi
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v4.2.1" >/dev/null 2>&1; then
+            printf 'v4.2.1 tag already exists without a published release; refusing to reuse it.\n' >&2
+            exit 1
+          fi
+          gh release create v4.2.1 \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$RELEASE_SHA" \
+            --title "Awtarchy v4.2.1: Sway TTY Launch" \
+            --notes-file RELEASE_NOTES/v4.2.1.md
+          actual_sha="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/v4.2.1" --jq '.object.sha')"
+          [[ "$actual_sha" == "$RELEASE_SHA" ]] || {
+            printf 'Published tag does not match validated revision.\n' >&2
+            exit 1
+          }
+          gh release view v4.2.1 --repo "$GITHUB_REPOSITORY" --json url,tagName,isDraft
