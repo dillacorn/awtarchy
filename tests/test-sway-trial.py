@@ -113,6 +113,7 @@ assert "swaybg_command -" in CONFIG
 assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
+assert "nwg-displays" in (TRIAL / "setup.sh").read_text()
 sway_package_stage = RUNTIME.split(
     "install_sway_repo_dependencies_stage() {", 1
 )[1].split("install_arch_repo_apps_stage()", 1)[0]

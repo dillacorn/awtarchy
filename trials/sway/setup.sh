@@ -15,7 +15,7 @@ screencast_chooser="$config/xdg-desktop-portal-wlr/sway"
 for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal" "$config/xdg-desktop-portal-wlr"; do
     [[ ! -L "$directory" && ( ! -e "$directory" || -d "$directory" ) ]] || { fail "Unsafe directory: $directory"; exit 1; }
 done
-for bin in sway swaymsg qs foot fuzzel python3 jq flock grim slurp wl-copy; do
+for bin in sway swaymsg qs foot fuzzel nwg-displays python3 jq flock grim slurp wl-copy; do
     command -v "$bin" >/dev/null 2>&1 || { fail "Missing package tool $bin"; exit 1; }
 done
 temp="$(mktemp -d)"
