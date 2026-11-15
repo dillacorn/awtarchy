@@ -1,8 +1,8 @@
-name: Validate SwayWM experimental trial
+name: Validate Sway
 
 on:
   push:
-    branches: [SwayWM_Migration_Trial_Investigation]
+    branches: [main, SwayWM_Migration_Trial_Investigation]
     paths:
       - ".github/workflows/validate-swaywm-trial.yml"
       - "trials/sway/**"
@@ -15,6 +15,7 @@ on:
       - "local/bin/awtarchy"
       - "local/share/awtarchy/awtarchy-runtime.sh"
       - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+      - "local/share/awtarchy/awtarchy-compositor-stable.sh"
   pull_request:
     branches: [main]
     paths:
@@ -29,6 +30,7 @@ on:
       - "local/bin/awtarchy"
       - "local/share/awtarchy/awtarchy-runtime.sh"
       - "local/share/awtarchy/awtarchy-compositor-manager.sh"
+      - "local/share/awtarchy/awtarchy-compositor-stable.sh"
 
 permissions:
   contents: read
@@ -48,8 +50,10 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Run Sway regression checks
+      - name: Parse stable compositor manager and run Sway regressions
         run: |
+          bash -n local/share/awtarchy/awtarchy-compositor-stable.sh
+          bash -n local/share/awtarchy/awtarchy-compositor-manager.sh
           python tests/test-sway-trial.py
           python tests/test-sway-ipc.py
           python tests/test-sway-focus-cycle.py
@@ -125,5 +129,5 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Check trial changes for whitespace errors
+      - name: Check Sway changes for whitespace errors
         run: git diff --check origin/main...HEAD
