@@ -22,13 +22,18 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - name: Skip once v4.2.0 is already published
+      - name: Skip outdated validation runs or completed v4.2.0
         id: publication_state
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_SHA: ${{ github.event.workflow_run.head_sha }}
         run: |
           set -euo pipefail
-          if gh release view v4.2.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          current_sha="$(gh api "repos/$GITHUB_REPOSITORY/branches/main" --jq '.commit.sha')"
+          if [[ "$current_sha" != "$RELEASE_SHA" ]]; then
+            printf 'create=false\n' >> "$GITHUB_OUTPUT"
+            printf 'Main moved; skipping obsolete release validation for %s.\n' "$RELEASE_SHA"
+          elif gh release view v4.2.0 --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             printf 'create=false\n' >> "$GITHUB_OUTPUT"
             printf 'v4.2.0 is already published; this workflow is complete.\n'
           else
