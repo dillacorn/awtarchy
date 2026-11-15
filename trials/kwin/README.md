@@ -54,7 +54,10 @@ unknown rather than claiming a virtual monitor is off.
 On an Arch/CachyOS host, `bash trials/kwin/package-plan.sh` prints the
 package transaction that pacman would resolve from the **current local sync
 databases**. It does not refresh databases, install packages, or change the
-default compositor. The preview refuses a transaction containing
+default compositor. The preview includes `kwin`, `xorg-xwayland`,
+`python-dbus-next`, `quickshell`, `foot` and `fuzzel`.
+Already-installed packages are omitted by pacman's `--needed`.
+The preview refuses a transaction containing
 `plasma-workspace`, `plasma-desktop`, or `plasma-meta`. It also
 includes the tiny official `python-dbus-next` package required by the
 trial's workspace-state bridge. The

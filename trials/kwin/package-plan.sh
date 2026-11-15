@@ -12,7 +12,7 @@ main() {
         return 1
     }
     local pkg
-    for pkg in kwin xorg-xwayland python-dbus-next; do
+    for pkg in kwin xorg-xwayland python-dbus-next quickshell foot fuzzel; do
         if ! pacman -Si -- "$pkg" >/dev/null 2>&1; then
             printf 'Missing official package metadata for %s; refresh the system package database normally.\n' "$pkg" >&2
             return 1
@@ -20,12 +20,12 @@ main() {
     done
 
     local planned=''
-    planned="$(pacman -Sp --needed --print-format '%n' -- kwin xorg-xwayland python-dbus-next)" || {
+    planned="$(pacman -Sp --needed --print-format '%n' -- kwin xorg-xwayland python-dbus-next quickshell foot fuzzel)" || {
         printf 'Pacman could not resolve the complete KWin transaction.\n' >&2
         return 1
     }
     printf 'Awtarchy KWin experimental package preview (read only)\n'
-    printf 'Direct requests: kwin, xorg-xwayland, python-dbus-next\n'
+    printf 'Direct requests: kwin, xorg-xwayland, python-dbus-next, quickshell, foot, fuzzel\n'
     printf 'Resolved installation targets from the current local pacman database:\n'
     local count=0
     while IFS= read -r pkg; do

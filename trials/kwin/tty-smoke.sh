@@ -23,7 +23,7 @@ main() {
         fail 'Expected an owned XDG_RUNTIME_DIR from the login session.'; return 1;
     }
     local binary
-    for binary in /usr/bin/kwin_wayland /usr/bin/foot /usr/bin/python3 /usr/bin/qs; do
+    for binary in /usr/bin/kwin_wayland /usr/bin/foot /usr/bin/fuzzel /usr/bin/python3 /usr/bin/qs; do
         [[ -x $binary && ! -L $binary ]] || {
             fail "Missing or unsafe executable: $binary"; return 1;
         }

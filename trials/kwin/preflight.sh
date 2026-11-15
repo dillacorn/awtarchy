@@ -32,7 +32,7 @@ main() {
     done
 
     printf '\nOfficial repository metadata:\n'
-    for pkg in kwin xorg-xwayland python-dbus-next; do
+    for pkg in kwin xorg-xwayland python-dbus-next quickshell foot fuzzel; do
         if pacman -Si -- "$pkg" >/dev/null 2>&1; then
             printf '  %s: available in configured sync databases\n' "$pkg"
         else
