@@ -62,6 +62,11 @@ def expected_files(repo, home, temporary):
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe Sway source file: " + str(source))
         result[target] = source.read_bytes()
+    # The TTY command is managed as an ordinary user-local Sway file.
+    tty_source = trial / "tty-launch.sh"
+    if tty_source.is_symlink() or not tty_source.is_file():
+        raise ValueError("Missing or unsafe Sway TTY launcher source")
+    result[home / ".local/bin/sway"] = tty_source.read_bytes()
     # nwg-displays writes this Sway-only workspace file outside the trial
     # directory. Keep an initial managed stub but preserve user-edited content.
     workspace_source = repo / "trials/workspaces"
@@ -340,7 +345,11 @@ def atomic_replace(target, body):
             handle.write(body)
             handle.flush()
             os.fsync(handle.fileno())
-        mode = target.stat().st_mode & 0o777 if target.exists() else 0o755 if target.suffix == ".sh" else 0o644
+        executable = (target.suffix == ".sh" or
+                      (target.name == "sway" and target.parent.name == "bin"
+                       and target.parent.parent.name == ".local"))
+        mode = (target.stat().st_mode & 0o777 if target.exists()
+                else 0o755 if executable else 0o644)
         os.chmod(name, mode)
         os.replace(name, target)
     finally:
@@ -388,6 +397,12 @@ def main():
                     raise ValueError("Missing initial Sway display/workspace file: " + key)
                 baseline.pop(key, None)
                 print("PRESERVE: custom Sway display/workspace file not added to stock baseline: " + key)
+            elif key == ".local/bin/sway" and actual.get(key) != sha(body):
+                # Never take ownership of a pre-existing custom sway command.
+                if key not in actual:
+                    raise ValueError("Sway TTY command not staged during installation")
+                baseline.pop(key, None)
+                print("PRESERVE: existing custom Sway TTY command: " + key)
             elif actual.get(key) != sha(body):
                 raise ValueError("Installed Sway stage does not match source: " + key)
         state.mkdir(parents=True, exist_ok=True)
@@ -454,6 +469,7 @@ def main():
             )
             new_helper = key in (
                 ".config/sway/workspaces",
+                ".local/bin/sway",
                 ".config/sway/awtarchy-trial/outputs",
                 ".config/sway/awtarchy-trial/awtarchy-login.mp3",
                 ".config/sway/awtarchy-trial/login-sound.sh",

@@ -244,6 +244,17 @@ else
     done
   fi
   if [[ "$target" == sway ]] && ! installed sway; then
+    # Remove only an exact Awtarchy-provided TTY entry. Preserve custom files.
+    tty_command="$HOME/.local/bin/sway"
+    tty_source="$repo/trials/sway/tty-launch.sh"
+    if [[ -f "$tty_command" && ! -L "$tty_command" && -O "$tty_command" &&
+          -f "$tty_source" && ! -L "$tty_source" ]] &&
+          cmp -s -- "$tty_source" "$tty_command"; then
+      rm -- "$tty_command"
+      printf 'Removed exact Awtarchy Sway TTY command: %s\n' "$tty_command"
+    elif [[ -e "$tty_command" || -L "$tty_command" ]]; then
+      printf 'PRESERVE customized or untracked TTY command: %s\n' "$tty_command"
+    fi
     for pair in \
         "$repo/trials/sway/sway.desktop:$session_file" \
         "$repo/trials/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
