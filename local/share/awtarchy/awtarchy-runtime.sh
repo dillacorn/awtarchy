@@ -4075,6 +4075,15 @@ install_awtarchy_command_stage() {
 
   retry_command run_as_target install -m 0755 "$runtime_src" "${install_dir}/awtarchy-runtime.sh"
   retry_command run_as_target install -m 0755 "$launcher_src" "${bin_dir}/awtarchy"
+  # Stable, published-release compositor manager for every installation.
+  local stable_manager_src="${REPO_DIR}/local/share/awtarchy/awtarchy-compositor-stable.sh"
+  local core_manager_src="${REPO_DIR}/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  for helper in "$stable_manager_src" "$core_manager_src"; do
+    [[ -f "$helper" && ! -L "$helper" ]] && bash -n "$helper" ||
+      die "Missing or invalid stable compositor manager: $helper"
+  done
+  retry_command run_as_target install -m 0755 "$stable_manager_src" "${install_dir}/awtarchy-compositor-stable.sh"
+  retry_command run_as_target install -m 0755 "$core_manager_src" "${install_dir}/awtarchy-compositor-core.sh"
   # A fresh Sway trial installation also receives the compositor menu.
   local compositor_helper="$REPO_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
   local installed_helper="$install_dir/awtarchy-compositor-manager.sh"
@@ -4107,9 +4116,10 @@ install_awtarchy_command_stage() {
 
   # The remote self-updater tracks stable main. It must not silently downgrade
   # the Sway-aware installer/runtime during an unreleased compositor trial.
-  if compositor_has_sway; then
-    log "Sway trial selected: keeping the branch maintenance runtime; skipping main self-update."
-  elif [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]]; then
+  if [[ "${AWTARCHY_SKIP_SELF_UPDATE:-0}" != "1" ]] &&
+     [[ "${REPO_DIR:-}" != */SwayWM_Migration_Trial_Investigation ]]; then
+    # The exact stable main runtime is always eligible for normal self-update.
+    # A trial checkout can explicitly request AWTARCHY_SKIP_SELF_UPDATE=1.
     log "Verifying the installed Awtarchy command against the current main updater..."
     if ! run_as_target env -u XDG_DATA_HOME -u XDG_STATE_HOME \
       HOME="$HOME_DIR" USER="$TARGET_USER" LOGNAME="$TARGET_USER" \
