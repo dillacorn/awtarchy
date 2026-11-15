@@ -66,7 +66,8 @@ print(kind, sha)
 PY
 )"
 read -r kind sha <<< "$revision"
-for ((depth=0; depth<8 && kind == tag; depth++)); do
+for depth in 1 2 3 4 5 6 7 8; do
+    [[ "$kind" == tag ]] || break
     curl "${curl_args[@]}" "$api/git/tags/$sha" -o "$tmp/ref.json"
     revision="$(python3 - "$tmp/ref.json" <<'PY'
 import json, re, sys
