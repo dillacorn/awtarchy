@@ -99,6 +99,7 @@ def foot_ttys(
     uid: int | None = None,
     executables: tuple[str, ...] = FOOT_EXECUTABLES,
     session: str = "",
+    sway_session: str = "",
 ) -> set[str]:
     owner = os.getuid() if uid is None else uid
     terminals: set[str] = set()
@@ -117,15 +118,24 @@ def foot_ttys(
             argv = (proc / "cmdline").read_bytes().split(b"\0")
             if any(b"awtarchy-polkit-agent" in argument for argument in argv):
                 continue
-            if session:
+            if session or sway_session:
                 env = (proc / "environ").read_bytes().split(b"\0")
-                prefixes = [
-                    field.split(b"=", 1)[1].decode("ascii", "ignore")
-                    for field in env
-                    if field.startswith(b"HYPRLAND_INSTANCE_SIGNATURE=")
-                ]
-                if prefixes and prefixes[0] != session:
-                    continue
+                if sway_session:
+                    # Sway themes must not recolor another compositor/TTY.
+                    sockets = [
+                        field.split(b"=", 1)[1].decode("utf-8", "ignore")
+                        for field in env if field.startswith(b"SWAYSOCK=")
+                    ]
+                    if sockets != [sway_session]:
+                        continue
+                elif session:
+                    prefixes = [
+                        field.split(b"=", 1)[1].decode("ascii", "ignore")
+                        for field in env
+                        if field.startswith(b"HYPRLAND_INSTANCE_SIGNATURE=")
+                    ]
+                    if prefixes and prefixes[0] != session:
+                        continue
         except OSError:
             continue
 
@@ -152,8 +162,12 @@ def broadcast(colors: dict[str, str]) -> int:
     payload = osc_palette(colors)
     owner = os.getuid()
     session = os.environ.get("HYPRLAND_INSTANCE_SIGNATURE", "")
+    sway_session = (os.environ.get("SWAYSOCK", "")
+                    if os.environ.get("XDG_CURRENT_DESKTOP", "").casefold() == "sway"
+                    else "")
     updated = 0
-    for tty in sorted(foot_ttys(uid=owner, session=session)):
+    for tty in sorted(foot_ttys(uid=owner, session=session,
+                                sway_session=sway_session)):
         try:
             st = os.stat(tty)
             if not stat.S_ISCHR(st.st_mode) or st.st_uid != owner:
