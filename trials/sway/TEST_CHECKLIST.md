@@ -83,6 +83,7 @@ A commit and static CI pass do not prove working Quickshell/Wayland behavior.
 - [ ] Foot's live palette and Micro colors match expected theme behavior.
 - [ ] Quickshell reload/relogin retains preferences and does not restart endlessly.
 - [ ] Audio widgets, media keys, brightness, date/time, network and battery readouts.
+- [ ] Quick Settings → Awtarchy shows independently expandable Sound, Cursor and Lockscreen sections, without an Edit/Done mode. Sound is open by default with Login sound and Screenshot sounds toggles; shortcut Options expand separately. Open Cursor and Lockscreen individually, use Lockscreen → Edit Layout, then close/reopen the flyout and verify preference values stay intact. Test on both monitors and in both Sway and Hyprland when the shared UI is installed.
 - [ ] In Quick Settings on either monitor, select the other monitor's brightness, change it (for example 35% to 75%), and verify the bar immediately updates and stays at the new value after a refresh, closing/reopening the flyout and selecting that output again.
 - [ ] Focus-on-outside-click dismissal is **not implemented** on Sway yet;
   explicit toggle, Escape and workspace-change dismissal are expected.

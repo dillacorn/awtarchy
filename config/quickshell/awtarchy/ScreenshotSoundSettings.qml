@@ -83,26 +83,6 @@ ColumnLayout {
 
         Text {
             Layout.fillWidth: true
-            text: "Sound settings"
-            color: Theme.foreground
-            font.family: Theme.fontFamily
-            font.pixelSize: root.textSize
-            font.bold: true
-        }
-
-        SettingsButton {
-            label: root.expanded ? "Less" : "Screenshot options"
-            textSize: root.textSize
-            onClicked: root.expanded = !root.expanded
-        }
-    }
-
-    RowLayout {
-        Layout.fillWidth: true
-        spacing: 6
-
-        Text {
-            Layout.fillWidth: true
             text: "Login sound"
             color: Theme.foreground
             font.family: Theme.fontFamily
@@ -128,6 +108,13 @@ ColumnLayout {
             color: Theme.foreground
             font.family: Theme.fontFamily
             font.pixelSize: root.textSize
+        }
+
+        SettingsButton {
+            label: root.expanded ? "Fewer options" : "Options"
+            active: root.expanded
+            textSize: root.textSize
+            onClicked: root.expanded = !root.expanded
         }
 
         SettingsButton {

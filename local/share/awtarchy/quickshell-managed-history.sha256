@@ -1664,3 +1664,7 @@ f182b998f6127bbf7d468d6f982eee3e7a6a2fa75c2259e4fb1a26ea293fddd9	.config/hypr/sc
 
 # Shared Sound Settings QML stock baseline (login and screenshot controls).
 ed6d8199c47a1640fc1f3df33396a2f0628fb65d457eeacffe70132ad588dda5	.config/quickshell/awtarchy/ScreenshotSoundSettings.qml
+
+# Awtarchy Quick Settings: independent Sound, Cursor and Lockscreen sections.
+01ce657925a3e07db70d0a87680c81db579d2b6b8ec5ecce271f8aa855e56624	.config/quickshell/awtarchy/QuickSettings.qml
+9ecd83b9b16b6ed27f51dd6285acfeb2e19cebd68964eb80d399de4fea1f998f	.config/quickshell/awtarchy/ScreenshotSoundSettings.qml
