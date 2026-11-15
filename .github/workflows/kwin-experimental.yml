@@ -65,7 +65,7 @@ jobs:
       - name: Parse KWin Quickshell QML with upstream Qt6 tooling
         run: |
           docker run --rm -v "$PWD:/repo:ro" -w /repo archlinux:latest bash -euc '
-            pacman -Sy --noconfirm qt6-declarative
+            pacman -Syu --noconfirm qt6-declarative
             /usr/lib/qt6/bin/qmlformat trials/kwin/shell.qml >/dev/null
           '
       - name: KWin scripting stub verification
