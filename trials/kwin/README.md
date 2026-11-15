@@ -72,6 +72,17 @@ bindings rely on KWin 6's documented scripting API; CI exercises API stubs,
 `Super+Arrow` quick-tiling shortcuts are deliberately not overridden yet.
 No attempt is made to pass off the stacking compositor as dynamically tiled.
 
+## Experimental dynamic tiling
+
+A second **trial-only** KWin script implements conservative dwindle-style
+geometry with 9 px outer gaps and 6 px inner gaps. It uses KWin's actual
+`workspace.clientArea` per output and per virtual desktop, and ignores
+fullscreen windows, recognized games, utility windows, minimized windows and
+always-on-top windows. A layout that cannot fit minimum tile sizes is left
+untouched rather than placing windows offscreen. This is not feature parity
+with Hyprland's full dwindle layout: interactive split ratios, rearrangement,
+scratchpads, and reliable fullscreen gaming still require live validation.
+
 ## Integration constraints
 
 1. Keep Hyprland's `hyprland.lua`, Hyprland Quickshell profile and all Sway

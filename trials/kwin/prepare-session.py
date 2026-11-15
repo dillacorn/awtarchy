@@ -13,14 +13,14 @@ from pathlib import Path
 import stat
 import sys
 
-PLUGIN_ID = "awtarchy-kwin"
+PLUGIN_IDS = ("awtarchy-kwin", "awtarchy-kwin-tiling")
 KWINRC = (
     "[Desktops]\n"
     "Number=10\n"
     "Rows=1\n"
     "\n"
     "[Plugins]\n"
-    f"{PLUGIN_ID}Enabled=true\n"
+    "".join(f"{plugin}Enabled=true\\n" for plugin in PLUGIN_IDS)
 )
 
 
@@ -45,26 +45,28 @@ def plan(root: Path, sources: Path) -> list[tuple[Path, bytes]]:
         fail("Session root is not owned by the invoking user")
     if stat.S_IMODE(root.stat().st_mode) & 0o077:
         fail("Session root must be private (mode 0700)")
-    metadata_path = sources / "package" / "metadata.json"
-    script_path = sources / "shortcuts.js"
-    for file in (metadata_path, script_path):
-        if file.is_symlink() or not file.is_file():
-            fail(f"Missing or unsafe source: {file}")
-    meta = metadata_path.read_bytes()
-    info = json.loads(meta)
-    if info.get("KPlugin", {}).get("Id") != PLUGIN_ID:
-        fail("KWin script package ID mismatch")
-    if info.get("KPackageStructure") != "KWin/Script" or (
-        info.get("X-Plasma-MainScript") != "code/main.js"
-    ):
-        fail("KWin script package metadata mismatch")
-
-    package = root / "data" / "kwin" / "scripts" / PLUGIN_ID
-    contents = [
-        (root / "config" / "kwinrc", KWINRC.encode("utf-8")),
-        (package / "metadata.json", meta),
-        (package / "contents" / "code" / "main.js", script_path.read_bytes()),
-    ]
+    contents = [(root / "config" / "kwinrc", KWINRC.encode("utf-8"))]
+    scripts = (("awtarchy-kwin", "shortcuts.js", "metadata.json"),
+               ("awtarchy-kwin-tiling", "tiling.js", "tiling-metadata.json"))
+    for plugin_id, script, metadata in scripts:
+        metadata_path = sources / "package" / metadata
+        script_path = sources / script
+        for file in (metadata_path, script_path):
+            if file.is_symlink() or not file.is_file():
+                fail(f"Missing or unsafe source: {file}")
+        meta = metadata_path.read_bytes()
+        info = json.loads(meta)
+        if info.get("KPlugin", {}).get("Id") != plugin_id:
+            fail("KWin script package ID mismatch")
+        if info.get("KPackageStructure") != "KWin/Script" or (
+            info.get("X-Plasma-MainScript") != "code/main.js"
+        ):
+            fail("KWin script package metadata mismatch")
+        package = root / "data" / "kwin" / "scripts" / plugin_id
+        contents.extend([
+            (package / "metadata.json", meta),
+            (package / "contents" / "code" / "main.js", script_path.read_bytes()),
+        ])
     for target, expected in contents:
         safe_directory(target.parent, root)
         if target.is_symlink():

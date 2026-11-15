@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "trials/kwin/prepare-session.py"
 PLUGIN = ROOT / "trials/kwin/package/metadata.json"
 SOURCE = ROOT / "trials/kwin/shortcuts.js"
+TILING = ROOT / "trials/kwin/tiling.js"
 
 metadata = json.loads(PLUGIN.read_text(encoding="utf-8"))
 assert metadata["KPlugin"]["Id"] == "awtarchy-kwin"
@@ -46,9 +47,12 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-kwin-test-") as directory:
     config = root / "config" / "kwinrc"
     installed = root / "data/kwin/scripts/awtarchy-kwin/contents/code/main.js"
     assert sha(installed) == sha(SOURCE)
+    tiling = root / "data/kwin/scripts/awtarchy-kwin-tiling/contents/code/main.js"
+    assert sha(tiling) == sha(TILING)
     assert "Number=10" in config.read_text()
     assert "awtarchy-kwinEnabled=true" in config.read_text()
-    recorded = {config: sha(config), installed: sha(installed)}
+    assert "awtarchy-kwin-tilingEnabled=true" in config.read_text()
+    recorded = {config: sha(config), installed: sha(installed), tiling: sha(tiling)}
     run("--stage")
     assert recorded == {path: sha(path) for path in recorded}
     assert sibling.read_text(encoding="utf-8") == "preserve"

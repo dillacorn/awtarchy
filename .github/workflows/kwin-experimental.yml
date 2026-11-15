@@ -40,6 +40,9 @@ jobs:
           python3 tests/test-kwin-session-stage.py
       - name: KWin scripting stub verification
         run: |
+          node --check trials/kwin/tiling.js
+          node --check tests/test-kwin-tiling.mjs
+          node tests/test-kwin-tiling.mjs
           node --check trials/kwin/shortcuts.js
           node --check tests/test-kwin-shortcuts.mjs
           node tests/test-kwin-shortcuts.mjs

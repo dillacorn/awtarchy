@@ -1,0 +1,13 @@
+{
+  "KPlugin": {
+    "Id": "awtarchy-kwin-tiling",
+    "Name": "Awtarchy KWin experimental tiling",
+    "Description": "Trial-only dynamic tiling for ordinary windows; games, fullscreen windows, and utility windows are excluded",
+    "Version": "0.1.0",
+    "License": "MIT",
+    "Website": "https://github.com/dillacorn/awtarchy"
+  },
+  "X-Plasma-API": "javascript",
+  "X-Plasma-MainScript": "code/main.js",
+  "KPackageStructure": "KWin/Script"
+}
