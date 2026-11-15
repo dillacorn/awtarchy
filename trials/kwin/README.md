@@ -33,6 +33,16 @@ The script checks only local package metadata and existing configuration. It
 does not install, remove, rewrite, enable, start or stop anything. It does not
 need root. A missing optional package is a status, not a change request.
 
+## Package dependency preview (no installation)
+
+On an Arch/CachyOS host, `bash trials/kwin/package-plan.sh` prints the
+package transaction that pacman would resolve from the **current local sync
+databases**. It does not refresh databases, install packages, or change the
+default compositor. The preview refuses a transaction containing
+`plasma-workspace`, `plasma-desktop`, or `plasma-meta`. The
+staging/smoke scripts assume `kwin` and `foot` are already installed;
+there is still no production installer or package remover in this branch.
+
 ## Standalone DRM smoke test (not the Awtarchy session)
 
 For testers who **already have** the official `kwin` and `foot` packages,
@@ -40,8 +50,10 @@ For testers who **already have** the official `kwin` and `foot` packages,
 an otherwise unused local TTY. It requires the explicit
 `AWTARCHY_KWIN_SMOKE=yes` opt-in. It refuses root, terminal emulators, nested
 Wayland/X11 sessions, and detected concurrently running Hyprland/Sway/KWin
-processes. This is **not** a production desktop, does not load Quickshell or
-the workspace script and intentionally disables the unverified lockscreen.
+processes. This is **not** a production desktop and does not load Quickshell.
+It stages a private KWin script package and enables 10 numbered workspaces,
+but intentionally disables the unverified lockscreen. Workspace shortcuts
+must still be confirmed live on KWin; offline tests only simulate the API.
 Do not leave sensitive content unattended. Closing Foot should cause KWin
 to stop and return to the TTY; actual KWin/driver behavior needs testing.
 Settings use a newly created private directory under

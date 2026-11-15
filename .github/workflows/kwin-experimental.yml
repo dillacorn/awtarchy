@@ -33,6 +33,11 @@ jobs:
           bash -n trials/kwin/tty-smoke.sh
           bash -n tests/test-kwin-tty-smoke.sh
           bash tests/test-kwin-tty-smoke.sh
+          bash -n trials/kwin/package-plan.sh
+          bash -n tests/test-kwin-package-plan.sh
+          bash tests/test-kwin-package-plan.sh
+          python3 -m py_compile trials/kwin/prepare-session.py
+          python3 tests/test-kwin-session-stage.py
       - name: KWin scripting stub verification
         run: |
           node --check trials/kwin/shortcuts.js
