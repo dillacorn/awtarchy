@@ -1,0 +1,45 @@
+// Offline KWin scripting API stub: no real KWin, display, or D-Bus required.
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import vm from "node:vm";
+
+const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const source = fs.readFileSync(path.join(root, "trials/kwin/shortcuts.js"), "utf8");
+const desktops = Array.from({ length: 10 }, (_, n) => ({ id: String(n + 1) }));
+const output = { name: "DP-1" };
+const window = { output, normalWindow: true, desktops: [desktops[0]] };
+const changes = [];
+const shortcuts = new Map();
+const workspace = {
+    activeWindow: window, activeScreen: output, desktops,
+    setCurrentDesktopForScreen(desktop, screen) { changes.push([desktop, screen]); }
+};
+vm.runInNewContext(source, {
+    workspace,
+    registerShortcut(id, title, keys, callback) {
+        assert.equal(shortcuts.has(id), false);
+        shortcuts.set(id, { title, keys, callback });
+        return true;
+    }
+}, { filename: "shortcuts.js" });
+assert.equal(shortcuts.size, 20);
+assert.equal(shortcuts.get("awtarchy-workspace-show-10").keys, "Meta+0");
+assert.equal(shortcuts.get("awtarchy-workspace-move-10").keys, "Meta+Shift+0");
+shortcuts.get("awtarchy-workspace-show-3").callback();
+assert.equal(changes.length, 1);
+assert.equal(changes[0][0], desktops[2]);
+assert.equal(changes[0][1], output);
+shortcuts.get("awtarchy-workspace-move-2").callback();
+assert.equal(window.desktops[0], desktops[1]);
+workspace.desktops = [desktops[0]];
+shortcuts.get("awtarchy-workspace-show-5").callback();
+shortcuts.get("awtarchy-workspace-move-5").callback();
+assert.equal(changes.length, 1);
+assert.equal(window.desktops[0], desktops[1]);
+workspace.desktops = desktops;
+window.normalWindow = false;
+shortcuts.get("awtarchy-workspace-move-3").callback();
+assert.equal(window.desktops[0], desktops[1]);
+console.log("PASS: KWin workspace shortcuts: focus, move, missing desktop, utility window");
