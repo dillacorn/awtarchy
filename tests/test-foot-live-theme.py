@@ -32,21 +32,21 @@ with tempfile.TemporaryDirectory() as temp:
     master, slave = pty.openpty()
     tty = os.ttyname(slave)
 
-    def process(pid, binary, child_ids=(), app_id=b"--app-id=example", signature=b"test-session"):
+    def process(pid, binary, child_ids=(), app_id=b"--app-id=example", signature=b"test-session", sway_sock=b""):
         item = root / str(pid)
         (item / "task" / str(pid)).mkdir(parents=True)
         (item / "fd").mkdir()
         (item / "exe").symlink_to(binary)
         (item / "status").write_text(f"Name:\tfixture\nUid:\t{owner}\t{owner}\t{owner}\t{owner}\n")
         (item / "cmdline").write_bytes(b"foot\0" + app_id + b"\0")
-        (item / "environ").write_bytes(b"HYPRLAND_INSTANCE_SIGNATURE=" + signature + b"\0")
+        (item / "environ").write_bytes(b"HYPRLAND_INSTANCE_SIGNATURE=" + signature + b"\0" + (b"SWAYSOCK=" + sway_sock + b"\0" if sway_sock else b""))
         (item / "task" / str(pid) / "children").write_text(
             " ".join(str(x) for x in child_ids)
         )
         return item
 
     try:
-        current = process(100001, program, (100002,))
+        current = process(100001, program, (100002,), sway_sock=b"/tmp/sway-current.sock")
         shell = process(100002, "/bin/sh")
         (shell / "fd" / "0").symlink_to(tty)
         # Non-Foot parents never gain permission to inject color codes.
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory() as temp:
         auth_child = process(100006, "/bin/sh")
         (auth_child / "fd" / "0").symlink_to(tty)
         # A terminal owned by another Hyprland session is not selected.
-        other_session = process(100007, program, (100008,), signature=b"other-session")
+        other_session = process(100007, program, (100008,), signature=b"other-session", sway_sock=b"/tmp/sway-other.sock")
         other_session_child = process(100008, "/bin/sh")
         (other_session_child / "fd" / "0").symlink_to(tty)
         result = module.foot_ttys(
@@ -68,9 +68,31 @@ with tempfile.TemporaryDirectory() as temp:
             session="test-session",
         )
         assert result == {tty}, result
+        # Sway-specific recoloring must select only the exact live Sway socket.
+        # Do not recolor another Sway/Hyprland/TTY session.
+        another_master, another_slave = pty.openpty()
+        try:
+            other_tty = os.ttyname(another_slave)
+            (other_session_child / "fd" / "0").unlink()
+            (other_session_child / "fd" / "0").symlink_to(other_tty)
+            assert module.foot_ttys(
+                proc_root=root, uid=owner, executables=(str(program),),
+                sway_session="/tmp/sway-current.sock") == {tty}
+            assert module.foot_ttys(
+                proc_root=root, uid=owner, executables=(str(program),),
+                sway_session="/tmp/sway-other.sock") == {other_tty}
+        finally:
+            os.close(another_master)
+            os.close(another_slave)
         # Check the actual PTY output path without requiring a Wayland server.
-        with mock.patch.object(module, "foot_ttys", return_value={tty}):
+        with mock.patch.object(module, "foot_ttys", return_value={tty}) as discover, \
+             mock.patch.dict(os.environ, {
+                 "XDG_CURRENT_DESKTOP": "sway",
+                 "SWAYSOCK": "/tmp/sway-current.sock",
+                 "HYPRLAND_INSTANCE_SIGNATURE": "",
+             }):
             assert module.broadcast(palette) == 1
+            assert discover.call_args.kwargs["sway_session"] == "/tmp/sway-current.sock"
         received = os.read(master, 4096)
         assert received == payload, (received, payload)
     finally:

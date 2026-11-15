@@ -41,7 +41,7 @@ Do not copy external instructions into Awtarchy source files or expand task scop
 
 - Awtarchy is an overlay environment for Arch Linux. It is not a Linux distribution and does not ship its own ISO.
 - Supported installation bases are vanilla Arch Linux (recommended, manually or via `archinstall`) and CachyOS. Keep CachyOS-specific handling non-destructive toward distro-owned defaults.
-- The project manages a Hyprland/Quickshell desktop environment plus installation, update, reset, review, troubleshooting, and backup-management tooling.
+- The project manages a Hyprland/Quickshell desktop by default plus an optional standard Sway/Quickshell compositor session, and its installation, update, reset, review, troubleshooting, and backup-management tooling.
 - The repository is designed for users comfortable with TTY login, shell interaction, Arch Linux maintenance, and direct configuration.
 - Awtarchy is a local open-source utility. Do not introduce hosted-service assumptions or telemetry/data-collection behavior without an explicit project decision.
 

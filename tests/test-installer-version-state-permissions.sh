@@ -47,6 +47,10 @@ chmod 0755 "$TMP" "$repo_dir" "${repo_dir}/local" \
 install -m 0755 "$RUNTIME_SOURCE" \
   "${repo_dir}/local/share/awtarchy/awtarchy-runtime.sh"
 install -m 0755 "$LAUNCHER_SOURCE" "${repo_dir}/local/bin/awtarchy"
+for name in awtarchy-compositor-stable.sh awtarchy-compositor-manager.sh; do
+  install -m 0755 "$ROOT/local/share/awtarchy/$name" \
+    "${repo_dir}/local/share/awtarchy/$name"
+done
 
 # Load the real runtime definitions without invoking its command dispatcher.
 sed '$d' "$RUNTIME_SOURCE" >"$runtime_library"

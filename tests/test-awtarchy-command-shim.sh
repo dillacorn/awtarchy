@@ -44,6 +44,12 @@ grep -Fq '# Awtarchy user-local command shim' "$AWTARCHY_EXPECTED_SYSTEM_SHIM"
 printf 'Fresh-install runtime reached after system shim creation.\n'
 EOF_RUNTIME
 chmod 0755 "$repo/local/share/awtarchy/awtarchy-runtime.sh"
+# Keep the command-shim fixture minimal while supplying the new mandatory
+# stable compositor launch sources.
+cp -- "$ROOT/local/share/awtarchy/awtarchy-compositor-stable.sh" \
+  "$repo/local/share/awtarchy/awtarchy-compositor-stable.sh"
+cp -- "$ROOT/local/share/awtarchy/awtarchy-compositor-manager.sh" \
+  "$repo/local/share/awtarchy/awtarchy-compositor-manager.sh"
 
 existing_home="${TMP}/existing-home"
 existing_bin="${TMP}/existing-system-bin"

@@ -10,7 +10,7 @@ For a new machine:
 2. **Alternatively:** install [CachyOS](https://cachyos.org/) using its official installer. A minimal setup is preferable, but an existing working CachyOS desktop can be used.
 3. Boot into your installed system and log in before running Awtarchy.
 
-Awtarchy overlays its own Hyprland/Quickshell desktop and managed configuration. CachyOS-specific safeguards preserve existing driver/network/display-manager state where practical, but installed desktop configuration may still be updated by Awtarchy. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
+Awtarchy overlays its own Quickshell desktop and managed configuration. Hyprland is the default compositor; standard Sway is an optional second session. CachyOS-specific safeguards preserve existing driver/network/display-manager state where practical, but installed desktop configuration may still be updated by Awtarchy. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
 
 ## Install Awtarchy
 
@@ -22,6 +22,14 @@ git clone https://github.com/dillacorn/awtarchy
 cd awtarchy
 sudo ./awtarchy-install.sh
 ```
+
+The installer lets you choose **Hyprland (default)**, **Sway**, or **Both**.
+Selecting Both provides independently selectable Ly sessions and separate
+compositor/Quickshell profiles, while sharing desktop applications.
+Sway uses `nwg-displays` (`Super+Ctrl+M`) for monitor settings; Hyprland
+continues using Hyprmoncfg. Adding Sway from an active Hyprland session
+imports the current display layout once when safe, but never overwrites a
+personalized Sway layout. SwayFX is not part of this release.
 
 The installer collects the relevant hardware/package choices before applying the overlay. Dependencies required by managed Awtarchy features are installed automatically and are kept separate from optional package choices.
 

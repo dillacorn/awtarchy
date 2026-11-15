@@ -733,7 +733,7 @@ write_command_version() {
 
 self_update() {
   local commit="${1:-}" installed tmp archive top repo_dir
-  local new_runtime new_launcher new_package_reconciler
+  local new_runtime new_launcher new_package_reconciler new_compositor_stable new_compositor_core
 
   have curl || die "curl is required for self-update."
   have tar || die "tar is required for self-update."
@@ -746,7 +746,7 @@ self_update() {
   commit="${commit,,}"
 
   installed="$(installed_updater_commit)"
-  if [[ $installed == "$commit" && -x $PACKAGE_RECONCILER ]]; then
+  if [[ $installed == "$commit" && -x $PACKAGE_RECONCILER && -x "$INSTALL_DIR/awtarchy-compositor-stable.sh" && -x "$INSTALL_DIR/awtarchy-compositor-core.sh" ]]; then
     log "Awtarchy updater is already current at ${UPDATER_BRANCH}@${commit}."
     return 0
   fi
@@ -777,6 +777,8 @@ self_update() {
   new_runtime="${repo_dir}/local/share/awtarchy/awtarchy-runtime.sh"
   new_launcher="${repo_dir}/local/bin/awtarchy"
   new_package_reconciler="${repo_dir}/local/share/awtarchy/awtarchy-package-reconcile.sh"
+  new_compositor_stable="${repo_dir}/local/share/awtarchy/awtarchy-compositor-stable.sh"
+  new_compositor_core="${repo_dir}/local/share/awtarchy/awtarchy-compositor-manager.sh"
 
   [[ -f $new_runtime ]] || {
     rm -rf -- "$tmp"
@@ -802,6 +804,14 @@ self_update() {
     rm -rf -- "$tmp"
     die "Downloaded Awtarchy package reconciler failed Bash syntax validation."
   }
+  for source in "$new_compositor_stable" "$new_compositor_core"; do
+    if [[ ! -f "$source" || -L "$source" ]] || ! bash -n "$source"; then
+      rm -rf -- "$tmp"
+      die "Downloaded compositor manager missing or invalid."
+    fi
+  done
+  atomic_install "$new_compositor_stable" "$INSTALL_DIR/awtarchy-compositor-stable.sh" 0755
+  atomic_install "$new_compositor_core" "$INSTALL_DIR/awtarchy-compositor-core.sh" 0755
   atomic_install "$new_runtime" "$RUNTIME" 0755
   atomic_install "$new_launcher" "${TARGET_HOME}/.local/bin/awtarchy" 0755
   atomic_install "$new_package_reconciler" "$PACKAGE_RECONCILER" 0755
@@ -1549,10 +1559,76 @@ check_package_mirrors_once() {
   AWTARCHY_RUNTIME="$RUNTIME" bash "$PACKAGE_RECONCILER" --mirror-check || true
 }
 
+# Branch-only compositor management, installed by the Sway trial installer.
+compositor_trial_installed() {
+  [[ -f "$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh" &&
+     ! -L "$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh" &&
+     -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
+}
+run_compositor_manager() {
+  local helper="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-stable.sh"
+  [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] ||
+    die "Stable compositor manager missing. Run awtarchy self-update."
+  bash "$helper" "$@"
+}
+compositor_menu() {
+  local choice rc
+  while true; do
+    choice="$(single_select_menu "Awtarchy Compositors: Hyprland / Sway" 0 \
+      "Status: installed compositors / GPU" \
+      "Preview: add Sway" \
+      "Install Sway (preserve Hyprland)" \
+      "Preview: add Hyprland" \
+      "Install Hyprland (preserve Sway)" \
+      "Preview: remove Sway and owned extras" \
+      "Remove Sway only" \
+      "Remove Sway and eligible owned extras" \
+      "Preview: remove Hyprland and owned extras" \
+      "Remove Hyprland only" \
+      "Remove Hyprland and eligible owned extras" \
+      "Review Sway managed config changes (no writes)" \
+      "Apply Sway managed updates (preserve custom edits)" \
+      "Back")" || return 0
+    rc=0
+    case "$choice" in
+      0) run_compositor_manager status plan no || rc=$? ;;
+      1) run_compositor_manager install-sway plan no || rc=$? ;;
+      2) run_compositor_manager install-sway apply no || rc=$? ;;
+      3) run_compositor_manager install-hyprland plan no || rc=$? ;;
+      4) run_compositor_manager install-hyprland apply no || rc=$? ;;
+      5) run_compositor_manager remove-sway plan yes || rc=$? ;;
+      6) run_compositor_manager remove-sway apply no || rc=$? ;;
+      7) run_compositor_manager remove-sway apply yes || rc=$? ;;
+      8) run_compositor_manager remove-hyprland plan yes || rc=$? ;;
+      9) run_compositor_manager remove-hyprland apply no || rc=$? ;;
+      10) run_compositor_manager remove-hyprland apply yes || rc=$? ;;
+      11) run_compositor_manager update-sway plan no || rc=$? ;;
+      12) run_compositor_manager update-sway apply no || rc=$? ;;
+      *) return 0 ;;
+    esac
+    (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
+    pause_menu
+  done
+}
+
+compositor_offer_once() {
+  [[ "$(installed_config_tag)" == v4.2.* ]] || return 0
+  pacman -Qq sway >/dev/null 2>&1 && return 0
+  local marker="$TARGET_HOME/.local/state/awtarchy/compositor-v420-offered" choice
+  [[ ! -e "$marker" && ! -L "$marker" ]] || return 0
+  choice="$(single_select_menu \
+    $'Awtarchy v4.2.0 introduces optional Sway support.\nHyprland remains the default and is preserved. Explore Sway?' 0 \
+    "Yes, open compositor management" "No, keep my current compositor")" || return 0
+  install -d -m 0755 "$TARGET_HOME/.local/state/awtarchy"
+  : >"$marker"
+  if [[ "$choice" == 0 ]]; then compositor_menu; fi
+}
+
 maintenance_menu() {
   [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || die "The Awtarchy menu requires an interactive terminal."
 
   local choice rc update_rc
+  compositor_offer_once
   while true; do
     choice="$(single_select_menu "Awtarchy Maintenance" 0 \
       "Refresh Awtarchy updater from main" \
@@ -1565,6 +1641,7 @@ maintenance_menu() {
       "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
+      "Manage compositors (Hyprland / Sway)" \
       "Exit")" || exit 0
 
     case "$choice" in
@@ -1646,6 +1723,10 @@ maintenance_menu() {
         print_version_status >/dev/tty
         pause_menu
         ;;
+      10)
+        compositor_menu || rc=$?
+        [[ -z ${rc:-} ]] || return "$rc"
+        ;;
       *) exit 0 ;;
     esac
     unset rc
@@ -1668,6 +1749,7 @@ Usage:
   awtarchy git review --branch <branch> [--commit <40-character-sha>]
   awtarchy git update --branch <branch> [--commit <40-character-sha>] [update options]
   awtarchy git reset --branch <branch> [--commit <40-character-sha>] [update options]
+  awtarchy compositor [status]
   awtarchy clean-backups [options]
   awtarchy troubleshoot
   awtarchy version
@@ -1758,6 +1840,16 @@ main() {
       fi
       shift
       run_package_reconciler "$@"
+      ;;
+    compositor)
+      shift
+      if (( $# == 0 )); then
+        compositor_menu
+      elif (( $# == 1 )) && [[ "$1" == status ]]; then
+        run_compositor_manager status plan no
+      else
+        die "Usage: awtarchy compositor [status]; the interactive menu handles changes."
+      fi
       ;;
     mic-suppression)
       shift

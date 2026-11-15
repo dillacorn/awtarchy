@@ -135,11 +135,14 @@ for token in logoPhysicsHz LockAudioAnalyzer LockWeatherCache weatherText mouseI
 done
 
 
-# Final maintainer polish contracts.
-[[ "$(grep -Fc -- 'Layout.minimumWidth: root.sectionActionColumnWidth' "$QUICK_SETTINGS")" -eq 2 ]] \
-    || fail 'Cursor/Lockscreen action columns do not share a hard minimum width'
-[[ "$(grep -Fc -- 'Layout.maximumWidth: root.sectionActionColumnWidth' "$QUICK_SETTINGS")" -eq 2 ]] \
-    || fail 'Cursor/Lockscreen action columns do not share a hard maximum width'
+# Final maintainer polish contracts. Independent compact categories replace
+# fixed-width stacked action columns and keep customization one click away.
+require_text "$QUICK_SETTINGS" 'label: root.cursorSectionOpen ? "Hide" : "Show"' \
+    'Cursor category has no compact toggle'
+require_text "$QUICK_SETTINGS" 'label: root.lockscreenSectionOpen ? "Hide" : "Show"' \
+    'Lockscreen category has no compact toggle'
+reject_text "$QUICK_SETTINGS" 'sectionActionColumnWidth' \
+    'retired fixed-width action columns still constrain Quick Settings'
 reject_text "$QUICK_SETTINGS" 'Hide Quickshell Lock Settings Before Lock Capture' \
     'retired lock-capture hide toggle remains in Quick Settings'
 reject_text "$LOCK_SCRIPT" 'hide_lock_settings_before_capture' \

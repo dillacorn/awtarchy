@@ -415,6 +415,25 @@ repair_target_ownership() {
   done
 }
 
+# Register the exact unreleased checkout only when explicitly selected.
+# Installing this command does not install packages or replace managed configs.
+install_trial_compositor_command() {
+  [[ "$(source_branch)" == SwayWM_Migration_Trial_Investigation ]] || return 0
+  local helper="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local dest="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-manager.sh"
+  local source_marker="$TARGET_HOME/.local/state/awtarchy/compositor-trial-source"
+  [[ -f "$helper" && ! -L "$helper" ]] || {
+    printf 'ERROR: Sway trial management backend missing.\n' >&2
+    return 1
+  }
+  bash -n "$helper" || return 1
+  run_as_target install -d -m 0755 "$TARGET_HOME/.local/share/awtarchy" "$TARGET_HOME/.local/state/awtarchy"
+  run_as_target install -m 0755 "$helper" "$dest"
+  printf '%s\n' "$SCRIPT_DIR" | run_as_target tee "$source_marker" >/dev/null
+  run_as_target chmod 0644 "$source_marker"
+  printf 'Registered Sway trial compositor menu from %s\n' "$SCRIPT_DIR"
+}
+
 refresh_existing_command() {
   local bin_dir="${TARGET_HOME}/.local/bin"
   local data_dir="${TARGET_HOME}/.local/share/awtarchy"
@@ -434,6 +453,21 @@ refresh_existing_command() {
   run_as_target install -d -m 0755 "$bin_dir" "$data_dir" "$state_dir"
   run_as_target install -m 0755 "$LAUNCHER_SOURCE" "${bin_dir}/awtarchy"
   run_as_target install -m 0755 "$RUNTIME_SOURCE" "${data_dir}/awtarchy-runtime.sh"
+
+  # Stable compositor tooling is installed even for Hyprland-only users.
+  # The old branch-specific manager, if present, remains untouched.
+  local stable_compositor="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-stable.sh"
+  local core_compositor="$SCRIPT_DIR/local/share/awtarchy/awtarchy-compositor-manager.sh"
+  for helper in "$stable_compositor" "$core_compositor"; do
+    if [[ ! -f "$helper" || -L "$helper" ]] || ! bash -n "$helper"; then
+      printf 'ERROR: Invalid stable compositor source: %s\n' "$helper" >&2
+      return 1
+    fi
+  done
+  run_as_target install -m 0755 "$stable_compositor" "${data_dir}/awtarchy-compositor-stable.sh"
+  run_as_target install -m 0755 "$core_compositor" "${data_dir}/awtarchy-compositor-core.sh"
+
+  install_trial_compositor_command
 
   command_tag="$(source_release_tag)"
   revision="$(source_revision)"

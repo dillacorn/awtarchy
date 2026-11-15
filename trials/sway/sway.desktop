@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=Sway (Awtarchy)
+Comment=Awtarchy Sway session; optional alternative to Hyprland
+Exec=/usr/local/bin/awtarchy-sway-session
+Type=Application
+DesktopNames=sway

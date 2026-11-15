@@ -42,7 +42,7 @@ Singleton {
     property bool barIconsOpen: false
     property bool barAppearanceOpen: false
     property bool barVisibilityOpen: false
-    property bool awtarchyEditMode: false
+    // Awtarchy retains compact, independently expandable categories.
     property bool cursorSectionExpanded: false
     property bool lockscreenSectionExpanded: false
     readonly property bool cursorSectionOpen: cursorSectionExpanded
@@ -78,7 +78,6 @@ Singleton {
     property int preparedStateRevision: -1
     property bool secondaryCardsActive: false
     readonly property int panelFadeDuration: 140
-    readonly property int sectionActionColumnWidth: Math.max(132, scaledText(9) * 13)
     property var flyoutScreen: null
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
@@ -381,6 +380,7 @@ Singleton {
         panelPresented = false;
         quickSettingsWindow.visible = true;
         panelPresented = true;
+        screenshotSoundSettings.refresh();
         if (wasVisible)
             Qt.callLater(() => root.positionWindow());
         // The startup prewarm already populated status. Give the mapped window
@@ -2382,12 +2382,13 @@ Singleton {
                             ColumnLayout {
                                 id: awtarchyContent
                                 anchors.fill: parent
-                                anchors.margins: 8
-                                spacing: 5
+                                anchors.margins: 6
+                                spacing: 3
 
                                 RowLayout {
                                     Layout.fillWidth: true
-                                    spacing: 8
+                                    spacing: 6
+
                                     Text {
                                         Layout.fillWidth: true
                                         text: "Awtarchy"
@@ -2397,128 +2398,110 @@ Singleton {
                                         font.bold: true
                                     }
                                     SettingsButton {
-                                        label: "Awtarchy Tips"
+                                        label: "Tips"
                                         textSize: root.scaledText(9)
                                         onClicked: root.openAwtarchyTips()
                                     }
-                                    SettingsButton {
-                                        label: root.awtarchyEditMode ? "Done" : "Edit"
-                                        active: root.awtarchyEditMode
-                                        textSize: root.scaledText(9)
-                                        onClicked: {
-                                            root.awtarchyEditMode = !root.awtarchyEditMode;
-                                            if (!root.awtarchyEditMode) {
-                                                root.cursorSectionExpanded = false;
-                                                root.lockscreenSectionExpanded = false;
-                                            }
-                                        }
-                                    }
                                 }
 
-                                Text {
+                                ScreenshotSoundSettings {
+                                    id: screenshotSoundSettings
                                     Layout.fillWidth: true
-                                    visible: !root.awtarchyEditMode
-                                    text: "Built-in manual and Awtarchy desktop preferences."
-                                    color: Theme.muted
-                                    font.family: Theme.fontFamily
-                                    font.pixelSize: root.scaledText(8)
-                                    wrapMode: Text.Wrap
+                                    textSize: root.scaledText(9)
+                                }
+
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Theme.active
                                 }
 
                                 RowLayout {
                                     Layout.fillWidth: true
                                     spacing: 8
-                                    visible: root.awtarchyEditMode
 
                                     Text {
-                                        Layout.fillWidth: true
                                         text: "Cursor"
                                         color: Theme.foreground
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(9)
+                                        font.pixelSize: root.scaledText(10)
                                         font.bold: true
                                     }
-                                    ColumnLayout {
-                                        id: cursorSectionActions
-                                        Layout.minimumWidth: root.sectionActionColumnWidth
-                                        Layout.preferredWidth: root.sectionActionColumnWidth
-                                        Layout.maximumWidth: root.sectionActionColumnWidth
-                                        Layout.alignment: Qt.AlignRight
-                                        spacing: 5
-                                        SettingsButton {
-                                            Layout.fillWidth: true
-                                            label: root.cursorSectionOpen ? "Collapse Cursor" : "Expand Cursor"
-                                            active: root.cursorSectionOpen
-                                            textSize: root.scaledText(9)
-                                            onClicked: root.cursorSectionExpanded = !root.cursorSectionExpanded
-                                        }
+                                    Item { Layout.fillWidth: true }
+                                    SettingsButton {
+                                        label: root.cursorSectionOpen ? "Hide" : "Show"
+                                        active: root.cursorSectionOpen
+                                        textSize: root.scaledText(9)
+                                        onClicked: root.cursorSectionExpanded = !root.cursorSectionExpanded
                                     }
                                 }
 
                                 CursorThemeSettings {
                                     id: awtarchyCursorThemeSection
                                     Layout.fillWidth: true
-                                    visible: root.awtarchyEditMode && root.cursorSectionExpanded
+                                    Layout.leftMargin: 12
+                                    Layout.rightMargin: 4
+                                    visible: root.cursorSectionExpanded
                                     active: visible && quickSettingsWindow.visible
                                         && !root.settingsOpen
                                         && root.quickSettingsSectionVisible("awtarchy")
                                 }
 
+                                Rectangle {
+                                    Layout.fillWidth: true
+                                    Layout.preferredHeight: 1
+                                    color: Theme.active
+                                }
+
                                 RowLayout {
                                     Layout.fillWidth: true
                                     spacing: 8
-                                    visible: root.awtarchyEditMode
 
                                     Text {
-                                        Layout.fillWidth: true
                                         text: "Lockscreen"
                                         color: Theme.foreground
                                         font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(9)
+                                        font.pixelSize: root.scaledText(10)
                                         font.bold: true
                                     }
-                                    Text {
-                                        text: BarState.lockscreenAnimationPreference()
-                                        color: Theme.muted
-                                        font.family: Theme.fontFamily
-                                        font.pixelSize: root.scaledText(8)
-                                    }
-                                    ColumnLayout {
-                                        id: lockscreenSectionActions
-                                        Layout.minimumWidth: root.sectionActionColumnWidth
-                                        Layout.preferredWidth: root.sectionActionColumnWidth
-                                        Layout.maximumWidth: root.sectionActionColumnWidth
-                                        Layout.alignment: Qt.AlignRight
-                                        spacing: 5
-                                        SettingsButton {
-                                            Layout.fillWidth: true
-                                            label: root.lockscreenSectionOpen ? "Collapse Lockscreen" : "Expand Lockscreen"
-                                            active: root.lockscreenSectionOpen
-                                            textSize: root.scaledText(9)
-                                            onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
-                                        }
-                                        SettingsButton {
-                                            Layout.fillWidth: true
-                                            label: "Edit Layout"
-                                            active: true
-                                            textSize: root.scaledText(9)
-                                            onClicked: root.openLockscreenEditor()
-                                        }
-                                        Text {
-                                            Layout.fillWidth: true
-                                            text: "Super + Alt + E"
-                                            color: Theme.muted
-                                            font.family: Theme.fontFamily
-                                            font.pixelSize: root.scaledText(8)
-                                            horizontalAlignment: Text.AlignHCenter
-                                        }
+                                    Item { Layout.fillWidth: true }
+                                    SettingsButton {
+                                        label: root.lockscreenSectionOpen ? "Hide" : "Show"
+                                        active: root.lockscreenSectionOpen
+                                        textSize: root.scaledText(9)
+                                        onClicked: root.lockscreenSectionExpanded = !root.lockscreenSectionExpanded
                                     }
                                 }
 
                                 ColumnLayout {
                                     Layout.fillWidth: true
-                                    visible: root.awtarchyEditMode && root.lockscreenSectionExpanded
-                                    spacing: 5
+                                    Layout.leftMargin: 12
+                                    Layout.rightMargin: 4
+                                    visible: root.lockscreenSectionExpanded
+                                    spacing: 6
+
+                                    RowLayout {
+                                        Layout.fillWidth: true
+                                        spacing: 8
+                                        Text {
+                                            Layout.fillWidth: true
+                                            text: "Layout"
+                                            color: Theme.foreground
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.scaledText(9)
+                                        }
+                                        Text {
+                                            text: "Super + Alt + E"
+                                            color: Theme.muted
+                                            font.family: Theme.fontFamily
+                                            font.pixelSize: root.scaledText(8)
+                                        }
+                                        SettingsButton {
+                                            label: "Edit Layout"
+                                            textSize: root.scaledText(9)
+                                            onClicked: root.openLockscreenEditor()
+                                        }
+                                    }
 
                                     Text {
                                         Layout.fillWidth: true

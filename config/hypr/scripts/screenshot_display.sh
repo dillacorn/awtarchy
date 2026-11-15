@@ -2,34 +2,82 @@
 # github.com/dillacorn/awtarchy/tree/main/config/hypr/scripts
 # ~/.config/hypr/scripts/screenshot_display.sh
 
+# Super+Shift+D: capture the focused Hyprland monitor, save a PNG and
+# copy the same image to the Wayland clipboard. No slurp or Satty.
 set -euo pipefail
 
-# deps
-for cmd in grim hyprctl jq notify-send wl-copy; do
-  command -v "$cmd" >/dev/null 2>&1 || { echo "$cmd missing" >&2; exit 1; }
+for cmd in grim hyprctl jq wl-copy mktemp date flock; do
+  command -v "$cmd" >/dev/null 2>&1 || {
+    printf '%s missing\n' "$cmd" >&2
+    exit 1
+  }
 done
 
+# Queue rapid captures and avoid a notification that could appear in the next
+# image. Keep this private and session-scoped, never use a shared /tmp lock.
+runtime="${XDG_RUNTIME_DIR:-}"
+[[ -n "$runtime" && -d "$runtime" && ! -L "$runtime" ]] || {
+  printf 'Safe XDG_RUNTIME_DIR required for screenshot lock\n' >&2
+  exit 1
+}
+lock_dir="$runtime/awtarchy-locks"
+# XDG_RUNTIME_DIR itself is private; the screenshot lock file contains no data.
+# mkdir -p handles concurrent first invocations safely without a chmod race.
+mkdir -p -- "$lock_dir"
+[[ -d "$lock_dir" && ! -L "$lock_dir" ]] || {
+  printf 'Unsafe screenshot lock directory\n' >&2
+  exit 1
+}
+
+
+
+
+take_screenshot() {
+  flock -w 5 9 || {
+    printf 'Screenshot queue timed out after 5 seconds\n' >&2
+    return 1
+  }
+  # Focused monitor, not pointer location. Refuse ambiguous IPC.
+  local mon out_dir file
+  mon="$(hyprctl -j monitors 9>&- | jq -er '
+    if type != "array" then error("invalid monitors") else
+        [.[] | select(type == "object" and .focused == true)
+             | .name | select(type == "string" and length > 0)] |
+        if length == 1 then .[0]
+        else error("expected exactly one focused monitor") end
+    end
+')" || {
+  printf 'Unable to identify the focused Hyprland monitor\n' >&2
+  exit 1
+}
+
 out_dir="$HOME/Pictures/Screenshots"
-file="$out_dir/$(date +%m%d%Y-%I%p-%S).png"
+mkdir -p -- "$out_dir"
+[[ -d "$out_dir" && ! -L "$out_dir" ]] || {
+  printf 'Unsafe screenshots directory: %s\n' "$out_dir" >&2
+  exit 1
+}
 
-mkdir -p "$out_dir"
-
-# get monitor name from cursor, fallback to focused
-cursor_json="$(hyprctl -j cursors 2>/dev/null || true)"
-if [[ -n "$cursor_json" ]] && echo "$cursor_json" | jq -e . >/dev/null 2>&1; then
-    mon="$(echo "$cursor_json" | jq -r '.[0].monitor')"
+# Unique even when the shortcut is pressed repeatedly within one second.
+file="$(mktemp "$out_dir/$(date +%m%d%Y-%I%p-%S)-XXXXXXXX.png")" || return 1
+if ! grim -o "$mon" "$file" 9>&-; then
+  rm -f -- "$file"
+  printf 'Failed to capture focused monitor: %s\n' "$mon" >&2
+  exit 1
 fi
 
-if [[ -z "${mon:-}" || "$mon" == "null" ]]; then
-    monitor_json="$(hyprctl -j monitors 2>/dev/null || true)"
-    if [[ -n "$monitor_json" ]] && echo "$monitor_json" | jq -e . >/dev/null 2>&1; then
-        mon="$(echo "$monitor_json" | jq -r '.[] | select(.focused==true) | .name' | head -n1)"
-    fi
+# A completed grim capture triggers the sound even if clipboard copying fails.
+sound_helper="$(dirname -- "${BASH_SOURCE[0]}")/screenshot_sound.sh"
+if [[ -f "$sound_helper" && ! -L "$sound_helper" ]]; then
+  bash "$sound_helper" play direct 9>&- >/dev/null 2>&1 || true
 fi
 
-[[ -n "${mon:-}" ]] || { echo "No monitor found" >&2; exit 1; }
+# A screenshot already captured stays saved even if the clipboard fails.
+if ! wl-copy --type image/png < "$file" 9>&-; then
+  printf 'Screenshot saved but clipboard copy failed: %s\n' "$file" >&2
+  exit 1
+fi
 
-grim -o "$mon" "$file" >/dev/null 2>&1
-wl-copy --type image/png < "$file"
-
-notify-send --app-name 'awtarchy-screenshot' 'Screenshot saved & copied' "$file" || true
+  # No flash/notification: rapid captures remain visually uncontaminated.
+}
+take_screenshot 9>"$lock_dir/hypr-screenshot.lock"
