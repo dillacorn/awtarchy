@@ -27,15 +27,19 @@ main() {
             fail "Missing or unsafe executable: $binary"; return 1;
         }
     done
-    if command -v pgrep >/dev/null 2>&1; then
-        local compositor
-        for compositor in Hyprland sway kwin_wayland; do
-            if pgrep -u "$(id -u)" -x "$compositor" >/dev/null 2>&1; then
-                fail "Existing compositor $compositor is running; end that session normally first."
-                return 1
-            fi
-        done
-    fi
+    command -v pgrep >/dev/null 2>&1 || {
+        fail 'pgrep is required to verify compositor isolation.'; return 1;
+    }
+    [[ -S "$XDG_RUNTIME_DIR/bus" ]] || {
+        fail 'A user D-Bus session socket is required.'; return 1;
+    }
+    local compositor
+    for compositor in Hyprland sway kwin_wayland; do
+        if pgrep -u "$(id -u)" -x "$compositor" >/dev/null 2>&1; then
+            fail "Existing compositor $compositor is running; end that session normally first."
+            return 1
+        fi
+    done
 
     local state="${XDG_STATE_HOME:-$HOME/.local/state}/awtarchy" private=''
     [[ ! -L $state && ( ! -e $state || -d $state ) ]] || {
