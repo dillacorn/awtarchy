@@ -43,7 +43,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-focused-screenshot-") as temp:
     mocks = {
         "pw-play": r"""#!/usr/bin/env bash
 set -euo pipefail
-[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.35 --latency=20ms -" ]] || exit 8
+[[ "$*" == "--raw --format=s16 --rate=48000 --channels=1 --volume=0.15 --latency=20ms -" ]] || exit 8
 stats="$(python3 -c 'import sys,hashlib; pcm=sys.stdin.buffer.read(); print(len(pcm), hashlib.sha256(pcm).hexdigest())')"
 [[ "$stats" == "17280 baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c" ]] || exit 9
 [[ "${SOUND_FAIL:-0}" != 1 ]] || exit 10
