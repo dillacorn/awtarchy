@@ -208,7 +208,7 @@ assert "swaybg_command -" in CONFIG
 
 
 for path, fragments in (
-    (TRIAL / "sway.desktop", ("Sway (Awtarchy Trial)",
+    (TRIAL / "sway.desktop", ("Sway (Awtarchy)",
       "Exec=/usr/local/bin/awtarchy-sway-session")),
     (TRIAL / "session-launch.sh", ("/usr/bin/sway --config", "XDG_CURRENT_DESKTOP=sway")),
     (TRIAL / "ipc.sh", ("awtarchy-sway", '[[ "$response" == "ok" ]]')),
