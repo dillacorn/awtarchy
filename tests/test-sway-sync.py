@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
 
     assert home / ".config/sway/awtarchy-trial/outputs" in desired
     assert home / ".config/sway/workspaces" in desired
+    # The source stub must remain separate from the user's saved output data.
+    assert desired[home / ".config/sway/awtarchy-trial/outputs"].startswith(b"#")
+    assert desired[home / ".config/sway/workspaces"].startswith(b"#")
     manager_path = home / ".local/share/awtarchy/awtarchy-compositor-manager.sh"
     assert manager_path in desired
     missing = home / ".config/quickshell/awtarchy-sway/SwayFlyoutWindow.qml"
