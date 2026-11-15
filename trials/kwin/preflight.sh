@@ -20,7 +20,7 @@ main() {
     printf '\nInstalled packages:\n'
 
     local pkg state
-    for pkg in kwin xorg-xwayland libkscreen kglobalacceld plasma-workspace plasma-meta \
+    for pkg in kwin xorg-xwayland python-dbus-next libkscreen kglobalacceld plasma-workspace plasma-meta \
                quickshell foot xdg-desktop-portal-kde xdg-desktop-portal-hyprland \
                xdg-desktop-portal-wlr xdg-desktop-portal-gtk hyprland sway; do
         if pacman -Qq -- "$pkg" >/dev/null 2>&1; then
@@ -32,7 +32,7 @@ main() {
     done
 
     printf '\nOfficial repository metadata:\n'
-    for pkg in kwin xorg-xwayland; do
+    for pkg in kwin xorg-xwayland python-dbus-next; do
         if pacman -Si -- "$pkg" >/dev/null 2>&1; then
             printf '  %s: available in configured sync databases\n' "$pkg"
         else

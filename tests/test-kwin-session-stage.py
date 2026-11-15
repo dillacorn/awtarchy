@@ -12,6 +12,7 @@ SCRIPT = ROOT / "trials/kwin/prepare-session.py"
 PLUGIN = ROOT / "trials/kwin/package/metadata.json"
 SOURCE = ROOT / "trials/kwin/shortcuts.js"
 TILING = ROOT / "trials/kwin/tiling.js"
+PUBLISHER = ROOT / "trials/kwin/state-publisher.js"
 SHELL = ROOT / "trials/kwin/shell.qml"
 
 metadata = json.loads(PLUGIN.read_text(encoding="utf-8"))
@@ -52,16 +53,19 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-kwin-test-") as directory:
     assert sha(installed) == sha(SOURCE)
     tiling = root / "data/kwin/scripts/awtarchy-kwin-tiling/contents/code/main.js"
     assert sha(tiling) == sha(TILING)
+    publisher = root / "data/kwin/scripts/awtarchy-kwin-state/contents/code/main.js"
+    assert sha(publisher) == sha(PUBLISHER)
     assert "Number=10" in config.read_text()
     assert "FocusPolicy=FocusFollowsMouse" in config.read_text()
     assert "PerOutputVirtualDesktops=true" in config.read_text()
     assert "CommandAllKey=Alt" in config.read_text()
     assert "awtarchy-kwinEnabled=true" in config.read_text()
     assert "awtarchy-kwin-tilingEnabled=true" in config.read_text()
+    assert "awtarchy-kwin-stateEnabled=true" in config.read_text()
     assert config.read_text().splitlines().count("awtarchy-kwinEnabled=true") == 1
     assert config.read_text().splitlines().count("awtarchy-kwin-tilingEnabled=true") == 1
     recorded = {config: sha(config), installed: sha(installed),
-                tiling: sha(tiling), shell: sha(shell)}
+                tiling: sha(tiling), shell: sha(shell), publisher: sha(publisher)}
     run("--stage")
     assert recorded == {path: sha(path) for path in recorded}
     assert sibling.read_text(encoding="utf-8") == "preserve"

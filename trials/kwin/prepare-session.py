@@ -13,7 +13,7 @@ from pathlib import Path
 import stat
 import sys
 
-PLUGIN_IDS = ("awtarchy-kwin", "awtarchy-kwin-tiling")
+PLUGIN_IDS = ("awtarchy-kwin", "awtarchy-kwin-tiling", "awtarchy-kwin-state")
 KWINRC = (
     "[Desktops]\n"
     "Number=10\n"
@@ -63,7 +63,8 @@ def plan(root: Path, sources: Path) -> list[tuple[Path, bytes]]:
     contents.append((root / "config" / "quickshell" /
                      "awtarchy-kwin-smoke" / "shell.qml", shell.read_bytes()))
     scripts = (("awtarchy-kwin", "shortcuts.js", "metadata.json"),
-               ("awtarchy-kwin-tiling", "tiling.js", "tiling-metadata.json"))
+               ("awtarchy-kwin-tiling", "tiling.js", "tiling-metadata.json"),
+               ("awtarchy-kwin-state", "state-publisher.js", "state-metadata.json"))
     for plugin_id, script, metadata in scripts:
         metadata_path = sources / "package" / metadata
         script_path = sources / script

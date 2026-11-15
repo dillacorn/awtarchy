@@ -54,18 +54,21 @@ On an Arch/CachyOS host, `bash trials/kwin/package-plan.sh` prints the
 package transaction that pacman would resolve from the **current local sync
 databases**. It does not refresh databases, install packages, or change the
 default compositor. The preview refuses a transaction containing
-`plasma-workspace`, `plasma-desktop`, or `plasma-meta`. The
+`plasma-workspace`, `plasma-desktop`, or `plasma-meta`. It also
+includes the tiny official `python-dbus-next` package required by the
+trial's workspace-state bridge. The
 staging/smoke scripts assume `kwin` and `foot` are already installed;
 there is still no production installer or package remover in this branch.
 
 ## Standalone DRM smoke test (not the Awtarchy session)
 
-For testers who **already have** the official `kwin` and `foot` packages,
+For testers who **already have** the official `kwin`, `quickshell`,
+`python-dbus-next` and `foot` packages,
 `tty-smoke.sh` can open an isolated KWin instance and one Foot terminal from
 an otherwise unused local TTY. It requires the explicit
 `AWTARCHY_KWIN_SMOKE=yes` opt-in. It refuses root, terminal emulators, nested
 Wayland/X11 sessions, and detected concurrently running Hyprland/Sway/KWin
-processes. This is **not** a production desktop and does not load Quickshell.
+processes. This is **not** a production desktop. It starts a minimal Quickshell trial bar.
 It stages a private KWin script package and enables 10 numbered workspaces,
 but intentionally disables the unverified lockscreen. Workspace shortcuts
 must still be confirmed live on KWin; offline tests only simulate the API.
@@ -80,12 +83,19 @@ desktop session.
 ## Isolated Quickshell integration probe
 
 The TTY smoke session launches a private Quickshell `PanelWindow` on every
-monitor, with a basic clock and session label. This is a *protocol and lifecycle*
+monitor, with a clock, session label and per-monitor desktop activity. This is a *protocol and lifecycle*
 probe, not a replacement for the Awtarchy bar. Its source is
 `trials/kwin/shell.qml` and its generated destination remains inside the
 temporary KWin `XDG_CONFIG_HOME`. Closing Foot terminates the child session
 and its own Quickshell PID. Real Wayland layer-shell operation and correct
 session teardown still require runtime testing.
+
+A separate KWin script publishes desktop/occupancy snapshots over a
+session-only D-Bus name (`org.awtarchy.KWinTrial1`) to a private Python
+`python-dbus-next` receiver. The receiver rejects invalid/oversized state
+and atomically writes a private JSON file watched by Quickshell `FileView`.
+The service starts before KWin and is terminated when the TTY smoke test
+ends. No existing user service or Sway/Hyprland IPC is modified.
 
 The private `kwinrc` also enables per-output virtual desktops,
 focus-follows-mouse, and Alt+left/right pointer move/resize. This matches

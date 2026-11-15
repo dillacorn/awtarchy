@@ -43,6 +43,8 @@ jobs:
           python3 tests/test-kwin-session-stage.py
           python3 -m py_compile trials/kwin/monitor-info.py
           python3 tests/test-kwin-monitor-info.py
+          python3 -m py_compile trials/kwin/state-bridge.py
+          python3 tests/test-kwin-state-bridge.py
       - name: Quickshell probe contract
         run: |
           python3 - <<'PY'
@@ -53,10 +55,15 @@ jobs:
           assert "Quickshell.screens" in shell
           assert "PanelWindow {" in shell
           assert "SystemClock {" in shell
+          assert 'AWTARCHY_KWIN_STATE_FILE' in shell
+          assert 'workspaceState' in shell
           print("PASS: Quickshell static integration contract")
           PY
       - name: KWin scripting stub verification
         run: |
+          node --check trials/kwin/state-publisher.js
+          node --check tests/test-kwin-state-publisher.mjs
+          node tests/test-kwin-state-publisher.mjs
           node --check trials/kwin/tiling.js
           node --check tests/test-kwin-tiling.mjs
           node tests/test-kwin-tiling.mjs

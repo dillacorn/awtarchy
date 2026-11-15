@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Manual, isolated KWin DRM bring-up only. NOT an Awtarchy desktop session.
 set -euo pipefail
+umask 077
 
 fail() { printf 'KWin smoke test: %s\n' "$*" >&2; return 1; }
 
@@ -27,6 +28,9 @@ main() {
             fail "Missing or unsafe executable: $binary"; return 1;
         }
     done
+    /usr/bin/python3 -c 'import dbus_next' >/dev/null 2>&1 || {
+        fail 'python-dbus-next is required for isolated workspace state.'; return 1;
+    }
     command -v pgrep >/dev/null 2>&1 || {
         fail 'pgrep is required to verify compositor isolation.'; return 1;
     }
@@ -58,7 +62,36 @@ main() {
     }
     python3 "$origin/prepare-session.py" --root "$private" --check || return 1
     python3 "$origin/prepare-session.py" --root "$private" --stage || return 1
-    install -d -m 0700 -- "$private/cache" || return 1
+    [[ -f "$origin/state-bridge.py" && ! -L "$origin/state-bridge.py" ]] || {
+        fail 'KWin workspace bridge source missing or unsafe.'; return 1;
+    }
+    install -d -m 0700 -- "$private/cache" "$private/runtime" || return 1
+
+    # Claim the private D-Bus receiver before KWin scripts publish their
+    # initial workspace state. Never start an unrelated user service.
+    local bridge_pid='' attempt
+    stop_bridge() {
+        if [[ -n "$bridge_pid" ]] && kill -0 "$bridge_pid" 2>/dev/null; then
+            kill -TERM "$bridge_pid" 2>/dev/null || :
+            wait "$bridge_pid" 2>/dev/null || :
+        fi
+    }
+    trap stop_bridge EXIT
+    /usr/bin/python3 "$origin/state-bridge.py" --state-dir "$private/runtime" \
+        > "$private/bridge.log" 2>&1 &
+    bridge_pid=$!
+    for (( attempt=0; attempt<40; attempt++ )); do
+        [[ -f "$private/runtime/ready" && ! -L "$private/runtime/ready" ]] && break
+        if ! kill -0 "$bridge_pid" 2>/dev/null; then
+            fail 'KWin D-Bus bridge terminated; see private bridge.log.'
+            return 1
+        fi
+        sleep 0.05
+    done
+    [[ -f "$private/runtime/ready" ]] || {
+        fail 'Timed out waiting for KWin D-Bus bridge initialization.'
+        return 1
+    }
 
     printf 'Starting temporary KWin DRM smoke test on %s.\n' "$vt"
     printf 'No Awtarchy shell or security lock is enabled; experimental numbered-workspace shortcuts are loaded.\n'
@@ -70,6 +103,7 @@ main() {
         XDG_CONFIG_HOME="$private/config" \
         XDG_DATA_HOME="$private/data" \
         XDG_CACHE_HOME="$private/cache" \
+        AWTARCHY_KWIN_STATE_FILE="$private/runtime/workspace-state.json" \
         XDG_CURRENT_DESKTOP=awtarchy-kwin-smoke \
         XDG_SESSION_DESKTOP=awtarchy-kwin-smoke \
         XDG_SESSION_TYPE=wayland \
