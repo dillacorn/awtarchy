@@ -19,7 +19,18 @@ KWINRC = (
     "Number=10\n"
     "Rows=1\n"
     "\n"
-    "[Plugins]\n"
+    "[Windows]\\n"
+    "FocusPolicy=FocusFollowsMouse\\n"
+    "PerOutputVirtualDesktops=true\\n"
+    "SeparateScreenFocus=true\\n"
+    "RollOverDesktops=false\\n"
+    "\\n"
+    "[MouseBindings]\\n"
+    "CommandAllKey=Alt\\n"
+    "CommandAll1=Activate, raise and move\\n"
+    "CommandAll3=Activate, raise and resize\\n"
+    "\\n"
+    "[Plugins]\n
     "".join(f"{plugin}Enabled=true\n" for plugin in PLUGIN_IDS)
 )
 
@@ -46,6 +57,11 @@ def plan(root: Path, sources: Path) -> list[tuple[Path, bytes]]:
     if stat.S_IMODE(root.stat().st_mode) & 0o077:
         fail("Session root must be private (mode 0700)")
     contents = [(root / "config" / "kwinrc", KWINRC.encode("utf-8"))]
+    shell = sources / "shell.qml"
+    if shell.is_symlink() or not shell.is_file():
+        fail("Missing or unsafe KWin Quickshell probe")
+    contents.append((root / "config" / "quickshell" /
+                     "awtarchy-kwin-smoke" / "shell.qml", shell.read_bytes()))
     scripts = (("awtarchy-kwin", "shortcuts.js", "metadata.json"),
                ("awtarchy-kwin-tiling", "tiling.js", "tiling-metadata.json"))
     for plugin_id, script, metadata in scripts:

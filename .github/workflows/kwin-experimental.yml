@@ -30,6 +30,9 @@ jobs:
           bash -n trials/kwin/preflight.sh
           bash -n tests/test-kwin-preflight.sh
           bash tests/test-kwin-preflight.sh
+          bash -n trials/kwin/probe-session.sh
+          bash -n tests/test-kwin-probe-session.sh
+          bash tests/test-kwin-probe-session.sh
           bash -n trials/kwin/tty-smoke.sh
           bash -n tests/test-kwin-tty-smoke.sh
           bash tests/test-kwin-tty-smoke.sh
@@ -38,6 +41,18 @@ jobs:
           bash tests/test-kwin-package-plan.sh
           python3 -m py_compile trials/kwin/prepare-session.py
           python3 tests/test-kwin-session-stage.py
+      - name: Quickshell probe contract
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          shell = Path("trials/kwin/shell.qml").read_text()
+          assert "import Quickshell" in shell
+          assert "ShellRoot {" in shell
+          assert "Quickshell.screens" in shell
+          assert "PanelWindow {" in shell
+          assert "SystemClock {" in shell
+          print("PASS: Quickshell static integration contract")
+          PY
       - name: KWin scripting stub verification
         run: |
           node --check trials/kwin/tiling.js

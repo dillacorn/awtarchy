@@ -62,6 +62,20 @@ preferences are installed or changed. A user D-Bus bus is still shared and
 its effects must be observed, so do not use this concurrently with another
 desktop session.
 
+## Isolated Quickshell integration probe
+
+The TTY smoke session launches a private Quickshell `PanelWindow` on every
+monitor, with a basic clock and session label. This is a *protocol and lifecycle*
+probe, not a replacement for the Awtarchy bar. Its source is
+`trials/kwin/shell.qml` and its generated destination remains inside the
+temporary KWin `XDG_CONFIG_HOME`. Closing Foot terminates the child session
+and its own Quickshell PID. Real Wayland layer-shell operation and correct
+session teardown still require runtime testing.
+
+The private `kwinrc` also enables per-output virtual desktops,
+focus-follows-mouse, and Alt+left/right pointer move/resize. This matches
+supported current KWin configuration keys rather than invented options.
+
 ## Experimental shortcuts loaded by the TTY smoke test
 
 The private KWin script package registers `Super+1..0`, `Super+Shift+1..0`,

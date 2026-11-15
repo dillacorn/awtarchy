@@ -22,7 +22,7 @@ main() {
         fail 'Expected an owned XDG_RUNTIME_DIR from the login session.'; return 1;
     }
     local binary
-    for binary in /usr/bin/kwin_wayland /usr/bin/foot /usr/bin/python3; do
+    for binary in /usr/bin/kwin_wayland /usr/bin/foot /usr/bin/python3 /usr/bin/qs; do
         [[ -x $binary && ! -L $binary ]] || {
             fail "Missing or unsafe executable: $binary"; return 1;
         }
@@ -49,6 +49,10 @@ main() {
     private="$(mktemp -d -- "$state/kwin-smoke.XXXXXX")" || return 1
     local origin
     origin="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd -P)" || return 1
+    [[ -f "$origin/probe-session.sh" && ! -L "$origin/probe-session.sh" ]] || {
+        fail 'KWin probe session script is missing or unsafe.'; return 1;
+    }
+    bash -n "$origin/probe-session.sh" || return 1
     [[ -f "$origin/prepare-session.py" && ! -L "$origin/prepare-session.py" ]] || {
         fail 'Private KWin stage helper is missing or unsafe.'; return 1;
     }
@@ -58,6 +62,7 @@ main() {
 
     printf 'Starting temporary KWin DRM smoke test on %s.\n' "$vt"
     printf 'No Awtarchy shell or security lock is enabled; experimental numbered-workspace shortcuts are loaded.\n'
+    printf 'A small temporary Quickshell panel and a Foot terminal will open.\n'
     printf 'Close the Foot window to ask KWin to return to your TTY.\n'
     printf 'Isolated test settings: %s\n' "$private/config"
 
@@ -69,7 +74,7 @@ main() {
         XDG_SESSION_DESKTOP=awtarchy-kwin-smoke \
         XDG_SESSION_TYPE=wayland \
         /usr/bin/kwin_wayland --drm --xwayland --no-lockscreen \
-            --no-kactivities --exit-with-session=/usr/bin/foot
+            --no-kactivities --exit-with-session="$origin/probe-session.sh"
 }
 
 main "$@"
