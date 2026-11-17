@@ -1,15 +1,16 @@
-# KWin compositor investigation (not installable yet)
+# KWin compositor investigation (isolated Ly/TTY test)
 
 This is an **isolated, read-only investigation** for a minimal KWin Wayland
 session in Awtarchy. Hyprland remains the default; the existing optional Sway
 implementation and all of its configuration remain unchanged.
 
-This directory contains an **opt-in, user-local experimental session**,
-not a production Awtarchy profile. It never changes Hyprland or Sway, and
-it deliberately does not create a Ly entry. KWin can run without Plasma,
-but the production Quickshell UI, secure session lock and screencast portal
-have not yet been ported and verified. Do not advertise this as a finished
-compositor choice in the stable Awtarchy menu.
+This directory contains an **opt-in experimental session**,
+not a production Awtarchy profile. KWin can run without Plasma, but
+the production Quickshell UI, secure session lock and screencast portal
+have not yet been ported or verified. The optional Ly entry is labelled
+**KWin (Awtarchy Trial)** so an unfinished session cannot be mistaken
+for the normal desktop. Installing the entry changes neither the Hyprland
+nor Sway session. Do not advertise it as a stable compositor choice.
 
 ## Why KWin
 
@@ -88,6 +89,52 @@ remove packages or touch Hyprland, Sway, Ly, or any KDE settings. There is
 not yet a safe automated in-place trial upgrade; it refuses unknown source
 changes instead of overwriting user edits.
 
+## Updating an existing KWin trial and registering Ly
+
+From the existing checkout on branch
+`KWinWM_Migration_Trial_Investigation`, first fast-forward a clean
+worktree. Do not re-clone the repo and do not overwrite local edits.
+Install any missing KWin dependencies with pacman separately; the prior
+mirrors/signatures failure must be resolved before the trial can launch.
+
+```bash
+git -C "$HOME/awtarchy-kwin-test" pull --ff-only
+python3 "$HOME/awtarchy-kwin-test/trials/kwin/setup-trial.py" --update
+bash "$HOME/awtarchy-kwin-test/trials/kwin/setup-ly.sh" plan
+bash "$HOME/awtarchy-kwin-test/trials/kwin/setup-ly.sh" apply
+```
+
+The updater detects a new installation or refreshes exact, manifest-tracked
+trial files. It refuses user edits/missing files, keeps original bytes and
+the old manifest under `~/.local/state/awtarchy/kwin-trial-upgrade-*`,
+and leaves the system packages, Sway and Hyprland unchanged. The Ly setup
+installs **only** `/usr/local/bin/awtarchy-kwin-trial-session` and
+`/usr/share/wayland-sessions/awtarchy-kwin-trial.desktop`. It refuses
+unknown/custom or package-managed files. It does not enable/disable Ly;
+the entry becomes selectable from the next Ly login screen.
+
+To unregister **only** the exact KWin Ly files (without uninstalling
+packages or trial data):
+
+```bash
+bash "$HOME/awtarchy-kwin-test/trials/kwin/setup-ly.sh" remove
+```
+
+To show the existing Awtarchy Sway Ly entry as exactly **Sway** while
+retaining its `Exec=`, session configuration and settings, use the separate
+label-only helper; it only accepts known Awtarchy Sway entries, refuses
+unrecognized files, and retains a root-owned backup:
+
+```bash
+python3 "$HOME/awtarchy-kwin-test/trials/kwin/sway-ly-label.py" --plan
+python3 "$HOME/awtarchy-kwin-test/trials/kwin/sway-ly-label.py" --apply
+```
+
+This renames only the display label in the existing
+`awtarchy-sway-trial.desktop` file. It does not rename Sway's executable,
+config directory, session wrapper, or install a second Sway session.
+An unknown local entry is preserved and must be inspected manually.
+
 ## Standalone DRM smoke test (not the Awtarchy session)
 
 For testers who **already have** the official `kwin`, `xorg-xwayland`,
@@ -100,7 +147,8 @@ processes. This is **not** a production desktop. It starts a minimal Quickshell 
 It stages a private KWin script package and enables 10 numbered workspaces,
 but intentionally disables the unverified lockscreen. When the user-local
 trial has been explicitly installed, login at a free TTY and type
-`kwin` to start the guarded experiment. KWin is not added to Ly.
+`kwin` to start the guarded experiment. Alternatively, after the
+separate opt-in Ly registration, select **KWin (Awtarchy Trial)** in Ly.
 Workspace shortcuts
 must still be confirmed live on KWin; offline tests only simulate the API.
 Do not leave sensitive content unattended. Closing Foot should cause KWin
@@ -200,7 +248,7 @@ scratchpads, and reliable fullscreen gaming still require live validation.
       no `plasma-workspace` or `plasma-meta` is installed by Awtarchy.
 - [ ] Isolated and reversible install, ownership tracking and dry-run;
       remove only known Awtarchy-owned KWin-specific packages.
-- [ ] Dedicated Ly/TTY session with recovery path and GPU-specific safety,
+- [ ] Production Ly/TTY session with recovery path and GPU-specific safety,
       no changes to existing Hyprland and Sway startup.
 - [ ] KWin-native configuration/scripts for Awtarchy's normal bindings,
       workspace/navigation/floating/gap and window-mode expectations.
