@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Install/remove only Awtarchy's user-local experimental KWin trial.
+"""Install/update/remove only Awtarchy's user-local experimental KWin trial.
 
 No pacman, root, Ly or existing compositor configuration writes. Uninstall
 removes only exact files recorded during installation.
@@ -10,6 +10,8 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import stat
+import tempfile
 import sys
 
 FILES = (
@@ -123,6 +125,88 @@ def install(apply: bool):
     print("No official packages, Ly sessions, or other compositors modified")
 
 
+def update():
+    """Refresh an exact, tracked trial in place, preserving recoverable backups.
+
+    If the original package install failed before stage, do a normal install.
+    Any local customization or missing managed file blocks the entire update.
+    """
+    entries, manifest = inventory()
+    expected = {str(path): digest(data) for path, data, _ in entries}
+    recorded = read_record(manifest, set(expected))
+    if recorded is None:
+        install(True)
+        return
+    if set(recorded) != set(expected):
+        raise ValueError("Unexpected old trial inventory; refusing upgrade")
+    changes = []
+    for path, data, mode in entries:
+        safe(path)
+        if (not path.is_file() or path.stat().st_uid != os.geteuid()
+                or not stat.S_ISREG(path.stat().st_mode)):
+            raise ValueError(f"Missing/unsafe managed file: {path}")
+        old = path.read_bytes()
+        if digest(old) != recorded[str(path)]:
+            raise ValueError(f"Locally modified trial file preserved: {path}")
+        if old != data:
+            changes.append((path, old, data, mode))
+    if not changes:
+        print("Existing KWin trial is already current")
+        return
+
+    safe(manifest.parent)
+    backup_dir = Path(tempfile.mkdtemp(
+        prefix="kwin-trial-upgrade-", dir=manifest.parent))
+    os.chmod(backup_dir, 0o700)
+    # Back up the exact original bytes and permissions before replacing any
+    # trial file. Backups are kept for manual recovery after a power failure.
+    for index, (path, old, new, mode) in enumerate(changes):
+        archive = backup_dir / f"{index:03d}.original"
+        archive.write_bytes(old)
+        os.chmod(archive, 0o600)
+    old_manifest = manifest.read_bytes()
+    archive_manifest = backup_dir / "manifest.original"
+    archive_manifest.write_bytes(old_manifest)
+    os.chmod(archive_manifest, 0o600)
+
+    def replace_bytes(path: Path, value: bytes, mode: int) -> None:
+        safe(path)
+        fd, staged_name = tempfile.mkstemp(
+            prefix=".kwin-update-", dir=path.parent)
+        try:
+            with os.fdopen(fd, "wb") as staged:
+                staged.write(value)
+            os.chmod(staged_name, mode)
+            os.replace(staged_name, path)
+        finally:
+            if os.path.exists(staged_name):
+                os.unlink(staged_name)
+
+    applied = []
+    try:
+        for path, old, new, mode in changes:
+            if path.read_bytes() != old:
+                raise ValueError(f"Trial file changed during upgrade: {path}")
+            replace_bytes(path, new, mode)
+            applied.append((path, old, mode))
+        new_manifest = (json.dumps({"version": 1, "files": expected},
+                                   sort_keys=True, indent=2) + "\n").encode()
+        if manifest.read_bytes() != old_manifest:
+            raise ValueError("Trial manifest changed during upgrade")
+        replace_bytes(manifest, new_manifest, 0o600)
+    except Exception:
+        for path, old, mode in reversed(applied):
+            try:
+                replace_bytes(path, old, mode)
+            except OSError:
+                print(f"RECOVERY REQUIRED: {path}, backup: {backup_dir}",
+                      file=sys.stderr)
+        raise
+    print(f"Updated {len(changes)} exact KWin trial file(s).")
+    print(f"Original files and manifest backed up at: {backup_dir}")
+    print("No changes to Ly, Sway, Hyprland or system packages.")
+
+
 def remove():
     entries, manifest = inventory()
     recorded = read_record(manifest, {str(path) for path, _, _ in entries})
@@ -153,11 +237,14 @@ def main():
     actions = parser.add_mutually_exclusive_group(required=True)
     actions.add_argument("--plan", action="store_true")
     actions.add_argument("--install", action="store_true")
+    actions.add_argument("--update", action="store_true")
     actions.add_argument("--remove", action="store_true")
     args = parser.parse_args()
     try:
         if args.remove:
             remove()
+        elif args.update:
+            update()
         else:
             install(args.install)
         return 0
