@@ -1,0 +1,6 @@
+[Desktop Entry]
+Name=KWin (Awtarchy Trial)
+Comment=Experimental standalone KWin and Quickshell; no secure lock
+Exec=/usr/local/bin/awtarchy-kwin-trial-session
+Type=Application
+DesktopNames=awtarchy-kwin-smoke
