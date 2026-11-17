@@ -10,14 +10,34 @@ main() {
     [[ ${AWTARCHY_KWIN_SMOKE:-} == yes ]] || {
         fail 'Explicit opt-in required: AWTARCHY_KWIN_SMOKE=yes'; return 1;
     }
-    [[ -t 0 && -t 1 ]] || { fail 'Use an interactive local TTY.'; return 1; }
+    # Ly normally launches Wayland sessions without interactive stdin/stdout,
+    # so the TTY-only check is replaced by a separate, explicit --ly path.
     local vt=''
-    vt="$(tty)" || { fail 'Could not identify active TTY.'; return 1; }
-    [[ $vt =~ ^/dev/tty[0-9]+$ ]] || {
-        fail "Expected a local VT, got $vt"; return 1;
-    }
-    [[ -z ${WAYLAND_DISPLAY:-} && -z ${DISPLAY:-} && ${XDG_SESSION_TYPE:-tty} == tty ]] || {
-        fail 'Existing graphical session detected; run from a plain TTY.'; return 1;
+    case "${1:-}" in
+        '')
+            [[ $# -eq 0 ]] || { fail 'Unexpected trial arguments'; return 2; }
+            [[ -t 0 && -t 1 ]] || { fail 'Use an interactive local TTY.'; return 1; }
+            vt="$(tty)" || { fail 'Could not identify active TTY.'; return 1; }
+            [[ $vt =~ ^/dev/tty[0-9]+$ ]] || {
+                fail "Expected a local VT, got $vt"; return 1;
+            }
+            [[ ${XDG_SESSION_TYPE:-tty} == tty ]] || {
+                fail 'TTY mode expects a plain login terminal.'; return 1;
+            }
+            ;;
+        --ly)
+            [[ $# -eq 1 && ${XDG_SESSION_TYPE:-} == wayland ]] || {
+                fail 'Ly mode expects one Wayland login session.'; return 1;
+            }
+            vt="Ly"
+            ;;
+        *)
+            fail 'Usage: tty-smoke.sh [--ly]'
+            return 2
+            ;;
+    esac
+    [[ -z ${WAYLAND_DISPLAY:-} && -z ${DISPLAY:-} ]] || {
+        fail 'Existing graphical display detected; refusing nested KWin.'; return 1;
     }
     [[ -n ${XDG_RUNTIME_DIR:-} && -d $XDG_RUNTIME_DIR && -O $XDG_RUNTIME_DIR ]] || {
         fail 'Expected an owned XDG_RUNTIME_DIR from the login session.'; return 1;

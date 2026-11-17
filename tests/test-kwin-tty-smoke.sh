@@ -21,5 +21,19 @@ if HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" \
     false
 fi
 grep -Fq 'Use an interactive local TTY' "$tmp/out"
+if HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" XDG_SESSION_TYPE=wayland \
+    WAYLAND_DISPLAY=wayland-1 AWTARCHY_KWIN_SMOKE=yes \
+    bash "$tmp/tty-smoke.sh" --ly >"$tmp/out" 2>&1; then
+    printf 'ERROR: Ly mode accepted a nested display\n' >&2
+    false
+fi
+grep -Fq 'Existing graphical display detected' "$tmp/out"
+if HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" XDG_SESSION_TYPE=tty \
+    AWTARCHY_KWIN_SMOKE=yes \
+    bash "$tmp/tty-smoke.sh" --ly >"$tmp/out" 2>&1; then
+    printf 'ERROR: Ly mode accepted a plain TTY\n' >&2
+    false
+fi
+grep -Fq 'Ly mode expects one Wayland login session' "$tmp/out"
 [[ ! -e "$tmp/state" ]]
-printf 'PASS: KWin smoke launch rejects non-TTY and missing opt-in\n'
+printf 'PASS: KWin smoke rejects non-TTY, missing opt-in and nested Ly starts\n'
