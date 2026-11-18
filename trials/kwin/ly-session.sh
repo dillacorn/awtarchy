@@ -17,6 +17,11 @@ main() {
         printf 'KWin Ly: existing graphical display; refusing nested launch.\n' >&2
         return 1
     }
+    # Ly desktop entries may inherit XDG_SESSION_TYPE=tty from their login VT.
+    # The selected .desktop is explicitly a Wayland compositor session.
+    export XDG_CURRENT_DESKTOP=awtarchy-kwin-smoke
+    export XDG_SESSION_DESKTOP=awtarchy-kwin-smoke
+    export XDG_SESSION_TYPE=wayland
     AWTARCHY_KWIN_SMOKE=yes bash "$source" --ly
 }
 
