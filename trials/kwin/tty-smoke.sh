@@ -5,6 +5,14 @@ umask 077
 
 fail() { printf 'KWin smoke test: %s\n' "$*" >&2; return 1; }
 
+valid_system_executable() {
+    # Arch officially packages command aliases such as /usr/bin/python3 as
+    # symlinks to versioned, executable files. Reject broken/non-executable
+    # targets, not symlinks themselves. /usr/bin is root-owned.
+    local binary="$1"
+    [[ -f "$binary" && -x "$binary" ]]
+}
+
 main() {
     [[ ${EUID} -ne 0 ]] || { fail 'Never run as root.'; return 1; }
     [[ ${AWTARCHY_KWIN_SMOKE:-} == yes ]] || {
@@ -44,7 +52,7 @@ main() {
     }
     local binary
     for binary in /usr/bin/kwin_wayland /usr/bin/foot /usr/bin/fuzzel /usr/bin/python3 /usr/bin/qs; do
-        [[ -x $binary && ! -L $binary ]] || {
+        valid_system_executable "$binary" || {
             fail "Missing or unsafe executable: $binary"; return 1;
         }
     done

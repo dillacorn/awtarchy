@@ -36,4 +36,26 @@ if HOME="$tmp/home" XDG_STATE_HOME="$tmp/state" XDG_SESSION_TYPE=tty \
 fi
 grep -Fq 'Ly mode expects one Wayland login session' "$tmp/out"
 [[ ! -e "$tmp/state" ]]
+# The actual Arch /usr/bin/python3 is a link to a versioned binary.
+# Verify regular binaries and linked binaries both pass, while broken
+# links and non-executables fail closed.
+source <(sed -n '/^valid_system_executable() {/,/^}/p' "$target")
+printf '#!/usr/bin/env bash\\ntrue\\n' > "$tmp/real"
+chmod 0755 "$tmp/real"
+ln -s -- real "$tmp/linked"
+ln -s -- does-not-exist "$tmp/broken"
+printf '#!/usr/bin/env bash\\ntrue\\n' > "$tmp/nonexec"
+chmod 0644 "$tmp/nonexec"
+valid_system_executable "$tmp/real"
+valid_system_executable "$tmp/linked"
+if valid_system_executable "$tmp/broken"; then
+    printf 'ERROR: accepted broken executable link\\n' >&2; false
+fi
+if valid_system_executable "$tmp/nonexec"; then
+    printf 'ERROR: accepted non-executable file\\n' >&2; false
+fi
+if valid_system_executable "$tmp"; then
+    printf 'ERROR: accepted a directory as an executable\\n' >&2; false
+fi
+printf 'PASS: KWin guard allows official binary symlinks and refuses unsafe targets\\n'
 printf 'PASS: KWin smoke rejects non-TTY, missing opt-in and nested Ly starts\n'
