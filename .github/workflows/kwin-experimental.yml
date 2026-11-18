@@ -49,6 +49,7 @@ jobs:
           bash -n trials/kwin/ly-session.sh
           bash -n trials/kwin/setup-ly.sh
           bash tests/test-kwin-ly.sh
+          python3 tests/test-kwin-ly-install.py
           python3 -m py_compile trials/kwin/sway-ly-label.py
           python3 tests/test-kwin-sway-ly-label.py
           bash -n trials/kwin/tty-command.sh
