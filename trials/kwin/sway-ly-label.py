@@ -61,6 +61,13 @@ def main() -> int:
         before = TARGET.read_bytes()
         text = before.decode("utf-8")
         after = renamed(text).encode("utf-8")
+        # The distribution's separate, package-owned sway.desktop is not
+        # ours to remove or change. Ly may therefore list Sway twice.
+        stock = Path("/usr/share/wayland-sessions/sway.desktop")
+        if stock.is_file():
+            print("NOTE: The stock Sway Ly session also exists. "
+                  "Ly may show two entries named Sway. "
+                  "The stock session is preserved.")
         if after == before:
             print("Already Name=Sway; no changes")
             return 0
