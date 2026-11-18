@@ -5,6 +5,20 @@ umask 077
 
 fail() { printf 'KWin smoke test: %s\n' "$*" >&2; return 1; }
 
+# The cleanup trap runs on shell exit, after main() has returned and its
+# local variables are out of scope. Keep the child PID and cleanup at script
+# scope; never kill anything except the process this script launched.
+bridge_pid=''
+stop_bridge() {
+    local pid="${bridge_pid:-}"
+    [[ -n "$pid" ]] || return 0
+    if kill -0 "$pid" 2>/dev/null; then
+        kill -TERM -- "$pid" 2>/dev/null || :
+    fi
+    wait "$pid" 2>/dev/null || :
+    bridge_pid=''
+}
+
 valid_system_executable() {
     # Arch officially packages command aliases such as /usr/bin/python3 as
     # symlinks to versioned, executable files. Reject broken/non-executable
@@ -65,6 +79,12 @@ main() {
     [[ -S "$XDG_RUNTIME_DIR/bus" ]] || {
         fail 'A user D-Bus session socket is required.'; return 1;
     }
+    # Ly may not populate DBUS_SESSION_BUS_ADDRESS even with a valid
+    # logind-provided user bus. Use the validated local socket for this
+    # trial rather than starting a new bus or touching system services.
+    if [[ -z ${DBUS_SESSION_BUS_ADDRESS:-} ]]; then
+        export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"
+    fi
     local compositor
     for compositor in Hyprland sway kwin_wayland; do
         if pgrep -u "$(id -u)" -x "$compositor" >/dev/null 2>&1; then
@@ -100,12 +120,15 @@ main() {
 
     # Claim the private D-Bus receiver before KWin scripts publish their
     # initial workspace state. Never start an unrelated user service.
-    local bridge_pid='' attempt
-    stop_bridge() {
-        if [[ -n "$bridge_pid" ]] && kill -0 "$bridge_pid" 2>/dev/null; then
-            kill -TERM "$bridge_pid" 2>/dev/null || :
-            wait "$bridge_pid" 2>/dev/null || :
+    local attempt
+    show_bridge_failure() {
+        fail "$1" || :
+        printf 'KWin bridge diagnostics: %s\n' "$private/bridge.log" >&2
+        if [[ -f "$private/bridge.log" && ! -L "$private/bridge.log" &&
+              -O "$private/bridge.log" ]]; then
+            tail -n 80 -- "$private/bridge.log" >&2 || :
         fi
+        return 1
     }
     trap stop_bridge EXIT
     /usr/bin/python3 "$origin/state-bridge.py" --state-dir "$private/runtime" \
@@ -114,13 +137,13 @@ main() {
     for (( attempt=0; attempt<40; attempt++ )); do
         [[ -f "$private/runtime/ready" && ! -L "$private/runtime/ready" ]] && break
         if ! kill -0 "$bridge_pid" 2>/dev/null; then
-            fail 'KWin D-Bus bridge terminated; see private bridge.log.'
+            show_bridge_failure 'KWin D-Bus bridge exited before readiness.'
             return 1
         fi
         sleep 0.05
     done
     [[ -f "$private/runtime/ready" ]] || {
-        fail 'Timed out waiting for KWin D-Bus bridge initialization.'
+        show_bridge_failure 'Timed out waiting for KWin D-Bus bridge initialization.'
         return 1
     }
 

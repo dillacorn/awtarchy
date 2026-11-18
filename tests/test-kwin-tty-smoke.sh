@@ -58,4 +58,36 @@ if valid_system_executable "$tmp"; then
     printf 'ERROR: accepted a directory as an executable\n' >&2; false
 fi
 printf 'PASS: KWin guard allows official binary symlinks and refuses unsafe targets\n'
+# A premature startup failure must not produce an unbound-variable error.
+# The global cleanup trap must reap only the exact process launched here,
+# even after the invoking main() function's local scope disappears.
+sed -n '/^stop_bridge() {/,/^}/p' "$target" > "$tmp/stop-bridge.sh"
+[[ -s "$tmp/stop-bridge.sh" ]]
+if (
+    set -euo pipefail
+    source "$tmp/stop-bridge.sh"
+    bridge_pid=''
+    trap stop_bridge EXIT
+    false
+); then
+    printf 'ERROR: expected simulated startup failure\n' >&2
+    false
+fi
+(
+    set -euo pipefail
+    source "$tmp/stop-bridge.sh"
+    bridge_pid=''
+    trap stop_bridge EXIT
+    sleep 20 &
+    bridge_pid=$!
+    printf '%s\n' "$bridge_pid" > "$tmp/bridge.pid"
+)
+child_pid="$(< "$tmp/bridge.pid")"
+if kill -0 "$child_pid" 2>/dev/null; then
+    printf 'ERROR: orphaned KWin test bridge PID %s\n' "$child_pid" >&2
+    kill -TERM "$child_pid" 2>/dev/null || :
+    false
+fi
+grep -Fq 'export DBUS_SESSION_BUS_ADDRESS="unix:path=$XDG_RUNTIME_DIR/bus"' "$target"
+printf 'PASS: KWin bridge cleanup survives main scope and reaps its child\n'
 printf 'PASS: KWin smoke rejects non-TTY, missing opt-in and nested Ly starts\n'

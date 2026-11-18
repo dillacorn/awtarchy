@@ -135,6 +135,23 @@ This renames only the display label in the existing
 config directory, session wrapper, or install a second Sway session.
 An unknown local entry is preserved and must be inspected manually.
 
+## Ly bridge startup and session diagnostics
+
+The trial's separate workspace D-Bus bridge is launched **before** KWin.
+Its PID is tracked for the script lifetime and terminated when the trial
+returns to Ly, including early startup failures. Missing
+`DBUS_SESSION_BUS_ADDRESS` is populated from the validated
+`$XDG_RUNTIME_DIR/bus` socket for the trial only. When bridge startup
+fails, the Ly log includes the last 80 bridge-log lines and the exact
+private log location under `~/.local/state/awtarchy/kwin-smoke.*/bridge.log`.
+No previous user or system D-Bus services are killed automatically.
+
+A first launch followed by a D-Bus-name collision can indicate a leftover
+bridge from an older launcher with the out-of-scope EXIT-trap bug. Inspect
+`bridge.log` and the exact old process identity before stopping anything.
+The KWin rendering/UI experience is still a minimal integration probe,
+not the full Awtarchy Quickshell environment.
+
 ## Standalone DRM smoke test (not the Awtarchy session)
 
 For testers who **already have** the official `kwin`, `xorg-xwayland`,
