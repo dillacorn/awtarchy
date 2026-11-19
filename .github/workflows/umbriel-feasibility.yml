@@ -1,0 +1,32 @@
+name: Umbriel Feasibility (read only)
+
+on:
+  push:
+    branches:
+      - UmbrielWM_Migration_Trial_Investigation
+    paths:
+      - trials/umbriel/**
+      - tests/test-umbriel-*
+      - .github/workflows/umbriel-feasibility.yml
+  pull_request:
+    paths:
+      - trials/umbriel/**
+      - tests/test-umbriel-*
+      - .github/workflows/umbriel-feasibility.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-and-readonly-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+      - name: Python syntax and isolated hardware/package survey
+        run: |
+          python3 -m py_compile trials/umbriel/preflight.py
+          python3 tests/test-umbriel-preflight.py
+          python3 trials/umbriel/preflight.py
+      - name: Whitespace validation
+        run: git diff --check HEAD^ HEAD
