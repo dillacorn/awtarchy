@@ -17,6 +17,8 @@ MANAGER = TRIAL / "quickshell.sh"
 OUTPUT_INFO = TRIAL / "monitor-info.py"
 DDC_STATUS = TRIAL / "ddc.sh"
 DDC_CONTROL = TRIAL / "hypr-ddc-brightness.sh"
+MODE_CONTROL = TRIAL / "mode-control.sh"
+TOGGLE_UTILITY = TRIAL / "toggle-utility.py"
 
 def command(args):
     result = subprocess.run(args, capture_output=True, text=True, timeout=5)
@@ -141,8 +143,27 @@ def action(args):
             raise RuntimeError("Awtarchy DDC controller unavailable")
         command([str(DDC_CONTROL), "--monitor", mon, "set-percent", percent])
         return
+    if name == "submap":
+        if len(rest) != 1 or rest[0] not in ("reset", "noalt", "mouse", "vm"):
+            raise ValueError("Invalid Sway submap")
+        if not MODE_CONTROL.is_file() or MODE_CONTROL.is_symlink():
+            raise RuntimeError("Sway input-mode controller unavailable")
+        argv = ["reset"] if rest[0] == "reset" else ["toggle", rest[0]]
+        # A direct mode request should select that mode rather than toggle it
+        # off when already active; the existing mode control is toggle-based.
+        state = Path(os.environ.get("XDG_RUNTIME_DIR",
+            os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))) / "awtarchy-sway-submap"
+        current = state.read_text().strip() if state.is_file() and not state.is_symlink() else ""
+        if rest[0] == "reset" or current == rest[0]:
+            if rest[0] != "reset":
+                return
+            argv = ["reset"]
+        command(["bash", str(MODE_CONTROL), *argv])
+        return
     if name == "wallpaper" and not rest:
-        command(["awtwall"])
+        if not TOGGLE_UTILITY.is_file() or TOGGLE_UTILITY.is_symlink():
+            raise RuntimeError("Sway wallpaper toggle unavailable")
+        command(["python3", str(TOGGLE_UTILITY), "wallpicker"])
         return
     raise RuntimeError(f"Sway setting '{name}' is not supported; nothing was changed")
 
