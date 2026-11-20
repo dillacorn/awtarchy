@@ -35,7 +35,7 @@ def outputs_from_saved_hyprland():
         if not match:
             continue
         fields = {}
-        source = match.group(1)
+        source = match.group(1).strip().rstrip(",").strip()
         fields_re = re.compile(
             r"""\s*(output|mode|position|scale|vrr)\s*=\s*("[^"]*"|'[^']*'|\d+(?:\.\d+)?)\s*(?:,|$)"""
         )
