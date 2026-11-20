@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -28,16 +29,48 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
         config / "umbriel/config.toml": src / "native-config.toml",
         target / "config.toml": src / "config.toml",
     }
+    # Keep the generated migration in Umbriel's private include. It is
+    # regenerated from the selected source, never executed as Lua/Sway shell.
+    spec = importlib.util.spec_from_file_location("awtarchy_umbriel_migrate", src / "migrate.py")
+    migrator = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(migrator)
+    override = os.environ.get("AWTARCHY_MIGRATE_FROM", "auto")
+    migrated, info = migrator.migrate(home, override)
+    print("MIGRATION: " + info["source"] + " (" + info["selection"] +
+          "), displays=" + str(info["outputs"]) +
+          ", shortcuts=" + str(info["keybinds"]))
+    if info["outputs"] == 0:
+        print("MIGRATION: no verified explicit display rules; defaults retained")
+    result = {target / "migrated.toml": migrated}
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
                  "position.sh", "runtime-rules.sh"):
         sources[target / name] = src / name
-    result = {}
     for dst, origin in sources.items():
         if origin.is_symlink() or not origin.is_file():
             raise ValueError("Unsafe Umbriel source " + str(origin))
         result[dst] = origin.read_bytes()
     tomllib.loads(result[target / "config.toml"].decode())
     tomllib.loads(result[config / "umbriel/config.toml"].decode())
+    # Validate the full include stack before staging any live user config.
+    # An invalid native config must not be installed or activated.
+    if shutil.which("umbriel") is not None:
+        testroot = stage / "validate/umbriel"
+        testroot.mkdir(parents=True, exist_ok=True)
+        for name, data in (
+            ("config.toml", result[config / "umbriel/config.toml"]),
+            ("awtarchy-trial/config.toml", result[target / "config.toml"]),
+            ("awtarchy-trial/migrated.toml", result[target / "migrated.toml"]),
+        ):
+            dest = testroot / name
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_bytes(data)
+        env = dict(os.environ)
+        env["XDG_CONFIG_HOME"] = str(testroot.parent)
+        check = subprocess.run(["umbriel", "config", "validate"], env=env,
+                               capture_output=True, text=True, timeout=12)
+        if check.returncode:
+            raise ValueError("Umbriel rejected migrated config: " +
+                             (check.stderr or check.stdout).strip()[:2500])
 
     rendered = stage / "awtarchy-umbriel"
     manager = stage / "quickshell.sh"
@@ -135,12 +168,19 @@ def reconcile(repo: Path, home: Path, mode: str):
             raise ValueError("Unsafe or unowned Umbriel file " + str(target))
     updated = dict(baseline)
     new_files = changes = preserved = 0
-    for target, content in sorted(desired.items()):
+    # Install migration data before publishing an include that references it.
+    # On an already running Umbriel session this avoids an incomplete reload.
+    native = home / ".config/umbriel/config.toml"
+    ordered = sorted(desired, key=lambda path: (
+        path == native, str(path)))
+    for target in ordered:
+        content = desired[target]
         key = str(target.relative_to(home))
         expected = digest(content)
         existing = target.read_bytes() if target.exists() else None
         if existing == content:
-            updated[key] = expected
+            if mode == "apply":
+                updated[key] = expected
             continue
         if existing is None:
             new_files += 1
