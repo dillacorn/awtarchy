@@ -7,10 +7,10 @@ set -euo pipefail
     printf 'Capture requires an active Umbriel session\n' >&2
     exit 1
 }
-[[ $# -eq 1 ]] || { printf 'Usage: capture.sh area|window|display|display-copy\n' >&2; exit 2; }
+[[ $# -eq 1 ]] || { printf 'Usage: capture.sh area|window|display|display-copy|print\n' >&2; exit 2; }
 mode="$1"
 case "$mode" in
-    area|window|display|display-copy) ;;
+    area|window|display|display-copy|print) ;;
     *) printf 'Unknown capture mode\n' >&2; exit 2 ;;
 esac
 
@@ -59,7 +59,7 @@ capture() {
         area)
             geometry="$(slurp -b '#ffffff20' -c '#00000040' 9>&-)" || return 1
             ;;
-        display)
+        display|print)
             geometry="$(slurp -o -r -c '#00000000' 9>&-)" || return 1
             ;;
         display-copy)
@@ -115,6 +115,7 @@ capture() {
     if [[ -f "$sound" && ! -L "$sound" ]]; then
         style=satty
         [[ "$mode" == display-copy ]] && style=direct
+        [[ "$mode" == print ]] && style=print
         bash "$sound" play "$style" 9>&- >/dev/null 2>&1 || true
     fi
     wl-copy --type image/png < "$image" 9>&- || return 1
@@ -143,7 +144,7 @@ if [[ "$mode" == display-copy ]]; then
     fi
     printf 'Saved and copied: %s\n' "$saved"
 else
-    if [[ "$mode" == display ]]; then
+    if [[ "$mode" == display || "$mode" == print ]]; then
         satty --filename "$image" --fullscreen \
             --output-filename "$directory/$(date +%m%d%Y-%I%p-%S).png"
     else
