@@ -344,6 +344,14 @@ default_floating = true
 default_floating_size = { width = 0.80, height = 0.85 }
 default_position = { x = 0, y = 0, anchor = "center" }
 
+# Some Foot wrappers retain their generic app-id. Match the exact terminal
+# title instead of floating every Foot terminal; never affect normal shells.
+[[window_rule]]
+match.title = "^btop$"
+default_floating = true
+default_floating_size = { width = 0.80, height = 0.85 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
 [[window_rule]]
 match.app_id = "^(maccel)$"
 default_floating = true
@@ -352,6 +360,12 @@ default_position = { x = 0, y = 0, anchor = "center" }
 
 [[window_rule]]
 match.app_id = "^(Wiremix)$"
+default_floating = true
+default_floating_size = { width = 0.65, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.title = "^Wiremix$"
 default_floating = true
 default_floating_size = { width = 0.65, height = 0.70 }
 default_position = { x = 0, y = 0, anchor = "center" }
