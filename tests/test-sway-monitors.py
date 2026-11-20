@@ -150,13 +150,21 @@ with TemporaryDirectory(prefix="sway-saved-monitors-") as temp:
         'hl.monitor({ output = "DP-3", mode = "1920x1080@239.761", position = "0x0", scale = 1, vrr = 0 })\n'
         '-- hl.monitor({ output = "DP-2", mode = "bad", position = "auto", scale = 2 })\n',
         encoding="utf-8")
-    with patch.dict(os.environ, {"XDG_CONFIG_HOME": temp, "XDG_CURRENT_DESKTOP": "sway"}):
+    with patch.dict(os.environ, {"XDG_CONFIG_HOME": temp, "XDG_CURRENT_DESKTOP": "sway"}), \
+         patch.object(module, "connected_drm_outputs", return_value={"DP-1", "DP-3"}):
         saved_lines = module.outputs_from_saved_hyprland()
         assert saved_lines == [
             "output DP-1 mode 1920x1080@400.002Hz position 0 1080 scale 1",
             "output DP-3 mode 1920x1080@239.761Hz position 0 0 scale 1",
             "output DP-1 adaptive_sync on",
         ], saved_lines
+        with patch.object(module, "connected_drm_outputs", return_value={"Virtual-1"}):
+            try:
+                module.outputs_from_saved_hyprland()
+            except ValueError:
+                pass
+            else:
+                raise AssertionError("Imported settings for disconnected monitors")
         config.write_text('hl.monitor({ output = "DP-1", mode = "preferred", position = "auto", scale = "auto" })\n')
         try:
             module.outputs_from_saved_hyprland()
