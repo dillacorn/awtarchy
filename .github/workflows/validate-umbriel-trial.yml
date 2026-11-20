@@ -1,0 +1,36 @@
+name: Validate Umbriel experimental trial
+
+on:
+  push:
+    branches:
+      - feature/umbriel-quickshell-trial
+  pull_request:
+    paths:
+      - 'trials/umbriel/**'
+      - 'trials/sway/render-quickshell.py'
+      - 'trials/sway/render-manager.py'
+      - 'config/quickshell/**'
+      - 'local/bin/awtarchy'
+      - 'tests/test-umbriel-trial.py'
+      - '.github/workflows/validate-umbriel-trial.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-umbriel-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify Bash and Python syntax
+        run: |
+          set -euo pipefail
+          bash -n local/bin/awtarchy
+          for source in trials/umbriel/*.sh; do bash -n "$source"; done
+          python3 -m compileall -q trials/umbriel tests/test-umbriel-trial.py
+          git diff --check HEAD^..HEAD
+      - name: Validate Quickshell render and preserved state
+        run: |
+          set -euo pipefail
+          python3 tests/test-umbriel-trial.py
