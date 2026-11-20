@@ -138,7 +138,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
 
     # Without active generated Lua, unambiguous saved hyprmoncfg JSON profiles
     # can still restore the user's exact monitor modes, positions and VRR.
-    hypr.write_text('hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto", vrr = 0 })\\n')
+    hypr.write_text('hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto", vrr = 0 })\n')
     prof_dir = home / ".config/hyprmoncfg/profiles"
     prof_dir.mkdir(parents=True)
     saved = {
