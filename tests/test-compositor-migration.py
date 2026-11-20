@@ -80,8 +80,8 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
 
     # Restore the explicit-display fixture for subsequent migration checks.
     hypr.write_text(
-        'hl.monitor({ output = "DP-1", mode = "1920x1080@400.002014", position = "0x1080", scale = 1, vrr = 0 })\\n'
-        'hl.monitor({ output = "DP-3", mode = "1920x1080@239.761002", position = "0x0", scale = 1, vrr = 1 })\\n',
+        'hl.monitor({ output = "DP-1", mode = "1920x1080@400.002014", position = "0x1080", scale = 1, vrr = 0 })\n'
+        'hl.monitor({ output = "DP-3", mode = "1920x1080@239.761002", position = "0x0", scale = 1, vrr = 1 })\n',
         encoding="utf-8")
 
     # A generated active hyprmoncfg override beats the Awtarchy root defaults.
