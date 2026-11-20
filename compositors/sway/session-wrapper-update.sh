@@ -24,7 +24,7 @@ if [[ -n "${AWTARCHY_COMPOSITOR_RELEASE_SOURCE:-}" ]]; then
     }
     if [[ "$repo" =~ /awtarchy-[0-9a-f]{40}$ &&
           -f "$repo/config/hypr/hyprland.lua" &&
-          -f "$repo/trials/sway/setup.sh" ]]; then
+          -f "$repo/compositors/sway/setup.sh" ]]; then
         :  # Trusted stable release source, verified by the stable manager.
     elif [[ -d "$repo/.git" &&
             "$(git -C "$repo" branch --show-current)" == feature/simplify-compositor-management &&
@@ -43,7 +43,7 @@ else
     }
 fi
 
-source="$repo/trials/sway/session-launch.sh"
+source="$repo/compositors/sway/session-launch.sh"
 target=/usr/local/bin/awtarchy-sway-session
 [[ -f "$source" && ! -L "$source" ]] && bash -n "$source" || {
     printf 'Invalid Sway session launcher source\n' >&2

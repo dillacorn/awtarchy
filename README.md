@@ -48,7 +48,7 @@ Awtarchy-authored code and configuration is licensed under MIT unless otherwise 
 | **Repositories**   | core, extra, multilib, [AUR](https://aur.archlinux.org/), [Flathub](https://flathub.org/)                                                                                                              |
 | **Terminal**       | [Foot](https://codeberg.org/dnkl/foot)                                                                                                                                                    |
 | **Bootloader**     | [systemd-boot](https://man.archlinux.org/man/systemd-boot.7) and/or [Limine](https://github.com/limine-bootloader/limine)                                                                              |
-| **Window Manager** | [Hyprland](https://github.com/hyprwm/Hyprland) (default) or [Sway](https://github.com/swaywm/sway) (optional), individually or together ([Sway details](trials/sway/README.md))                                                                                 |
+| **Window Manager** | [Hyprland](https://github.com/hyprwm/Hyprland) (default) or [Sway](https://github.com/swaywm/sway) (optional), individually or together ([Sway details](compositors/sway/README.md))                                                                                 |
 | **Shell**          | [Quickshell](https://github.com/quickshell-mirror/quickshell) ([Awtarchy config](https://github.com/dillacorn/awtarchy/tree/main/config/quickshell/awtarchy))                                          |
 | **Kernel**         | [Arch Linux](https://archlinux.org/packages/core/x86_64/linux/) · [Arch Linux LTS](https://archlinux.org/packages/core/x86_64/linux-lts/) · [CachyOS kernel](https://github.com/CachyOS/linux-cachyos) |
 

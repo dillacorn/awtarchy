@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 CONFIG = (TRIAL / "config").read_text(encoding="utf-8")
 RUNTIME = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text(encoding="utf-8")
 MANAGER = (ROOT / "local/share/awtarchy/awtarchy-compositor-manager.sh").read_text(encoding="utf-8")

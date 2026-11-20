@@ -8,7 +8,7 @@ import tempfile
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT_SOURCE = ROOT / "trials/sway/capture.sh"
+SCRIPT_SOURCE = ROOT / "compositors/sway/capture.sh"
 SOUND_SOURCE = ROOT / "config/hypr/scripts/screenshot_sound.sh"
 
 with tempfile.TemporaryDirectory(prefix="sway-satty-contract-") as directory:

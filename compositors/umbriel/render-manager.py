@@ -7,7 +7,7 @@ import sys
 
 
 def render(repo, destination):
-    sway = repo / "trials/sway/render-manager.py"
+    sway = repo / "compositors/sway/render-manager.py"
     spec = importlib.util.spec_from_file_location("awtarchy_sway_manager_renderer", sway)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

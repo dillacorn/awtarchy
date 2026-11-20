@@ -33,7 +33,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-release-source-") as work:
         '#!/usr/bin/env bash\nset -euo pipefail\n'
         'printf "core:%s %s %s\\n" "$1" "$2" "$3"\n'
         'if [[ "$1" != status ]]; then\n'
-        '  [[ -f "$AWTARCHY_COMPOSITOR_RELEASE_SOURCE/trials/sway/setup.sh" ]]\n'
+        '  [[ -f "$AWTARCHY_COMPOSITOR_RELEASE_SOURCE/compositors/sway/setup.sh" ]]\n'
         '  [[ -f "$AWTARCHY_COMPOSITOR_RELEASE_SOURCE/config/hypr/hyprland.lua" ]]\n'
         'fi\n')
     sha = "a" * 40
@@ -41,7 +41,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-release-source-") as work:
     top = "awtarchy-" + sha
     archive = root / "archive.tar.gz"
     with tarfile.open(archive, "w:gz") as tar:
-        for name in (top + "/trials/sway/setup.sh",
+        for name in (top + "/compositors/sway/setup.sh",
                      top + "/config/hypr/hyprland.lua"):
             payload = b"# fixture\n"
             info = tarfile.TarInfo(name)

@@ -11,7 +11,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "trials/sway/mime-parity.py"
+SCRIPT = ROOT / "compositors/sway/mime-parity.py"
 spec = importlib.util.spec_from_file_location("mime_parity", SCRIPT)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

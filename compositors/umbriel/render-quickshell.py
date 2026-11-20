@@ -22,8 +22,8 @@ RENAME = {
 
 def render(repo: Path, destination: Path):
     root = repo.resolve()
-    bridge_dir = root / "trials/umbriel"
-    sway_renderer = root / "trials/sway/render-quickshell.py"
+    bridge_dir = root / "compositors/umbriel"
+    sway_renderer = root / "compositors/sway/render-quickshell.py"
     if destination.exists() or destination.is_symlink():
         raise ValueError("Refusing to replace existing Umbriel shell")
     spec = importlib.util.spec_from_file_location("awtarchy_sway_renderer", sway_renderer)
@@ -31,7 +31,7 @@ def render(repo: Path, destination: Path):
     spec.loader.exec_module(sway)
     with tempfile.TemporaryDirectory(prefix="awtarchy-umbriel-qs-") as temp:
         stage = Path(temp) / "awtarchy-sway"
-        sway.render(root / "config/quickshell/awtarchy", stage, root / "trials/sway")
+        sway.render(root / "config/quickshell/awtarchy", stage, root / "compositors/sway")
         result = Path(temp) / "awtarchy-umbriel"
         result.mkdir()
         for source in sorted(stage.iterdir()):

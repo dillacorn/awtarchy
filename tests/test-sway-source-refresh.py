@@ -5,7 +5,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "trials/sway/source-refresh.sh"
+SCRIPT = ROOT / "compositors/sway/source-refresh.sh"
 BRANCH = "SwayWM_Migration_Trial_Investigation"
 
 

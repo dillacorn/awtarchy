@@ -6,7 +6,7 @@ fail() { printf 'Sway trial setup: %s\n' "$*" >&2; return 1; }
 case "$1" in --check|--install) action="$1" ;; *) fail 'Unknown action'; exit 2 ;; esac
 [[ "$(id -u)" != 0 && -f /etc/arch-release ]] || { fail 'Use a normal Arch/CachyOS user'; exit 1; }
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-src="$repo/trials/sway"
+src="$repo/compositors/sway"
 tty_source="$src/tty-launch.sh"
 tty_dir="$HOME/.local/bin"
 tty_launcher="$tty_dir/sway"
@@ -58,7 +58,7 @@ for name in "${sources[@]}"; do
         fi
     fi
 done
-workspace_source="$repo/trials/workspaces"
+workspace_source="$repo/compositors/sway/workspaces"
 workspace_target="$config/sway/workspaces"
 [[ -f "$workspace_source" && ! -L "$workspace_source" ]] || {
     fail "Missing Sway workspace source"; exit 1;

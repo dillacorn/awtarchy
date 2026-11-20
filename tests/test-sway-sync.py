@@ -15,7 +15,7 @@ import tempfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-SYNC = ROOT / "trials/sway/sync.py"
+SYNC = ROOT / "compositors/sway/sync.py"
 sys.path.insert(0, str(SYNC.parent))
 import sync as sway_sync
 
@@ -44,9 +44,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     tty = home / ".local/bin/sway"
     native = home / ".config/sway/config"
     assert native in desired
-    assert desired[native] == (ROOT / "trials/sway/native-config").read_bytes()
+    assert desired[native] == (ROOT / "compositors/sway/native-config").read_bytes()
     assert tty in desired
-    assert desired[tty] == (ROOT / "trials/sway/tty-launch.sh").read_bytes()
+    assert desired[tty] == (ROOT / "compositors/sway/tty-launch.sh").read_bytes()
     # The source stub must remain separate from the user's saved output data.
     assert desired[home / ".config/sway/awtarchy-trial/outputs"].startswith(b"#")
     assert desired[home / ".config/sway/workspaces"].startswith(b"#")

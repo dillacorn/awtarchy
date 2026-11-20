@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-IPC = ROOT / "trials/sway/ipc.sh"
+IPC = ROOT / "compositors/sway/ipc.sh"
 
 QS = r"""#!/usr/bin/env bash
 set -euo pipefail

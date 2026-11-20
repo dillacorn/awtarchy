@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 config = (TRIAL / "config").read_text()
 blocks = {}
 for name in ("noalt", "mouse", "vm"):

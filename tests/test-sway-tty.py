@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LAUNCHER = ROOT / "trials/sway/tty-launch.sh"
+LAUNCHER = ROOT / "compositors/sway/tty-launch.sh"
 assert LAUNCHER.is_file()
 assert subprocess.run(["bash", "-n", str(LAUNCHER)], check=False).returncode == 0
 body = LAUNCHER.read_text(encoding="utf-8")

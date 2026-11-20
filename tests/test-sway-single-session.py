@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 SCRIPT = TRIAL / "legacy-session-cleanup.sh"
 MANAGER = (ROOT / "local/share/awtarchy/awtarchy-compositor-manager.sh").read_text()
 RUNTIME = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text()
@@ -18,7 +18,7 @@ assert 'native_config="$config/sway/config"' in SETUP
 assert 'install -m 0644 -- "$native_source" "$native_config"' in SETUP
 assert 'legacy-session-cleanup.sh" apply "$repo"' in MANAGER
 assert 'legacy-session-cleanup.sh" apply "$REPO_DIR"' in RUNTIME
-assert '"$repo/trials/sway/sway.desktop:$session_file"' not in MANAGER
+assert '"$repo/compositors/sway/sway.desktop:$session_file"' not in MANAGER
 assert 'install -m 0644 -- "${source}/sway.desktop" "$desktop"' not in RUNTIME
 # Awtarchy menu presents one Install/Remove/Cancel choice only.
 # Helpers must not ask the user to type another authorization phrase.

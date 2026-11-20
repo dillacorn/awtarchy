@@ -8,7 +8,7 @@ set -euo pipefail
 }
 mode="$1"
 repo="$2"
-source_file="$repo/trials/sway/sway.desktop"
+source_file="$repo/compositors/sway/sway.desktop"
 legacy=/usr/share/wayland-sessions/awtarchy-sway-trial.desktop
 native=/usr/share/wayland-sessions/sway.desktop
 [[ "$repo" == /* && -d "$repo" && ! -L "$repo" &&

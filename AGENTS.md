@@ -120,6 +120,20 @@ Do not assume old Awtarchy architecture still exists. Inspect these current entr
 - Contains monitor defaults, environment, permissions, autostart, look/feel, input, bindings, submaps, and related desktop behavior.
 - Preserve the existing Lua configuration approach unless a task explicitly changes that architecture.
 
+### Optional compositor sources
+
+`compositors/sway/` and `compositors/umbriel/`
+
+- Repository source trees for optional compositors, including their session
+  setup, shell rendering, migration helpers, and integration tests.
+- Do not recreate a `trials/` source directory in the main repository.
+- Keep the default Hyprland source in `config/hypr/` unless a separately
+  scoped change explicitly migrates that installer-managed tree.
+- Repository layout changes must not rewrite personal compositor state in
+  `~/.config/hypr/`, `~/.config/sway/`, or `~/.config/umbriel/`.
+- Existing installed `awtarchy-trial` state directories remain supported
+  until an explicit preservation-first migration is implemented and verified.
+
 ### Quickshell
 
 `config/quickshell/awtarchy/`

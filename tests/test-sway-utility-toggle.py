@@ -6,7 +6,7 @@ from unittest.mock import patch
 import os
 
 root = Path(__file__).resolve().parents[1]
-source = root / "trials/sway/toggle-utility.py"
+source = root / "compositors/sway/toggle-utility.py"
 spec = importlib.util.spec_from_file_location("sway_toggle_utility", source)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

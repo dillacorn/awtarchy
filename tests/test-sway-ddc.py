@@ -12,7 +12,7 @@ from unittest.mock import patch
 ROOT = Path(__file__).resolve().parents[1]
 CONTROLLER = ROOT / "config/hypr/scripts/hypr-ddc-brightness.sh"
 BAR = ROOT / "config/hypr/scripts/ddc_brightness.sh"
-QUICKSETTINGS = ROOT / "trials/sway/quicksettings.py"
+QUICKSETTINGS = ROOT / "compositors/sway/quicksettings.py"
 
 with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
     tmp = Path(directory)
@@ -27,7 +27,7 @@ with tempfile.TemporaryDirectory(prefix="sway-ddc-") as directory:
     # Stage the repository sources like the installer (0755) before executing.
     staged_scripts = config / "sway/awtarchy-trial"
     staged_scripts.mkdir(parents=True)
-    adapter_source = ROOT / "trials/sway/ddc.sh"
+    adapter_source = ROOT / "compositors/sway/ddc.sh"
     for source in (CONTROLLER, BAR, adapter_source):
         target = staged_scripts / source.name
         shutil.copyfile(source, target)

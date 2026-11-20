@@ -1577,12 +1577,12 @@ run_compositor_manager() {
        "$(git -C "$umbriel_repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
        "$(git -C "$umbriel_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
        -z "$(git -C "$umbriel_repo" status --porcelain --untracked-files=no)" &&
-       -f "$umbriel_repo/trials/umbriel/manage.sh" &&
+       -f "$umbriel_repo/compositors/umbriel/manage.sh" &&
        -f "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" ]] ||
       die "Invalid Umbriel trial checkout; installed compositor manager untouched."
     case "${1:-}" in
       install-umbriel|remove-umbriel)
-        bash "$umbriel_repo/trials/umbriel/manage.sh" "$1" \
+        bash "$umbriel_repo/compositors/umbriel/manage.sh" "$1" \
           "$([[ "${2:-}" == plan ]] && printf preview || printf apply)" ;;
       status|install-sway|install-hyprland|remove-sway|remove-hyprland)
         AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$umbriel_repo" \

@@ -91,7 +91,7 @@ elif pacman -Qq umbriel >/dev/null 2>&1; then
 else
     printf 'Umbriel: requires AUR package umbriel-git (yay)\n'
 fi
-python3 "$repo/trials/umbriel/sync.py" preview --repo "$repo"
+python3 "$repo/compositors/umbriel/sync.py" preview --repo "$repo"
 if [[ "$mode" == preview ]]; then
     printf 'Preview only. No packages, session entries or configs changed.\n'
     exit 0
@@ -136,24 +136,24 @@ entry=/usr/share/wayland-sessions/umbriel.desktop
 check="$(mktemp -d)"
 trap 'rm -rf -- "$check"' EXIT
 mkdir -p "$check/umbriel/awtarchy-trial"
-cp -- "$repo/trials/umbriel/native-config.toml" "$check/umbriel/config.toml"
-cp -- "$repo/trials/umbriel/config.toml" "$check/umbriel/awtarchy-trial/config.toml"
+cp -- "$repo/compositors/umbriel/native-config.toml" "$check/umbriel/config.toml"
+cp -- "$repo/compositors/umbriel/config.toml" "$check/umbriel/awtarchy-trial/config.toml"
 if ! XDG_CONFIG_HOME="$check" umbriel config validate; then
     printf 'Umbriel rejected the trial config. No user config applied.\n' >&2
     false
 fi
-python3 "$repo/trials/umbriel/sync.py" apply --repo "$repo"
+python3 "$repo/compositors/umbriel/sync.py" apply --repo "$repo"
 # Ly may use Awtarchy's curated session directory instead of the package
 # directory. Register only the Umbriel package entry; never edit Ly config,
 # replace an existing session file, or add duplicate compositor entries.
-if ! bash "$repo/trials/umbriel/register-ly-session.sh" apply; then
+if ! bash "$repo/compositors/umbriel/register-ly-session.sh" apply; then
     printf 'Umbriel config is staged, but Ly registration needs attention.\n' >&2
-    printf 'Review safely: bash %s/trials/umbriel/register-ly-session.sh plan\n' "$repo" >&2
+    printf 'Review safely: bash %s/compositors/umbriel/register-ly-session.sh plan\n' "$repo" >&2
     false
 fi
 printf 'Umbriel trial files staged; Ly visibility is not yet verified.\n'
 printf 'Ly reads session entries when it starts. A reboot may be necessary\n'
 printf 'before Umbriel appears; do not restart Ly from an active desktop.\n'
-printf 'If Umbriel remains absent, run: bash %s/trials/umbriel/diagnose-session.sh\n' "$repo"
+printf 'If Umbriel remains absent, run: bash %s/compositors/umbriel/diagnose-session.sh\n' "$repo"
 printf 'Existing compositor configs and sessions remain installed.\n'
 printf 'Reboot is recommended before first login; no automatic restart.\n'

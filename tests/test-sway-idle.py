@@ -10,7 +10,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 config = (TRIAL / "swayidle.conf").read_text()
 manager_source = (TRIAL / "idle-manager.py").read_text()
 script = TRIAL / "idle-action.sh"

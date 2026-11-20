@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "trials/umbriel/register-ly-session.sh"
+SCRIPT = ROOT / "compositors/umbriel/register-ly-session.sh"
 source = SCRIPT.read_text(encoding="utf-8")
 assert 'sudo ln -sT -- "$source" "$target"' in source
 assert 'Name=Umbriel' in source

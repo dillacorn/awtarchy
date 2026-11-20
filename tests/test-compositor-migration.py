@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location(
-    "awtarchy_umbriel_migration", ROOT / "trials/umbriel/migrate.py")
+    "awtarchy_umbriel_migration", ROOT / "compositors/umbriel/migrate.py")
 module = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(module)
 

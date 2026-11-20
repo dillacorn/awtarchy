@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 root = Path(__file__).resolve().parents[1]
-script = root / "trials/sway/theme-colors.sh"
+script = root / "compositors/sway/theme-colors.sh"
 
 with tempfile.TemporaryDirectory(prefix="sway-theme-colors-") as temp:
     base = Path(temp)

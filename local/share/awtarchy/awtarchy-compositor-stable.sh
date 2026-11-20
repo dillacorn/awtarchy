@@ -105,7 +105,7 @@ with tarfile.open(archive, "r:gz") as reader:
 PY
 tar -xzf "$tmp/source.tar.gz" -C "$tmp"
 source="$tmp/awtarchy-$sha"
-[[ -f "$source/trials/sway/setup.sh" && -f "$source/config/hypr/hyprland.lua" ]] || {
+[[ -f "$source/compositors/sway/setup.sh" && -f "$source/config/hypr/hyprland.lua" ]] || {
     printf 'Release %s does not contain stable Sway support. Run awtarchy update first.\n' "$tag" >&2
     false
 }

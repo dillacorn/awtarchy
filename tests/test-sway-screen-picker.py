@@ -10,7 +10,7 @@ import tempfile
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 module_path = TRIAL / "portal-chooser.py"
 spec = importlib.util.spec_from_file_location("awtarchy_portal", module_path)
 chooser = importlib.util.module_from_spec(spec)

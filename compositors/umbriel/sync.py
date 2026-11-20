@@ -22,7 +22,7 @@ def digest(data: bytes) -> str:
 
 
 def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
-    src = repo / "trials/umbriel"
+    src = repo / "compositors/umbriel"
     config = home / ".config"
     target = config / "umbriel/awtarchy-trial"
     sources = {

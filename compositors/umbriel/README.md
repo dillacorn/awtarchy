@@ -9,7 +9,7 @@ Awtarchy update/reset state is not modified.
 
 Run the checkout's `local/bin/awtarchy compositor` with
 `AWTARCHY_UMBRIEL_TRIAL_SOURCE` set to the absolute clean checkout path.
-Choose **Install Umbriel**. This calls only `trials/umbriel/manage.sh`,
+Choose **Install Umbriel**. This calls only `compositors/umbriel/manage.sh`,
 checks AUR and existing packages, allows the interactive `yay` build for
 `umbriel-git`, requires the upstream package-owned `umbriel.desktop`
 session, then validates the experimental TOML against the installed binary
@@ -29,7 +29,7 @@ Ly enumerates session directories when the interface starts. If Ly started
 before the Umbriel package was installed, reboot before testing its list;
 never restart Ly from an active graphical session as a shortcut.
 
-For missing entries, run the read-only `trials/umbriel/diagnose-session.sh`
+For missing entries, run the read-only `compositors/umbriel/diagnose-session.sh`
 script. It checks installed packages, the desktop entry and ownership, Ly's
 configured Wayland session paths, and Ly's service start time. Do not create
 a duplicate .desktop entry to work around a stale list.

@@ -50,7 +50,7 @@ else
   [[ "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] ||
     { fail 'Trial source changed branch'; exit 1; }
 fi
-[[ -f "$repo/trials/sway/setup.sh" && -f "$repo/config/hypr/hyprland.lua" ]] ||
+[[ -f "$repo/compositors/sway/setup.sh" && -f "$repo/config/hypr/hyprland.lua" ]] ||
   { fail 'Compositor source incomplete'; exit 1; }
 printf 'Action: %s\n' "$operation"
 printf 'Personal configs are preserved. Shared packages are preserved.\n'
@@ -83,13 +83,13 @@ if [[ "$mode" == plan ]]; then
       # Review must remain read-only and never misreport an old checkout as
       # "already up to date". Only apply can change the registered Git tree.
       if [[ -z "$release_source" ]]; then
-        bash "$repo/trials/sway/source-refresh.sh" check "$repo"
+        bash "$repo/compositors/sway/source-refresh.sh" check "$repo"
       fi
-      python3 "$repo/trials/sway/sync.py" review --repo "$repo"
-      bash "$repo/trials/sway/session-wrapper-update.sh" plan "$repo"
-      bash "$repo/trials/sway/legacy-session-cleanup.sh" plan "$repo" ;;
+      python3 "$repo/compositors/sway/sync.py" review --repo "$repo"
+      bash "$repo/compositors/sway/session-wrapper-update.sh" plan "$repo"
+      bash "$repo/compositors/sway/legacy-session-cleanup.sh" plan "$repo" ;;
     install-hyprland)
-      python3 "$repo/trials/sway/stage-hyprland.py" --preview --repo "$repo" ;;
+      python3 "$repo/compositors/sway/stage-hyprland.py" --preview --repo "$repo" ;;
     *) : ;;
   esac
   printf 'Preview only; nothing changed.\n'
@@ -142,10 +142,10 @@ if [[ "$operation" == install-sway ]]; then
       libnotify jq python pipewire lxqt-policykit playerctl; do
     add_pkg "$pkg"
   done
-  bash "$repo/trials/sway/setup.sh" --check
+  bash "$repo/compositors/sway/setup.sh" --check
   # Check root destinations before any file installation. Do not overwrite others.
   for pair in \
-      "$repo/trials/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
+      "$repo/compositors/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
     source_descriptor="${pair%%:*}"
     installed_descriptor="${pair#*:}"
     [[ -f "$source_descriptor" && ! -L "$source_descriptor" ]] ||
@@ -156,7 +156,7 @@ if [[ "$operation" == install-sway ]]; then
         { fail "Existing session file must be reviewed: $installed_descriptor"; exit 1; }
     fi
   done
-  bash "$repo/trials/sway/setup.sh" --install
+  bash "$repo/compositors/sway/setup.sh" --install
   if [[ "${XDG_CURRENT_DESKTOP:-}" == Hyprland && -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ]]; then
     config="$HOME/.config/sway/awtarchy-trial/config"
     if python3 - "$config" <<'PY'
@@ -170,52 +170,52 @@ sys.exit(0 if not any(line.strip() and not line.lstrip().startswith("#")
                       for line in between.splitlines()) else 2)
 PY
     then
-      python3 "$repo/trials/sway/import-hypr-monitors.py" --preview
-      python3 "$repo/trials/sway/import-hypr-monitors.py" --apply
+      python3 "$repo/compositors/sway/import-hypr-monitors.py" --preview
+      python3 "$repo/compositors/sway/import-hypr-monitors.py" --apply
     fi
   else
     # Outside an active Hyprland session, import only explicit saved Lua
     # monitor values. Dynamic/auto rules are never evaluated or guessed.
-    if python3 "$repo/trials/sway/import-hypr-monitors.py" --from-saved --preview; then
-      python3 "$repo/trials/sway/import-hypr-monitors.py" --from-saved --apply
+    if python3 "$repo/compositors/sway/import-hypr-monitors.py" --from-saved --preview; then
+      python3 "$repo/compositors/sway/import-hypr-monitors.py" --from-saved --apply
     else
       printf 'No safe saved Hyprland output profile; keeping Sway display settings.\n'
     fi
   fi
   sudo install -d -m 0755 /usr/local/bin /usr/share/wayland-sessions
   [[ -e /usr/local/bin/awtarchy-sway-session ]] ||
-    sudo install -m 0755 "$repo/trials/sway/session-launch.sh" /usr/local/bin/awtarchy-sway-session
+    sudo install -m 0755 "$repo/compositors/sway/session-launch.sh" /usr/local/bin/awtarchy-sway-session
   # Keep the package-owned sway.desktop as the only Ly session.
-  bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
+  bash "$repo/compositors/sway/legacy-session-cleanup.sh" apply "$repo"
   baseline="$HOME/.local/state/awtarchy/sway-managed-baseline.json"
   if [[ ! -e "$baseline" && ! -L "$baseline" ]]; then
-    python3 "$repo/trials/sway/sync.py" record --repo "$repo"
+    python3 "$repo/compositors/sway/sync.py" record --repo "$repo"
   fi
 elif [[ "$operation" == update-sway ]]; then
   # Update exactly the registered trial branch, never main or another repo.
   # Only fast-forward a clean worktree; preserve all local edits/history.
   # This happens after the existing interactive update-sway confirmation.
   if [[ -z "$release_source" ]]; then
-    bash "$repo/trials/sway/source-refresh.sh" apply "$repo"
+    bash "$repo/compositors/sway/source-refresh.sh" apply "$repo"
   fi
   # Install the Sway-native monitor editor before its shortcut becomes active.
   add_pkg nwg-displays
   # Apply the branch-current diff; no package operations or compositor
   # removals are reachable through this branch.
-  python3 "$repo/trials/sway/sync.py" apply --repo "$repo"
+  python3 "$repo/compositors/sway/sync.py" apply --repo "$repo"
   # Root-owned Ly wrapper: exact known stock hashes only, with backup.
-  bash "$repo/trials/sway/session-wrapper-update.sh" apply "$repo"
-  bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
+  bash "$repo/compositors/sway/session-wrapper-update.sh" apply "$repo"
+  bash "$repo/compositors/sway/legacy-session-cleanup.sh" apply "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   # Validate every destination before installing anything. Copy only missing
   # Awtarchy scripts, shaders, configuration and shared shell files.
-  python3 "$repo/trials/sway/stage-hyprland.py" --preview --repo "$repo"
+  python3 "$repo/compositors/sway/stage-hyprland.py" --preview --repo "$repo"
   for pkg in hyprland hyprland-qt-support hyprpaper hypridle hyprpicker hyprsunset \
       xdg-desktop-portal-hyprland quickshell foot fuzzel mako grim slurp \
       wl-clipboard cliphist jq python pipewire playerctl; do
     add_pkg "$pkg"
   done
-  python3 "$repo/trials/sway/stage-hyprland.py" --apply --repo "$repo"
+  python3 "$repo/compositors/sway/stage-hyprland.py" --apply --repo "$repo"
   [[ -f /usr/share/wayland-sessions/hyprland.desktop ]] ||
     { fail 'The Hyprland package did not provide a usable Ly Wayland session entry'; exit 1; }
 else
@@ -245,7 +245,7 @@ else
   fi
   # Cleanup while the package-provided Sway entry is still installed.
   if [[ "$target" == sway ]]; then
-    bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
+    bash "$repo/compositors/sway/legacy-session-cleanup.sh" apply "$repo"
   fi
   drop_pkg "$target"
   if [[ "$remove_deps" == yes ]]; then
@@ -263,7 +263,7 @@ else
   if [[ "$target" == sway ]] && ! installed sway; then
     # Remove only an exact Awtarchy-provided TTY entry. Preserve custom files.
     tty_command="$HOME/.local/bin/sway"
-    tty_source="$repo/trials/sway/tty-launch.sh"
+    tty_source="$repo/compositors/sway/tty-launch.sh"
     if [[ -f "$tty_command" && ! -L "$tty_command" && -O "$tty_command" &&
           -f "$tty_source" && ! -L "$tty_source" ]] &&
           cmp -s -- "$tty_source" "$tty_command"; then
@@ -273,7 +273,7 @@ else
       printf 'PRESERVE customized or untracked TTY command: %s\n' "$tty_command"
     fi
     for pair in \
-        "$repo/trials/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
+        "$repo/compositors/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
       source_descriptor="${pair%%:*}"
       installed_descriptor="${pair#*:}"
       if [[ -f "$installed_descriptor" && ! -L "$installed_descriptor" &&
