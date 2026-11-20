@@ -28,7 +28,30 @@ assert "yay -S --needed umbriel-git" in (TRIAL / "manage.sh").read_text()
 assert "/usr/share/wayland-sessions/umbriel.desktop" in (TRIAL / "manage.sh").read_text()
 assert "awtarchy-umbriel" in (TRIAL / "render-quickshell.py").read_text()
 assert '"Install Umbriel"' in (ROOT / "local/bin/awtarchy").read_text()
-assert '"Update Umbriel"' in (ROOT / "local/bin/awtarchy").read_text()
+launcher = (ROOT / "local/bin/awtarchy").read_text()
+runtime = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text()
+menu = launcher.split("compositor_menu() {", 1)[1].split(
+    "\ncompositor_offer_once() {", 1)[0]
+assert 'remove-umbriel' in (TRIAL / "manage.sh").read_text()
+assert 'pacman -R --print --print-format' in (TRIAL / "manage.sh").read_text()
+assert 'sudo pacman -R --noconfirm -- "$target"' in (TRIAL / "manage.sh").read_text()
+assert 'Cannot remove the last supported compositor' in (TRIAL / "manage.sh").read_text()
+assert '"Update Umbriel"' not in menu
+assert '"Update Sway"' not in menu
+assert '"Remove Umbriel"' in menu
+assert '"Remove Hyprland" "Remove Sway"' in menu
+assert '"Install Umbriel"' in menu
+assert '"Update configs (preserve personal customizations)"' in launcher
+review = runtime.split('if (( REVIEW_ONLY == 1 )); then', 1)[1].split(
+    'log "Review-only mode complete.', 1)[0]
+assert 'trials/sway/sync.py" review' in review
+assert 'trials/umbriel/sync.py" preview' in review
+accepted = runtime.split('if ! confirm_live_update_result; then', 1)[1]
+assert 'trials/sway/sync.py" apply' in accepted
+assert 'trials/umbriel/sync.py" apply' in accepted
+assert 'umbriel-trial-baseline.json' in accepted
+assert accepted.index('trials/umbriel/sync.py" apply') < accepted.index(
+    'log "Reconciling hardware and managed packages..."')
 assert 'AWTARCHY_UMBRIEL_TRIAL_SOURCE' in (ROOT / "local/bin/awtarchy").read_text()
 
 with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
