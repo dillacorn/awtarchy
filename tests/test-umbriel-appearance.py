@@ -41,6 +41,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
         "QS_FOREGROUND = '#eeeeee'\n"
         "QS_FOCUS = '#424242'\n",
         encoding="utf-8")
+    (themes / "catppuccin-frappé").write_text(
+        "NEW_ACTIVE_BORDER=aabbccff\nNEW_INACTIVE_BORDER=223344ff\n")
+    assert theme.palette(home, "catppuccin-frappé")["active_border"] == "aabbccff"
     selected = theme.palette(home, "steel")
     rendered = theme.render_toml(selected)
     loaded = tomllib.loads(rendered.decode())
