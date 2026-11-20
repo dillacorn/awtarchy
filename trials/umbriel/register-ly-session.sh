@@ -99,16 +99,9 @@ if [[ "$mode" == plan ]]; then
     exit 0
 fi
 
-[[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || {
-    printf 'Interactive approval required to add Umbriel to Ly.\n' >&2
-    exit 1
-}
-printf 'Type Umbriel to add the single package-owned Ly entry: ' >/dev/tty
-IFS= read -r approval </dev/tty || :
-[[ "$approval" == Umbriel ]] || {
-    printf 'Canceled; nothing changed.\n'
-    exit 1
-}
+# The explicit "apply" action is authorization. Do not demand a
+# case-sensitive typed phrase after the caller has selected the operation.
+# Preserve all identity, ownership, duplicate and no-clobber checks above.
 # no-clobber link: unexpected concurrent creation must never be overwritten.
 sudo ln -sT -- "$source" "$target"
 [[ -L "$target" && "$(readlink -- "$target")" == "$source" ]] || {
