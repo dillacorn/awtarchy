@@ -45,7 +45,7 @@ jobs:
     steps:
       - name: Install current Arch Sway and validation tools
         run: |
-          pacman -Syu --noconfirm --needed git python bash sway swayidle jq qt6-declarative
+          pacman -Syu --noconfirm --needed git python bash sway swayidle jq qt6-declarative diffutils
 
       - name: Check out exact trial commit
         uses: actions/checkout@v4
