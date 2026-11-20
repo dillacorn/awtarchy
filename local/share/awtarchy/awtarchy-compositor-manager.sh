@@ -95,15 +95,10 @@ if [[ "$mode" == plan ]]; then
   printf 'Preview only; nothing changed.\n'
   exit 0
 fi
-[[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] ||
-  { fail 'Changes require interactive confirmation'; exit 1; }
-# The interactive Awtarchy menu already presented a dedicated confirmation.
-# Keep typed authorization for direct core/helper invocation outside that menu.
-if [[ "${AWTARCHY_COMPOSITOR_MENU_APPROVED:-}" != "$operation" ]]; then
-  printf 'Type %s to authorize: ' "$operation" >/dev/tty
-  IFS= read -r approval </dev/tty || :
-  [[ "$approval" == "$operation" ]] || { printf 'Canceled.\n'; exit 1; }
-fi
+# The compositor menu already has an Install/Remove/Cancel confirmation.
+# For explicit direct "apply" invocations, the selected operation is the
+# authorization; do not require a second typed phrase. All package ownership,
+# active-session and last-compositor checks below still apply.
 record() {
   local pkg="$1"
   [[ ! -L "$ledger" && ( ! -e "$ledger" || -f "$ledger" ) ]] ||
