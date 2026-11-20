@@ -1,4 +1,4 @@
 # Awtarchy's only Umbriel login config. Install only if missing.
 # The official umbriel.desktop / start-umbriel entry remains package-owned.
 [include]
-files = ["awtarchy-trial/config.toml", "awtarchy-trial/migrated.toml"]
+files = ["awtarchy-trial/config.toml", "awtarchy-trial/theme.toml", "awtarchy-trial/migrated.toml"]
