@@ -2,6 +2,7 @@
 """Offline native Umbriel workspace IPC regression: independent outputs and live events."""
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -111,4 +112,45 @@ with tempfile.TemporaryDirectory(prefix="umbriel-workspace-events-") as temp:
             except subprocess.TimeoutExpired:
                 process.kill()
                 process.communicate(timeout=3)
-print("PASS: Umbriel workspace events, per-output active state and deduplication")
+# Native named workspaces represent one global identity across all outputs.
+# A transferred workspace can change output AND positional index, including
+# an index above 10, without changing its globally numbered name.
+spec = importlib.util.spec_from_file_location(
+    "awtarchy_umbriel_native_workspaces",
+    ROOT / "compositors/umbriel/workspace-state.py")
+adapter = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(adapter)
+
+named = [
+    {"id": f"DP-1:stable-{num}", "name": str(num), "named": True,
+     "index": num, "output": "DP-1",
+     "active": num == 1, "focused": num == 1}
+    for num in range(1, 11)
+]
+# Umbriel's secondary dynamic output still has a LOCAL position 1. It is not
+# another global workspace 1 and must not render as that number in the bar.
+anonymous_secondary = {"id": "DP-3:local-1", "name": "1", "named": False,
+                       "index": 1, "output": "DP-3", "active": True, "focused": False}
+original = adapter.collect(named + [anonymous_secondary], [])
+assert len(original) == 10
+assert all(row["monitor"] == "DP-1" for row in original)
+assert {(row["id"], row["name"]) for row in original} == {
+    (i, str(i)) for i in range(1, 11)}
+after_move = [dict(row) for row in named]
+after_move[0]["focused"] = False
+after_move[1].update({"output": "DP-3", "index": 4, "active": True,
+                      "focused": True})
+moved = adapter.collect(after_move + [anonymous_secondary], [])
+by_number = {row["id"]: row for row in moved}
+assert len(moved) == len(by_number) == 10
+assert by_number[1]["monitor"] == "DP-1"
+assert by_number[2]["monitor"] == "DP-3"
+assert by_number[2]["name"] == "2"
+assert by_number[2]["focused"] is True
+assert by_number[2]["id"] == 2  # NOT destination output-local index 4
+after_move[1].update({"output": "DP-1", "index": 11,
+                      "active": True, "focused": True})
+moved_back = adapter.collect(after_move + [anonymous_secondary], [])
+assert next(w for w in moved_back if w["id"] == 2)["monitor"] == "DP-1"
+assert next(w for w in moved_back if w["id"] == 2)["name"] == "2"
+print("PASS: Umbriel workspace events, per-output active state and global named identity")
