@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Offline translation coverage: exact modes, safe shortcuts and source choice."""
 from pathlib import Path
+import json
 import importlib.util
 import os
 import tempfile
@@ -134,6 +135,36 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}):
         _, report = module.migrate(home, connected=connected)
     assert report["source"] == "sway" and "recorded" in report["selection"]
+
+    # Without active generated Lua, unambiguous saved hyprmoncfg JSON profiles
+    # can still restore the user's exact monitor modes, positions and VRR.
+    hypr.write_text('hl.monitor({ output = "", mode = "preferred", position = "auto", scale = "auto", vrr = 0 })\\n')
+    prof_dir = home / ".config/hyprmoncfg/profiles"
+    prof_dir.mkdir(parents=True)
+    saved = {
+        "name": "Gaming",
+        "outputs": [
+            {"name": "DP-1", "enabled": True, "mode": "1920x1080@400.002",
+             "width": 1920, "height": 1080, "refresh": 400.002, "x": 0,
+             "y": 1080, "scale": 1, "vrr": 0, "transform": 0},
+            {"name": "DP-3", "enabled": True, "mode": "1920x1080@239.761",
+             "width": 1920, "height": 1080, "refresh": 239.761, "x": 0,
+             "y": 0, "scale": 1, "vrr": 2, "transform": 0},
+        ],
+    }
+    (prof_dir / "gaming.json").write_text(json.dumps(saved))
+    raw, report = module.migrate(home, "hyprland", connected)
+    imported = tomllib.loads(raw.decode())["output"]
+    assert imported["DP-1"]["mode"] == "1920x1080@400.002"
+    assert imported["DP-3"]["vrr"] == "fullscreen"
+    assert report["outputs"] == 2
+    other = json.loads(json.dumps(saved))
+    other["name"] = "Gaming 2"
+    other["outputs"][0]["x"] = 1920
+    (prof_dir / "other.json").write_text(json.dumps(other))
+    raw, report = module.migrate(home, "hyprland", connected)
+    assert report["outputs"] == 0, "Ambiguous monitor profiles must not be guessed"
+    (prof_dir / "other.json").unlink()
 
     # No source script is executed, even when a malicious command is present.
     hypr.write_text('hl.bind("SUPER + N", hl.dsp.exec_cmd("rm -rf ~"), {})\n')
