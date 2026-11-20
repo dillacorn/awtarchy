@@ -4,9 +4,8 @@ import Quickshell
 import Quickshell.Io
 import Quickshell.Wayland
 
-// Umbriel's get_tree is authoritative for applications on hidden workspaces.
-// Foreign-toplevel screen lists only describe visible/current workspaces and
-// previously made the bar omit Steam on workspace 4 when viewing workspace 2.
+// Umbriel's native workspace/window IPC reports both visible and hidden
+// workspaces. Foreign-toplevel data is an optional Wayland integration.
 Singleton {
     id: root
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
@@ -32,15 +31,17 @@ Singleton {
         });
     }
 
-    function numericWorkspaces() {
+    function numericWorkspaces(output) {
+        const where = String(output || (root.focusedMonitor ? root.focusedMonitor.name : ""));
         return (root.workspaces.values || [])
-            .filter(w => Number.isInteger(w.id) && w.id >= 1 && w.id <= 10)
+            .filter(w => Number.isInteger(w.id) && w.id >= 1 && w.id <= 10
+                    && (!where || (w.monitor && w.monitor.name === where)))
             .sort((a, b) => a.id - b.id);
     }
 
-    function activateWorkspace(selector) {
+    function activateWorkspace(selector, output) {
         const key = String(selector || "");
-        const all = numericWorkspaces();
+        const all = numericWorkspaces(output);
         let number = null;
         if (key === "e-1" || key === "e+1") {
             const focused = all.findIndex(w => w.focused);
@@ -53,7 +54,10 @@ Singleton {
         }
         if (!Number.isInteger(number) || number < 1 || number > 10)
             return false;
-        Quickshell.execDetached(["umbriel", "msg", "workspace-switch", String(number)]);
+        const command = ["umbriel", "msg", "workspace-switch", String(number)];
+        if (output)
+            command.push("--output", String(output));
+        Quickshell.execDetached(command);
         return true;
     }
 
@@ -63,8 +67,9 @@ Singleton {
         const value = choices[String(direction)] || "";
         if (!value)
             return false;
-        // Unknown direction-to-output mapping; never guess a destination.
-        return false;
+        // Upstream provides explicit directional workspace moves.
+        Quickshell.execDetached(["umbriel", "msg", "workspace-move-to-output-" + value]);
+        return true;
     }
 
     function toggleUtility(appId, command) {
