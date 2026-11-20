@@ -143,7 +143,8 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                 result[home / ".local/state/awtarchy/active-theme-umbriel"] = (
                     name + "\n").encode()
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
-                 "capture.sh", "toggle-utility.py", "mode-control.py", "animations.sh",
+                 "workspace-events.py", "capture.sh", "toggle-utility.py",
+                 "mode-control.py", "animations.sh",
                  "default-apps.sh", "position.sh", "runtime-rules.sh",
                  "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
