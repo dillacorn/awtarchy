@@ -10451,6 +10451,19 @@ main() {
       log "Reviewing Sway managed changes from the same immutable release..."
       run_target python3 "$repo_dir/trials/sway/sync.py" review --repo "$repo_dir" ||
         die "Sway review failed; no managed files were changed."
+      # Review the privileged session pieces before applying any updates.
+      # These guards preserve customized files and package-owned sessions.
+      if [[ -f "$repo_dir/trials/sway/session-wrapper-update.sh" &&
+            ! -L "$repo_dir/trials/sway/session-wrapper-update.sh" ]]; then
+        run_target env "AWTARCHY_COMPOSITOR_RELEASE_SOURCE=$repo_dir" \
+          bash "$repo_dir/trials/sway/session-wrapper-update.sh" plan "$repo_dir" ||
+          warn "Could not preview the existing root-owned Sway launcher; it remains untouched."
+      fi
+      if [[ -f "$repo_dir/trials/sway/legacy-session-cleanup.sh" &&
+            ! -L "$repo_dir/trials/sway/legacy-session-cleanup.sh" ]]; then
+        run_target bash "$repo_dir/trials/sway/legacy-session-cleanup.sh" plan "$repo_dir" ||
+          warn "Unrecognized Sway Ly session entry will be preserved."
+      fi
     fi
     # The Umbriel trial has an independent exact-hash ownership baseline.
     # Review only installations that actually staged this Awtarchy profile.
@@ -10627,6 +10640,20 @@ main() {
       if ! run_target python3 "$repo_dir/trials/sway/sync.py" apply --repo "$repo_dir"; then
         warn "Sway config update did not finish. Existing Sway customizations and baseline remain protected."
         warn "A later Update configs can retry this Sway component; check the reported failure first."
+      else
+        # Previously handled by the separate Update Sway button. Both helpers
+        # operate on the verified immutable release and refuse custom files.
+        if [[ -f "$repo_dir/trials/sway/session-wrapper-update.sh" &&
+              ! -L "$repo_dir/trials/sway/session-wrapper-update.sh" ]]; then
+          run_target env "AWTARCHY_COMPOSITOR_RELEASE_SOURCE=$repo_dir" \
+            bash "$repo_dir/trials/sway/session-wrapper-update.sh" apply "$repo_dir" ||
+            warn "Root-owned Sway launcher was not updated; review its ownership/customizations."
+        fi
+        if [[ -f "$repo_dir/trials/sway/legacy-session-cleanup.sh" &&
+              ! -L "$repo_dir/trials/sway/legacy-session-cleanup.sh" ]]; then
+          run_target bash "$repo_dir/trials/sway/legacy-session-cleanup.sh" apply "$repo_dir" ||
+            warn "Additional Sway Ly entry is customized or unrecognized; it was preserved."
+        fi
       fi
     else
       warn "The selected release has no Sway updater. Existing Sway files were left unchanged."
