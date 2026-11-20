@@ -22,6 +22,7 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - System session launcher (used internally by Ly and TTY): /usr/local/bin/awtarchy-sway-session
 - TTY command: `sway` (managed `~/.local/bin/sway`, no arguments). `sway -C` or any other arguments invoke native `/usr/bin/sway`.
 - Ly is optional. Existing personal `sway` launchers are preserved.
+- For an active NVIDIA kernel driver, Awtarchy's Ly/TTY session launcher automatically passes `--unsupported-gpu` to Sway. This hides Sway's proprietary-driver notice only; NVIDIA compatibility is still not guaranteed, and the native `sway` CLI remains unchanged.
 - Portal preference: ~/.config/xdg-desktop-portal/sway-portals.conf
 - Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Quickshell overlay with exact portal-source protocol; Fuzzel not used by OBS)
 - Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock or Mako installed for this Quickshell-based session)

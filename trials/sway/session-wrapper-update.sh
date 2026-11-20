@@ -13,14 +13,27 @@ repo="$2"
     printf 'Expected plan or apply\n' >&2
     exit 2
 }
-[[ "$repo" == /* && -d "$repo/.git" && ! -L "$repo" ]] || {
-    printf 'Unsafe Sway trial checkout\n' >&2
+[[ "$repo" == /* && -d "$repo" && ! -L "$repo" ]] || {
+    printf 'Unsafe Sway source directory\n' >&2
     exit 1
 }
-[[ "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] || {
-    printf 'Not the registered Sway trial branch\n' >&2
-    exit 1
-}
+if [[ -n "${AWTARCHY_COMPOSITOR_RELEASE_SOURCE:-}" ]]; then
+    # The stable manager already verified this exact published release archive.
+    # Never treat an unrelated directory as a trusted release source.
+    [[ "$repo" == "$AWTARCHY_COMPOSITOR_RELEASE_SOURCE" &&
+       "$repo" =~ /awtarchy-[0-9a-f]{40}$ &&
+       -f "$repo/trials/sway/setup.sh" &&
+       -f "$repo/config/hypr/hyprland.lua" ]] || {
+        printf 'Invalid stable Sway release source\n' >&2
+        exit 1
+    }
+else
+    [[ -d "$repo/.git" &&
+       "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] || {
+        printf 'Not the registered Sway trial branch\n' >&2
+        exit 1
+    }
+fi
 
 source="$repo/trials/sway/session-launch.sh"
 target=/usr/local/bin/awtarchy-sway-session
@@ -49,7 +62,7 @@ fi
 # launchers. Never infer ownership from the filename alone.
 stock_hash="$(git hash-object --no-filters -- "$target")"
 case "$stock_hash" in
-    77c9d91310dc7b1b70989ac620ab2a90b04a9427|9c5e76d6156fec32f311eb218b265adb664cfb6d)
+    77c9d91310dc7b1b70989ac620ab2a90b04a9427|9c5e76d6156fec32f311eb218b265adb664cfb6d|ffe175ba53f95f7480e478eeae63814609f8ca58)
         ;;
     *)
         printf 'PRESERVE: Sway Ly launcher was customized; no root file modified\n'
@@ -79,4 +92,4 @@ if ! cmp -s -- "$source" "$target"; then
     printf 'Sway Ly launcher verification failed; backup: %s\n' "$backup" >&2
     exit 1
 fi
-printf 'UPDATED: Sway Ly session launcher. New sessions inherit Qt5 and Qt6 themes; current Sway session stays running.\n'
+printf 'UPDATED: Sway Ly/TTY launcher. New sessions inherit the updated settings; current Sway session stays running.\n'

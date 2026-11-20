@@ -45,7 +45,7 @@ jobs:
     steps:
       - name: Install current Arch Sway and validation tools
         run: |
-          pacman -Syu --noconfirm --needed git python bash sway swayidle jq qt6-declarative
+          pacman -Syu --noconfirm --needed git python bash sway swayidle jq qt6-declarative diffutils
 
       - name: Check out exact trial commit
         uses: actions/checkout@v4
@@ -58,6 +58,7 @@ jobs:
           bash -n local/share/awtarchy/awtarchy-compositor-manager.sh
           python tests/test-sway-stable-source.py
           python tests/test-sway-tty.py
+          python tests/test-sway-nvidia-warning.py
           python tests/test-sway-trial.py
           python tests/test-sway-ipc.py
           python tests/test-sway-focus-cycle.py
