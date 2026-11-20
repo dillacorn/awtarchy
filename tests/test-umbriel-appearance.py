@@ -78,7 +78,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
     ], check=True, timeout=85)
     owner = (rendered_dir / "FlyoutManager.qml").read_text()
     assert "closeRequested(surface);" in owner
-    assert 'closeRequested("");' in owner
+    assert "closeRequested(key);" in owner
     assert "hyprEventConnection" not in owner
     assert 'activeSurface = surface;' in owner
     picker = (rendered_dir / "ThemePicker.qml").read_text()
