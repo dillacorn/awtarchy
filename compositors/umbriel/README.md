@@ -114,11 +114,37 @@ selected source and number of verified displays/shortcuts. A report of
 `displays=0` is a failed display migration, not proof of success. Do not
 replace custom Umbriel layout files to force an import.
 
+## Appearance, flyouts, and display management
+
+- Default Awtarchy Umbriel windows now request a 1px border, square corners,
+  and an animation profile tuned toward the current Hyprland defaults.
+  This is a *translation*, not a promise that two different compositors
+  implement identical animations.
+- `ThemePicker` uses Umbriel's dedicated `theme-apply.sh`, updates
+  `~/.config/quickshell/awtarchy-umbriel/theme.json`, and writes a
+  private `theme.toml` include with Umbriel's native focused/unfocused border
+  colors. Theme names with non-ASCII letters are supported. Hyprland and Sway
+  compositor files remain unchanged.
+- The Sway and Umbriel rendered Quickshell flyout managers close competing
+  flyouts immediately when another is claimed. The newly opened theme
+  picker is exempt from its own close signal.
+- `Super+Ctrl+M` opens **wdisplays**, an upstream-supported wlr-output-
+  management GUI. It manages connected displays, modes, scale and arrangement;
+  it is **not** a workspace editor. Live changes made in wdisplays are not
+  automatically written into Awtarchy's `migrated.toml` and may not survive
+  a compositor restart. Do not misrepresent them as saved.
+- Umbriel and Sway use layer-shell panels to avoid tiling and preserve their
+  output-local positions. Resizing the layer-shell surface during an active
+  pointer grab can break the gesture. The current ALT+right drag previews a
+  size and commits once on release; it is not Hyprland's continuous floating-
+  window resize. Right/bottom edge handling is corrected so inward dragging
+  enlarges the panel.
+
 ## Known experimental limitations
 
 This is **not** full Quickshell parity. Some existing Awtarchy shell helpers
-still expect Sway/Hyprland-specific operations (capture, theme/window-rule
-updates, lock capture, monitor editing, DDC/built-in brightness integration,
+still expect Sway/Hyprland-specific operations (capture, dynamic window-rule
+updates, lock capture, persistent monitor editing, DDC/built-in brightness integration,
 input modes, advanced positioning and utility toggles). Initial implementation
 must prove shell startup first; unsupported actions should report errors or be
 disabled, not claim to have changed another compositor.
