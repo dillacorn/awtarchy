@@ -38,7 +38,7 @@ COMMANDS = {
     "file_manager": "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager",
     "web_browser": "spawn python3 ~/.config/hypr/scripts/default_applications.py launch browser",
     "power_menu": "spawn " + IPC + "powermenu begin",
-    "default_apps": "spawn python3 ~/.config/hypr/scripts/default_applications.py",
+    "default_apps": "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py default-apps",
 }
 NATIVE = {
     "hl.dsp.window.close()": "window-close",
