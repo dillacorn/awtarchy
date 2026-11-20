@@ -22,8 +22,9 @@ for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_
 done
 [[ -f "$native_source" && ! -L "$native_source" ]] ||
     { fail "Missing native Sway config source"; exit 1; }
-[[ ! -L "$native_config" && ( ! -e "$native_config" || -f "$native_config" ) ]] ||
-    { fail "Unsafe native Sway config; preserve it manually"; exit 1; }
+[[ ! -e "$native_config" && ! -L "$native_config" ||
+   -f "$native_config" || -L "$native_config" ]] ||
+    { fail "Unsafe native Sway config directory; refusing"; exit 1; }
 [[ -f "$tty_source" && ! -L "$tty_source" ]] && bash -n "$tty_source" ||
     { fail "Missing or invalid Sway TTY entry"; exit 1; }
 for directory in "$HOME/.local" "$tty_dir"; do
@@ -109,9 +110,9 @@ done
 [[ -e "$workspace_target" ]] || install -m 0644 -- "$workspace_source" "$workspace_target"
 # The Arch-provided Sway Ly entry reads ~/.config/sway/config. Link only
 # through a plain, managed include, without replacing a personal Sway config.
-if [[ ! -e "$native_config" ]]; then
+if [[ ! -e "$native_config" && ! -L "$native_config" ]]; then
     install -m 0644 -- "$native_source" "$native_config"
-elif ! cmp -s -- "$native_source" "$native_config"; then
+elif [[ -L "$native_config" ]] || ! cmp -s -- "$native_source" "$native_config"; then
     printf 'PRESERVE: personal Sway entry config %s; native Ly session will use it.\n' "$native_config"
 fi
 # Leave package-owned /usr/bin/sway untouched and preserve custom commands.
