@@ -558,14 +558,13 @@ Qs.Singleton {
                     text = text.replace(
                         '/hypr/scripts/default_applications.sh',
                         '/sway/awtarchy-trial/default-apps.sh')
-                    # Preserve supported bar + audio state. Do not offer
-                    # nonfunctional night-light, vibrance or input-mode toggles.
+                    # Preserve supported bar + audio and native input-mode
+                    # controls. Night-light/vibrance remain unsupported.
                     text = text.replace(
                         'visible: root.quickSettingsSectionVisible("display-effects")',
                         'visible: false')
-                    text = text.replace(
-                        'visible: root.quickSettingsSectionVisible("submap")',
-                        'visible: false')
+                    # Both Sway and Umbriel now implement the native mode
+                    # transition in Quick Settings; do not hide this control.
                     text = text.replace(
                         'visible: root.quickSettingsSectionVisible("numlock")',
                         'visible: false')
