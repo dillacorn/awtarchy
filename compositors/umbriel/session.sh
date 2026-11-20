@@ -18,6 +18,11 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
 fi
 # start-umbriel has already imported graphical session values to systemd.
 trial="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial"
+# Publish the verified initial input mode before Quickshell reads bar state.
+if [[ -f "$trial/mode-control.py" && ! -L "$trial/mode-control.py" ]]; then
+    python3 "$trial/mode-control.py" sync || \
+        printf 'Umbriel input mode state unavailable\n' >&2
+fi
 if [[ ! -L "$trial/quickshell.sh" && -f "$trial/quickshell.sh" ]]; then
     bash "$trial/quickshell.sh" start || {
         printf 'Umbriel Quickshell failed; inspect ~/.cache/awtarchy/quickshell-umbriel.log\n' >&2
