@@ -40,6 +40,8 @@ def render(repo: Path, destination: Path):
             target = RENAME.get(source.name, source.name)
             if source.name == "SwayBridge.qml":
                 text = (bridge_dir / "UmbrielBridge.qml").read_text(encoding="utf-8")
+            elif source.name == "ScreenSharePicker.qml":
+                text = (bridge_dir / "ScreenSharePicker.qml").read_text(encoding="utf-8")
             else:
                 try:
                     text = source.read_text(encoding="utf-8")
