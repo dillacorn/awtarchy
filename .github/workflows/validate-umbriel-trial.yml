@@ -36,3 +36,4 @@ jobs:
         run: |
           set -euo pipefail
           python3 tests/test-umbriel-trial.py
+          python3 tests/test-umbriel-ly-session.py
