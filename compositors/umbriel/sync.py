@@ -65,7 +65,8 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                 result[home / ".local/state/awtarchy/active-theme-umbriel"] = (
                     name + "\n").encode()
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
-                 "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
+                 "capture.sh", "toggle-utility.py", "position.sh", "runtime-rules.sh",
+                 "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
     for dst, origin in sources.items():
         if origin.is_symlink() or not origin.is_file():
