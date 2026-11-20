@@ -1566,6 +1566,20 @@ compositor_trial_installed() {
      -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
 }
 run_compositor_manager() {
+  # Explicit test checkout is never installed over the user's normal command.
+  # This allows the exact, unmerged menu branch to exercise its own backend.
+  if [[ -n "${AWTARCHY_COMPOSITOR_TEST_SOURCE:-}" ]]; then
+    local source_repo="$AWTARCHY_COMPOSITOR_TEST_SOURCE"
+    [[ "$source_repo" == /* && -d "$source_repo/.git" && ! -L "$source_repo" &&
+       "$(git -C "$source_repo" branch --show-current)" == feature/simplify-compositor-management &&
+       "$(git -C "$source_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+       -z "$(git -C "$source_repo" status --porcelain --untracked-files=no)" &&
+       -f "$source_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" ]] ||
+      die "Invalid or modified compositor menu test checkout."
+    AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$source_repo" \
+      bash "$source_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" "$@"
+    return $?
+  fi
   local helper="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-stable.sh"
   [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] ||
     die "Stable compositor manager missing. Run awtarchy self-update."
