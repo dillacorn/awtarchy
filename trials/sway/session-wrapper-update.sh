@@ -13,14 +13,35 @@ repo="$2"
     printf 'Expected plan or apply\n' >&2
     exit 2
 }
-[[ "$repo" == /* && -d "$repo/.git" && ! -L "$repo" ]] || {
-    printf 'Unsafe Sway trial checkout\n' >&2
+[[ "$repo" == /* && -d "$repo" && ! -L "$repo" ]] || {
+    printf 'Unsafe Sway source directory\n' >&2
     exit 1
 }
-[[ "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] || {
-    printf 'Not the registered Sway trial branch\n' >&2
-    exit 1
-}
+if [[ -n "${AWTARCHY_COMPOSITOR_RELEASE_SOURCE:-}" ]]; then
+    [[ "$repo" == "$AWTARCHY_COMPOSITOR_RELEASE_SOURCE" ]] || {
+        printf 'Sway session source differs from the selected checkout\n' >&2
+        exit 1
+    }
+    if [[ "$repo" =~ /awtarchy-[0-9a-f]{40}$ &&
+          -f "$repo/config/hypr/hyprland.lua" &&
+          -f "$repo/trials/sway/setup.sh" ]]; then
+        :  # Trusted stable release source, verified by the stable manager.
+    elif [[ -d "$repo/.git" &&
+            "$(git -C "$repo" branch --show-current)" == feature/simplify-compositor-management &&
+            "$(git -C "$repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+            -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ]]; then
+        :  # Explicit, clean, user-selected test checkout.
+    else
+        printf 'Unrecognized Sway release/test source\n' >&2
+        exit 1
+    fi
+else
+    [[ -d "$repo/.git" &&
+       "$(git -C "$repo" branch --show-current)" == SwayWM_Migration_Trial_Investigation ]] || {
+        printf 'Not the registered Sway trial branch\n' >&2
+        exit 1
+    }
+fi
 
 source="$repo/trials/sway/session-launch.sh"
 target=/usr/local/bin/awtarchy-sway-session
