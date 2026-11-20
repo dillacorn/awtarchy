@@ -19,7 +19,14 @@ status() {
   for pkg in hyprland sway; do
     if installed "$pkg"; then printf '%s: installed\n' "$pkg"; else printf '%s: absent\n' "$pkg"; fi
   done
-  if [[ -f "$session_file" ]]; then printf 'Sway Ly entry: present\n'; else printf 'Sway Ly entry: missing\n'; fi
+  if [[ -f /usr/share/wayland-sessions/sway.desktop ]]; then
+    printf 'Sway Ly entry: native (one session)\n'
+  else
+    printf 'Sway Ly entry: missing package session\n'
+  fi
+  if [[ -e "$session_file" || -L "$session_file" ]]; then
+    printf 'Legacy duplicate Sway entry: needs safe migration\n'
+  fi
   for pkg in vulkan-radeon vulkan-intel nvidia-utils vulkan-nouveau; do
     if installed "$pkg"; then printf 'GPU Vulkan package: %s\n' "$pkg"; fi
   done
@@ -79,7 +86,8 @@ if [[ "$mode" == plan ]]; then
         bash "$repo/trials/sway/source-refresh.sh" check "$repo"
       fi
       python3 "$repo/trials/sway/sync.py" review --repo "$repo"
-      bash "$repo/trials/sway/session-wrapper-update.sh" plan "$repo" ;;
+      bash "$repo/trials/sway/session-wrapper-update.sh" plan "$repo"
+      bash "$repo/trials/sway/legacy-session-cleanup.sh" plan "$repo" ;;
     install-hyprland)
       python3 "$repo/trials/sway/stage-hyprland.py" --preview --repo "$repo" ;;
     *) : ;;
@@ -89,9 +97,13 @@ if [[ "$mode" == plan ]]; then
 fi
 [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] ||
   { fail 'Changes require interactive confirmation'; exit 1; }
-printf 'Type %s to authorize: ' "$operation" >/dev/tty
-IFS= read -r approval </dev/tty || :
-[[ "$approval" == "$operation" ]] || { printf 'Canceled.\n'; exit 1; }
+# The interactive Awtarchy menu already presented a dedicated confirmation.
+# Keep typed authorization for direct core/helper invocation outside that menu.
+if [[ "${AWTARCHY_COMPOSITOR_MENU_APPROVED:-}" != "$operation" ]]; then
+  printf 'Type %s to authorize: ' "$operation" >/dev/tty
+  IFS= read -r approval </dev/tty || :
+  [[ "$approval" == "$operation" ]] || { printf 'Canceled.\n'; exit 1; }
+fi
 record() {
   local pkg="$1"
   [[ ! -L "$ledger" && ( ! -e "$ledger" || -f "$ledger" ) ]] ||
@@ -138,7 +150,6 @@ if [[ "$operation" == install-sway ]]; then
   bash "$repo/trials/sway/setup.sh" --check
   # Check root destinations before any file installation. Do not overwrite others.
   for pair in \
-      "$repo/trials/sway/sway.desktop:$session_file" \
       "$repo/trials/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
     source_descriptor="${pair%%:*}"
     installed_descriptor="${pair#*:}"
@@ -173,8 +184,8 @@ PY
   sudo install -d -m 0755 /usr/local/bin /usr/share/wayland-sessions
   [[ -e /usr/local/bin/awtarchy-sway-session ]] ||
     sudo install -m 0755 "$repo/trials/sway/session-launch.sh" /usr/local/bin/awtarchy-sway-session
-  [[ -e "$session_file" ]] ||
-    sudo install -m 0644 "$repo/trials/sway/sway.desktop" "$session_file"
+  # Keep the package-owned sway.desktop as the only Ly session.
+  bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
   baseline="$HOME/.local/state/awtarchy/sway-managed-baseline.json"
   if [[ ! -e "$baseline" && ! -L "$baseline" ]]; then
     python3 "$repo/trials/sway/sync.py" record --repo "$repo"
@@ -193,6 +204,7 @@ elif [[ "$operation" == update-sway ]]; then
   python3 "$repo/trials/sway/sync.py" apply --repo "$repo"
   # Root-owned Ly wrapper: exact known stock hashes only, with backup.
   bash "$repo/trials/sway/session-wrapper-update.sh" apply "$repo"
+  bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
 elif [[ "$operation" == install-hyprland ]]; then
   # Validate every destination before installing anything. Copy only missing
   # Awtarchy scripts, shaders, configuration and shared shell files.
@@ -230,6 +242,10 @@ else
   if installed "$target" && ! owned "$target"; then
     fail "Compositor $target was not installed by Awtarchy; no package removed."; exit 1
   fi
+  # Cleanup while the package-provided Sway entry is still installed.
+  if [[ "$target" == sway ]]; then
+    bash "$repo/trials/sway/legacy-session-cleanup.sh" apply "$repo"
+  fi
   drop_pkg "$target"
   if [[ "$remove_deps" == yes ]]; then
     for pkg in $packages; do
@@ -256,7 +272,6 @@ else
       printf 'PRESERVE customized or untracked TTY command: %s\n' "$tty_command"
     fi
     for pair in \
-        "$repo/trials/sway/sway.desktop:$session_file" \
         "$repo/trials/sway/session-launch.sh:/usr/local/bin/awtarchy-sway-session"; do
       source_descriptor="${pair%%:*}"
       installed_descriptor="${pair#*:}"
