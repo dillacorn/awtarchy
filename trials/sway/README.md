@@ -18,7 +18,7 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 
 - Sway config (retained legacy path): ~/.config/sway/awtarchy-trial/config
 - Generated shell: ~/.config/quickshell/awtarchy-sway
-- Ly session: Sway (Awtarchy); older trial entries remain until upgraded
+- Ly session: exactly **Sway**, using Arch's package-owned `sway.desktop` and a managed `~/.config/sway/config` include (only created when absent). The obsolete `Sway (Awtarchy)` entry is removed only when the file is byte-for-byte the historical Awtarchy version; custom files block automatic cleanup rather than being overwritten.
 - System session launcher (used internally by Ly and TTY): /usr/local/bin/awtarchy-sway-session
 - TTY command: `sway` (managed `~/.local/bin/sway`, no arguments). `sway -C` or any other arguments invoke native `/usr/bin/sway`.
 - Ly is optional. Existing personal `sway` launchers are preserved.
@@ -26,6 +26,9 @@ Jay failed these checks; Mango tags did not match expected workspaces.
 - Screencast selector: ~/.config/xdg-desktop-portal-wlr/sway (Sway-only Quickshell overlay with exact portal-source protocol; Fuzzel not used by OBS)
 - Core packages: sway, swaybg, swayidle, xdg-desktop-portal-wlr (no swaylock or Mako installed for this Quickshell-based session)
 - Hyprland config, Quickshell profile and Hyprland Ly session remain installed.
+- Configuration preservation is unconditional: Awtarchy will not replace an existing custom native Sway config. The native session then uses that personal config, while the Awtarchy Sway TTY wrapper still uses its isolated config.
+- Installing from live Hyprland copies the active monitor setup where safe. An offline installation can import only complete literal monitor values from `~/.config/hypr/hyprland.lua`; automatic/dynamic profiles cannot be inferred and remain unchanged.
+- Sway's native `sway.desktop` may bypass Awtarchy's root-owned launch wrapper. Hardware-specific environment compatibility, including the NVIDIA unsupported-GPU notice, must be verified on the real machine before release.
 
 The updater compares the installed Sway config to its recorded baseline. If
 it is still unmodified, the updater can install new window rules while keeping
