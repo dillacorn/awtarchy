@@ -168,7 +168,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert "toggle-utility.py" in settings.read_text()
         assert ".casefold() != \"umbriel\"" in settings.read_text()
         wrapper = home / ".config/umbriel/awtarchy-trial/quicksettings.sh"
-        assert '== "umbriel"' in wrapper.read_text()
+        assert '== umbriel' in wrapper.read_text()
         assert "${XDG_CURRENT_DESKTOP,,}" in wrapper.read_text()
         personal = home / ".config/quickshell/awtarchy-umbriel/Bar.qml"
         personal.write_text("personal Umbriel bar; do not overwrite")
