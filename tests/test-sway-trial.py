@@ -31,8 +31,8 @@ for path in sorted(TRIAL.glob("*.sh")) + [
     command("bash", "-n", str(path))
 
 assert "SwayWM_Migration_Trial_Investigation" in INSTALLER
-for phrase in ("Install Sway (preserve Hyprland)",
-               "Remove Sway and eligible owned extras", "compositor_menu()"):
+for phrase in ('options+=("Install Sway")',
+               'options+=("Remove Hyprland" "Remove Sway")', "compositor_menu()"):
     assert phrase in LAUNCHER, phrase
 for phrase in ('COMPOSITOR_SELECTION="hyprland"', 'compositor_has_hyprland()',
                'compositor_has_sway()', 'install_sway_repo_dependencies_stage()',

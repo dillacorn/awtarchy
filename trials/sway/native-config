@@ -1,0 +1,3 @@
+# Awtarchy Sway entrypoint for the distribution-provided Sway session.
+# Personal Sway configs are never overwritten by the Awtarchy installer.
+include awtarchy-trial/config

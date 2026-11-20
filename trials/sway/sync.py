@@ -67,6 +67,12 @@ def expected_files(repo, home, temporary):
     if tty_source.is_symlink() or not tty_source.is_file():
         raise ValueError("Missing or unsafe Sway TTY launcher source")
     result[home / ".local/bin/sway"] = tty_source.read_bytes()
+    # The package-provided Sway session reads this include. Existing native
+    # Sway configurations stay user-owned and are never overridden.
+    native_source = trial / "native-config"
+    if native_source.is_symlink() or not native_source.is_file():
+        raise ValueError("Missing or unsafe native Sway config source")
+    result[home / ".config/sway/config"] = native_source.read_bytes()
     # nwg-displays writes this Sway-only workspace file outside the trial
     # directory. Keep an initial managed stub but preserve user-edited content.
     workspace_source = repo / "trials/workspaces"
@@ -378,7 +384,7 @@ def main():
         key = str(path.relative_to(home))
         # An existing user sway symlink is explicitly outside our ownership.
         # Never read its destination or treat it as an error for other updates.
-        if path.is_symlink() and key == ".local/bin/sway":
+        if path.is_symlink() and key in (".local/bin/sway", ".config/sway/config"):
             continue
         if path.is_symlink() or path.parent.is_symlink():
             raise ValueError("Refusing linked installed Sway path: " + str(path))
@@ -402,6 +408,10 @@ def main():
                     raise ValueError("Missing initial Sway display/workspace file: " + key)
                 baseline.pop(key, None)
                 print("PRESERVE: custom Sway display/workspace file not added to stock baseline: " + key)
+            elif key == ".config/sway/config" and actual.get(key) != sha(body):
+                # Native configs preexisting Awtarchy must never be adopted.
+                baseline.pop(key, None)
+                print("PRESERVE: personal native Sway config: " + key)
             elif key == ".local/bin/sway" and actual.get(key) != sha(body):
                 # Never take ownership of a pre-existing command or symlink.
                 if key not in actual and not path.is_symlink():
@@ -426,7 +436,7 @@ def main():
     counts = dict(unchanged=0, update=0, preserve=0, missing=0)
     for path, body in sorted(desired.items(), key=lambda item: str(item[0])):
         key = str(path.relative_to(home))
-        if key == ".local/bin/sway" and path.is_symlink():
+        if key in (".local/bin/sway", ".config/sway/config") and path.is_symlink():
             counts["preserve"] += 1
             print("PRESERVE custom Sway command symlink: " + key)
             continue
@@ -479,6 +489,7 @@ def main():
             new_helper = key in (
                 ".config/sway/workspaces",
                 ".local/bin/sway",
+                ".config/sway/config",
                 ".config/sway/awtarchy-trial/outputs",
                 ".config/sway/awtarchy-trial/awtarchy-login.mp3",
                 ".config/sway/awtarchy-trial/login-sound.sh",

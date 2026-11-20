@@ -16,6 +16,94 @@ START = "# AWTARCHY-SWAY-OUTPUTS-BEGIN"
 END = "# AWTARCHY-SWAY-OUTPUTS-END"
 NAME = re.compile(r"^[A-Za-z0-9_.-]{1,48}$")
 
+def connected_drm_outputs():
+    """Return kernel connector names; empty means no safe offline match."""
+    result = set()
+    directory = Path("/sys/class/drm")
+    if not directory.is_dir():
+        return result
+    for entry in directory.glob("card*-*/status"):
+        match = re.fullmatch(r"card\d+-(.+)", entry.parent.name)
+        if not match or not NAME.fullmatch(match.group(1)):
+            continue
+        try:
+            if entry.read_text(encoding="ascii").strip() == "connected":
+                result.add(match.group(1))
+        except OSError:
+            continue
+    return result
+
+
+def outputs_from_saved_hyprland():
+    """Import literal monitor declarations without evaluating untrusted Lua.
+
+    Only complete explicit modes, positions and scales can be translated.
+    The Awtarchy default 'preferred/auto' entry is intentionally ignored.
+    """
+    path = Path(os.environ.get(
+        "XDG_CONFIG_HOME", str(Path.home() / ".config"))) / "hypr/hyprland.lua"
+    if path.is_symlink() or not path.is_file() or path.stat().st_size > 1024 * 1024:
+        raise ValueError("No safe saved Hyprland monitor config")
+    lines = []
+    names = set()
+    text = path.read_text(encoding="utf-8")
+    for line in text.splitlines():
+        # Never run Lua or infer values from functions, expressions or variables.
+        match = re.fullmatch(r"\s*hl\.monitor\(\{(.*?)\}\)\s*(?:--.*)?", line)
+        if not match:
+            continue
+        fields = {}
+        source = match.group(1).strip().rstrip(",").strip()
+        fields_re = re.compile(
+            r"""\s*(output|mode|position|scale|vrr)\s*=\s*("[^"]*"|'[^']*'|\d+(?:\.\d+)?)\s*(?:,|$)"""
+        )
+        cursor = 0
+        while cursor < len(source):
+            found = fields_re.match(source, cursor)
+            if not found or found.group(1) in fields:
+                fields = {}
+                break
+            value = found.group(2)
+            fields[found.group(1)] = value[1:-1] if value[:1] in ("'", '"') else value
+            cursor = found.end()
+        name = fields.get("output", "")
+        if not name:
+            continue
+        if not NAME.fullmatch(name) or name in names:
+            raise ValueError("Duplicate or unsafe saved Hyprland output")
+        mode = re.fullmatch(r"(\d{3,5})x(\d{3,5})@(\d+(?:\.\d+)?)", fields.get("mode", ""))
+        position = re.fullmatch(r"(-?\d+)x(-?\d+)", fields.get("position", ""))
+        try:
+            scale = Decimal(fields.get("scale", ""))
+            refresh = Decimal(mode.group(3)) if mode else Decimal(0)
+        except (ValueError, ArithmeticError):
+            continue
+        if (not mode or not position or not 20 <= refresh <= 1000
+                or not 0 < scale <= 8 or int(mode.group(1)) <= 0
+                or int(mode.group(2)) <= 0):
+            continue
+        vrr = fields.get("vrr", "0")
+        if vrr not in ("0", "1"):
+            continue
+        names.add(name)
+        lines.append((name, int(mode.group(1)), int(mode.group(2)),
+                      int(position.group(1)), int(position.group(2)), refresh, scale, vrr))
+    if not lines:
+        raise ValueError("No complete literal Hyprland monitor settings to import")
+    connected = connected_drm_outputs()
+    if not connected or not names.issubset(connected):
+        raise ValueError("Saved monitor names are not verified against connected DRM outputs")
+    min_x = min(row[3] for row in lines)
+    min_y = min(row[4] for row in lines)
+    result = [
+        f"output {name} mode {width}x{height}@{hz}Hz position {x-min_x} {y-min_y} scale {scale}"
+        for name, width, height, x, y, hz, scale, _ in lines
+    ]
+    result.extend(f"output {name} adaptive_sync on"
+                  for name, *_rest, vrr in lines if vrr == "1")
+    return result
+
+
 def outputs_from_hyprland():
     if os.environ.get("XDG_CURRENT_DESKTOP") != "Hyprland":
         raise ValueError("Import must run from active Hyprland")
@@ -171,6 +259,7 @@ def main():
     mode = ap.add_mutually_exclusive_group(required=True)
     mode.add_argument("--preview", action="store_true")
     mode.add_argument("--apply", action="store_true")
+    ap.add_argument("--from-saved", action="store_true", help="Use only literal saved Hyprland monitor settings")
     ap.add_argument("--config", type=Path, default=Path(
         os.environ.get("XDG_CONFIG_HOME", str(Path.home() / ".config"))
     ) / "sway/awtarchy-trial/config")
@@ -186,9 +275,13 @@ def main():
     previous = cfg.read_text(encoding="utf-8")
     if "# Awtarchy Sway dual-compositor trial. Does not touch Hyprland." not in previous:
         raise ValueError("Unknown Sway profile")
-    lines = outputs_from_hyprland()
-    profile_extras, workspace_lines = active_hyprmoncfg_additions(lines)
-    lines.extend(profile_extras)
+    if args.from_saved:
+        lines = outputs_from_saved_hyprland()
+        workspace_lines = []
+    else:
+        lines = outputs_from_hyprland()
+        profile_extras, workspace_lines = active_hyprmoncfg_additions(lines)
+        lines.extend(profile_extras)
     result = insert_profile(previous, lines)
     # nwg-displays owns this Sway-only file after the first customization.
     # Import only into the untouched stock stub, never into user settings.

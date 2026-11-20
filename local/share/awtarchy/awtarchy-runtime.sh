@@ -4137,7 +4137,7 @@ install_awtarchy_command_stage() {
 
 install_sway_session_stage() {
   compositor_has_sway || return 0
-  local source="${REPO_DIR}/trials/sway" desktop="/usr/share/wayland-sessions/awtarchy-sway-trial.desktop"
+  local source="${REPO_DIR}/trials/sway"
   local launcher="/usr/local/bin/awtarchy-sway-session"
 
   [[ -f "${source}/setup.sh" && ! -L "${source}/setup.sh" ]] \
@@ -4146,11 +4146,10 @@ install_sway_session_stage() {
     bash "${source}/setup.sh" --check \
     || die "Sway session preflight failed; existing Sway/Hyprland configs were not overwritten."
 
-  install -d -m 0755 -- /usr/share/wayland-sessions /usr/local/bin
-  if [[ ! -e "$desktop" && ! -L "$desktop" ]]; then
-    install -m 0644 -- "${source}/sway.desktop" "$desktop" \
-      || die "Could not add the isolated Sway Ly session."
-  fi
+  [[ -f /usr/share/wayland-sessions/sway.desktop &&
+     ! -L /usr/share/wayland-sessions/sway.desktop ]] \
+    || die "Missing native Sway session from package; refusing a duplicate session."
+  install -d -m 0755 -- /usr/local/bin
   if [[ ! -e "$launcher" && ! -L "$launcher" ]]; then
     install -m 0755 -- "${source}/session-launch.sh" "$launcher" \
       || die "Could not install the Sway session wrapper."
@@ -4158,6 +4157,21 @@ install_sway_session_stage() {
   run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
     bash "${source}/setup.sh" --install \
     || die "Sway session staging failed; Hyprland configuration was not removed."
+  bash "${source}/legacy-session-cleanup.sh" apply "$REPO_DIR" \
+    || die "Could not safely migrate the old duplicate Sway Ly entry."
+  # Import explicit settings from the saved Hyprland Lua config if possible.
+  # Existing Sway output rules and configs are never replaced.
+  local sway_cfg="${HOME_DIR}/.config/sway/awtarchy-trial/config"
+  if [[ -f "$sway_cfg" && ! -L "$sway_cfg" ]]; then
+    if run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+        python3 "${source}/import-hypr-monitors.py" --preview --from-saved; then
+      run_as_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+        python3 "${source}/import-hypr-monitors.py" --apply --from-saved \
+        || die "Saved Hyprland monitor import failed; Sway settings preserved."
+    else
+      log "No safe explicit saved Hyprland monitor layout to import; keeping Sway defaults."
+    fi
+  fi
   # Record exact managed source hashes and preserve imported Sway outputs.
   local sync_helper="${source}/sync.py"
   local sync_baseline="${HOME_DIR}/.local/state/awtarchy/sway-managed-baseline.json"

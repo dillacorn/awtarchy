@@ -1566,46 +1566,102 @@ compositor_trial_installed() {
      -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
 }
 run_compositor_manager() {
+  # Explicit test checkout is never installed over the user's normal command.
+  # This allows the exact, unmerged menu branch to exercise its own backend.
+  if [[ -n "${AWTARCHY_COMPOSITOR_TEST_SOURCE:-}" ]]; then
+    local source_repo="$AWTARCHY_COMPOSITOR_TEST_SOURCE"
+    [[ "$source_repo" == /* && -d "$source_repo/.git" && ! -L "$source_repo" &&
+       "$(git -C "$source_repo" branch --show-current)" == feature/simplify-compositor-management &&
+       "$(git -C "$source_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+       -z "$(git -C "$source_repo" status --porcelain --untracked-files=no)" &&
+       -f "$source_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" ]] ||
+      die "Invalid or modified compositor menu test checkout."
+    AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$source_repo" \
+      bash "$source_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" "$@"
+    return $?
+  fi
   local helper="$TARGET_HOME/.local/share/awtarchy/awtarchy-compositor-stable.sh"
   [[ -f "$helper" && ! -L "$helper" && -O "$helper" ]] ||
     die "Stable compositor manager missing. Run awtarchy self-update."
   bash "$helper" "$@"
 }
 compositor_menu() {
-  local choice rc
+  local choice operation action answer title rc
+  local -a options=() actions=()
+  local sway_state hyprland_state
   while true; do
-    choice="$(single_select_menu "Awtarchy Compositors: Hyprland / Sway" 0 \
-      "Status: installed compositors / GPU" \
-      "Preview: add Sway" \
-      "Install Sway (preserve Hyprland)" \
-      "Preview: add Hyprland" \
-      "Install Hyprland (preserve Sway)" \
-      "Preview: remove Sway and owned extras" \
-      "Remove Sway only" \
-      "Remove Sway and eligible owned extras" \
-      "Preview: remove Hyprland and owned extras" \
-      "Remove Hyprland only" \
-      "Remove Hyprland and eligible owned extras" \
-      "Review Sway managed config changes (no writes)" \
-      "Apply Sway managed updates (preserve custom edits)" \
-      "Back")" || return 0
-    rc=0
-    case "$choice" in
-      0) run_compositor_manager status plan no || rc=$? ;;
-      1) run_compositor_manager install-sway plan no || rc=$? ;;
-      2) run_compositor_manager install-sway apply no || rc=$? ;;
-      3) run_compositor_manager install-hyprland plan no || rc=$? ;;
-      4) run_compositor_manager install-hyprland apply no || rc=$? ;;
-      5) run_compositor_manager remove-sway plan yes || rc=$? ;;
-      6) run_compositor_manager remove-sway apply no || rc=$? ;;
-      7) run_compositor_manager remove-sway apply yes || rc=$? ;;
-      8) run_compositor_manager remove-hyprland plan yes || rc=$? ;;
-      9) run_compositor_manager remove-hyprland apply no || rc=$? ;;
-      10) run_compositor_manager remove-hyprland apply yes || rc=$? ;;
-      11) run_compositor_manager update-sway plan no || rc=$? ;;
-      12) run_compositor_manager update-sway apply no || rc=$? ;;
-      *) return 0 ;;
+    options=() actions=()
+    sway_state="Not installed"
+    hyprland_state="Not installed"
+    if pacman -Qq sway >/dev/null 2>&1; then sway_state="Installed"; fi
+    if pacman -Qq hyprland >/dev/null 2>&1; then hyprland_state="Installed"; fi
+
+    if [[ "$sway_state" == "Not installed" ]]; then
+      options+=("Install Sway")
+      actions+=("install-sway")
+    else
+      options+=("Update Sway")
+      actions+=("update-sway")
+    fi
+    if [[ "$hyprland_state" == "Not installed" ]]; then
+      options+=("Install Hyprland")
+      actions+=("install-hyprland")
+    fi
+    if [[ "$sway_state" == "Installed" && "$hyprland_state" == "Installed" ]]; then
+      options+=("Remove Hyprland" "Remove Sway")
+      actions+=("remove-hyprland" "remove-sway")
+    fi
+    options+=("Back")
+    actions+=("back")
+
+    title="Compositor Management
+
+Hyprland: $hyprland_state
+Sway:     $sway_state
+
+Personal configurations are always preserved."
+    choice="$(single_select_menu "$title" 0 "${options[@]}")" || return 0
+    operation="${actions[$choice]:-back}"
+    [[ "$operation" != back ]] || return 0
+
+    case "$operation" in
+      install-sway)
+        title="Install Sway
+
+Install Sway and required dependencies.
+Import compatible Hyprland settings when available.
+Preserve existing Sway and Hyprland configurations.
+Keep Hyprland installed."
+        action="Install" ;;
+      install-hyprland)
+        title="Install Hyprland
+
+Install Hyprland and required dependencies.
+Preserve existing Sway and Hyprland configurations.
+Keep Sway installed."
+        action="Install" ;;
+      update-sway)
+        title="Update Sway
+
+Apply managed Sway and Quickshell improvements.
+Preserve customized settings, monitor layout and shared packages.
+Remove only the exact obsolete duplicate Ly entry."
+        action="Update" ;;
+      remove-sway|remove-hyprland)
+        title="Remove ${operation#remove-}
+
+Remove only the selected compositor and eligible
+Awtarchy-owned extras that are not shared.
+Always preserve personal configurations.
+Keep the other compositor installed."
+        action="Remove" ;;
     esac
+    answer="$(single_select_menu "$title" 0 "$action" "Cancel")" || continue
+    [[ "$answer" == 0 ]] || continue
+
+    rc=0
+    AWTARCHY_COMPOSITOR_MENU_APPROVED="$operation" \
+      run_compositor_manager "$operation" apply yes || rc=$?
     (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
     pause_menu
   done
