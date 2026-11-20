@@ -73,12 +73,17 @@ Singleton {
     }
 
     function toggleUtility(appId, command) {
-        if ((appId === "Wiremix" || appId === "awtarchy-default-apps")
-                && Array.isArray(command) && command.length > 0) {
-            Quickshell.execDetached(command);
-            return true;
-        }
-        return false;
+        // Route both the bar and the quick settings selector through the same
+        // compositor-owned exact-window toggle as the keyboard shortcuts.
+        const name = appId === "Wiremix" ? "wiremix"
+            : appId === "awtarchy-default-apps" ? "default-apps" : "";
+        if (!name)
+            return false;
+        Quickshell.execDetached([
+            "python3", root.configHome + "/umbriel/awtarchy-trial/toggle-utility.py",
+            name
+        ]);
+        return true;
     }
 
     function refreshMonitors() {
