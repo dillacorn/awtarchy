@@ -30,7 +30,8 @@ menu = LAUNCHER.split("compositor_menu() {", 1)[1].split(
 assert "Preview: add Sway" not in menu
 assert "preserve Hyprland)" not in menu
 assert 'options+=("Install Sway")' in menu
-assert 'options+=("Update Sway")' in menu
+assert 'options+=("Update Sway")' not in menu
+assert 'Update configs to refresh installed compositor profiles' in menu
 assert 'options+=("Remove Hyprland" "Remove Sway")' in menu
 assert 'options+=("Back")' in menu
 assert 'single_select_menu "$title" 0 "$action" "Cancel"' in menu
