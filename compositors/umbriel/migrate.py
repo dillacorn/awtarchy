@@ -138,6 +138,88 @@ def output(name: str, mode: str, position: str, scale: str,
     return result
 
 
+def saved_hyprmoncfg_outputs(home: Path, connected: set[str]) -> dict[str, dict]:
+    """Use a saved hyprmoncfg profile only when it matches unambiguously.
+
+    Canonical hyprmoncfg profiles are JSON, not the generated live Lua.
+    Never choose between divergent saved profiles or guess connector names.
+    """
+    directory = home / ".config/hyprmoncfg/profiles"
+    if (not connected or directory.is_symlink() or not directory.is_dir()
+            or directory.stat().st_uid != os.geteuid()):
+        return {}
+    possibilities = {}
+    for path in sorted(directory.glob("*.json"))[:65]:
+        text = safe_read(path, 262144)
+        if text is None:
+            continue
+        try:
+            profile = json.loads(text)
+        except ValueError:
+            continue
+        if not isinstance(profile, dict):
+            continue
+        entries = profile.get("outputs")
+        if not isinstance(entries, list) or not 0 < len(entries) <= 32:
+            continue
+        results, names = {}, set()
+        valid = True
+        for value in entries:
+            if not isinstance(value, dict):
+                valid = False
+                break
+            name = value.get("name")
+            enabled = value.get("enabled")
+            if (not isinstance(name, str) or not CONNECTOR.fullmatch(name)
+                    or name in names or type(enabled) is not bool):
+                valid = False
+                break
+            names.add(name)
+            if name not in connected:
+                continue
+            if not enabled:
+                results[name] = {"enabled": False}
+                continue
+            x, y = value.get("x"), value.get("y")
+            if type(x) is not int or type(y) is not int:
+                valid = False
+                break
+            if value.get("rotation_auto") or value.get("mirror"):
+                valid = False
+                break
+            mode = value.get("mode", "")
+            if not isinstance(mode, str) or not MODE.fullmatch(mode):
+                width, height, hz = (value.get("width"), value.get("height"),
+                                     value.get("refresh"))
+                if (type(width) is not int or type(height) is not int
+                        or type(hz) not in (int, float)):
+                    valid = False
+                    break
+                mode = f"{width}x{height}@{hz}"
+            scale = value.get("scale")
+            if type(scale) not in (int, float):
+                valid = False
+                break
+            rotation = value.get("transform", 0)
+            if type(rotation) is not int or not 0 <= rotation < len(TRANSFORMS):
+                valid = False
+                break
+            vrr = value.get("vrr", 0)
+            settings = output(name, mode, f"{x}x{y}", str(scale),
+                              str(vrr) if vrr in (0, 1, 2) else "0",
+                              TRANSFORMS[rotation])
+            if settings is None:
+                valid = False
+                break
+            results[name] = settings
+        if not valid or names != connected or set(results) != connected:
+            continue
+        signature = json.dumps(results, sort_keys=True, separators=(",", ":"))
+        possibilities[signature] = results
+    # Two profiles with the same outputs but different layouts are ambiguous.
+    return next(iter(possibilities.values())) if len(possibilities) == 1 else {}
+
+
 def hypr_outputs(home: Path, connected: set[str]) -> dict[str, dict]:
     # hyprmoncfg's generated active Lua is more authoritative than the
     # Awtarchy root wildcard and sample Virtual-1 entries.
@@ -181,7 +263,7 @@ def hypr_outputs(home: Path, connected: set[str]) -> dict[str, dict]:
                 result[name] = settings
         if result:
             return result
-    return {}
+    return saved_hyprmoncfg_outputs(home, connected)
 
 
 def sway_outputs(home: Path, connected: set[str]) -> dict[str, dict]:
