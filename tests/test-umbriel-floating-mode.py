@@ -1,0 +1,50 @@
+#!/usr/bin/env python3
+"""Exercise Umbriel's persisted floating preference without compositor writes."""
+import importlib.util
+import os
+from pathlib import Path
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+
+ROOT = Path(__file__).resolve().parents[1]
+path = ROOT / "compositors/umbriel/floating-windows.py"
+spec = importlib.util.spec_from_file_location("umbriel_floating", path)
+mod = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(mod)
+
+with tempfile.TemporaryDirectory(prefix="umbriel-floating-check-") as tmp:
+    root = Path(tmp)
+    runtime = root / "runtime"
+    runtime.mkdir(mode=0o700)
+    cfg = root / "config"
+    target = cfg / "umbriel/awtarchy-trial/floating-rules.toml"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(mod.OFF)
+    env = {"XDG_CONFIG_HOME": str(cfg), "XDG_RUNTIME_DIR": str(runtime),
+           "XDG_CURRENT_DESKTOP": "Umbriel", "WAYLAND_DISPLAY": "wayland-1"}
+    reply = SimpleNamespace(stdout='{"ok":null}', returncode=0)
+    with patch.dict(os.environ, env), \
+         patch.object(mod.os, "geteuid", return_value=1000), \
+         patch.object(mod.subprocess, "run", return_value=reply) as run:
+        mod.run(["status"])
+        mod.run(["set", "on"])
+        assert target.read_bytes() == mod.ON
+        assert (runtime / "awtarchy-umbriel-floating-windows-state").read_text() == "enabled\\n".replace("\\n", "\n")
+        assert [args.args[0][1:] for args in run.call_args_list] == [
+            ["config", "validate"], ["msg", "config-reload"]]
+        run.reset_mock()
+        mod.run(["set", "off"])
+        assert target.read_bytes() == mod.OFF
+        assert len(run.call_args_list) == 2
+        # A personalized file is never silently rewritten.
+        target.write_text("# personal floating policy\n")
+        try:
+            mod.run(["set", "on"])
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Unexpected overwrite of a customized policy")
+        assert target.read_text() == "# personal floating policy\n"
+
+print("PASS: Umbriel native floating-only toggle, persistent state and custom preservation")
