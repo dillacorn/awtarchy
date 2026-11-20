@@ -10454,7 +10454,9 @@ main() {
     fi
     # The Umbriel trial has an independent exact-hash ownership baseline.
     # Review only installations that actually staged this Awtarchy profile.
-    if [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+    if { pacman -Qq umbriel-git >/dev/null 2>&1 ||
+         pacman -Qq umbriel >/dev/null 2>&1; } &&
+       [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
           ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
           -f "$repo_dir/trials/umbriel/sync.py" &&
           ! -L "$repo_dir/trials/umbriel/sync.py" ]]; then
@@ -10635,7 +10637,9 @@ main() {
   # owns a separate exact-hash manifest. Only Awtarchy-staged profiles
   # are updated, after the user has accepted the live update.
   # A failure here must not roll back accepted Hyprland changes.
-  if [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+  if { pacman -Qq umbriel-git >/dev/null 2>&1 ||
+       pacman -Qq umbriel >/dev/null 2>&1; } &&
+     [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
         ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" ]]; then
     if [[ -f "$repo_dir/trials/umbriel/sync.py" &&
           ! -L "$repo_dir/trials/umbriel/sync.py" ]]; then
