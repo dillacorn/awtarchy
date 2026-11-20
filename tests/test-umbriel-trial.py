@@ -40,6 +40,8 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         capture_output=False, check=True, timeout=90)
     assert (rendered / "shell.qml").is_file()
     assert (rendered / "UmbrielBridge.qml").is_file()
+    assert "native portal" in (rendered / "ScreenSharePicker.qml").read_text()
+    assert "/sway/awtarchy-trial/" not in (rendered / "ScreenSharePicker.qml").read_text()
     assert (rendered / "UmbrielFlyoutWindow.qml").is_file()
     for source in rendered.glob("*.qml"):
         text = source.read_text()
