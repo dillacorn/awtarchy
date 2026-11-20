@@ -37,6 +37,24 @@ for config in /etc/ly/config.lua /etc/ly/config.ini; do
     fi
 done
 
+printf '\n=== AWTARCHY LY SESSION DIRECTORY ===\n'
+dir=/etc/ly/awtarchy-wayland-sessions
+if [[ -d "$dir" && ! -L "$dir" ]]; then
+    stat -c 'Owner UID: %u | Mode: %a | Path: %n' -- "$dir"
+    for desktop in "$dir"/*.desktop; do
+        [[ -e "$desktop" || -L "$desktop" ]] || continue
+        printf '\n%s\n' "$desktop"
+        if [[ -L "$desktop" ]]; then
+            printf 'Linked to: %s\n' "$(readlink -- "$desktop")"
+        fi
+        if [[ -f "$desktop" ]]; then
+            grep -E '^(Name|Exec|DesktopNames)=' -- "$desktop" || true
+        fi
+    done
+else
+    printf 'Missing or unsafe: %s\n' "$dir"
+fi
+
 printf '\n=== LY SERVICE STATE ===\n'
 if command -v systemctl >/dev/null 2>&1; then
     systemctl show ly.service --no-pager -p ActiveState -p ActiveEnterTimestamp 2>&1 || true
