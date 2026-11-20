@@ -42,6 +42,8 @@ def render(repo: Path, destination: Path):
                 text = (bridge_dir / "UmbrielBridge.qml").read_text(encoding="utf-8")
             elif source.name == "ScreenSharePicker.qml":
                 text = (bridge_dir / "ScreenSharePicker.qml").read_text(encoding="utf-8")
+            elif source.name == "TitleBarsCard.qml":
+                text = (bridge_dir / "TitleBarsCard.qml").read_text(encoding="utf-8")
             else:
                 try:
                     text = source.read_text(encoding="utf-8")
@@ -59,11 +61,20 @@ def render(repo: Path, destination: Path):
                     text = text.replace("active-theme-sway", "active-theme-umbriel")
                     text = text.replace("Sway", "Umbriel")
                     if source.name == "Bar.qml":
+                        text = text.replace(
+                            "/umbriel/awtarchy-trial/mode-control.sh",
+                            "/umbriel/awtarchy-trial/mode-control.py")
                         old = "        UmbrielBridge.activateWorkspace(selector);"
                         new = "        UmbrielBridge.activateWorkspace(selector, monitorName);"
                         if text.count(old) != 1:
                             raise ValueError("Umbriel bar workspace target changed")
                         text = text.replace(old, new, 1)
+                    if source.name == "ScreenshotSoundSettings.qml":
+                        # Both the inherited Sway and Hyprland preference paths
+                        # must read the same shared file during an Umbriel login.
+                        text = text.replace(
+                            "/hypr/scripts/screenshot_sound.sh",
+                            "/umbriel/awtarchy-trial/screenshot_sound.sh")
                     if "swaymsg " in text or "hyprctl " in text or "import Quickshell.I3" in text:
                         raise ValueError("Unported compositor-specific QML: " + source.name)
             (result / target).write_text(text, encoding="utf-8")
