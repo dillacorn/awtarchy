@@ -10,8 +10,9 @@ Singleton {
     id: root
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
-    readonly property string workspaceScript: configHome
-        + "/umbriel/awtarchy-trial/workspace-state.py"
+    readonly property string eventsScript: configHome
+        + "/umbriel/awtarchy-trial/workspace-events.py"
+    property bool eventsEnabled: true
     property var workspaces: ({ values: [] })
     property var toplevels: ({ values: [] })
     property var focusedMonitor: null
@@ -44,7 +45,7 @@ Singleton {
         const all = numericWorkspaces(output);
         let number = null;
         if (key === "e-1" || key === "e+1") {
-            const focused = all.findIndex(w => w.focused);
+            const focused = all.findIndex(w => w.active);
             if (focused < 0 || !all.length)
                 return false;
             const step = key === "e-1" ? -1 : 1;
@@ -84,11 +85,6 @@ Singleton {
             name
         ]);
         return true;
-    }
-
-    function refreshMonitors() {
-        if (!workspaceReader.running)
-            workspaceReader.exec(["python3", root.workspaceScript]);
     }
 
     function applyWorkspaceState(state) {
@@ -151,7 +147,7 @@ Singleton {
             root.workspaces = { values: mappedWorkspaces };
         }
         const windowSignature = JSON.stringify(mappedWindows.map(t =>
-            [t.title, t.workspace.id, t.activated]));
+            [t.title, t.lastIpcObject.class, t.workspace.id, t.activated]));
         if (root.windowFingerprint !== windowSignature) {
             root.windowFingerprint = windowSignature;
             root.toplevels = { values: mappedWindows };
@@ -184,31 +180,38 @@ Singleton {
         }
     }
 
+    // Umbriel sends full snapshots on change. The persistent subscriber also
+    // removes duplicate window-coordinate updates before QML model rebuilding.
+    // A failed connection is retried with backoff, never a 700 ms process loop.
     Process {
-        id: workspaceReader
-        stdout: StdioCollector {
-            onStreamFinished: {
+        id: workspaceSubscriber
+        running: root.eventsEnabled
+        command: ["python3", root.eventsScript]
+        stdout: SplitParser {
+            onRead: line => {
                 try {
-                    root.applyWorkspaceState(JSON.parse(text));
+                    root.applyWorkspaceState(JSON.parse(line));
                 } catch (error) {
-                    console.warn("UmbrielBridge: workspace state parse failed", error);
+                    console.warn("UmbrielBridge: invalid workspace event", error);
                 }
             }
         }
-        stderr: StdioCollector {
-            onStreamFinished: {
-                const message = text.trim();
-                if (message.length)
-                    console.warn("UmbrielBridge: workspace helper:", message);
+        stderr: SplitParser {
+            onRead: line => {
+                if (line.trim().length)
+                    console.warn("UmbrielBridge: workspace subscription:", line.trim());
             }
+        }
+        onExited: {
+            root.eventsEnabled = false;
+            subscriptionRetry.restart();
         }
     }
 
     Timer {
-        interval: 700
-        repeat: true
-        running: true
-        triggeredOnStart: true
-        onTriggered: root.refreshMonitors()
+        id: subscriptionRetry
+        interval: 2500
+        repeat: false
+        onTriggered: root.eventsEnabled = true
     }
 }
