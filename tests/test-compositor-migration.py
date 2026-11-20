@@ -96,15 +96,15 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert missing["workspace_home"] == "DP-1"
     assert temporarily_absent
     keys = profile["keybinds"]
-    assert keys["Mod+F"] == "window-toggle-floating", keys
-    assert keys["Mod+Ctrl+F"] == "window-toggle-fullscreen"
-    assert keys["Mod+Q"] == "window-close"
-    assert keys["Mod+Alt+BackSpace"].endswith("quicksettings toggle")
-    assert keys["Mod+X"] == "scratchpad-toggle"
+    assert keys["Super+F"] == "window-toggle-floating", keys
+    assert keys["Super+Ctrl+F"] == "window-toggle-fullscreen"
+    assert keys["Super+Q"] == "window-close"
+    assert keys["Super+Alt+BackSpace"].endswith("quicksettings toggle")
+    assert keys["Super+X"] == "scratchpad-toggle"
     assert keys["Alt+P"].endswith("launcher toggle")
-    assert keys["Mod+1"] == "workspace-switch --name 1"
+    assert keys["Super+1"] == "workspace-switch --name 1"
     assert keys["Alt+Shift+1"] == "window-move-to-workspace --name 1"
-    assert "Mod+Alt+BracketLeft" not in keys  # Hyprland-only vibrance
+    assert "Super+Alt+BracketLeft" not in keys  # Hyprland-only vibrance
     assert all("hyprctl" not in v and "swaymsg" not in v for v in keys.values())
 
     # Regression: Awtarchy's real default Hyprland window bindings are in
@@ -112,13 +112,13 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     # dispatcher actions without executing any Lua.
     hypr.write_text((ROOT / "config/hypr/hyprland.lua").read_text(encoding="utf-8"))
     current = module.hypr_bindings(home)
-    assert current["Mod+Q"] == "window-close", current
+    assert current["Super+Q"] == "window-close", current
     assert current["Alt+F4"] == "window-close"
-    assert current["Mod+F"] == "window-toggle-floating"
-    assert current["Mod+Ctrl+F"] == "window-toggle-fullscreen"
+    assert current["Super+F"] == "window-toggle-floating"
+    assert current["Super+Ctrl+F"] == "window-toggle-fullscreen"
     assert current["Alt+Tab"] == "window-focus-next"
-    assert current["Mod+Y"] == "window-toggle-pinned"
-    assert current["Mod+N"].endswith("notifications toggle")
+    assert current["Super+Y"] == "window-toggle-pinned"
+    assert current["Super+N"].endswith("notifications toggle")
     assert current["Alt+P"].endswith("launcher toggle")
 
     # Restore the explicit-display fixture for subsequent migration checks.
@@ -162,9 +162,9 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     profile = tomllib.loads(raw.decode())
     assert report["source"] == "sway"
     assert profile["output"]["DP-3"]["vrr"] == "always"
-    assert profile["keybinds"]["Mod+F"] == "window-toggle-floating"
-    assert profile["keybinds"]["Mod+Ctrl+F"] == "window-toggle-fullscreen"
-    assert profile["keybinds"]["Mod+D"].endswith("launcher toggle")
+    assert profile["keybinds"]["Super+F"] == "window-toggle-floating"
+    assert profile["keybinds"]["Super+Ctrl+F"] == "window-toggle-fullscreen"
+    assert profile["keybinds"]["Super+D"].endswith("launcher toggle")
     assert profile["keybinds"]["Alt+1"] == "workspace-switch --name 1"
     assert "Alt+Tab" not in profile["keybinds"]  # Sway-specific focus-cycle utility
 
