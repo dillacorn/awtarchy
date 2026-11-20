@@ -11,9 +11,10 @@ import sys
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
 SCRIPTS = CONFIG / "hypr/scripts"
 UTILITIES = {
-    "btop": (("btop",), ("foot", "--app-id", "btop", "btop"), False),
+    "btop": (("btop",), ("foot", "--app-id", "btop", "--title", "btop", "btop"), False),
     "maccel": (("maccel",), ("foot", "--app-id", "maccel", "maccel", "tui"), False),
-    "wiremix": (("Wiremix",), ("foot", "--app-id", "Wiremix", "wiremix"), False),
+    "wiremix": (("Wiremix",), ("foot", "--app-id", "Wiremix", "--title", "Wiremix",
+                           "wiremix", "-p", "auto", "-f", "30"), False),
     "default-apps": (("awtarchy-default-apps",),
         ("foot", "--app-id", "awtarchy-default-apps", "--title",
          "awtarchy-default-apps", "python3", str(SCRIPTS / "default_applications.py"), "tui"), True),
@@ -58,7 +59,17 @@ def classify(windows: list, workspaces: list, identities: tuple,
         if not isinstance(window, dict):
             continue
         app_id = window.get("app_id")
-        if not isinstance(app_id, str) or app_id.casefold() not in names:
+        title = window.get("title")
+        # Foot/Footclient installations can expose their generic app-id while
+        # honoring the explicit terminal title. Restrict this fallback to
+        # known terminal identities and an exact utility title, never an
+        # arbitrary window title or a substring match.
+        id_match = isinstance(app_id, str) and app_id.casefold() in names
+        title_match = (isinstance(title, str) and title.casefold() in names
+                       and isinstance(app_id, str)
+                       and app_id.casefold() in ("foot", "footclient",
+                                                "org.codeberg.dnkl.foot"))
+        if not (id_match or title_match):
             continue
         if window.get("floating") is not True:
             tiled = True
