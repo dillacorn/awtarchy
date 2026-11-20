@@ -144,7 +144,8 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                     name + "\n").encode()
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
                  "capture.sh", "toggle-utility.py", "mode-control.py", "animations.sh",
-                 "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
+                 "default-apps.sh", "position.sh", "runtime-rules.sh",
+                 "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
     # Screenshot preferences are shared; stage the known-good helper without
     # writing into any source compositor's installed configuration.
