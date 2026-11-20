@@ -96,9 +96,12 @@ do not present that as a safe Umbriel-only update.
   a pre-existing last-compositor marker. If neither exists, Hyprland is a
   *fallback*, not evidence it was last used. Set
   `AWTARCHY_MIGRATE_FROM=sway` (or `hyprland`) explicitly if needed.
-- GPU-specific flags, NVIDIA driver changes, tearing and HDR are **not**
-  automatically enabled. Explicit source VRR policies can be translated only
-  for verified matching displays.
+- Existing NVIDIA drivers and kernel configuration are never changed.
+  Output-level tearing and direct scanout are enabled for eligible fullscreen
+  games. The importer uses fullscreen VRR only on displays where Umbriel
+  reports adaptive-sync support, while retaining explicit source policies.
+  These options permit lower latency but do not guarantee an asynchronous
+  flip, direct scanout, or active VRR in every game.
 
 ## Retesting an installed Umbriel trial
 
@@ -139,6 +142,22 @@ replace custom Umbriel layout files to force an import.
   size and commits once on release; it is not Hyprland's continuous floating-
   window resize. Right/bottom edge handling is corrected so inward dragging
   enlarges the panel.
+
+## Native window mouse controls and global workspace identity
+
+Umbriel has one compositor-owned mouse-drag modifier (`general.mod_key`).
+Awtarchy sets it to **Alt**: Alt+left-drag moves windows and Alt+right-drag
+resizes them. All existing Super keyboard shortcuts are expressed with explicit
+`Super+` chords, including migrated bindings; the native Super+mouse grab is
+therefore replaced rather than retained as a second drag modifier.
+
+Awtarchy uses ten globally named workspaces, initially on the selected home
+output. Other monitors use dynamic local workspaces and should not duplicate
+the global names. `Alt+1` and `Super+1` target the named workspace 1
+irrespective of its current output; transferring a named workspace preserves
+its identity. Workspace layout changes from the prior output-local 10/10 model
+should be applied from another compositor before beginning a new Umbriel
+session, not live-reloaded with open windows.
 
 ## Known experimental limitations
 
