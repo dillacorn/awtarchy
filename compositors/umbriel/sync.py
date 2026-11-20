@@ -125,6 +125,11 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     guard_module = importlib.util.module_from_spec(guard_spec)
     guard_spec.loader.exec_module(guard_module)
     result[target / "capture-rules.toml"] = guard_module.render_defaults()
+    floating_spec = importlib.util.spec_from_file_location(
+        "awtarchy_umbriel_floating", src / "floating-windows.py")
+    floating_module = importlib.util.module_from_spec(floating_spec)
+    floating_spec.loader.exec_module(floating_module)
+    result[target / "floating-rules.toml"] = floating_module.OFF
     theme_spec = importlib.util.spec_from_file_location(
         "awtarchy_umbriel_colors", src / "theme-colors.py")
     theme_module = importlib.util.module_from_spec(theme_spec)
@@ -151,7 +156,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                  "workspace-events.py", "capture.sh", "toggle-utility.py",
                  "mode-control.py", "animations.sh",
                  "default-apps.sh", "screenshare-guard.sh", "screenshare-guard.py",
-                 "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
+                 "floating-windows.sh", "floating-windows.py", "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
     # Screenshot preferences are shared; stage the known-good helper without
     # writing into any source compositor's installed configuration.
@@ -174,6 +179,8 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
             ("awtarchy-trial/theme.toml", result[target / "theme.toml"]),
             ("awtarchy-trial/capture-rules.toml",
              result[target / "capture-rules.toml"]),
+            ("awtarchy-trial/floating-rules.toml",
+             result[target / "floating-rules.toml"]),
         ):
             dest = testroot / name
             dest.parent.mkdir(parents=True, exist_ok=True)
