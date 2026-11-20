@@ -601,6 +601,43 @@ Qs.Singleton {
                         raise ValueError("Quick Settings action-result handler changed")
                     text = text.replace(old_result, new_result, 1)
 
+                    # Preserve the user's saved state on a failed write.
+                    # An optimistic UI refresh previously claimed that Save/
+                    # Copy had succeeded even if the backend exited nonzero.
+                    old_writer = (
+                        '    Process {\\n'
+                        '        id: stateWriter\\n'
+                        '        onExited: {\\n'
+                        '            BarState.refresh();\\n'
+                        '            privacyRuleUpdater.exec([root.configHome + "/hypr/scripts/quickshell_runtime_rules.sh"]);\\n'
+                        '            Qt.callLater(() => root.runNextStateCommand());\\n'
+                        '        }\\n'
+                        '    }'
+                    ).replace('\\n', '\n')
+                    # The renderer translates the runtime rule script path
+                    # before this pass, so match the translated destination.
+                    old_writer = old_writer.replace(
+                        '/hypr/scripts/quickshell_runtime_rules.sh',
+                        '/sway/awtarchy-trial/runtime-rules.sh')
+                    new_writer = (
+                        '    Process {\\n'
+                        '        id: stateWriter\\n'
+                        '        onExited: (exitCode, exitStatus) => {\\n'
+                        '            if (exitCode === 0) {\\n'
+                        '                BarState.refresh();\\n'
+                        '                privacyRuleUpdater.exec([root.configHome + "/sway/awtarchy-trial/runtime-rules.sh"]);\\n'
+                        '            } else {\\n'
+                        '                root.settingsMessage = "Settings write failed (" + exitCode + ")";\\n'
+                        '                root.stateCommandQueue = [];\\n'
+                        '            }\\n'
+                        '            Qt.callLater(() => root.runNextStateCommand());\\n'
+                        '        }\\n'
+                        '    }'
+                    ).replace('\\n', '\n')
+                    if text.count(old_writer) != 1:
+                        raise ValueError("Quick Settings persistent-state writer changed")
+                    text = text.replace(old_writer, new_writer, 1)
+
                     # The Sway backend accepts panel output and selected
                     # brightness output separately. The shared QML originally
                     # sends the panel name twice; that makes the brightness
