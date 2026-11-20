@@ -89,6 +89,11 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
             body = body.replace('== sway', '== Umbriel')
         if name == "quicksettings.py":
             body = body.replace('!= "sway"', '!= "Umbriel"')
+            old_wallpaper = 'command(["awtwall"])'
+            if body.count(old_wallpaper) != 1:
+                raise ValueError("Sway wallpaper action changed")
+            body = body.replace(old_wallpaper,
+                'command(["python3", str(TRIAL / "toggle-utility.py"), "wallpicker"])')
         if "swaymsg" in body or "SWAYSOCK" in body:
             raise ValueError("Unported Sway Quick Settings adapter: " + name)
         results[name] = body.encode()
