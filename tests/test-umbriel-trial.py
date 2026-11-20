@@ -117,14 +117,14 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
 
         def newer_release(repo, target_home, stage):
             desired = desired_original(repo, target_home, stage)
-            desired[session] = desired[session] + b"\\n# managed update test\\n"
+            desired[session] = desired[session] + b"\n# managed update test\n"
             return desired
 
         with patch.object(sync, "desired_files", side_effect=newer_release):
             sync.reconcile(ROOT, home, "preview")
             assert session.read_bytes() == original_session
             sync.reconcile(ROOT, home, "apply")
-        assert session.read_bytes() == original_session + b"\\n# managed update test\\n"
+        assert session.read_bytes() == original_session + b"\n# managed update test\n"
         backups = list(session.parent.glob("session.sh.backup-*"))
         assert len(backups) == 1 and backups[0].read_bytes() == original_session
         assert personal.read_text() == "personal Umbriel bar; do not overwrite"
