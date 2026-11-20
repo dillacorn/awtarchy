@@ -49,6 +49,21 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     theme = theme_module.palette(home)
     result[target / "theme.toml"] = theme_module.render_toml(theme)
     initial_quickshell_palette = theme_module.quickshell_palette(theme)
+    # On the first Umbriel install, reflect the user's last selected
+    # Awtarchy theme in its own picker state; never replace a later Umbriel
+    # theme selection, which is protected by the separate managed baseline.
+    shared_theme = home / ".local/state/awtarchy/active-theme"
+    if (shared_theme.is_file() and not shared_theme.is_symlink()
+            and shared_theme.stat().st_uid == os.geteuid()):
+        name = shared_theme.read_text(encoding="utf-8").strip()
+        if theme_module.valid_theme_name(name):
+            try:
+                theme_module.theme_source(home, name)
+            except ValueError:
+                pass
+            else:
+                result[home / ".local/state/awtarchy/active-theme-umbriel"] = (
+                    name + "\n").encode()
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
                  "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
