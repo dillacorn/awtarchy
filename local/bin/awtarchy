@@ -1648,7 +1648,9 @@ Hyprland: $hyprland_state
 Sway:     $sway_state
 Umbriel:  $umbriel_state
 
-Personal configurations are always preserved.\n\nUse Update configs to refresh installed compositor profiles."
+Personal configurations are always preserved.
+
+Use Update configs to refresh installed compositor profiles."
     choice="$(single_select_menu "$title" 0 "${options[@]}")" || return 0
     operation="${actions[$choice]:-back}"
     [[ "$operation" != back ]] || return 0
