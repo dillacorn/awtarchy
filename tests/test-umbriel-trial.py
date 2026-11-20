@@ -28,6 +28,16 @@ assert keybinds["Super+1"] == "workspace-switch --name 1"
 assert keybinds["Super+F"] == "window-toggle-floating"
 assert keybinds["Super+Alt+A"].endswith("toggle-utility.py default-apps")
 assert keybinds["Alt+1"] == "workspace-switch --name 1"
+assert keybinds["Alt+Shift+B"].endswith("toggle-utility.py btop")
+assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
+assert keybinds["Super+Alt+M"].endswith("mode-control.py toggle mouse")
+routing = {w["match"].get("app_id"): w.get("default_workspace")
+           for w in config["window_rule"]}
+assert any("firefox" in rule and target == "2" for rule, target in routing.items())
+assert any("obs" in rule and target == "10" for rule, target in routing.items())
+assert any("steam_app" in rule and target == "1" for rule, target in routing.items())
+assert any(w["match"].get("title") == "^btop$"
+           and w["default_floating"] is True for w in config["window_rule"])
 assert all(not chord.startswith("Mod+") and
            ",Mod+" not in chord for chord in keybinds)
 assert config["input"]["mouse"]["accel_profile"] == "flat"
@@ -108,6 +118,12 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "return workspace.active || workspace.toplevels.values.length > 0;" in bar
     assert bar.count('modelData.active ? Theme.subtleActive : "transparent"') >= 2
     assert "awtarchy-umbriel-submap" in bar
+    assert bar.count('["python3", bar.mouseSubmapScript, "toggle", "mouse"]') >= 2
+    assert '["python3", bar.mouseSubmapScript, "reset"]' in bar
+    quick = (rendered / "QuickSettings.qml").read_text()
+    assert "root.placement = root.placementForScreen(root.activeScreen);" in quick
+    assert 'root.actionMessage = "Action failed (" + exitCode + ")";' in quick
+    assert 'visible: root.quickSettingsSectionVisible("submap")' in quick
     bridge = (rendered / "UmbrielBridge.qml").read_text()
     assert "workspace-events.py" in bridge and "SplitParser" in bridge
     assert "interval: 700" not in bridge
@@ -143,6 +159,17 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         sync.reconcile(ROOT, home, "apply")
         assert (home / ".config/umbriel/config.toml").exists()
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
+        helper = home / ".config/umbriel/awtarchy-trial/application-state.sh"
+        assert helper.is_file()
+        assert "quickshell-state.json" in helper.read_text()
+        assert "/umbriel/awtarchy-trial/quickshell.sh" in helper.read_text()
+        settings = home / ".config/umbriel/awtarchy-trial/quicksettings.py"
+        assert "mode-control.py" in settings.read_text()
+        assert "toggle-utility.py" in settings.read_text()
+        assert ".casefold() != \"umbriel\"" in settings.read_text()
+        wrapper = home / ".config/umbriel/awtarchy-trial/quicksettings.sh"
+        assert '== "umbriel"' in wrapper.read_text()
+        assert "${XDG_CURRENT_DESKTOP,,}" in wrapper.read_text()
         personal = home / ".config/quickshell/awtarchy-umbriel/Bar.qml"
         personal.write_text("personal Umbriel bar; do not overwrite")
         sync.reconcile(ROOT, home, "apply")
