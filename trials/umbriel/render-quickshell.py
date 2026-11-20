@@ -56,6 +56,7 @@ def render(repo: Path, destination: Path):
                     text = text.replace("/sway/awtarchy-trial/", "/umbriel/awtarchy-trial/")
                     text = text.replace("/quickshell/awtarchy-sway/", "/quickshell/awtarchy-umbriel/")
                     text = text.replace("awtarchy-sway", "awtarchy-umbriel")
+                    text = text.replace("active-theme-sway", "active-theme-umbriel")
                     text = text.replace("Sway", "Umbriel")
                     if source.name == "Bar.qml":
                         old = "        UmbrielBridge.activateWorkspace(selector);"
