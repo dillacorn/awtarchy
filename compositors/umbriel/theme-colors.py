@@ -15,13 +15,18 @@ import sys
 import tempfile
 import tomllib
 
-THEME_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,99}\Z")
+def valid_theme_name(name: str) -> bool:
+    # Awtarchy includes accented palette names. Accept Unicode letters while
+    # keeping paths a single, safe file component.
+    return (isinstance(name, str) and 1 <= len(name) <= 100
+            and name[0].isalnum()
+            and all(c.isalnum() or c in "-._" for c in name))
 EIGHT = re.compile(r"[0-9a-fA-F]{8}\Z")
 SIX = re.compile(r"#[0-9a-fA-F]{6}\Z")
 
 
 def theme_source(home: Path, name: str) -> Path:
-    if not THEME_NAME.fullmatch(name) or name in (".", ".."):
+    if not valid_theme_name(name) or name in (".", ".."):
         raise ValueError("Invalid Awtarchy theme name")
     path = home / ".config/hypr/themes" / name
     if path.is_symlink() or not path.is_file() or path.stat().st_uid != os.geteuid():
@@ -47,7 +52,7 @@ def palette(home: Path, name: str | None = None) -> dict:
         state = home / ".local/state/awtarchy/active-theme"
         if state.is_file() and not state.is_symlink() and state.stat().st_uid == os.geteuid():
             candidate = state.read_text(encoding="utf-8").strip()
-            name = candidate if THEME_NAME.fullmatch(candidate) else None
+            name = candidate if valid_theme_name(candidate) else None
     if name is None:
         return colors
     try:
