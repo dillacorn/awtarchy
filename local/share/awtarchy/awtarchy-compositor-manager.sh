@@ -179,7 +179,13 @@ PY
       python3 "$repo/trials/sway/import-hypr-monitors.py" --apply
     fi
   else
-    printf 'Sway output profile not imported; run one-time importer from Hyprland.\n'
+    # Outside an active Hyprland session, import only explicit saved Lua
+    # monitor values. Dynamic/auto rules are never evaluated or guessed.
+    if python3 "$repo/trials/sway/import-hypr-monitors.py" --from-saved --preview; then
+      python3 "$repo/trials/sway/import-hypr-monitors.py" --from-saved --apply
+    else
+      printf 'No safe saved Hyprland output profile; keeping Sway display settings.\n'
+    fi
   fi
   sudo install -d -m 0755 /usr/local/bin /usr/share/wayland-sessions
   [[ -e /usr/local/bin/awtarchy-sway-session ]] ||
