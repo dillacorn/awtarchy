@@ -23,7 +23,7 @@ def connected_drm_outputs():
     if not directory.is_dir():
         return result
     for entry in directory.glob("card*-*/status"):
-        match = re.fullmatch(r"card\\d+-(.+)", entry.parent.name)
+        match = re.fullmatch(r"card\d+-(.+)", entry.parent.name)
         if not match or not NAME.fullmatch(match.group(1)):
             continue
         try:
