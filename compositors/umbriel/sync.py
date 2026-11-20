@@ -65,9 +65,12 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                 result[home / ".local/state/awtarchy/active-theme-umbriel"] = (
                     name + "\n").encode()
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
-                 "capture.sh", "toggle-utility.py", "position.sh", "runtime-rules.sh",
-                 "theme-apply.sh", "theme-colors.py"):
+                 "capture.sh", "toggle-utility.py", "mode-control.py", "animations.sh",
+                 "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
+    # Screenshot preferences are shared; stage the known-good helper without
+    # writing into any source compositor's installed configuration.
+    sources[target / "screenshot_sound.sh"] = repo / "config/hypr/scripts/screenshot_sound.sh"
     for dst, origin in sources.items():
         if origin.is_symlink() or not origin.is_file():
             raise ValueError("Unsafe Umbriel source " + str(origin))
