@@ -110,7 +110,7 @@ IFS= read -r approval </dev/tty || :
     exit 1
 }
 # no-clobber link: unexpected concurrent creation must never be overwritten.
-sudo ln -s -- "$source" "$target"
+sudo ln -sT -- "$source" "$target"
 [[ -L "$target" && "$(readlink -- "$target")" == "$source" ]] || {
     printf 'Umbriel Ly entry could not be verified after registration.\n' >&2
     exit 1
