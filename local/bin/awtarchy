@@ -1701,8 +1701,7 @@ The next Update configs will not update removed Umbriel."
     [[ "$answer" == 0 ]] || continue
 
     rc=0
-    AWTARCHY_COMPOSITOR_MENU_APPROVED="$operation" \
-      run_compositor_manager "$operation" apply yes || rc=$?
+    run_compositor_manager "$operation" apply yes || rc=$?
     (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
     pause_menu
   done
