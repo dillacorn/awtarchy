@@ -158,6 +158,10 @@ def reconcile(repo: Path, home: Path, mode: str):
         print(("UPDATE " if mode == "apply" else "WOULD UPDATE ")
               + key + " (original backup)")
         if mode == "apply":
+            # A settings editor may modify the file after our initial scan.
+            # Never turn a stale baseline into authority over a newer edit.
+            if target.is_symlink() or not target.is_file() or target.read_bytes() != existing:
+                raise ValueError("Umbriel file changed during update; preserving " + key)
             atomic_write(target, content, True)
             updated[key] = expected
     if mode == "apply":
