@@ -275,7 +275,7 @@ def render(source: Path, destination: Path, trial: Path):
                         ("        activeSurface = surface;",
                          "        closeRequested(surface);\n        activeSurface = surface;"),
                         ("        overlaySurface = key;",
-                         '        closeRequested("");\n        overlaySurface = key;'),
+                         '        closeRequested(key);\n        overlaySurface = key;'),
                     ):
                         if text.count(old) != 1:
                             raise ValueError("Flyout ownership protocol changed")
