@@ -30,9 +30,29 @@ the existing Awtarchy Sway/Hyprland sessions.
 - Existing Awtarchy Quickshell appearance preferences are read by the shell
   renderer; do not assume all compositor-specific controls are portable.
 
-Re-running **Update Umbriel** updates only files that match the exact prior
-Umbriel managed checksum, backing up each changed file. Modified or unknown
-files are preserved. No package, driver, compositor or session is removed.
+All installed Awtarchy compositor profiles are updated together through the
+normal **Update configs** workflow. The existing **Review config changes**
+action previews Sway and Umbriel files without changing them. Sway already
+used this path; Umbriel now uses the same immutable release/git-testing source
+with its own checksum baseline.
+
+Updates replace only files matching their exact prior Umbriel managed checksum,
+backing up changed files. Modified or unknown files are preserved. No package,
+driver, compositor or session is removed during a config update. An installed
+Umbriel package alone does not authorize Awtarchy to adopt personal config files;
+the Awtarchy baseline must already exist.
+
+The compositor menu has Install / Remove entries, not separate Update buttons.
+**Remove Umbriel** removes only the selected package after checking another
+supported compositor is installed and Umbriel is not running. Personal config,
+the Awtarchy Quickshell profile, and the separate Umbriel portal remain intact.
+
+**Release boundary:** a stable Update configs operation uses published release
+sources, not this unpublished PR. Until a release containing this code exists,
+the currently installed Awtarchy updater cannot deliver these Umbriel changes.
+Running a git-testing update to this branch would also update the common
+Hyprland Awtarchy files and change the user's current MangoWM test state;
+do not present that as a safe Umbriel-only update.
 
 ## Initial supported scope
 
