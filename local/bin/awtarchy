@@ -1567,7 +1567,7 @@ compositor_trial_installed() {
 }
 run_compositor_manager() {
   case "${1:-}" in
-    install-umbriel|update-umbriel)
+    install-umbriel|remove-umbriel)
       # Only the explicit Umbriel development checkout can modify its own
       # isolated trial files. The installed stable manager stays untouched.
       local umbriel_repo="${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}"
@@ -1617,26 +1617,27 @@ compositor_menu() {
     if [[ "$sway_state" == "Not installed" ]]; then
       options+=("Install Sway")
       actions+=("install-sway")
-    else
-      options+=("Update Sway")
-      actions+=("update-sway")
     fi
     if [[ "$hyprland_state" == "Not installed" ]]; then
       options+=("Install Hyprland")
       actions+=("install-hyprland")
     fi
-    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" ]]; then
-      if [[ "$umbriel_state" == "Installed" ]]; then
-        options+=("Update Umbriel")
-        actions+=("update-umbriel")
-      else
-        options+=("Install Umbriel")
-        actions+=("install-umbriel")
-      fi
+    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" &&
+          "$umbriel_state" == "Not installed" ]]; then
+      options+=("Install Umbriel")
+      actions+=("install-umbriel")
     fi
+    # Never present a removal action that could leave the user without
+    # another supported graphical compositor.
     if [[ "$sway_state" == "Installed" && "$hyprland_state" == "Installed" ]]; then
       options+=("Remove Hyprland" "Remove Sway")
       actions+=("remove-hyprland" "remove-sway")
+    fi
+    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" &&
+          "$umbriel_state" == "Installed" &&
+          ( "$hyprland_state" == "Installed" || "$sway_state" == "Installed" ) ]]; then
+      options+=("Remove Umbriel")
+      actions+=("remove-umbriel")
     fi
     options+=("Back")
     actions+=("back")
@@ -1647,7 +1648,7 @@ Hyprland: $hyprland_state
 Sway:     $sway_state
 Umbriel:  $umbriel_state
 
-Personal configurations are always preserved."
+Personal configurations are always preserved.\n\nUse Update configs to refresh installed compositor profiles."
     choice="$(single_select_menu "$title" 0 "${options[@]}")" || return 0
     operation="${actions[$choice]:-back}"
     [[ "$operation" != back ]] || return 0
@@ -1670,14 +1671,6 @@ Render Awtarchy Quickshell in a separate Umbriel profile.
 Preserve Hyprland, Sway, Mango, and personal configurations.
 Keep GPU gaming flags at upstream defaults."
         action="Install" ;;
-      update-umbriel)
-        title="Update Umbriel (experimental)
-
-Review and refresh only baseline-matched Umbriel trial files.
-Back up unchanged managed files before replacing.
-Preserve every personalized or unknown configuration.
-Do not upgrade AUR packages or drivers automatically."
-        action="Update" ;;
       install-hyprland)
         title="Install Hyprland
 
@@ -1685,20 +1678,21 @@ Install Hyprland and required dependencies.
 Preserve existing Sway and Hyprland configurations.
 Keep Sway installed."
         action="Install" ;;
-      update-sway)
-        title="Update Sway
-
-Apply managed Sway and Quickshell improvements.
-Preserve customized settings, monitor layout and shared packages.
-Remove only the exact obsolete duplicate Ly entry."
-        action="Update" ;;
       remove-sway|remove-hyprland)
         title="Remove ${operation#remove-}
 
 Remove only the selected compositor and eligible
 Awtarchy-owned extras that are not shared.
 Always preserve personal configurations.
-Keep the other compositor installed."
+Keep another compositor installed."
+        action="Remove" ;;
+      remove-umbriel)
+        title="Remove Umbriel
+
+Remove only the Umbriel compositor package.
+Preserve its configuration, Quickshell profile and shared dependencies.
+Keep Hyprland or Sway installed.
+The next Update configs will not update removed Umbriel."
         action="Remove" ;;
     esac
     answer="$(single_select_menu "$title" 0 "$action" "Cancel")" || continue
