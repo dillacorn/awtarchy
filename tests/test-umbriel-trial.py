@@ -15,7 +15,8 @@ ROOT = Path(__file__).resolve().parents[1]
 TRIAL = ROOT / "trials/umbriel"
 for script in (TRIAL / "session.sh", TRIAL / "ipc.sh",
                TRIAL / "manage.sh", TRIAL / "position.sh",
-               TRIAL / "runtime-rules.sh", ROOT / "local/bin/awtarchy"):
+               TRIAL / "runtime-rules.sh", TRIAL / "diagnose-session.sh",
+               ROOT / "local/bin/awtarchy"):
     subprocess.run(["bash", "-n", str(script)], check=True)
 config = tomllib.loads((TRIAL / "config.toml").read_text())
 assert config["layout"]["mode"] == "dwindle"
@@ -26,6 +27,11 @@ assert "tearing" not in (TRIAL / "config.toml").read_text().split(
 assert "umbriel-git" in (TRIAL / "manage.sh").read_text()
 assert "yay -S --needed umbriel-git" in (TRIAL / "manage.sh").read_text()
 assert "/usr/share/wayland-sessions/umbriel.desktop" in (TRIAL / "manage.sh").read_text()
+assert "Ly visibility is not yet verified" in (TRIAL / "manage.sh").read_text()
+diagnostic = (TRIAL / "diagnose-session.sh").read_text()
+assert "systemctl show ly.service --no-pager" in diagnostic
+assert "pacman -Qo --" in diagnostic
+assert "waylandsessions" in diagnostic
 assert "awtarchy-umbriel" in (TRIAL / "render-quickshell.py").read_text()
 assert '"Install Umbriel"' in (ROOT / "local/bin/awtarchy").read_text()
 launcher = (ROOT / "local/bin/awtarchy").read_text()
