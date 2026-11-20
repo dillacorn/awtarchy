@@ -1566,23 +1566,32 @@ compositor_trial_installed() {
      -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
 }
 run_compositor_manager() {
-  case "${1:-}" in
-    install-umbriel|remove-umbriel)
-      # Only the explicit Umbriel development checkout can modify its own
-      # isolated trial files. The installed stable manager stays untouched.
-      local umbriel_repo="${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}"
-      [[ "$umbriel_repo" == /* && -d "$umbriel_repo/.git" &&
-         ! -L "$umbriel_repo" &&
-         "$(git -C "$umbriel_repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
-         "$(git -C "$umbriel_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
-         -z "$(git -C "$umbriel_repo" status --porcelain --untracked-files=no)" &&
-         -f "$umbriel_repo/trials/umbriel/manage.sh" ]] ||
-        die "Invalid Umbriel trial checkout; stable compositor configuration untouched."
-      bash "$umbriel_repo/trials/umbriel/manage.sh" "$1" "$([[ "${2:-}" == plan ]] && printf preview || printf apply)"
-      return $? ;;
-  esac
-  # Explicit test checkout is never installed over the user's normal command.
-  # This allows the exact, unmerged menu branch to exercise its own backend.
+  # An explicitly selected Umbriel trial checkout runs its own compositor
+  # backend, not the user's installed stable backend. This makes its
+  # Install/Remove confirmations consistent for Hyprland, Sway and Umbriel
+  # while leaving normal 'awtarchy' and Mango git-testing state untouched.
+  if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" ]]; then
+    local umbriel_repo="$AWTARCHY_UMBRIEL_TRIAL_SOURCE"
+    [[ "$umbriel_repo" == /* && -d "$umbriel_repo/.git" &&
+       ! -L "$umbriel_repo" &&
+       "$(git -C "$umbriel_repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
+       "$(git -C "$umbriel_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+       -z "$(git -C "$umbriel_repo" status --porcelain --untracked-files=no)" &&
+       -f "$umbriel_repo/trials/umbriel/manage.sh" &&
+       -f "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" ]] ||
+      die "Invalid Umbriel trial checkout; installed compositor manager untouched."
+    case "${1:-}" in
+      install-umbriel|remove-umbriel)
+        bash "$umbriel_repo/trials/umbriel/manage.sh" "$1" \
+          "$([[ "${2:-}" == plan ]] && printf preview || printf apply)" ;;
+      status|install-sway|install-hyprland|remove-sway|remove-hyprland)
+        AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$umbriel_repo" \
+          bash "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" "$@" ;;
+      *) die "Unsupported experimental compositor operation." ;;
+    esac
+    return $?
+  fi
+  # Keep the earlier single-purpose branch test support unchanged.
   if [[ -n "${AWTARCHY_COMPOSITOR_TEST_SOURCE:-}" ]]; then
     local source_repo="$AWTARCHY_COMPOSITOR_TEST_SOURCE"
     [[ "$source_repo" == /* && -d "$source_repo/.git" && ! -L "$source_repo" &&
