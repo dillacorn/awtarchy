@@ -18,7 +18,7 @@ new_tail = (
     "# Sway's proprietary NVIDIA warning is an upstream support notice, not a\n"
     "# runtime compatibility check. Suppress it only when NVIDIA's driver is loaded.\n"
     "sway_args=()\n"
-    "if [[ -r /proc/driver/nvidia/version ]]; then\n"
+    'if [[ -r /proc/modules ]] && grep -q "^nvidia " /proc/modules; then\n'
     "    sway_args+=(--unsupported-gpu)\n"
     "fi\n"
     'exec /usr/bin/sway "${sway_args[@]}" --config "$configuration"\n'
@@ -38,13 +38,13 @@ with tempfile.TemporaryDirectory(prefix="sway-nvidia-contract-") as temporary:
     native = root / "native-sway"
     native.write_text('#!/usr/bin/env bash\nprintf "%s\\n" "$@"\n')
     native.chmod(0o755)
-    driver_marker = root / "nvidia/version"
+    driver_marker = root / "proc-modules"
     config = root / "config/sway/awtarchy-trial/config"
     config.parent.mkdir(parents=True)
     config.write_text("# fixture\n")
     fixture = root / "session"
     fixture.write_text(session.replace(
-        "/proc/driver/nvidia/version", str(driver_marker)
+        "/proc/modules", str(driver_marker)
     ).replace("/usr/bin/sway", str(native)))
     fixture.chmod(0o755)
     env = dict(os.environ, HOME=str(root), XDG_CONFIG_HOME=str(root / "config"))
@@ -55,8 +55,9 @@ with tempfile.TemporaryDirectory(prefix="sway-nvidia-contract-") as temporary:
         return result.stdout.splitlines()
 
     assert launch() == ["--config", str(config)], "Non-NVIDIA launch changed"
-    driver_marker.parent.mkdir()
-    driver_marker.write_text("NVIDIA driver loaded\n")
+    driver_marker.write_text("nvidia_drm 1 0 - Live 0x0\n")
+    assert launch() == ["--config", str(config)], "Other NVIDIA modules are insufficient"
+    driver_marker.write_text("nvidia 1 0 - Live 0x0\n")
     assert launch() == ["--unsupported-gpu", "--config", str(config)], (
         "NVIDIA launch did not supply exactly one unsupported-GPU flag")
 
