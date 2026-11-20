@@ -64,6 +64,25 @@ def render(repo: Path, destination: Path):
                         text = text.replace(
                             "/umbriel/awtarchy-trial/mode-control.sh",
                             "/umbriel/awtarchy-trial/mode-control.py")
+                        # Umbriel has one active workspace on EACH output; focused
+                        # is true only on the keyboard-focused output. A hidden
+                        # empty active workspace would make the bar appear stuck.
+                        old_visible = ("return workspace.focused || "
+                                       "workspace.toplevels.values.length > 0;")
+                        if text.count(old_visible) != 1:
+                            raise ValueError("Umbriel workspace visibility predicate changed")
+                        text = text.replace(
+                            old_visible,
+                            "return workspace.active || workspace.toplevels.values.length > 0;",
+                            1)
+                        old_selected = ("modelData.focused ? Theme.subtleActive "
+                                        ': "transparent"')
+                        selected_count = text.count(old_selected)
+                        if selected_count < 2:
+                            raise ValueError("Umbriel workspace selection highlights changed")
+                        text = text.replace(
+                            old_selected,
+                            'modelData.active ? Theme.subtleActive : "transparent"')
                         old = "        UmbrielBridge.activateWorkspace(selector);"
                         new = "        UmbrielBridge.activateWorkspace(selector, monitorName);"
                         if text.count(old) != 1:
