@@ -89,6 +89,8 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
             body = body.replace('== "Umbriel"', '== "umbriel"')
         if name == "quicksettings.sh":
             body = body.replace('== sway', '== Umbriel')
+            body = body.replace('${XDG_CURRENT_DESKTOP:-}', '${XDG_CURRENT_DESKTOP,,}')
+            body = body.replace('== Umbriel', '== umbriel')
         if name == "quicksettings.py":
             body = body.replace('!= "sway"', '!= "Umbriel"')
             body = body.replace('os.environ.get("XDG_CURRENT_DESKTOP") != "Umbriel"',
