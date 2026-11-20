@@ -17,6 +17,83 @@ import tempfile
 import tomllib
 
 
+
+def port_brightness(repo: Path) -> dict[str, bytes]:
+    """Adapt proven Awtarchy DDC implementation for Umbriel IPC without touching Hyprland."""
+    scripts = repo / "config/hypr/scripts"
+    bar = (scripts / "ddc_brightness.sh").read_text(encoding="utf-8")
+    control = (scripts / "hypr-ddc-brightness.sh").read_text(encoding="utf-8")
+    if (scripts / "ddc_brightness.sh").is_symlink() or (
+            scripts / "hypr-ddc-brightness.sh").is_symlink():
+        raise ValueError("Refusing symlinked brightness source")
+
+    def once(body: str, old: str, new: str) -> str:
+        if body.count(old) != 1:
+            raise ValueError("Shared DDC source drift; refusing unverified port: " + old[:65])
+        return body.replace(old, new, 1)
+
+    first = bar.index("focused_monitor() {")
+    last = bar.index("resolve_monitor() {", first)
+    bar = bar[:first] + """focused_monitor() {
+  umbriel outputs --json 2>/dev/null |
+    jq -r '.[] | select(.enabled == true and .focused == true) | .name' | head -n1
+}
+
+monitor_under_cursor() {
+  # Umbriel does not expose a cursor-position query. The bar supplies the
+  # exact output through AWTARCHY_OUTPUT_NAME; otherwise use focused output.
+  return 1
+}
+
+""" + bar[last:]
+    bar = once(bar,
+        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then',
+        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        '    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/quickshell.sh"\n'
+        '    profile="awtarchy-umbriel"\n'
+        '  elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then')
+
+    control = once(control,
+        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
+        '    inventory="$(swaymsg -r -t get_outputs 2>/dev/null)" || return 1',
+        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        '    inventory="$(umbriel outputs --json 2>/dev/null)" || return 1\n'
+        '  elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
+        '    inventory="$(swaymsg -r -t get_outputs 2>/dev/null)" || return 1')
+    control = once(control,
+        'if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
+        '  need_cmd swaymsg\nelse\n  need_cmd hyprctl\nfi',
+        'if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        '  need_cmd umbriel\n'
+        'elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
+        '  need_cmd swaymsg\nelse\n  need_cmd hyprctl\nfi')
+    control = control.replace('.active != false)', '.active != false and .enabled != false)')
+    return {"ddc_brightness.sh": bar.encode(), "hypr-ddc-brightness.sh": control.encode()}
+
+
+def port_quicksettings(repo: Path) -> dict[str, bytes]:
+    """Keep the working Sway Quick Settings contract, swap only compositor identity."""
+    source = repo / "compositors/sway"
+    results = {}
+    for name in ("quicksettings.py", "quicksettings.sh", "ddc.sh"):
+        path = source / name
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Missing or unsafe shared Quick Settings adapter " + str(path))
+        body = path.read_text(encoding="utf-8")
+        body = body.replace("Sway", "Umbriel").replace("sway/awtarchy-trial", "umbriel/awtarchy-trial")
+        body = body.replace("awtarchy-sway-submap", "awtarchy-umbriel-submap")
+        if name == "ddc.sh":
+            body = body.replace('"${SWAYSOCK:-}"', '"${WAYLAND_DISPLAY:-}"')
+        if name == "quicksettings.sh":
+            body = body.replace('== sway', '== Umbriel')
+        if name == "quicksettings.py":
+            body = body.replace('!= "sway"', '!= "Umbriel"')
+        if "swaymsg" in body or "SWAYSOCK" in body:
+            raise ValueError("Unported Sway Quick Settings adapter: " + name)
+        results[name] = body.encode()
+    return results
+
+
 def digest(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
@@ -114,6 +191,10 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
             initial_quickshell_palette if asset.name == "theme.json"
             else asset.read_bytes())
     result[target / "quickshell.sh"] = manager.read_bytes()
+    for name, content in port_brightness(repo).items():
+        result[target / name] = content
+    for name, content in port_quicksettings(repo).items():
+        result[target / name] = content
     return result
 
 
