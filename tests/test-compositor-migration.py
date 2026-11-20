@@ -51,10 +51,33 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert report["outputs"] == 2, report
     assert profile["output"]["DP-1"] == {
         "mode": "1920x1080@400.002014", "position": [0, 1080],
-        "scale": 1.0, "workspaces": 10, "tearing": True}, profile["output"]
+        "scale": 1.0, "workspaces": [str(n) for n in range(1, 11)],
+        "tearing": True}, profile["output"]
+    assert report["workspace_home"] == "DP-1"
     assert profile["output"]["DP-3"]["vrr"] == "always"
-    assert profile["output"]["DP-3"]["workspaces"] == 10
+    assert profile["output"]["DP-3"]["workspaces"] == "dynamic"
     assert profile["output"]["DP-3"]["tearing"] is True
+    # Explicit primary selection is independent of pointer/focus order and
+    # remains stable when one named workspace is physically transferred.
+    with patch.dict(os.environ, {"AWTARCHY_UMBRIEL_WORKSPACE_HOME": "DP-3"}):
+        alternative, status = module.migrate(home, "hyprland", connected)
+    different = tomllib.loads(alternative.decode())["output"]
+    assert status["workspace_home"] == "DP-3"
+    assert different["DP-3"]["workspaces"] == [str(n) for n in range(1, 11)]
+    assert different["DP-1"]["workspaces"] == "dynamic"
+    preference = home / ".config/umbriel/awtarchy-trial/workspace-home"
+    preference.parent.mkdir(parents=True, exist_ok=True)
+    preference.write_text("DP-1\\n".replace("\\n", "\n"))
+    with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}):
+        repeat, persisted = module.migrate(home, "hyprland", connected)
+    assert persisted["workspace_home"] == "DP-1"
+    assert tomllib.loads(repeat.decode())["output"]["DP-1"]["workspaces"] == [
+        str(n) for n in range(1, 11)]
+    # Preserve a disconnected home preference rather than silently migrating
+    # the 1-10 identities to a different display when the primary is unplugged.
+    temporarily_absent, missing = module.migrate(home, "hyprland", {"DP-3"})
+    assert missing["workspace_home"] == "DP-1"
+    assert temporarily_absent
     keys = profile["keybinds"]
     assert keys["Mod+F"] == "window-toggle-floating", keys
     assert keys["Mod+Ctrl+F"] == "window-toggle-fullscreen"
@@ -62,8 +85,8 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert keys["Mod+Alt+BackSpace"].endswith("quicksettings toggle")
     assert keys["Mod+X"] == "scratchpad-toggle"
     assert keys["Alt+P"].endswith("launcher toggle")
-    assert keys["Mod+1"] == "workspace-switch 1"
-    assert keys["Alt+Shift+1"] == "window-move-to-workspace 1"
+    assert keys["Mod+1"] == "workspace-switch --name 1"
+    assert keys["Alt+Shift+1"] == "window-move-to-workspace --name 1"
     assert "Mod+Alt+BracketLeft" not in keys  # Hyprland-only vibrance
     assert all("hyprctl" not in v and "swaymsg" not in v for v in keys.values())
 
@@ -125,7 +148,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert profile["keybinds"]["Mod+F"] == "window-toggle-floating"
     assert profile["keybinds"]["Mod+Ctrl+F"] == "window-toggle-fullscreen"
     assert profile["keybinds"]["Mod+D"].endswith("launcher toggle")
-    assert profile["keybinds"]["Alt+1"] == "workspace-switch 1"
+    assert profile["keybinds"]["Alt+1"] == "workspace-switch --name 1"
     assert "Alt+Tab" not in profile["keybinds"]  # Sway-specific focus-cycle utility
 
     with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}):
