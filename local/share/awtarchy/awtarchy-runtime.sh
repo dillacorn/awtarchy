@@ -4626,7 +4626,7 @@ top_menu() {
     choice="$(single_select_menu "Awtarchy" 0 \
       "Install Awtarchy" \
       "Dry-run Awtarchy install plan" \
-      "Update configs (preserve Hyprland customizations)" \
+      "Update configs (preserve personal customizations)" \
       "Reset configs (clean-slate managed files)" \
       "Clean Awtarchy backup files" \
       "Exit")" || exit 0
