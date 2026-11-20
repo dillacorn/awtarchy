@@ -96,14 +96,9 @@ if [[ "$mode" == preview ]]; then
     printf 'Preview only. No packages, session entries or configs changed.\n'
     exit 0
 fi
-[[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || {
-    printf 'Umbriel installation requires an interactive terminal\n' >&2; false;
-}
-if [[ "${AWTARCHY_COMPOSITOR_MENU_APPROVED:-}" != "$operation" ]]; then
-    printf 'Type %s to authorize installation: ' "$operation" >/dev/tty
-    IFS= read -r approval </dev/tty || :
-    [[ "$approval" == "$operation" ]] || { printf 'Canceled\n'; false; }
-fi
+# "Install" in the compositor menu confirms the operation. A direct
+# "install-umbriel apply" command explicitly requests installation.
+# Keep yay/pacman review and sudo authentication where they are required.
 # This build is evolving. Use the exact existing AUR package without
 # automatically patching its PKGBUILD, switching GPU drivers, or reinstalling
 # any package that already provides Umbriel.
