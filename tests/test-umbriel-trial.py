@@ -92,7 +92,19 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         text = source.read_text()
         assert "import Quickshell.I3" not in text, source
         assert 'hyprctl ' not in text and 'swaymsg ' not in text, source
-    assert "UmbrielBridge" in (rendered / "Bar.qml").read_text()
+    bar = (rendered / "Bar.qml").read_text()
+    assert "UmbrielBridge" in bar
+    assert "return workspace.active || workspace.toplevels.values.length > 0;" in bar
+    assert bar.count('modelData.active ? Theme.subtleActive : "transparent"') >= 2
+    assert "awtarchy-umbriel-submap" in bar
+    bridge = (rendered / "UmbrielBridge.qml").read_text()
+    assert "workspace-events.py" in bridge and "SplitParser" in bridge
+    assert "interval: 700" not in bridge
+    guard = (rendered / "ScreenShareGuardCard.qml").read_text()
+    assert "/umbriel/awtarchy-trial/screenshare-guard.sh" in guard
+    floating = (rendered / "FloatingWindowsState.qml").read_text()
+    assert "/umbriel/awtarchy-trial/floating-windows.sh" in floating
+    assert "awtarchy-umbriel-floating-windows-state" in floating
     assert "awtarchy-umbriel" in (rendered / "shell.qml").read_text()
     home = root / "home"
     home.mkdir()
