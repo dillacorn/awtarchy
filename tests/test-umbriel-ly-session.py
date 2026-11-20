@@ -14,6 +14,9 @@ assert 'owner' in source and 'umbriel-git' in source
 assert 'PRESERVE: destination already exists' in source
 assert 'waylandsessions' in source
 assert '/etc/ly/awtarchy-wayland-sessions' in source
+assert "Type Umbriel" not in source
+assert "approval" not in source
+assert "sudo ln -sT" in source
 subprocess.run(["bash", "-n", str(SCRIPT)], check=True)
 
 with tempfile.TemporaryDirectory(prefix="awtarchy-umbriel-ly-") as temp:
@@ -80,6 +83,19 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-umbriel-ly-") as temp:
     planned = run()
     assert planned.returncode == 0 and "WOULD LINK:" in planned.stdout, planned
     assert not target.exists(), "Preview changed Ly session directory"
+
+    # Direct apply must register the package-owned entry without any typed
+    # confirmation or terminal input. Privileged calls are redirected to
+    # a temporary test directory, never the host's Ly configuration.
+    sudo = bin_dir / "sudo"
+    sudo.write_text('#!/bin/sh\n"$@"\n')
+    sudo.chmod(0o755)
+    applied = subprocess.run(["bash", str(fixture), "apply"], env=env,
+                             input="", capture_output=True, text=True, timeout=15)
+    assert applied.returncode == 0 and "Registered Umbriel" in applied.stdout, applied
+    assert target.is_symlink() and target.resolve() == entry
+    assert "Type Umbriel" not in applied.stdout + applied.stderr
+    target.unlink()
 
     # Existing unmanaged session (even with another filename) must not
     # create a second Umbriel entry.
