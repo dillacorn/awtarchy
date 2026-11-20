@@ -16,9 +16,13 @@ def query(name):
     return result
 
 
-def collect():
-    workspaces = query("workspaces")
-    windows = query("windows")
+def collect(workspaces=None, windows=None):
+    # Preserve the standalone diagnostic; the live IPC subscriber supplies
+    # coherent snapshots directly without spawning separate Umbriel CLIs.
+    if workspaces is None:
+        workspaces = query("workspaces")
+    if windows is None:
+        windows = query("windows")
     full = {}
     for workspace in workspaces:
         if not isinstance(workspace, dict):
@@ -50,10 +54,10 @@ def collect():
         full[key]["clients"].append({
             "title": str(window.get("title", "")),
             "app_id": str(window.get("app_id", "")),
-            # Umbriel uses "focused", not "active"; multiple workspaces can
-            # remember a focused window, so only the globally focused
-            # workspace may supply the Quickshell active toplevel.
-            "focused": bool(window.get("focused")) and full[key]["focused"],
+            # Umbriel's window.active is the globally activated toplevel.
+            # Its window.focused is remembered per workspace, including
+            # inactive workspaces, so it is not a reliable activation flag.
+            "focused": bool(window.get("active")) and full[key]["focused"],
             "urgent": bool(window.get("urgent")),
         })
     return sorted(full.values(), key=lambda x: (x["monitor"], x["id"]))
