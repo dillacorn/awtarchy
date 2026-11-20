@@ -259,6 +259,42 @@ def render(source: Path, destination: Path, trial: Path):
                         '    }\\n'
                         '}\\n'
                     ).replace('\\n', '\n')
+                if path.name == "FlyoutManager.qml":
+                    # Hyprland's activewindow event does not exist on wlroots
+                    # compositors. A stale event gate left competing layer-shell
+                    # flyouts visible together. Close previous flyouts at the
+                    # moment a different surface is claimed, inside Quickshell.
+                    marker = "    property Connections hyprEventConnection: Connections {"
+                    ending = "    function titleForSurface(surface) {"
+                    if text.count(marker) != 1 or text.count(ending) != 1:
+                        raise ValueError("Flyout focus ownership changed")
+                    start = text.index(marker)
+                    end = text.index(ending, start)
+                    text = text[:start] + text[end:]
+                    for old, new in (
+                        ("        activeSurface = surface;",
+                         "        closeRequested(surface);\n        activeSurface = surface;"),
+                        ("        overlaySurface = key;",
+                         '        closeRequested("");\n        overlaySurface = key;'),
+                    ):
+                        if text.count(old) != 1:
+                            raise ValueError("Flyout ownership protocol changed")
+                        text = text.replace(old, new, 1)
+                if path.name == "ThemePicker.qml":
+                    # Overlay picker is a real layer-shell flyout too. Closing
+                    # all other flyouts must also close an older theme picker.
+                    marker = '    IpcHandler {\n        target: "themes"'
+                    if text.count(marker) != 1:
+                        raise ValueError("Theme picker IPC source changed")
+                    text = text.replace(marker, '''    Connections {
+        target: FlyoutManager
+        function onCloseRequested(exceptSurface) {
+            if (exceptSurface !== "themes" && pickerWindow.visible)
+                root.close();
+        }
+    }
+
+''' + marker, 1)
                 if path.name == "BarButton.qml":
                     text = prefer_sway_discrete_wheel(text)
                 if path.name == "Bar.qml":
