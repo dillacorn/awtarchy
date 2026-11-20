@@ -32,33 +32,44 @@ Singleton {
         });
     }
 
-    function numericWorkspaces(output) {
-        const where = String(output || (root.focusedMonitor ? root.focusedMonitor.name : ""));
+    function numericWorkspaces() {
+        // A global number identifies one named workspace across all outputs.
+        // Output-local index is deliberately never used for navigation.
         return (root.workspaces.values || [])
-            .filter(w => Number.isInteger(w.id) && w.id >= 1 && w.id <= 10
-                    && (!where || (w.monitor && w.monitor.name === where)))
+            .filter(w => w.named && Number.isInteger(w.id) && w.id >= 1 && w.id <= 10)
             .sort((a, b) => a.id - b.id);
     }
 
     function activateWorkspace(selector, output) {
         const key = String(selector || "");
-        const all = numericWorkspaces(output);
+        const all = numericWorkspaces();
         let number = null;
         if (key === "e-1" || key === "e+1") {
-            const focused = all.findIndex(w => w.active);
+            const activeHere = all.findIndex(w => w.active && w.monitor
+                && w.monitor.name === output);
+            const focused = activeHere >= 0 ? activeHere
+                : all.findIndex(w => w.focused);
             if (focused < 0 || !all.length)
                 return false;
             const step = key === "e-1" ? -1 : 1;
             number = all[(focused + step + all.length) % all.length].id;
         } else {
             number = Number(key);
+            // Reject an outdated click on a bar from which the named workspace
+            // was already transferred, rather than selecting another display.
+            const target = all.find(w => w.id === number);
+            if (output && (!target || !target.monitor || target.monitor.name !== output))
+                return false;
         }
         if (!Number.isInteger(number) || number < 1 || number > 10)
             return false;
-        const command = ["umbriel", "msg", "workspace-switch", String(number)];
-        if (output)
-            command.push("--output", String(output));
-        Quickshell.execDetached(command);
+        if (all.filter(w => w.id === number).length !== 1)
+            return false;
+        // --name forces global lookup for digit-only names. Bare "1" means
+        // the local position 1 on Umbriel's pointer-preferred output.
+        Quickshell.execDetached([
+            "umbriel", "msg", "workspace-switch", "--name", String(number)
+        ]);
         return true;
     }
 
@@ -124,6 +135,7 @@ Singleton {
             mappedWorkspaces.push({
                 id: id,
                 name: name,
+                named: Boolean(entry.named),
                 monitor: { name: output },
                 active: Boolean(entry.active),
                 focused: Boolean(entry.focused),
@@ -140,7 +152,7 @@ Singleton {
             return;
 
         const wsSignature = JSON.stringify(mappedWorkspaces.map(w =>
-            [w.id, w.monitor.name, w.active, w.focused, w.urgent,
+            [w.id, w.monitor.name, w.named, w.active, w.focused, w.urgent,
              w.toplevels.values.map(t => [t.title, t.lastIpcObject.class])]));
         if (root.workspaceFingerprint !== wsSignature) {
             root.workspaceFingerprint = wsSignature;
