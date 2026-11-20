@@ -20,7 +20,7 @@ assert config["animation"]["windows_in"]["style"] == "popin"
 assert config["animation"]["windows_in"]["scale"] == .87
 assert config["animation"]["workspaces"]["enabled"] is False
 assert config["animation"]["layers"]["enabled"] is True
-assert config["keybinds"]["Mod+Ctrl+M"] == "spawn wdisplays"
+assert config["keybinds"]["Super+Ctrl+M"] == "spawn wdisplays"
 assert "wdisplays" in (UMBRIEL / "manage.sh").read_text()
 assert "awtarchy-trial/theme.toml" in native["include"]["files"]
 assert native["include"]["files"].index("awtarchy-trial/theme.toml") < (
