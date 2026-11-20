@@ -84,6 +84,7 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
         body = body.replace("awtarchy-sway-submap", "awtarchy-umbriel-submap")
         if name == "ddc.sh":
             body = body.replace('"${SWAYSOCK:-}"', '"${WAYLAND_DISPLAY:-}"')
+            body = body.replace('== "sway"', '== "Umbriel"')
         if name == "quicksettings.sh":
             body = body.replace('== sway', '== Umbriel')
         if name == "quicksettings.py":
