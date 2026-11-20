@@ -71,6 +71,11 @@ def render(repo: Path, destination: Path):
                     text = text.replace("active-theme-sway", "active-theme-umbriel")
                     text = text.replace("Sway", "Umbriel")
                     if source.name == "Bar.qml":
+                        # Unlike Sway, native Umbriel uses Super as its drag
+                        # modifier. Do not display Sway's Alt-only instruction.
+                        text = text.replace(
+                            "Toggle Umbriel mouse mode (Alt still required to drag/resize)",
+                            "Toggle Umbriel mouse mode (Super+drag/resize)")
                         text = text.replace(
                             "/umbriel/awtarchy-trial/mode-control.sh",
                             "/umbriel/awtarchy-trial/mode-control.py")
