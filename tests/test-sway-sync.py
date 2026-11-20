@@ -42,6 +42,9 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     assert home / ".config/sway/awtarchy-trial/outputs" in desired
     assert home / ".config/sway/workspaces" in desired
     tty = home / ".local/bin/sway"
+    native = home / ".config/sway/config"
+    assert native in desired
+    assert desired[native] == (ROOT / "trials/sway/native-config").read_bytes()
     assert tty in desired
     assert desired[tty] == (ROOT / "trials/sway/tty-launch.sh").read_bytes()
     # The source stub must remain separate from the user's saved output data.
@@ -94,6 +97,11 @@ with tempfile.TemporaryDirectory(prefix="sway-update-test-") as tmp:
     assert tty.stat().st_mode & 0o111, "New Sway TTY command must be executable"
     updated = json.loads(manifest.read_text())
     assert updated[str(tty.relative_to(home))] == digest(desired[tty])
+    # Native Sway entrypoint customizations are always preserved.
+    native.write_text("# personal Sway config\\nset $mod Mod4\\n")
+    assert "PRESERVE modified file: .config/sway/config" in run("review")
+    run("apply")
+    assert native.read_text() == "# personal Sway config\\nset $mod Mod4\\n"
     # Saved Sway outputs/workspaces belong to the user after customization.
     custom_outputs = home / ".config/sway/awtarchy-trial/outputs"
     custom_workspaces = home / ".config/sway/workspaces"
