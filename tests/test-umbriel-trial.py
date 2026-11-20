@@ -45,9 +45,13 @@ assert '"Update configs (preserve personal customizations)"' in launcher
 review = runtime.split('if (( REVIEW_ONLY == 1 )); then', 1)[1].split(
     'log "Review-only mode complete.', 1)[0]
 assert 'trials/sway/sync.py" review' in review
+assert 'trials/sway/session-wrapper-update.sh" plan' in review
+assert 'trials/sway/legacy-session-cleanup.sh" plan' in review
 assert 'trials/umbriel/sync.py" preview' in review
 accepted = runtime.split('if ! confirm_live_update_result; then', 1)[1]
 assert 'trials/sway/sync.py" apply' in accepted
+assert 'trials/sway/session-wrapper-update.sh" apply' in accepted
+assert 'trials/sway/legacy-session-cleanup.sh" apply' in accepted
 assert 'trials/umbriel/sync.py" apply' in accepted
 assert 'umbriel-trial-baseline.json' in accepted
 assert accepted.index('trials/umbriel/sync.py" apply') < accepted.index(
