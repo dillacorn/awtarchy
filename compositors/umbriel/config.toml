@@ -10,6 +10,62 @@ show_cheatsheet = false
 mode = "dwindle"
 gap = 6
 
+# Match Awtarchy Hyprland's square, thin window borders.
+[appearance]
+border_width = 1
+outer_border_width = 0
+corner_radius = 0
+drag_opacity = 1.0
+
+[appearance.shadow]
+enabled = false
+
+# Umbriel supports different timing primitives from Hyprland. These are a
+# conservative translation of Awtarchy's fast pop-in, fade and window motion
+# profile; no heavy animation effects or forced workspace slide.
+[animation]
+enabled = true
+duration_ms = 160
+curve = "0.23,1.0,0.32,1.0"
+
+[animation.windows_in]
+enabled = true
+style = "popin"
+scale = 0.87
+duration_ms = 125
+
+[animation.windows_out]
+enabled = true
+style = "popin"
+scale = 0.87
+duration_ms = 95
+curve = "linear"
+
+[animation.windows_move]
+enabled = true
+duration_ms = 165
+
+[animation.windows_resize]
+enabled = true
+duration_ms = 145
+
+[animation.windows_opacity]
+enabled = true
+duration_ms = 125
+curve = "0.2,0.5,0.3,1.0"
+
+[animation.border]
+enabled = true
+duration_ms = 130
+
+[animation.workspaces]
+enabled = false
+
+[animation.layers]
+enabled = true
+duration_ms = 130
+curve = "0.4,0.1,0.2,1.0"
+
 [input.keyboard]
 numlock_toggle = true
 
@@ -23,6 +79,7 @@ numlock_toggle = true
 "Mod+C" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh clipboard toggle"
 "Mod+Alt+BackSpace" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh quicksettings toggle"
 "Mod+Shift+Space" = "spawn fuzzel"
+"Mod+Ctrl+M" = "spawn wdisplays"
 "Mod+Q" = "window-close"
 "Alt+F4" = "window-close"
 "Mod+Escape" = "session-quit"
