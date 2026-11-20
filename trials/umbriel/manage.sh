@@ -73,16 +73,9 @@ if [[ "$operation" == remove-umbriel ]]; then
         printf 'Preview only; no package removed.\n'
         exit 0
     fi
-    [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || {
-        printf 'Removal requires an interactive terminal.\n' >&2; false;
-    }
-    if [[ "${AWTARCHY_COMPOSITOR_MENU_APPROVED:-}" != "$operation" ]]; then
-        printf 'Type %s to authorize: ' "$operation" >/dev/tty
-        IFS= read -r approval </dev/tty || :
-        [[ "$approval" == "$operation" ]] || {
-            printf 'Canceled.\n'; false;
-        }
-    fi
+    # The compositor menu already provides a normal Remove/Cancel choice.
+    # Direct "remove-umbriel apply" is an explicit command, so it needs no
+    # second typed authorization. Keep the package/last-session safeguards.
     sudo pacman -R --noconfirm -- "$target"
     ! pacman -Qq "$target" >/dev/null 2>&1 || {
         printf 'Umbriel package still installed after removal attempt.\n' >&2; false;
