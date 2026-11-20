@@ -64,6 +64,26 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert "Mod+Alt+BracketLeft" not in keys  # Hyprland-only vibrance
     assert all("hyprctl" not in v and "swaymsg" not in v for v in keys.values())
 
+    # Regression: Awtarchy's real default Hyprland window bindings are in
+    # Lua arrays, not always standalone hl.bind calls. Import the supported
+    # dispatcher actions without executing any Lua.
+    hypr.write_text((ROOT / "config/hypr/hyprland.lua").read_text(encoding="utf-8"))
+    current = module.hypr_bindings(home)
+    assert current["Mod+Q"] == "window-close", current
+    assert current["Alt+F4"] == "window-close"
+    assert current["Mod+F"] == "window-toggle-floating"
+    assert current["Mod+Ctrl+F"] == "window-toggle-fullscreen"
+    assert current["Alt+Tab"] == "window-focus-next"
+    assert current["Mod+Y"] == "window-toggle-pinned"
+    assert current["Mod+N"].endswith("notifications toggle")
+    assert current["Alt+P"].endswith("launcher toggle")
+
+    # Restore the explicit-display fixture for subsequent migration checks.
+    hypr.write_text(
+        'hl.monitor({ output = "DP-1", mode = "1920x1080@400.002014", position = "0x1080", scale = 1, vrr = 0 })\\n'
+        'hl.monitor({ output = "DP-3", mode = "1920x1080@239.761002", position = "0x0", scale = 1, vrr = 1 })\\n',
+        encoding="utf-8")
+
     # A generated active hyprmoncfg override beats the Awtarchy root defaults.
     profile_path = home / ".config/hypr/hyprmoncfg-monitors.lua"
     profile_path.write_text(
