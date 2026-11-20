@@ -42,8 +42,15 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     if info["outputs"] == 0:
         print("MIGRATION: no verified explicit display rules; defaults retained")
     result = {target / "migrated.toml": migrated}
+    theme_spec = importlib.util.spec_from_file_location(
+        "awtarchy_umbriel_colors", src / "theme-colors.py")
+    theme_module = importlib.util.module_from_spec(theme_spec)
+    theme_spec.loader.exec_module(theme_module)
+    theme = theme_module.palette(home)
+    result[target / "theme.toml"] = theme_module.render_toml(theme)
+    initial_quickshell_palette = theme_module.quickshell_palette(theme)
     for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
-                 "position.sh", "runtime-rules.sh"):
+                 "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
     for dst, origin in sources.items():
         if origin.is_symlink() or not origin.is_file():
@@ -60,6 +67,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
             ("config.toml", result[config / "umbriel/config.toml"]),
             ("awtarchy-trial/config.toml", result[target / "config.toml"]),
             ("awtarchy-trial/migrated.toml", result[target / "migrated.toml"]),
+            ("awtarchy-trial/theme.toml", result[target / "theme.toml"]),
         ):
             dest = testroot / name
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -83,7 +91,9 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     for asset in sorted(rendered.iterdir()):
         if not asset.is_file() or asset.is_symlink():
             raise ValueError("Unexpected rendered Umbriel shell asset")
-        result[config / "quickshell/awtarchy-umbriel" / asset.name] = asset.read_bytes()
+        result[config / "quickshell/awtarchy-umbriel" / asset.name] = (
+            initial_quickshell_palette if asset.name == "theme.json"
+            else asset.read_bytes())
     result[target / "quickshell.sh"] = manager.read_bytes()
     return result
 
