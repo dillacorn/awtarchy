@@ -10452,6 +10452,17 @@ main() {
       run_target python3 "$repo_dir/trials/sway/sync.py" review --repo "$repo_dir" ||
         die "Sway review failed; no managed files were changed."
     fi
+    # The Umbriel trial has an independent exact-hash ownership baseline.
+    # Review only installations that actually staged this Awtarchy profile.
+    if [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+          ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+          -f "$repo_dir/trials/umbriel/sync.py" &&
+          ! -L "$repo_dir/trials/umbriel/sync.py" ]]; then
+      log "Reviewing Umbriel managed changes from the same immutable release..."
+      run_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+        python3 "$repo_dir/trials/umbriel/sync.py" preview --repo "$repo_dir" ||
+        die "Umbriel review failed; no managed Umbriel files were changed."
+    fi
     log "Review-only mode complete. No files were changed."
     return 0
   fi
@@ -10613,10 +10624,31 @@ main() {
       log "Updating separately managed Sway configuration from ${source_label}..."
       if ! run_target python3 "$repo_dir/trials/sway/sync.py" apply --repo "$repo_dir"; then
         warn "Sway config update did not finish. Existing Sway customizations and baseline remain protected."
-        warn "Use awtarchy compositor after this update to review and retry the Sway component."
+        warn "A later Update configs can retry this Sway component; check the reported failure first."
       fi
     else
       warn "The selected release has no Sway updater. Existing Sway files were left unchanged."
+    fi
+  fi
+
+  # Umbriel shares the same release snapshot as Hyprland and Sway, but
+  # owns a separate exact-hash manifest. Only Awtarchy-staged profiles
+  # are updated, after the user has accepted the live update.
+  # A failure here must not roll back accepted Hyprland changes.
+  if [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+        ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" ]]; then
+    if [[ -f "$repo_dir/trials/umbriel/sync.py" &&
+          ! -L "$repo_dir/trials/umbriel/sync.py" ]]; then
+      log "Updating separately managed Umbriel configuration from ${source_label}..."
+      if ! run_target env "HOME=${HOME_DIR}" "XDG_CONFIG_HOME=${HOME_DIR}/.config" \
+          python3 "$repo_dir/trials/umbriel/sync.py" apply --repo "$repo_dir"; then
+        warn "Umbriel config update did not finish. Personal settings and baseline remain protected."
+        warn "A later Update configs can retry this Umbriel component after inspection."
+      else
+        log "Umbriel profile updated. New shell files take effect on next Umbriel login."
+      fi
+    else
+      warn "The selected release has no Umbriel updater. Existing Umbriel files were left unchanged."
     fi
   fi
 
