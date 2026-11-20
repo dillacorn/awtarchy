@@ -42,6 +42,10 @@ assert 'remove-umbriel' in (TRIAL / "manage.sh").read_text()
 assert 'pacman -R --print --print-format' in (TRIAL / "manage.sh").read_text()
 assert 'sudo pacman -R --noconfirm -- "$target"' in (TRIAL / "manage.sh").read_text()
 assert 'Cannot remove the last supported compositor' in (TRIAL / "manage.sh").read_text()
+assert 'Type %s to authorize' not in (TRIAL / "manage.sh").read_text()
+assert 'Type %s to authorize installation' not in (TRIAL / "manage.sh").read_text()
+assert 'AWTARCHY_COMPOSITOR_MENU_APPROVED' not in (TRIAL / "manage.sh").read_text()
+assert '"Cancel"' in menu and 'single_select_menu "$title" 0 "$action" "Cancel"' in menu
 assert '"Update Umbriel"' not in menu
 assert '"Update Sway"' not in menu
 assert '"Remove Umbriel"' in menu
