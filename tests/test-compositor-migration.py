@@ -52,11 +52,28 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert profile["output"]["DP-1"] == {
         "mode": "1920x1080@400.002014", "position": [0, 1080],
         "scale": 1.0, "workspaces": [str(n) for n in range(1, 11)],
-        "tearing": True}, profile["output"]
+        "tearing": True, "direct_scanout": True}, profile["output"]
     assert report["workspace_home"] == "DP-1"
     assert profile["output"]["DP-3"]["vrr"] == "always"
     assert profile["output"]["DP-3"]["workspaces"] == "dynamic"
     assert profile["output"]["DP-3"]["tearing"] is True
+    assert profile["output"]["DP-3"]["direct_scanout"] is True
+    assert "vrr" not in profile["output"]["DP-1"]
+    # Confirm VRR only when Umbriel reports a bool (false means supported but
+    # disabled). A null on DP-3 is unsupported/unknown; its saved policy wins.
+    from types import SimpleNamespace
+    output_state = [
+        {"name": "DP-1", "enabled": True, "scale": 1.0, "adaptive_sync": False},
+        {"name": "DP-3", "enabled": True, "scale": 1.0, "adaptive_sync": None}
+    ]
+    with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}), \
+            patch.object(module.subprocess, "run",
+                         return_value=SimpleNamespace(stdout=json.dumps(output_state))):
+        live_raw, live_report = module.migrate(home, "hyprland", connected)
+    live_profile = tomllib.loads(live_raw.decode())
+    assert live_report["vrr_capable"] == ["DP-1"]
+    assert live_profile["output"]["DP-1"]["vrr"] == "fullscreen"
+    assert live_profile["output"]["DP-3"]["vrr"] == "always"
     # Explicit primary selection is independent of pointer/focus order and
     # remains stable when one named workspace is physically transferred.
     with patch.dict(os.environ, {"AWTARCHY_UMBRIEL_WORKSPACE_HOME": "DP-3"}):
