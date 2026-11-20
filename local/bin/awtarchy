@@ -1566,6 +1566,21 @@ compositor_trial_installed() {
      -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
 }
 run_compositor_manager() {
+  case "${1:-}" in
+    install-umbriel|update-umbriel)
+      # Only the explicit Umbriel development checkout can modify its own
+      # isolated trial files. The installed stable manager stays untouched.
+      local umbriel_repo="${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}"
+      [[ "$umbriel_repo" == /* && -d "$umbriel_repo/.git" &&
+         ! -L "$umbriel_repo" &&
+         "$(git -C "$umbriel_repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
+         "$(git -C "$umbriel_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+         -z "$(git -C "$umbriel_repo" status --porcelain --untracked-files=no)" &&
+         -f "$umbriel_repo/trials/umbriel/manage.sh" ]] ||
+        die "Invalid Umbriel trial checkout; stable compositor configuration untouched."
+      bash "$umbriel_repo/trials/umbriel/manage.sh" "$1" "$([[ "${2:-}" == plan ]] && printf preview || printf apply)"
+      return $? ;;
+  esac
   # Explicit test checkout is never installed over the user's normal command.
   # This allows the exact, unmerged menu branch to exercise its own backend.
   if [[ -n "${AWTARCHY_COMPOSITOR_TEST_SOURCE:-}" ]]; then
@@ -1588,13 +1603,16 @@ run_compositor_manager() {
 compositor_menu() {
   local choice operation action answer title rc
   local -a options=() actions=()
-  local sway_state hyprland_state
+  local sway_state hyprland_state umbriel_state
   while true; do
     options=() actions=()
     sway_state="Not installed"
     hyprland_state="Not installed"
+    umbriel_state="Not installed"
     if pacman -Qq sway >/dev/null 2>&1; then sway_state="Installed"; fi
     if pacman -Qq hyprland >/dev/null 2>&1; then hyprland_state="Installed"; fi
+    if pacman -Qq umbriel-git >/dev/null 2>&1 ||
+       pacman -Qq umbriel >/dev/null 2>&1; then umbriel_state="Installed"; fi
 
     if [[ "$sway_state" == "Not installed" ]]; then
       options+=("Install Sway")
@@ -1607,6 +1625,15 @@ compositor_menu() {
       options+=("Install Hyprland")
       actions+=("install-hyprland")
     fi
+    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" ]]; then
+      if [[ "$umbriel_state" == "Installed" ]]; then
+        options+=("Update Umbriel")
+        actions+=("update-umbriel")
+      else
+        options+=("Install Umbriel")
+        actions+=("install-umbriel")
+      fi
+    fi
     if [[ "$sway_state" == "Installed" && "$hyprland_state" == "Installed" ]]; then
       options+=("Remove Hyprland" "Remove Sway")
       actions+=("remove-hyprland" "remove-sway")
@@ -1618,6 +1645,7 @@ compositor_menu() {
 
 Hyprland: $hyprland_state
 Sway:     $sway_state
+Umbriel:  $umbriel_state
 
 Personal configurations are always preserved."
     choice="$(single_select_menu "$title" 0 "${options[@]}")" || return 0
@@ -1633,6 +1661,23 @@ Import compatible Hyprland settings when available.
 Preserve existing Sway and Hyprland configurations.
 Keep Hyprland installed."
         action="Install" ;;
+      install-umbriel)
+        title="Install Umbriel (experimental)
+
+Install existing AUR package umbriel-git when absent.
+Use the native package-owned Umbriel Ly session.
+Render Awtarchy Quickshell in a separate Umbriel profile.
+Preserve Hyprland, Sway, Mango, and personal configurations.
+Keep GPU gaming flags at upstream defaults."
+        action="Install" ;;
+      update-umbriel)
+        title="Update Umbriel (experimental)
+
+Review and refresh only baseline-matched Umbriel trial files.
+Back up unchanged managed files before replacing.
+Preserve every personalized or unknown configuration.
+Do not upgrade AUR packages or drivers automatically."
+        action="Update" ;;
       install-hyprland)
         title="Install Hyprland
 
@@ -1697,7 +1742,7 @@ maintenance_menu() {
       "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
-      "Manage compositors (Hyprland / Sway)" \
+      "Manage compositors (Hyprland / Sway / Umbriel trial)" \
       "Exit")" || exit 0
 
     case "$choice" in
