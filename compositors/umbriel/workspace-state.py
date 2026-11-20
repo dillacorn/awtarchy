@@ -27,10 +27,10 @@ def collect():
         output = workspace.get("output", "")
         identity = workspace.get("id", "")
         if (type(index) is not int or not 1 <= index <= 10
-                or not isinstance(identity, str)
+                or type(identity) not in (str, int) or not str(identity)
                 or not isinstance(output, str) or not output):
             continue
-        key = (identity, output)
+        key = (str(identity), output)
         full[key] = {
             "id": index, "name": str(workspace.get("name", index)),
             "monitor": output, "active": bool(workspace.get("active")),
@@ -43,14 +43,17 @@ def collect():
             continue
         identity = window.get("workspace", "")
         output = window.get("output", "")
-        key = (identity, output)
+        key = (str(identity), output)
         if key not in full:
             continue
         full[key]["fullscreen"] |= bool(window.get("fullscreen"))
         full[key]["clients"].append({
             "title": str(window.get("title", "")),
             "app_id": str(window.get("app_id", "")),
-            "focused": bool(window.get("active")),
+            # Umbriel uses "focused", not "active"; multiple workspaces can
+            # remember a focused window, so only the globally focused
+            # workspace may supply the Quickshell active toplevel.
+            "focused": bool(window.get("focused")) and full[key]["focused"],
             "urgent": bool(window.get("urgent")),
         })
     return sorted(full.values(), key=lambda x: (x["monitor"], x["id"]))
