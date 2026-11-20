@@ -123,6 +123,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     quick = (rendered / "QuickSettings.qml").read_text()
     assert "root.placement = root.placementForScreen(root.activeScreen);" in quick
     assert 'root.actionMessage = "Action failed (" + exitCode + ")";' in quick
+    assert 'root.settingsMessage = "Settings write failed (" + exitCode + ")";' in quick
     assert 'visible: root.quickSettingsSectionVisible("submap")' in quick
     bridge = (rendered / "UmbrielBridge.qml").read_text()
     assert "workspace-events.py" in bridge and "SplitParser" in bridge
