@@ -93,7 +93,7 @@ capture() {
                              and ($width | type) == "number"
                              and ($height | type) == "number"
                              and $width > 1 and $height > 1)
-                    | "\\(.x | floor),\\(.y | floor) \\($width | floor)x\\($height | floor) \\((.title // .app_id) | gsub("[\\r\\n]"; " "))"
+                    | "\(.x | floor),\(.y | floor) \($width | floor)x\($height | floor) \((.title // .app_id) | gsub("[\\r\\n]"; " "))"
                   end
             ')" || return 1
             [[ -n "$rectangles" ]] || {
