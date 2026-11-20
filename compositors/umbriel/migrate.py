@@ -51,7 +51,7 @@ NATIVE = {
     "hl.dsp.window.cycle_next({ next = false })": "window-focus-previous",
     'hl.dsp.workspace.toggle_special("magic")': "scratchpad-toggle",
 }
-KEYS = {"SUPER": "Mod", "ALT": "Alt", "CTRL": "Ctrl",
+KEYS = {"SUPER": "Super", "ALT": "Alt", "CTRL": "Ctrl",
         "CONTROL": "Ctrl", "SHIFT": "Shift"}
 KEYNAMES = {"return": "Return", "backspace": "BackSpace", "tab": "Tab",
             "escape": "Escape", "space": "Space", "bracketleft": "BracketLeft",
@@ -301,7 +301,7 @@ def normalize_key(raw: str, sway: bool = False) -> str | None:
         return None
     modifiers = []
     for piece in pieces[:-1]:
-        name = ({"MOD4": "Mod", "MOD1": "Alt", "CONTROL": "Ctrl"}.get(piece.upper())
+        name = ({"MOD4": "Super", "MOD1": "Alt", "CONTROL": "Ctrl"}.get(piece.upper())
                 if sway else KEYS.get(piece.upper()))
         name = name or KEYS.get(piece.upper())
         if not name or name in modifiers:
