@@ -33,9 +33,9 @@ assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
 assert keybinds["Super+Alt+M"].endswith("mode-control.py toggle mouse")
 routing = {w["match"].get("app_id"): w.get("default_workspace")
            for w in config["window_rule"]}
-assert any("firefox" in rule and target == "2" for rule, target in routing.items())
-assert any("obs" in rule and target == "10" for rule, target in routing.items())
-assert any("steam_app" in rule and target == "1" for rule, target in routing.items())
+assert any("firefox" in (rule or "") and target == "2" for rule, target in routing.items())
+assert any("obs" in (rule or "") and target == "10" for rule, target in routing.items())
+assert any("steam_app" in (rule or "") and target == "1" for rule, target in routing.items())
 assert any(w["match"].get("title") == "^btop$"
            and w["default_floating"] is True for w in config["window_rule"])
 assert all(not chord.startswith("Mod+") and
