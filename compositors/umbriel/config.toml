@@ -66,11 +66,18 @@ enabled = true
 duration_ms = 130
 curve = "0.4,0.1,0.2,1.0"
 
+[input.mouse]
+# Match Awtarchy Hyprland/Sway: no libinput acceleration or speed offset.
+accel_profile = "flat"
+sensitivity = 0.0
+
 [input.keyboard]
 numlock_toggle = true
 
 [keybinds]
 "Mod+Return" = "spawn foot"
+"Alt+Shift+Return" = "spawn foot"
+"Mod+Shift+Return" = "spawn foot"
 "Alt+Return" = "spawn foot"
 "Mod+D" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh launcher toggle"
 "Alt+P" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh launcher toggle"
@@ -78,44 +85,176 @@ numlock_toggle = true
 "Mod+N" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh notifications toggle"
 "Mod+C" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh clipboard toggle"
 "Mod+Alt+BackSpace" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh quicksettings toggle"
-"Mod+Shift+Space" = "spawn fuzzel"
+"Mod+T" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh themes toggle"
 "Mod+Ctrl+M" = "spawn wdisplays"
+"Mod+Shift+Space" = "spawn fuzzel"
+"Mod+E" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
+"Mod+Shift+E" = "spawn foot yazi"
+"Mod+B" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch browser"
+"Mod+Alt+A" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py default-apps"
+"Mod+W" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py wallpicker"
+"Mod+Shift+W" = "spawn awtwall --random-current"
+"Mod+Ctrl+W" = "spawn awtwall --random-all"
+"Mod+Alt+W" = "spawn awtwall --random-all-different"
+"Alt+Shift+B" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py btop"
+"Mod+Shift+B" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py btop"
+"Alt+Shift+M" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py maccel"
+"Mod+Shift+M" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py maccel"
+"Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py wiremix"
+"Mod+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py wiremix"
+"Mod+Alt+G" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py smtty"
+"Mod+Alt+L" = "spawn smtty -S -l"
+"Mod+Alt+O" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py smtty-O"
+"Mod+Alt+K" = "spawn smtty -k"
+"Alt+Shift+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"Mod+Shift+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"Mod+Shift+X" = "spawn bash ~/.config/umbriel/awtarchy-trial/capture.sh area"
+"Mod+Shift+S" = "spawn bash ~/.config/umbriel/awtarchy-trial/capture.sh window"
+"Mod+Shift+F" = "spawn bash ~/.config/umbriel/awtarchy-trial/capture.sh display"
+"Mod+Shift+D" = "spawn bash ~/.config/umbriel/awtarchy-trial/capture.sh display-copy"
 "Mod+Q" = "window-close"
+"Mod+Shift+Q" = "window-close"
+"Alt+Shift+Q" = "window-close"
 "Alt+F4" = "window-close"
 "Mod+Escape" = "session-quit"
 "Alt+Tab" = "window-focus-next"
 "Alt+Shift+Tab" = "window-focus-previous"
-"Mod+F" = "window-toggle-fullscreen"
-"Mod+Ctrl+F" = "window-toggle-maximize"
+"Mod+F" = "window-toggle-floating"
 "Alt+F" = "window-toggle-floating"
+"Mod+Ctrl+F" = "window-toggle-fullscreen"
+"Alt+Ctrl+F" = "window-toggle-fullscreen"
+"Mod+Y" = "window-toggle-pinned"
+"Mod+X" = "scratchpad-toggle"
+"Mod+Ctrl+X" = "window-toggle-scratchpad"
 "Mod+Left" = "window-focus-left"
-"Mod+Right" = "window-focus-right"
-"Mod+Up" = "window-focus-up"
-"Mod+Down" = "window-focus-down"
+"Alt+Left" = "window-focus-left"
 "Mod+Shift+Left" = "window-move-left"
+"Alt+Shift+Left" = "window-move-left"
+"Mod+Ctrl+Shift+Left" = "workspace-move-to-output-left"
+"Alt+Ctrl+Shift+Left" = "workspace-move-to-output-left"
+"Mod+Right" = "window-focus-right"
+"Alt+Right" = "window-focus-right"
 "Mod+Shift+Right" = "window-move-right"
+"Alt+Shift+Right" = "window-move-right"
+"Mod+Ctrl+Shift+Right" = "workspace-move-to-output-right"
+"Alt+Ctrl+Shift+Right" = "workspace-move-to-output-right"
+"Mod+Up" = "window-focus-up"
+"Alt+Up" = "window-focus-up"
 "Mod+Shift+Up" = "window-move-up"
+"Alt+Shift+Up" = "window-move-up"
+"Mod+Ctrl+Shift+Up" = "workspace-move-to-output-up"
+"Alt+Ctrl+Shift+Up" = "workspace-move-to-output-up"
+"Mod+Down" = "window-focus-down"
+"Alt+Down" = "window-focus-down"
 "Mod+Shift+Down" = "window-move-down"
+"Alt+Shift+Down" = "window-move-down"
+"Mod+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+"Alt+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+"Mod+BracketLeft" = "workspace-previous"
+"Mod+BracketRight" = "workspace-next"
+"Alt+BracketLeft" = "workspace-previous"
+"Alt+BracketRight" = "workspace-next"
 "Mod+1" = "workspace-switch 1"
-"Mod+2" = "workspace-switch 2"
-"Mod+3" = "workspace-switch 3"
-"Mod+4" = "workspace-switch 4"
-"Mod+5" = "workspace-switch 5"
-"Mod+6" = "workspace-switch 6"
-"Mod+7" = "workspace-switch 7"
-"Mod+8" = "workspace-switch 8"
-"Mod+9" = "workspace-switch 9"
-"Mod+0" = "workspace-switch 10"
 "Mod+Shift+1" = "window-move-to-workspace 1"
+"Alt+1" = "workspace-switch 1"
+"Alt+Shift+1" = "window-move-to-workspace 1"
+"Mod+2" = "workspace-switch 2"
 "Mod+Shift+2" = "window-move-to-workspace 2"
+"Alt+2" = "workspace-switch 2"
+"Alt+Shift+2" = "window-move-to-workspace 2"
+"Mod+3" = "workspace-switch 3"
 "Mod+Shift+3" = "window-move-to-workspace 3"
+"Alt+3" = "workspace-switch 3"
+"Alt+Shift+3" = "window-move-to-workspace 3"
+"Mod+4" = "workspace-switch 4"
 "Mod+Shift+4" = "window-move-to-workspace 4"
+"Alt+4" = "workspace-switch 4"
+"Alt+Shift+4" = "window-move-to-workspace 4"
+"Mod+5" = "workspace-switch 5"
 "Mod+Shift+5" = "window-move-to-workspace 5"
+"Alt+5" = "workspace-switch 5"
+"Alt+Shift+5" = "window-move-to-workspace 5"
+"Mod+6" = "workspace-switch 6"
 "Mod+Shift+6" = "window-move-to-workspace 6"
+"Alt+6" = "workspace-switch 6"
+"Alt+Shift+6" = "window-move-to-workspace 6"
+"Mod+7" = "workspace-switch 7"
 "Mod+Shift+7" = "window-move-to-workspace 7"
+"Alt+7" = "workspace-switch 7"
+"Alt+Shift+7" = "window-move-to-workspace 7"
+"Mod+8" = "workspace-switch 8"
 "Mod+Shift+8" = "window-move-to-workspace 8"
+"Alt+8" = "workspace-switch 8"
+"Alt+Shift+8" = "window-move-to-workspace 8"
+"Mod+9" = "workspace-switch 9"
 "Mod+Shift+9" = "window-move-to-workspace 9"
+"Alt+9" = "workspace-switch 9"
+"Alt+Shift+9" = "window-move-to-workspace 9"
+"Mod+0" = "workspace-switch 10"
 "Mod+Shift+0" = "window-move-to-workspace 10"
-"XF86AudioRaiseVolume" = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%+"
+"Alt+0" = "workspace-switch 10"
+"Alt+Shift+0" = "window-move-to-workspace 10"
+"XF86AudioRaiseVolume" = "spawn wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"
 "XF86AudioLowerVolume" = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
 "XF86AudioMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"XF86AudioMicMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"
+"XF86MonBrightnessUp" = "spawn brightnessctl -e4 -n2 set 5%+"
+"XF86MonBrightnessDown" = "spawn brightnessctl -e4 -n2 set 5%-"
+"XF86AudioPlay" = "spawn playerctl play-pause"
+"XF86AudioNext" = "spawn playerctl next"
+"XF86AudioPrev" = "spawn playerctl previous"
+
+[[window_rule]]
+match.app_id = "^(btop)$"
+default_floating = true
+default_floating_size = { width = 0.80, height = 0.85 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(maccel)$"
+default_floating = true
+default_floating_size = { width = 0.90, height = 0.96 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(Wiremix)$"
+default_floating = true
+default_floating_size = { width = 0.65, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(wallpicker)$"
+default_floating = true
+default_floating_size = { width = 0.85, height = 0.90 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(smtty|smtty-O)$"
+default_floating = true
+default_floating_size = { width = 0.50, height = 0.65 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-default-apps)$"
+default_floating = true
+default_floating_size = { width = 0.68, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-tips-tui)$"
+default_floating = true
+default_floating_size = { width = 0.50, height = 0.50 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-qalc)$"
+default_floating = true
+default_floating_size = { width = 0.45, height = 0.50 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+# A fullscreen game can request asynchronous presentation only on an output
+# explicitly configured for tearing in the machine-specific migrated include.
+[[window_rule]]
+match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"
+tearing = true
+
