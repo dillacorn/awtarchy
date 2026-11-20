@@ -389,4 +389,3 @@ default_position = { x = 0, y = 0, anchor = "center" }
 [[window_rule]]
 match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"
 tearing = true
-
