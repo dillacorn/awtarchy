@@ -125,6 +125,12 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     if info["outputs"] == 0:
         print("MIGRATION: no verified explicit display rules; defaults retained")
     result = {target / "migrated.toml": migrated}
+    if info["workspace_home"]:
+        # Retain the chosen global workspace home across compositor restarts,
+        # focus changes, and future incremental Awtarchy updates.
+        result[target / "workspace-home"] = (info["workspace_home"] + "\n").encode()
+        print("MIGRATION: global workspaces 1-10 initially on " +
+              info["workspace_home"] + " (native named workspaces)")
     guard_spec = importlib.util.spec_from_file_location(
         "awtarchy_umbriel_capture_guard", src / "screenshare-guard.py")
     guard_module = importlib.util.module_from_spec(guard_spec)
