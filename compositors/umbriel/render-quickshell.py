@@ -44,6 +44,16 @@ def render(repo: Path, destination: Path):
                 text = (bridge_dir / "ScreenSharePicker.qml").read_text(encoding="utf-8")
             elif source.name == "TitleBarsCard.qml":
                 text = (bridge_dir / "TitleBarsCard.qml").read_text(encoding="utf-8")
+            elif source.name == "ScreenShareGuardCard.qml":
+                # Sway's static unavailable card is incorrect: Umbriel provides
+                # genuine block_capture window rules and has its own backend.
+                text = (root / "config/quickshell/awtarchy"
+                        / "ScreenShareGuardCard.qml").read_text(encoding="utf-8")
+                before = "/hypr/scripts/screenshare_guard.sh"
+                if text.count(before) != 1:
+                    raise ValueError("Source Screen Share Guard path changed")
+                text = text.replace(before,
+                    "/umbriel/awtarchy-trial/screenshare-guard.sh")
             else:
                 try:
                     text = source.read_text(encoding="utf-8")
