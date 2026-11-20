@@ -82,8 +82,8 @@ def render(repo: Path, destination: Path):
                         # Umbriel has one active workspace on EACH output; focused
                         # is true only on the keyboard-focused output. A hidden
                         # empty active workspace would make the bar appear stuck.
-                        old_visible = ("return workspace.focused || "
-                                       "workspace.toplevels.values.length > 0;")
+                        old_visible = ("return workspace.focused || workspace.active "
+                                       "|| workspace.toplevels.values.length > 0;")
                         if text.count(old_visible) != 1:
                             raise ValueError("Umbriel workspace visibility predicate changed")
                         text = text.replace(
