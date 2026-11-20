@@ -16,6 +16,24 @@ START = "# AWTARCHY-SWAY-OUTPUTS-BEGIN"
 END = "# AWTARCHY-SWAY-OUTPUTS-END"
 NAME = re.compile(r"^[A-Za-z0-9_.-]{1,48}$")
 
+def connected_drm_outputs():
+    """Return kernel connector names; empty means no safe offline match."""
+    result = set()
+    directory = Path("/sys/class/drm")
+    if not directory.is_dir():
+        return result
+    for entry in directory.glob("card*-*/status"):
+        match = re.fullmatch(r"card\\d+-(.+)", entry.parent.name)
+        if not match or not NAME.fullmatch(match.group(1)):
+            continue
+        try:
+            if entry.read_text(encoding="ascii").strip() == "connected":
+                result.add(match.group(1))
+        except OSError:
+            continue
+    return result
+
+
 def outputs_from_saved_hyprland():
     """Import literal monitor declarations without evaluating untrusted Lua.
 
@@ -72,6 +90,9 @@ def outputs_from_saved_hyprland():
                       int(position.group(1)), int(position.group(2)), refresh, scale, vrr))
     if not lines:
         raise ValueError("No complete literal Hyprland monitor settings to import")
+    connected = connected_drm_outputs()
+    if not connected or not names.issubset(connected):
+        raise ValueError("Saved monitor names are not verified against connected DRM outputs")
     min_x = min(row[3] for row in lines)
     min_y = min(row[4] for row in lines)
     result = [
