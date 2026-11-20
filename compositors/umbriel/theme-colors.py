@@ -39,6 +39,9 @@ def palette(home: Path, name: str | None = None) -> dict:
         "inactive_border": "4b4b4bff",
         "background": "#353535",
         "foreground": "#d0d0d0",
+        "hover": "#404040", "focus": "#4a4a4a", "active": "#2b2b2b",
+        "urgent": "#ff5555", "charging": "#6a9955", "critical": "#ff5555",
+        "dark": "#1a1a1a", "muted": "#4a4a4a",
     }
     if name is None:
         state = home / ".local/state/awtarchy/active-theme"
@@ -54,7 +57,7 @@ def palette(home: Path, name: str | None = None) -> dict:
             raise
         return colors
     for line in path.read_text(encoding="utf-8").splitlines():
-        match = re.match(r"^\s*(NEW_ACTIVE_BORDER|NEW_INACTIVE_BORDER|QS_BACKGROUND|QS_FOREGROUND)\s*=\s*(.*?)\s*$", line)
+        match = re.match(r"^\s*(NEW_ACTIVE_BORDER|NEW_INACTIVE_BORDER|QS_BACKGROUND|QS_FOREGROUND|QS_HOVER|QS_FOCUS|QS_ACTIVE|QS_URGENT|QS_CHARGING|QS_CRITICAL|QS_DARK|QS_MUTED)\s*=\s*(.*?)\s*$", line)
         if not match:
             continue
         value = match.group(2).strip().strip('"').strip("'")
@@ -63,6 +66,10 @@ def palette(home: Path, name: str | None = None) -> dict:
             "NEW_INACTIVE_BORDER": "inactive_border",
             "QS_BACKGROUND": "background",
             "QS_FOREGROUND": "foreground",
+            "QS_HOVER": "hover", "QS_FOCUS": "focus",
+            "QS_ACTIVE": "active", "QS_URGENT": "urgent",
+            "QS_CHARGING": "charging", "QS_CRITICAL": "critical",
+            "QS_DARK": "dark", "QS_MUTED": "muted",
         }[match.group(1)]
         if (EIGHT if slot.endswith("_border") else SIX).fullmatch(value) is None:
             raise ValueError("Invalid palette entry: " + match.group(1))
@@ -92,12 +99,12 @@ def quickshell_palette(colors: dict, name: str | None = None) -> bytes:
     # Boot appearance only. ThemePicker's runtime application remains the
     # canonical writer for the full Quickshell palette.
     return (json.dumps({
-        "background": colors["background"],
-        "hover": "#404040", "focus": "#" + colors["active_border"][:6],
-        "active": "#2b2b2b", "urgent": "#ff5555",
-        "charging": "#6a9955", "critical": "#ff5555",
-        "foreground": colors["foreground"], "dark": "#1a1a1a",
-        "muted": "#4a4a4a", "lockAccent": "#" + colors["active_border"][:6],
+        "background": colors["background"], "hover": colors["hover"],
+        "focus": colors["focus"], "active": colors["active"],
+        "urgent": colors["urgent"], "charging": colors["charging"],
+        "critical": colors["critical"], "foreground": colors["foreground"],
+        "dark": colors["dark"], "muted": colors["muted"],
+        "lockAccent": "#" + colors["active_border"][:6],
     }, indent=2) + "\n").encode()
 
 
