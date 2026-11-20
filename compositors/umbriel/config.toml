@@ -391,3 +391,48 @@ default_position = { x = 0, y = 0, anchor = "center" }
 [[window_rule]]
 match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"
 tearing = true
+
+# AWTARCHY-APPLICATION-WORKSPACE-ROUTING
+# Match Sway/Hyprland's normal app placement using GLOBAL named workspaces.
+# A quoted number is a stable identity after transfer; an integer would be
+# a new output-local position and repeat the wrong-monitor bug.
+
+[[window_rule]]
+match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|chiaki|moonlight|com[.]moonlight_stream[.]Moonlight|.*[.]exe)$"
+default_workspace = "1"
+
+[[window_rule]]
+match.app_id = "^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"
+default_workspace = "2"
+
+[[window_rule]]
+match.app_id = "^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"
+default_workspace = "3"
+
+[[window_rule]]
+match.app_id = "^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"
+default_workspace = "4"
+
+[[window_rule]]
+match.app_id = "^(Spotify|com[.]spotify[.]Client)$"
+default_workspace = "5"
+
+[[window_rule]]
+match.app_id = "^(org[.]telegram[.]desktop|Telegram|Messages)$"
+default_workspace = "6"
+
+[[window_rule]]
+match.app_id = "^(Vncviewer|rustdesk)$"
+default_workspace = "7"
+
+[[window_rule]]
+match.app_id = "^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"
+default_workspace = "8"
+
+[[window_rule]]
+match.app_id = "^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"
+default_workspace = "9"
+
+[[window_rule]]
+match.app_id = "^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"
+default_workspace = "10"
