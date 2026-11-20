@@ -12,12 +12,18 @@ tty_dir="$HOME/.local/bin"
 tty_launcher="$tty_dir/sway"
 config="${XDG_CONFIG_HOME:-$HOME/.config}"
 trial="$config/sway/awtarchy-trial"
+native_source="$src/native-config"
+native_config="$config/sway/config"
 shell_dir="$config/quickshell/awtarchy-sway"
 portal="$config/xdg-desktop-portal/sway-portals.conf"
 screencast_chooser="$config/xdg-desktop-portal-wlr/sway"
 for directory in "$config" "$config/sway" "$trial" "$config/quickshell" "$shell_dir" "$config/xdg-desktop-portal" "$config/xdg-desktop-portal-wlr"; do
     [[ ! -L "$directory" && ( ! -e "$directory" || -d "$directory" ) ]] || { fail "Unsafe directory: $directory"; exit 1; }
 done
+[[ -f "$native_source" && ! -L "$native_source" ]] ||
+    { fail "Missing native Sway config source"; exit 1; }
+[[ ! -L "$native_config" && ( ! -e "$native_config" || -f "$native_config" ) ]] ||
+    { fail "Unsafe native Sway config; preserve it manually"; exit 1; }
 [[ -f "$tty_source" && ! -L "$tty_source" ]] && bash -n "$tty_source" ||
     { fail "Missing or invalid Sway TTY entry"; exit 1; }
 for directory in "$HOME/.local" "$tty_dir"; do
@@ -101,6 +107,13 @@ for i in "${!sources[@]}"; do
     install -m "$perms" -- "$src/$name" "$target"
 done
 [[ -e "$workspace_target" ]] || install -m 0644 -- "$workspace_source" "$workspace_target"
+# The Arch-provided Sway Ly entry reads ~/.config/sway/config. Link only
+# through a plain, managed include, without replacing a personal Sway config.
+if [[ ! -e "$native_config" ]]; then
+    install -m 0644 -- "$native_source" "$native_config"
+elif ! cmp -s -- "$native_source" "$native_config"; then
+    printf 'PRESERVE: personal Sway entry config %s; native Ly session will use it.\n' "$native_config"
+fi
 # Leave package-owned /usr/bin/sway untouched and preserve custom commands.
 [[ -d "$HOME/.local" ]] || mkdir -m 0700 -- "$HOME/.local"
 [[ -d "$tty_dir" ]] || mkdir -m 0700 -- "$tty_dir"
