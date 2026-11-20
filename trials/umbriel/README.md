@@ -19,6 +19,28 @@ The experiment uses upstream `start-umbriel` for Ly and TTY sessions.
 **No new .desktop entry** is created. Umbriel's session remains separate from
 the existing Awtarchy Sway/Hyprland sessions.
 
+## Ly session verification
+
+The AUR package normally installs one package-owned
+`/usr/share/wayland-sessions/umbriel.desktop`, launching `start-umbriel`.
+The installer confirms that file exists and is owned by a package, but
+**cannot establish that a running Ly process has refreshed its session menu**.
+Ly enumerates session directories when the interface starts. If Ly started
+before the Umbriel package was installed, reboot before testing its list;
+never restart Ly from an active graphical session as a shortcut.
+
+For missing entries, run the read-only `trials/umbriel/diagnose-session.sh`
+script. It checks installed packages, the desktop entry and ownership, Ly's
+configured Wayland session paths, and Ly's service start time. Do not create
+a duplicate .desktop entry to work around a stale list.
+
+The **normal** installed `awtarchy` command uses `main` and does not
+automatically acquire this experimental branch's compositor menu. Test the
+checkout using `AWTARCHY_UMBRIEL_TRIAL_SOURCE` and its
+`local/bin/awtarchy`. Only a separately authorized merge and appropriate
+command update can make the normal menu include Umbriel. The experiment
+does not replace or reset the user's current MangoWM configuration.
+
 ## Separate state
 
 - User config: `~/.config/umbriel/config.toml` is created ONLY if absent;
