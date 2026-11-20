@@ -84,7 +84,7 @@ Singleton {
     function applyWorkspaceState(state) {
         if (!Array.isArray(state))
             throw new Error("Expected array from Umbriel workspace helper");
-        // Workspace state is authoritative through swaymsg get_tree. The
+        // Workspace state is authoritative through Umbriel's workspaces/windows IPC. The
         // foreign-toplevel API is optional and must never blank the bar.
         const nativeWindows = typeof ToplevelManager === "undefined"
             ? [] : (ToplevelManager.toplevels.values || []);
