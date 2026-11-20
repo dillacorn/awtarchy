@@ -89,11 +89,10 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
             body = body.replace('== sway', '== Umbriel')
         if name == "quicksettings.py":
             body = body.replace('!= "sway"', '!= "Umbriel"')
-            old_wallpaper = 'command(["awtwall"])'
-            if body.count(old_wallpaper) != 1:
-                raise ValueError("Sway wallpaper action changed")
-            body = body.replace(old_wallpaper,
-                'command(["python3", str(TRIAL / "toggle-utility.py"), "wallpicker"])')
+            body = body.replace('"mode-control.sh"', '"mode-control.py"')
+            body = body.replace('["bash", str(MODE_CONTROL)', '["python3", str(MODE_CONTROL)')
+            if 'command(["awtwall"])' in body:
+                raise ValueError("Unported synchronous wallpaper picker action")
         if "swaymsg" in body or "SWAYSOCK" in body:
             raise ValueError("Unported Sway Quick Settings adapter: " + name)
         results[name] = body.encode()
@@ -170,6 +169,20 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
                  "screenshare-guard.sh", "screenshare-guard.py",
                  "floating-windows.sh", "floating-windows.py", "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
+    # Quickshell's save/copy/reset operations target the isolated compositor
+    # helper, not the Hyprland executable. The old staging omitted this file,
+    # so every flyout Save appeared successful while its command failed.
+    shared_state = repo / "config/hypr/scripts/quickshell_application_state.sh"
+    if not shared_state.is_file() or shared_state.is_symlink():
+        raise ValueError("Unsafe shared Quickshell state helper")
+    state_body = shared_state.read_text(encoding="utf-8")
+    old_state = '/hypr/scripts/quickshell.sh'
+    if state_body.count(old_state) != 1:
+        raise ValueError("Shared Quickshell state manager source changed")
+    state_body = state_body.replace(
+        old_state, '/umbriel/awtarchy-trial/quickshell.sh', 1)
+    result[target / "application-state.sh"] = state_body.encode()
+
     # Screenshot preferences are shared; stage the known-good helper without
     # writing into any source compositor's installed configuration.
     sources[target / "screenshot_sound.sh"] = repo / "config/hypr/scripts/screenshot_sound.sh"
