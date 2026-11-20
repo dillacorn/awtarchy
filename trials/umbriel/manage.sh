@@ -155,6 +155,9 @@ if ! XDG_CONFIG_HOME="$check" umbriel config validate; then
     false
 fi
 python3 "$repo/trials/umbriel/sync.py" apply --repo "$repo"
-printf '\nUmbriel trial staged. Next login: select package-owned Umbriel in Ly.\n'
+printf 'Umbriel trial files staged; Ly visibility is not yet verified.\n'
+printf 'Ly reads session entries when it starts. A reboot may be necessary\n'
+printf 'before Umbriel appears; do not restart Ly from an active desktop.\n'
+printf 'If Umbriel remains absent, run: bash %s/trials/umbriel/diagnose-session.sh\n' "$repo"
 printf 'Existing compositor configs and sessions remain installed.\n'
 printf 'Reboot is recommended before first login; no automatic restart.\n'
