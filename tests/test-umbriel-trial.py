@@ -66,7 +66,15 @@ assert 'trials/umbriel/sync.py" apply' in accepted
 assert 'umbriel-trial-baseline.json' in accepted
 assert accepted.index('trials/umbriel/sync.py" apply') < accepted.index(
     'log "Reconciling hardware and managed packages..."')
-assert 'AWTARCHY_UMBRIEL_TRIAL_SOURCE' in (ROOT / "local/bin/awtarchy").read_text()
+assert 'AWTARCHY_UMBRIEL_TRIAL_SOURCE' in launcher
+assert 'AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$umbriel_repo"' in launcher
+assert 'bash "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" "$@"' in launcher
+assert 'status|install-sway|install-hyprland|remove-sway|remove-hyprland' in launcher
+assert 'AWTARCHY_COMPOSITOR_MENU_APPROVED' not in launcher
+core = (ROOT / "local/share/awtarchy/awtarchy-compositor-manager.sh").read_text()
+assert "Type %s to authorize" not in core
+assert "sudo pacman -R --noconfirm" in core
+assert "Personal configs are preserved" in core
 
 with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     root = Path(temp)
