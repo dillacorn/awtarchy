@@ -62,6 +62,8 @@ with tempfile.TemporaryDirectory(prefix="umbriel-workspace-events-") as temp:
                      "output": "DP-1", "active": False, "focused": False},
                     {"id": "ws-dp3-1", "name": "1", "index": 1,
                      "output": "DP-3", "active": True, "focused": False},
+                    {"id": "ws-dp3-3", "name": "3", "index": 3,
+                     "output": "DP-3", "active": False, "focused": False},
                 ]
                 send(peer, "workspaces", original)
                 send(peer, "windows", [])
@@ -82,6 +84,22 @@ with tempfile.TemporaryDirectory(prefix="umbriel-workspace-events-") as temp:
                 assert second[("DP-1", 3)]["active"] is True
                 assert second[("DP-1", 3)]["focused"] is True
                 assert second[("DP-3", 1)]["active"] is True
+                # Selecting Alt+3 with pointer preference on the other monitor
+                # changes only DP-3's active workspace, not DP-1's own #3.
+                third_workspace = [dict(row) for row in changed]
+                for row in third_workspace:
+                    if row["output"] == "DP-3":
+                        row["active"] = row["index"] == 3
+                        row["focused"] = row["index"] == 3
+                    else:
+                        row["focused"] = False
+                send(peer, "workspaces", third_workspace)
+                third = state_key(receive_line(process))
+                assert third[("DP-1", 3)]["active"] is True
+                assert third[("DP-1", 3)]["focused"] is False
+                assert third[("DP-3", 1)]["active"] is False
+                assert third[("DP-3", 3)]["active"] is True
+                assert third[("DP-3", 3)]["focused"] is True
                 # Redundant socket notifications must not rebuild QML models.
                 send(peer, "windows", [])
                 available, _, _ = select.select([process.stdout], [], [], 0.20)
