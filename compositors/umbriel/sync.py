@@ -48,7 +48,7 @@ monitor_under_cursor() {
 """ + bar[last:]
     bar = once(bar,
         '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then',
-        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        '  if [[ "${XDG_CURRENT_DESKTOP,,}" == "umbriel" ]]; then\n'
         '    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/quickshell.sh"\n'
         '    profile="awtarchy-umbriel"\n'
         '  elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then')
@@ -56,14 +56,14 @@ monitor_under_cursor() {
     control = once(control,
         '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
         '    inventory="$(swaymsg -r -t get_outputs 2>/dev/null)" || return 1',
-        '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        '  if [[ "${XDG_CURRENT_DESKTOP,,}" == "umbriel" ]]; then\n'
         '    inventory="$(umbriel outputs --json 2>/dev/null)" || return 1\n'
         '  elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
         '    inventory="$(swaymsg -r -t get_outputs 2>/dev/null)" || return 1')
     control = once(control,
         'if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
         '  need_cmd swaymsg\nelse\n  need_cmd hyprctl\nfi',
-        'if [[ "${XDG_CURRENT_DESKTOP:-}" == "Umbriel" ]]; then\n'
+        'if [[ "${XDG_CURRENT_DESKTOP,,}" == "umbriel" ]]; then\n'
         '  need_cmd umbriel\n'
         'elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then\n'
         '  need_cmd swaymsg\nelse\n  need_cmd hyprctl\nfi')
@@ -85,10 +85,14 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
         if name == "ddc.sh":
             body = body.replace('"${SWAYSOCK:-}"', '"${WAYLAND_DISPLAY:-}"')
             body = body.replace('== "sway"', '== "Umbriel"')
+            body = body.replace('${XDG_CURRENT_DESKTOP:-}', '${XDG_CURRENT_DESKTOP,,}')
+            body = body.replace('== "Umbriel"', '== "umbriel"')
         if name == "quicksettings.sh":
             body = body.replace('== sway', '== Umbriel')
         if name == "quicksettings.py":
             body = body.replace('!= "sway"', '!= "Umbriel"')
+            body = body.replace('os.environ.get("XDG_CURRENT_DESKTOP") != "Umbriel"',
+                                'os.environ.get("XDG_CURRENT_DESKTOP", "").casefold() != "umbriel"')
             body = body.replace('"mode-control.sh"', '"mode-control.py"')
             body = body.replace('["bash", str(MODE_CONTROL)', '["python3", str(MODE_CONTROL)')
             if 'command(["awtwall"])' in body:
