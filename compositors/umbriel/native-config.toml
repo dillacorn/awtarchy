@@ -6,4 +6,5 @@ files = [
   "awtarchy-trial/theme.toml",
   "awtarchy-trial/migrated.toml",
   "awtarchy-trial/capture-rules.toml",
+  "awtarchy-trial/floating-rules.toml",
 ]
