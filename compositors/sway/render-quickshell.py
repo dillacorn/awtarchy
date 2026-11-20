@@ -535,6 +535,72 @@ Qs.Singleton {
                         raise ValueError("CaptureEyeButton changed")
                     text = text.replace('enabled: !root.locked', 'enabled: false')
                 if path.name == "QuickSettings.qml":
+                    # The status adapter is asynchronous and may momentarily
+                    # provide a missing/stale bar.enabled value during startup.
+                    # It must not override Quickshell's authoritative in-process
+                    # per-output BarState and center a previously edge-anchored
+                    # popup. This is shared by Sway and Umbriel renderers.
+                    before = (
+                        '                    const nextPlacement = '
+                        'String((root.statusData.bar || ({})).position || "");\\n'
+                        '                    if (!Boolean((root.statusData.bar || ({})).enabled))\\n'
+                        '                        root.placement = "center";\\n'
+                        '                    else if (["top", "bottom", "left", "right"].indexOf(nextPlacement) >= 0)\\n'
+                        '                        root.placement = nextPlacement;'
+                    ).replace('\\n', '\n')
+                    after = (
+                        '                    if (root.activeScreen)\\n'
+                        '                        root.placement = root.placementForScreen(root.activeScreen);'
+                    ).replace('\\n', '\n')
+                    if text.count(before) != 1:
+                        raise ValueError("Quick Settings placement status source changed")
+                    text = text.replace(before, after, 1)
+
+                    old_revision = (
+                        '        function onRevisionChanged() {\\n'
+                        '            if (root.prewarmEnabled && !quickSettingsWindow.visible && !root.openPreparing)\\n'
+                        '                quickSettingsPrewarmRefresh.restart();\\n'
+                        '        }'
+                    ).replace('\\n', '\n')
+                    new_revision = (
+                        '        function onRevisionChanged() {\\n'
+                        '            if (quickSettingsWindow.visible && root.activeScreen)\\n'
+                        '                root.placement = root.placementForScreen(root.activeScreen);\\n'
+                        '            else if (root.prewarmEnabled && !root.openPreparing)\\n'
+                        '                quickSettingsPrewarmRefresh.restart();\\n'
+                        '        }'
+                    ).replace('\\n', '\n')
+                    if text.count(old_revision) != 1:
+                        raise ValueError("Quick Settings bar state revision source changed")
+                    text = text.replace(old_revision, new_revision, 1)
+
+                    # A child process exiting nonzero is a failure even if
+                    # stderr was silent. Never tell the user "Updated" after a
+                    # failed wallpaper, brightness, bar or input-mode action.
+                    old_result = (
+                        '        onExited: {\\n'
+                        '            const finishedKind = root.runningActionKind;\\n'
+                        '            root.runningActionKind = "";\\n'
+                        '            if (root.actionError.length > 0)\\n'
+                        '                root.actionMessage = root.actionError;\\n'
+                        '            else\\n'
+                        '                root.actionMessage = "Updated";'
+                    ).replace('\\n', '\n')
+                    new_result = (
+                        '        onExited: (exitCode, exitStatus) => {\\n'
+                        '            const finishedKind = root.runningActionKind;\\n'
+                        '            root.runningActionKind = "";\\n'
+                        '            if (root.actionError.length > 0)\\n'
+                        '                root.actionMessage = root.actionError;\\n'
+                        '            else if (exitCode !== 0)\\n'
+                        '                root.actionMessage = "Action failed (" + exitCode + ")";\\n'
+                        '            else\\n'
+                        '                root.actionMessage = "Updated";'
+                    ).replace('\\n', '\n')
+                    if text.count(old_result) != 1:
+                        raise ValueError("Quick Settings action-result handler changed")
+                    text = text.replace(old_result, new_result, 1)
+
                     # The Sway backend accepts panel output and selected
                     # brightness output separately. The shared QML originally
                     # sends the panel name twice; that makes the brightness
