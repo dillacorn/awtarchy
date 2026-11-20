@@ -98,6 +98,17 @@ def render(repo: Path, destination: Path):
                         if text.count(old) != 1:
                             raise ValueError("Umbriel bar workspace target changed")
                         text = text.replace(old, new, 1)
+                    if source.name == "FloatingWindowsState.qml":
+                        source_helper = "/hypr/scripts/quickshell_floating_windows.sh"
+                        if text.count(source_helper) != 1:
+                            raise ValueError("Umbriel global floating source helper changed")
+                        text = text.replace(source_helper,
+                            "/umbriel/awtarchy-trial/floating-windows.sh")
+                        original_state = "/awtarchy-floating-windows-state"
+                        if text.count(original_state) != 1:
+                            raise ValueError("Umbriel global floating state path changed")
+                        text = text.replace(original_state,
+                            "/awtarchy-umbriel-floating-windows-state")
                     if source.name == "ScreenshotSoundSettings.qml":
                         # Both the inherited Sway and Hyprland preference paths
                         # must read the same shared file during an Umbriel login.
