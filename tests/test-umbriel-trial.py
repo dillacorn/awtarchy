@@ -20,6 +20,17 @@ for script in (TRIAL / "session.sh", TRIAL / "ipc.sh",
     subprocess.run(["bash", "-n", str(script)], check=True)
 config = tomllib.loads((TRIAL / "config.toml").read_text())
 assert config["layout"]["mode"] == "dwindle"
+# Native Umbriel mouse grabs use the sole configured Mod key. Bind it to
+# Alt while retaining Awtarchy's Super keyboard navigation explicitly.
+assert config["general"]["mod_key"] == "Alt"
+keybinds = config["keybinds"]
+assert keybinds["Super+1"] == "workspace-switch --name 1"
+assert keybinds["Super+F"] == "window-toggle-floating"
+assert keybinds["Super+Alt+A"].endswith("toggle-utility.py default-apps")
+assert keybinds["Alt+1"] == "workspace-switch --name 1"
+assert all(not chord.startswith("Mod+") and
+           ",Mod+" not in chord for chord in keybinds)
+assert config["input"]["mouse"]["accel_profile"] == "flat"
 assert config["general"]["autostart"] == [
     "bash ~/.config/umbriel/awtarchy-trial/session.sh"]
 assert "tearing" not in (TRIAL / "config.toml").read_text().split(
