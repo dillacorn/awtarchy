@@ -2,10 +2,10 @@
 # Isolated Umbriel trial. Never updates another compositor or the release state.
 set -euo pipefail
 
-[[ $# -eq 2 ]] || { printf 'Usage: manage.sh install-umbriel|update-umbriel preview|apply\n' >&2; false; }
+[[ $# -eq 2 ]] || { printf 'Usage: manage.sh install-umbriel|remove-umbriel preview|apply\n' >&2; false; }
 operation="$1"
 mode="$2"
-[[ "$operation" == install-umbriel || "$operation" == update-umbriel ]] || {
+[[ "$operation" == install-umbriel || "$operation" == remove-umbriel ]] || {
     printf 'Unsupported Umbriel trial action\n' >&2; false;
 }
 [[ "$mode" == preview || "$mode" == apply ]] || {
@@ -28,6 +28,68 @@ for command in pacman python3 git; do
 done
 printf '\nUmbriel trial: %s\n' "$operation"
 printf 'Never removes or overwrites Hyprland, Sway, Mango or KWin settings.\n'
+if [[ "$operation" == remove-umbriel ]]; then
+    # A compositor removal is an explicitly selected and confirmed action.
+    # Keep all personal configs and the separately packaged portal.
+    [[ "${XDG_CURRENT_DESKTOP:-}" != Umbriel &&
+       "${XDG_CURRENT_DESKTOP:-}" != umbriel ]] || {
+        printf 'Cannot remove the running Umbriel session.\n' >&2; false;
+    }
+    if command -v pgrep >/dev/null &&
+       pgrep -u "$(id -u)" -x umbriel >/dev/null 2>&1; then
+        printf 'Umbriel is running on another session; aborting removal.\n' >&2
+        false
+    fi
+    if ! pacman -Qq hyprland >/dev/null 2>&1 &&
+       ! pacman -Qq sway >/dev/null 2>&1; then
+        printf 'Cannot remove the last supported compositor.\n' >&2
+        false
+    fi
+    target=""
+    if pacman -Qq umbriel-git >/dev/null 2>&1; then
+        target=umbriel-git
+    elif pacman -Qq umbriel >/dev/null 2>&1; then
+        target=umbriel
+    else
+        printf 'Umbriel is not installed; no package changed.\n'
+        exit 0
+    fi
+    entry=/usr/share/wayland-sessions/umbriel.desktop
+    owner="$(pacman -Qqo -- "$entry" 2>/dev/null || true)"
+    [[ "$owner" == "$target" && -f "$entry" && ! -L "$entry" ]] || {
+        printf 'Umbriel Ly session is not owned by the target package; preserving it.\n' >&2
+        false
+    }
+    proposed="$(pacman -R --print --print-format '%n' -- "$target")" || {
+        printf 'Pacman dependency preflight rejected Umbriel removal.\n' >&2
+        false
+    }
+    [[ "$proposed" == "$target" ]] || {
+        printf 'Unexpected package removal set; refusing.\n' >&2; false;
+    }
+    printf 'Umbriel package eligible for removal: %s\n' "$target"
+    printf 'All configs, Awtarchy preferences, and portal packages remain intact.\n'
+    if [[ "$mode" == preview ]]; then
+        printf 'Preview only; no package removed.\n'
+        exit 0
+    fi
+    [[ -t 0 && -t 1 && -r /dev/tty && -w /dev/tty ]] || {
+        printf 'Removal requires an interactive terminal.\n' >&2; false;
+    }
+    if [[ "${AWTARCHY_COMPOSITOR_MENU_APPROVED:-}" != "$operation" ]]; then
+        printf 'Type %s to authorize: ' "$operation" >/dev/tty
+        IFS= read -r approval </dev/tty || :
+        [[ "$approval" == "$operation" ]] || {
+            printf 'Canceled.\n'; false;
+        }
+    fi
+    sudo pacman -R --noconfirm -- "$target"
+    ! pacman -Qq "$target" >/dev/null 2>&1 || {
+        printf 'Umbriel package still installed after removal attempt.\n' >&2; false;
+    }
+    printf 'Removed %s. Personal Umbriel files and shared dependencies retained.\n' "$target"
+    exit 0
+fi
 printf 'No compositor packages or login sessions will be uninstalled.\n'
 if pacman -Qq umbriel-git >/dev/null 2>&1; then
     printf 'Umbriel: umbriel-git installed\n'
