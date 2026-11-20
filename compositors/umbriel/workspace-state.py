@@ -23,20 +23,41 @@ def collect(workspaces=None, windows=None):
         workspaces = query("workspaces")
     if windows is None:
         windows = query("windows")
+    # Native Umbriel positions are per-output and change after workspace
+    # transfers. Awtarchy's global 1-10 identifiers must come from the stable
+    # explicit workspace name instead of "index". Keep old fixture compatibility
+    # only when the IPC source lacks the native "named" field entirely.
+    has_named_metadata = any(isinstance(ws, dict) and "named" in ws
+                             for ws in workspaces)
     full = {}
+    seen_numbers = set()
     for workspace in workspaces:
         if not isinstance(workspace, dict):
             continue
         index = workspace.get("index")
         output = workspace.get("output", "")
         identity = workspace.get("id", "")
-        if (type(index) is not int or not 1 <= index <= 10
+        name = workspace.get("name")
+        if has_named_metadata:
+            if (workspace.get("named") is not True or
+                    type(name) is not str or
+                    not name.isascii() or not name.isdecimal()):
+                continue
+            number = int(name)
+        else:
+            number = index
+        if (type(number) is not int or not 1 <= number <= 10
                 or type(identity) not in (str, int) or not str(identity)
                 or not isinstance(output, str) or not output):
             continue
         key = (str(identity), output)
+        if number in seen_numbers and has_named_metadata:
+            raise ValueError("Duplicate globally numbered Umbriel workspace " +
+                             str(number))
+        seen_numbers.add(number)
         full[key] = {
-            "id": index, "name": str(workspace.get("name", index)),
+            "id": number, "name": str(name or number),
+            "named": workspace.get("named") is True,
             "monitor": output, "active": bool(workspace.get("active")),
             "focused": bool(workspace.get("focused")),
             "urgent": bool(workspace.get("urgent")),
