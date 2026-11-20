@@ -33,7 +33,7 @@ export GAMESCOPE_WSI=vk_wayland
 # Sway's proprietary NVIDIA warning is an upstream support notice, not a
 # runtime compatibility check. Suppress it only when NVIDIA's driver is loaded.
 sway_args=()
-if [[ -r /proc/driver/nvidia/version ]]; then
+if [[ -r /proc/modules ]] && grep -q "^nvidia " /proc/modules; then
     sway_args+=(--unsupported-gpu)
 fi
 exec /usr/bin/sway "${sway_args[@]}" --config "$configuration"
