@@ -549,9 +549,12 @@ def migrate(home: Path, source: str = "auto",
              ""]
     for name in sorted(names):
         settings = dict(displays.get(name, {}))
-        if not active_source:
-            settings["scale"] = 1.0
-        settings["scale"] = live_scales.get(name, settings.get("scale", 1.0))
+        # DPI is a compositor-specific preference. Hyprland's 1.25 scale
+        # must not silently become Umbriel's 1.25 on the next fresh login.
+        # A scale queried from a *running Umbriel* session is authoritative
+        # for live staging; otherwise start at native 1.0, independently of
+        # the selected Hyprland/Sway source display profile.
+        settings["scale"] = live_scales.get(name, 1.0)
         settings["workspaces"] = (GLOBAL_WORKSPACE_NAMES.copy()
                                   if name == home_output else "dynamic")
         # Output opt-in alone does not force tearing: only clients that request
