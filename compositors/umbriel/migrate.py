@@ -241,6 +241,9 @@ def hypr_bindings(home: Path) -> dict[str, str]:
     text = safe_read(home / ".config/hypr/hyprland.lua")
     if not text:
         return {}
+    # The noalt submap is a different keyboard mode. Import only the
+    # default binding table rather than combining incompatible alternatives.
+    text = text.split('hl.define_submap("noalt", function()', 1)[0]
     binds = {}
 
     def add(raw: str, action: str | None):
@@ -253,6 +256,18 @@ def hypr_bindings(home: Path) -> dict[str, str]:
             r'\{\s*"([A-Za-z0-9 +_-]+)"\s*,\s*([A-Za-z_][A-Za-z_0-9]*)\s*(?:,|\})',
             text):
         add(match.group(1), COMMANDS.get(match.group(2)))
+    # Default Awtarchy window bindings live in array tables rather than
+    # direct hl.bind calls; translate only exact, supported dispatcher calls.
+    # This preserves the user's ALT/SUPER window close, float, fullscreen,
+    # focus cycling and pin shortcuts without evaluating any Lua.
+    for line in text.splitlines():
+        if line.lstrip().startswith("--"):
+            continue
+        item = re.fullmatch(
+            r'\s*\{\s*"([^"]+)"\s*,\s*(hl\.dsp\..+?)\s*\}\s*,?\s*(?:--.*)?',
+            line)
+        if item:
+            add(item.group(1), NATIVE.get(item.group(2).strip()))
     # Only literal, non-executed hl.bind actions. Complex Lua callbacks,
     # submaps, and Hyprland-only commands are not portable.
     for match in re.finditer(
