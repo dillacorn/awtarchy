@@ -55,6 +55,12 @@ def render(repo: Path, destination: Path):
                     text = text.replace("/quickshell/awtarchy-sway/", "/quickshell/awtarchy-umbriel/")
                     text = text.replace("awtarchy-sway", "awtarchy-umbriel")
                     text = text.replace("Sway", "Umbriel")
+                    if source.name == "Bar.qml":
+                        old = "        UmbrielBridge.activateWorkspace(selector);"
+                        new = "        UmbrielBridge.activateWorkspace(selector, monitorName);"
+                        if text.count(old) != 1:
+                            raise ValueError("Umbriel bar workspace target changed")
+                        text = text.replace(old, new, 1)
                     if "swaymsg " in text or "hyprctl " in text or "import Quickshell.I3" in text:
                         raise ValueError("Unported compositor-specific QML: " + source.name)
             (result / target).write_text(text, encoding="utf-8")
