@@ -85,8 +85,34 @@ do not present that as a safe Umbriel-only update.
 - Umbriel native session, simplified compositor menu, Foot, Fuzzel, basic
   workspace/window bindings, Quickshell launcher/power menu/notifications and
   PipeWire/audio surfaces are prepared for live testing.
-- No automatic GPU-specific flags, output configuration migration, changes
-  to NVIDIA drivers, or guessed VRR/tearing state.
+- A managed `awtarchy-trial/migrated.toml` include imports representable
+  monitor settings and keybinds from saved Hyprland/Sway configuration without
+  executing source scripts. It loads after Awtarchy's Umbriel defaults.
+- On Hyprland, saved `hyprmoncfg-monitors.lua` takes precedence; if absent,
+  unique matching `hyprmoncfg/profiles/*.json` layouts are supported.
+  Disconnected outputs, ambiguous layouts, dynamic rules, and unsupported
+  compositor-only shortcuts are skipped instead of guessed.
+- The importer prefers the currently running supported source compositor, then
+  a pre-existing last-compositor marker. If neither exists, Hyprland is a
+  *fallback*, not evidence it was last used. Set
+  `AWTARCHY_MIGRATE_FROM=sway` (or `hyprland`) explicitly if needed.
+- GPU-specific flags, NVIDIA driver changes, tearing and HDR are **not**
+  automatically enabled. Explicit source VRR policies can be translated only
+  for verified matching displays.
+
+## Retesting an installed Umbriel trial
+
+Use the existing `~/awtarchy-umbriel-trial` checkout. Fast-forward the
+experimental branch, then run `compositors/umbriel/sync.py preview --repo
+<checkout>` before `apply`. The managed config, Quickshell assets and
+`migrated.toml` are installed only when missing or still matching the
+Awtarchy checksum baseline; personalized files are never overwritten.
+
+Prefer applying while signed into Hyprland, then log into Umbriel to verify
+physical monitor modes, positioning, and shortcuts. The importer reports the
+selected source and number of verified displays/shortcuts. A report of
+`displays=0` is a failed display migration, not proof of success. Do not
+replace custom Umbriel layout files to force an import.
 
 ## Known experimental limitations
 
