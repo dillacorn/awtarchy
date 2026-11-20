@@ -51,8 +51,10 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert report["outputs"] == 2, report
     assert profile["output"]["DP-1"] == {
         "mode": "1920x1080@400.002014", "position": [0, 1080],
-        "scale": 1.0}, profile["output"]
+        "scale": 1.0, "workspaces": 10, "tearing": True}, profile["output"]
     assert profile["output"]["DP-3"]["vrr"] == "always"
+    assert profile["output"]["DP-3"]["workspaces"] == 10
+    assert profile["output"]["DP-3"]["tearing"] is True
     keys = profile["keybinds"]
     assert keys["Mod+F"] == "window-toggle-floating", keys
     assert keys["Mod+Ctrl+F"] == "window-toggle-fullscreen"
