@@ -71,14 +71,26 @@ def render(repo: Path, destination: Path):
                     text = text.replace("active-theme-sway", "active-theme-umbriel")
                     text = text.replace("Sway", "Umbriel")
                     if source.name == "Bar.qml":
-                        # Unlike Sway, native Umbriel uses Super as its drag
-                        # modifier. Do not display Sway's Alt-only instruction.
+                        # The compositor's native drag modifier is Alt; the
+                        # Super keyboard chords are bound explicitly.
                         text = text.replace(
                             "Toggle Umbriel mouse mode (Alt still required to drag/resize)",
-                            "Toggle Umbriel mouse mode (Super+drag/resize)")
+                            "Toggle Umbriel mouse mode (Alt+drag/resize)")
                         text = text.replace(
                             "/umbriel/awtarchy-trial/mode-control.sh",
                             "/umbriel/awtarchy-trial/mode-control.py")
+                        # The state manager stages .py with 0644, so the
+                        # bar must invoke it through the Python interpreter.
+                        old = '[bar.mouseSubmapScript, "toggle", "mouse"]'
+                        new = '["python3", bar.mouseSubmapScript, "toggle", "mouse"]'
+                        if text.count(old) != 4:
+                            raise ValueError("Umbriel mouse-mode toggle count changed")
+                        text = text.replace(old, new)
+                        old = '[bar.mouseSubmapScript, "reset"]'
+                        new = '["python3", bar.mouseSubmapScript, "reset"]'
+                        if text.count(old) != 3:
+                            raise ValueError("Umbriel mouse-mode reset count changed")
+                        text = text.replace(old, new)
                         # Umbriel has one active workspace on EACH output; focused
                         # is true only on the keyboard-focused output. A hidden
                         # empty active workspace would make the bar appear stuck.
