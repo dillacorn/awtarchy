@@ -61,7 +61,7 @@ KEYNAMES = {"return": "Return", "backspace": "BackSpace", "tab": "Tab",
 SAFE_EXEC = {
     "foot": "spawn foot",
     "foot yazi": "spawn foot yazi",
-    "fuzzel": "spawn fuzzel",
+    "fuzzel": COMMANDS["app_launcher"],
     "smtty -S -l": "spawn smtty -S -l",
     "smtty -k": "spawn smtty -k",
     "bash $trial/ipc.sh launcher toggle": COMMANDS["app_launcher"],
