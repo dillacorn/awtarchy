@@ -82,7 +82,7 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert status["workspace_home"] == "DP-3"
     assert different["DP-3"]["workspaces"] == [str(n) for n in range(1, 11)]
     assert different["DP-1"]["workspaces"] == "dynamic"
-    preference = home / ".config/umbriel/awtarchy-trial/workspace-home"
+    preference = home / ".config/umbriel/awtarchy/workspace-home"
     preference.parent.mkdir(parents=True, exist_ok=True)
     preference.write_text("DP-1\\n".replace("\\n", "\n"))
     with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}):
