@@ -154,7 +154,7 @@ fi
 if (
   ARCH_SELECTED=(lib32-optional-test)
   multilib_enabled() { return 1; }
-  die() { exit 97; }
+  die() { printf 'ERROR: %s\n' "$*" >&2; exit 97; }
   install_arch_repo_apps_stage
 ) >"$TMP/multilib-missing.log" 2>&1; then
   fail "Selected lib32 package bypassed multilib validation"
