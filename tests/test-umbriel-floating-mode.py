@@ -19,7 +19,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-floating-check-") as tmp:
     runtime = root / "runtime"
     runtime.mkdir(mode=0o700)
     cfg = root / "config"
-    target = cfg / "umbriel/awtarchy-trial/floating-rules.toml"
+    target = cfg / "umbriel/awtarchy/floating-rules.toml"
     target.parent.mkdir(parents=True)
     target.write_bytes(mod.OFF)
     env = {"XDG_CONFIG_HOME": str(cfg), "XDG_RUNTIME_DIR": str(runtime),
