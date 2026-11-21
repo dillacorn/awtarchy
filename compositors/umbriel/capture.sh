@@ -111,7 +111,7 @@ capture() {
     else
         grim -g "$geometry" "$image" 9>&- || return 1
     fi
-    sound="$HOME/.config/hypr/scripts/screenshot_sound.sh"
+    sound="$(dirname -- "${BASH_SOURCE[0]}")/screenshot_sound.sh"
     if [[ -f "$sound" && ! -L "$sound" ]]; then
         style=satty
         [[ "$mode" == display-copy ]] && style=direct
