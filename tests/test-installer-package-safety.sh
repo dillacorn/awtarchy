@@ -97,6 +97,21 @@ check_absent 'libvirtd'
 check_absent 'virsh '
 check_absent 'ufw '
 check_present 'Existing jack2 package preserved'
+
+# Even when manually selected in the package picker, the installer must not
+# let pacman --noconfirm resolve provider conflicts by removing JACK2.
+: >"$calls"
+if (
+  ARCH_SELECTED=(pipewire-jack)
+  die() { printf 'ERROR: %s\n' "$*" >&2; exit 97; }
+  install_arch_repo_apps_stage
+) >"$TMP/jack-conflict.log" 2>&1; then
+  fail "Conflicting selected PipeWire JACK provider replaced JACK2"
+fi
+grep -Fq 'Resolve the JACK provider manually' "$TMP/jack-conflict.log" ||
+  fail "Conflicting selected JACK provider was not explained"
+check_absent 'install pipewire-jack'
+
 if grep -Fq 'pacman -Rdd --noconfirm jack2' "$RUNTIME" ||
   grep -Fq 'virsh net-destroy default' "$RUNTIME"; then
   fail "Installer still contains destructive audio/network operations"
