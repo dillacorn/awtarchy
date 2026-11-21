@@ -62,6 +62,8 @@ jobs:
           python tests/test-sway-tty.py
           python tests/test-sway-single-session.py
           python tests/test-sway-trial.py
+          python3 tests/test-launcher-pointer-selection.py
+          python3 tests/test-clipboard-pointer-selection.py
           python tests/test-sway-ipc.py
           python tests/test-sway-focus-cycle.py
           python tests/test-sway-modes.py
