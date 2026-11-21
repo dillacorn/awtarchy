@@ -53,7 +53,7 @@ def render(repo: Path, destination: Path):
                 if text.count(before) != 1:
                     raise ValueError("Source Screen Share Guard path changed")
                 text = text.replace(before,
-                    "/umbriel/awtarchy-trial/screenshare-guard.sh")
+                    "/umbriel/awtarchy/screenshare-guard.sh")
             else:
                 try:
                     text = source.read_text(encoding="utf-8")
@@ -102,7 +102,7 @@ def render(repo: Path, destination: Path):
                     text = text.replace("SwayFocusGrab", "UmbrielFocusGrab")
                     text = text.replace("SwayDragBridge", "UmbrielDragBridge")
                     text = text.replace("SwayFlyoutWindow", "UmbrielFlyoutWindow")
-                    text = text.replace("/sway/awtarchy-trial/", "/umbriel/awtarchy-trial/")
+                    text = text.replace("/sway/awtarchy-trial/", "/umbriel/awtarchy/")
                     text = text.replace("/quickshell/awtarchy-sway/", "/quickshell/awtarchy-umbriel/")
                     text = text.replace("awtarchy-sway", "awtarchy-umbriel")
                     text = text.replace("active-theme-sway", "active-theme-umbriel")
@@ -159,8 +159,8 @@ def render(repo: Path, destination: Path):
                             "Toggle Umbriel mouse mode (Alt still required to drag/resize)",
                             "Toggle Umbriel mouse mode (Alt+drag/resize)")
                         text = text.replace(
-                            "/umbriel/awtarchy-trial/mode-control.sh",
-                            "/umbriel/awtarchy-trial/mode-control.py")
+                            "/umbriel/awtarchy/mode-control.sh",
+                            "/umbriel/awtarchy/mode-control.py")
                         # The state manager stages .py with 0644, so the
                         # bar must invoke it through the Python interpreter.
                         old = '[bar.mouseSubmapScript, "toggle", "mouse"]'
@@ -202,7 +202,7 @@ def render(repo: Path, destination: Path):
                         if text.count(source_helper) != 1:
                             raise ValueError("Umbriel global floating source helper changed")
                         text = text.replace(source_helper,
-                            "/umbriel/awtarchy-trial/floating-windows.sh")
+                            "/umbriel/awtarchy/floating-windows.sh")
                         original_state = "/awtarchy-floating-windows-state"
                         if text.count(original_state) != 1:
                             raise ValueError("Umbriel global floating state path changed")
@@ -213,7 +213,7 @@ def render(repo: Path, destination: Path):
                         # must read the same shared file during an Umbriel login.
                         text = text.replace(
                             "/hypr/scripts/screenshot_sound.sh",
-                            "/umbriel/awtarchy-trial/screenshot_sound.sh")
+                            "/umbriel/awtarchy/screenshot_sound.sh")
                     if "swaymsg " in text or "hyprctl " in text or "import Quickshell.I3" in text:
                         raise ValueError("Unported compositor-specific QML: " + source.name)
             (result / target).write_text(text, encoding="utf-8")
