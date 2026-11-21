@@ -20,6 +20,9 @@ Entries below distinguish implementation from hardware/session confirmation.
 | Quickshell DDC brightness | Adapted | User verified working |
 | Screen-share guard | Unsupported | Native Umbriel guard, user verified |
 | Per-monitor bar/flyout state | Shared Quickshell manager | Shared Quickshell manager |
+| Screenshot sounds and login audio | Private helper and exact managed MP3; runtime verify | Private helper and exact managed MP3; runtime verify |
+| sched-ext Quick Settings | Shared trusted scheduler bridge; runtime verify | Shared trusted scheduler bridge; runtime verify |
+| Window placement preview tint | Native Sway behavior | `colors.insert_hint` follows selected active border, 50% alpha; runtime verify |
 | Personal file/config preservation | Managed | Managed checksum |
 
 Before any new compositor release, audit all Hyprland-generated bindings,
