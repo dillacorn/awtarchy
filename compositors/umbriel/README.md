@@ -123,6 +123,18 @@ replace custom Umbriel layout files to force an import.
   and an animation profile tuned toward the current Hyprland defaults.
   This is a *translation*, not a promise that two different compositors
   implement identical animations.
+- Umbriel Quick Settings uses the same restricted sched-ext backend,
+  authorization workflow and persisted scheduler profiles as Hyprland and
+  Sway. It stages private copies of the trusted core; no compositor IPC is
+  used to manipulate the system scheduler. No privileged authorization is
+  attempted until explicitly requested in Quick Settings.
+- Umbriel screenshots now call their private managed sound helper instead of
+  depending on an installed Hyprland script. The same original Awtarchy
+  login MP3 and sound preferences are staged in Umbriel; playback starts once
+  after successful initial Quickshell startup, not on theme or shell reload.
+- Umbriel native `colors.insert_hint` uses the selected theme's active-border
+  RGB at 50% opacity for workspace drag/drop insertion previews. Changing
+  the theme updates this color through the private `theme.toml` include.
 - `ThemePicker` uses Umbriel's dedicated `theme-apply.sh`, updates
   `~/.config/quickshell/awtarchy-umbriel/theme.json`, and writes a
   private `theme.toml` include with Umbriel's native focused/unfocused border
