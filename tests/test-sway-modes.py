@@ -16,6 +16,22 @@ for name in ("noalt", "mouse", "vm"):
     for key, target in (("n", "noalt"), ("m", "mouse"), ("v", "vm")):
         assert (f"bindsym --inhibited Mod4+Mod1+{key} exec bash "
                 f"$trial/mode-control.sh toggle {target}") in blocks[name]
+# In noalt mode Alt is deliberately released to applications;
+# Super+Ctrl resize must still provide all eight inverse width/height actions.
+resize_actions = {
+    "Left": "resize shrink width 30 px",
+    "Right": "resize grow width 30 px",
+    "Up": "resize shrink height 30 px",
+    "Down": "resize grow height 30 px",
+    "h": "resize shrink width 30 px",
+    "l": "resize grow width 30 px",
+    "k": "resize shrink height 30 px",
+    "j": "resize grow height 30 px",
+}
+for key, action in resize_actions.items():
+    binding = f"bindsym Mod4+Control+{key} {action}"
+    assert blocks["noalt"].splitlines().count("    " + binding) == 1, binding
+    assert ("bindsym Mod1+Control+" + key) not in blocks["noalt"]
 assert "Mod4+2 workspace number 2" in blocks["noalt"]
 assert "Mod1+Tab exec python3 $trial/focus-cycle.py next" in blocks["noalt"]
 assert "Mod4+Mod1+2 workspace number 2" in blocks["vm"]
