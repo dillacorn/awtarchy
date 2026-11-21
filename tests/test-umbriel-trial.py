@@ -233,6 +233,25 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert '"/screenshot_sound.sh"' in (TRIAL / "capture.sh").read_text()
         assert '$HOME/.config/hypr/scripts/screenshot_sound.sh' not in (TRIAL / "capture.sh").read_text()
         subprocess.run(["bash", "-n", str(sound / "login-sound.sh")], check=True)
+        scheduler = sound / "scheduler.sh"
+        assert scheduler.read_bytes() == (TRIAL.parent / "sway/scheduler.sh").read_bytes()
+        for script in ("hypr_quicksettings_core.sh", "hypr_quicksettings.sh"):
+            assert (sound / script).read_bytes() == (
+                ROOT / "config/hypr/scripts" / script).read_bytes()
+        subprocess.run(["bash", "-n", str(scheduler)], check=True)
+        env = {**os.environ, "XDG_STATE_HOME": str(home / ".local/state"),
+               "XDG_CONFIG_HOME": str(home / ".config")}
+        status = subprocess.run(["bash", str(scheduler), "--status-json"],
+                                env=env, capture_output=True, text=True, timeout=20)
+        assert status.returncode == 0, status.stderr
+        sched_data = json.loads(status.stdout)
+        assert len(sched_data["schedulers"]) == 9
+        assert isinstance(sched_data["available"], bool)
+        assert sched_data["last_selected"] == ""
+        rejected = subprocess.run(["bash", str(scheduler), "--action",
+                                  "bar-position", "DP-1", "top"],
+                                  env=env, capture_output=True, text=True, timeout=10)
+        assert rejected.returncode != 0
         helper = home / ".config/umbriel/awtarchy-trial/application-state.sh"
         assert helper.is_file()
         assert "quickshell-state.json" in helper.read_text()
