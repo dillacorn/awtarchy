@@ -154,10 +154,14 @@ python3 "$repo/compositors/umbriel/sync.py" apply --repo "$repo"
 # Ly may use Awtarchy's curated session directory instead of the package
 # directory. Register only the Umbriel package entry; never edit Ly config,
 # replace an existing session file, or add duplicate compositor entries.
-if ! bash "$repo/compositors/umbriel/register-ly-session.sh" apply; then
-    printf 'Umbriel config is staged, but Ly registration needs attention.\n' >&2
-    printf 'Review safely: bash %s/compositors/umbriel/register-ly-session.sh plan\n' "$repo" >&2
-    false
+if [[ -f /etc/ly/config.ini && ! -L /etc/ly/config.ini ]]; then
+    if ! bash "$repo/compositors/umbriel/register-ly-session.sh" apply; then
+        printf 'Umbriel config is staged, but Ly registration needs attention.\n' >&2
+        printf 'Review safely: bash %s/compositors/umbriel/register-ly-session.sh plan\n' "$repo" >&2
+        false
+    fi
+else
+    printf 'Ly is not configured; use the Umbriel TTY command instead.\n'
 fi
 printf 'Umbriel managed files staged; Ly visibility is not yet verified.\n'
 printf 'Ly reads session entries when it starts. A reboot may be necessary\n'
