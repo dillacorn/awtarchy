@@ -146,6 +146,7 @@ bindsym Mod4+Control+f fullscreen toggle
 bindsym Mod1+r split toggle
 bindsym Mod4+r split toggle
 bindsym Mod1+Shift+r split toggle
+bindsym Mod4+Mod1+Shift+r reload
 bindsym Mod4+Shift+r split toggle
 
 # Scratchpad: Sway's native scratchpad, not Hyprland's special workspace.
@@ -442,6 +443,7 @@ mode "noalt" {
     bindsym Mod4+Control+f fullscreen toggle
     bindsym Mod4+r split toggle
     bindsym Mod4+Shift+r split toggle
+    bindsym Mod4+Mod1+Shift+r reload
     bindsym Mod4+x scratchpad show
     bindsym Mod4+Control+x move scratchpad
     bindsym Mod4+y sticky toggle
