@@ -12,7 +12,19 @@ fi
 
 /usr/bin/steam --disable-gpu "$@" &
 
-splitratio="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/splitratio_steam.sh"
-if [[ -x "$splitratio" ]]; then
+# Use each compositor's own supported window-layout controls. Sway keeps
+# its normal tiling behavior; never run Hyprland IPC outside Hyprland.
+case "${XDG_CURRENT_DESKTOP,,}" in
+    umbriel*)
+        splitratio="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy/steam-layout.sh"
+        ;;
+    hyprland*)
+        splitratio="${XDG_CONFIG_HOME:-$HOME/.config}/hypr/scripts/splitratio_steam.sh"
+        ;;
+    *)
+        splitratio=""
+        ;;
+esac
+if [[ -n "$splitratio" && -x "$splitratio" ]]; then
     ALLOW_WAIT=1 "$splitratio" >/dev/null 2>&1 &
 fi
