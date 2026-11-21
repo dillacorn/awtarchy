@@ -29,6 +29,8 @@ assert module.classify(floating_remote, focused, ("maccel",), False) == ((20, 21
 tiled_here = {"type": "root", "nodes": [ws("1", nodes=[window("maccel", 31, tiled=True)])]}
 assert module.classify(tiled_here, focused, ("maccel",), False) == ((), True)
 assert module.classify(tiled_here, focused, ("maccel",), True) == ((), False)
+assert module.UTILITIES["btop"][2] is True
+assert module.UTILITIES["wiremix"][2] is True
 assert module.classify(tiled_here, focused, ("Wiremix",), False) == ((), True)
 assert "hyprmoncfg" not in module.UTILITIES
 assert module.UTILITIES["displays"][1][0] == "nwg-displays"

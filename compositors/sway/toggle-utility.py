@@ -15,9 +15,9 @@ HYPR_SCRIPTS = CONFIG / "hypr/scripts"
 
 # Identity, executable argv and whether a manually tiled instance blocks launch.
 UTILITIES = {
-    "btop": (("btop",), ("foot", "--app-id", "btop", "btop"), False),
+    "btop": (("btop",), ("foot", "--app-id", "btop", "btop"), True),
     "maccel": (("maccel",), ("foot", "--app-id", "maccel", "maccel", "tui"), False),
-    "wiremix": (("Wiremix",), ("foot", "--app-id", "Wiremix", "wiremix"), False),
+    "wiremix": (("Wiremix",), ("foot", "--app-id", "Wiremix", "wiremix"), True),
     "default-apps": (
         ("awtarchy-default-apps",),
         ("foot", "--app-id", "awtarchy-default-apps", "--title",

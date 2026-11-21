@@ -195,6 +195,14 @@ bindsym Mod4+Control+Left resize shrink width 30 px
 bindsym Mod4+Control+Right resize grow width 30 px
 bindsym Mod4+Control+Up resize shrink height 30 px
 bindsym Mod4+Control+Down resize grow height 30 px
+bindsym Mod1+Control+h resize shrink width 30 px
+bindsym Mod4+Control+h resize shrink width 30 px
+bindsym Mod1+Control+l resize grow width 30 px
+bindsym Mod4+Control+l resize grow width 30 px
+bindsym Mod1+Control+k resize shrink height 30 px
+bindsym Mod4+Control+k resize shrink height 30 px
+bindsym Mod1+Control+j resize grow height 30 px
+bindsym Mod4+Control+j resize grow height 30 px
 
 # Global numbered workspaces, independent of output/tag.
 bindsym Mod1+1 workspace number 1
@@ -436,6 +444,10 @@ mode "noalt" {
     bindsym Mod4+Control+Right resize grow width 30 px
     bindsym Mod4+Control+Up resize shrink height 30 px
     bindsym Mod4+Control+Down resize grow height 30 px
+    bindsym Mod4+Control+h resize shrink width 30 px
+    bindsym Mod4+Control+l resize grow width 30 px
+    bindsym Mod4+Control+k resize shrink height 30 px
+    bindsym Mod4+Control+j resize grow height 30 px
     bindsym Mod4+1 workspace number 1
     bindsym Mod4+Shift+1 move container to workspace number 1
     bindsym Mod4+2 workspace number 2
