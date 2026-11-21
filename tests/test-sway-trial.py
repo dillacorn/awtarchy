@@ -200,14 +200,26 @@ for line in CONFIG.splitlines():
 # Immediate page flips need output AND application permission; a fullscreen
 # window remains required and ordinary desktop apps are not opted in.
 assert "output * allow_tearing yes" in CONFIG
+# Sway already has the correct native shrink/grow semantics. Verify
+# *every* Alt/Super arrow and hjkl alias matches Hyprland's resize vector.
+resize_actions = {
+    "Left": "resize shrink width 30 px",
+    "Right": "resize grow width 30 px",
+    "Up": "resize shrink height 30 px",
+    "Down": "resize grow height 30 px",
+    "h": "resize shrink width 30 px",
+    "l": "resize grow width 30 px",
+    "k": "resize shrink height 30 px",
+    "j": "resize grow height 30 px",
+}
 for mod in ("Mod1", "Mod4"):
-    for key, expected in (
-        ("h", "resize shrink width 30 px"),
-        ("l", "resize grow width 30 px"),
-        ("k", "resize shrink height 30 px"),
-        ("j", "resize grow height 30 px")
-    ):
-        assert f"bindsym {mod}+Control+{key} {expected}" in CONFIG
+    for key, action in resize_actions.items():
+        assert bindings[f"{mod}+Control+{key}"] == [action], (mod, key)
+for key, action in {
+    "y": resize_actions["Left"], "o": resize_actions["Right"],
+    "u": resize_actions["Up"], "i": resize_actions["Down"],
+}.items():
+    assert bindings[f"Mod1+{key}"] == [action], key
 assert "output * max_render_time off" in CONFIG
 assert re.search(r'(?m)^for_window \[app_id=.*steam_app_.*\] allow_tearing yes$', CONFIG)
 assert re.search(r'(?m)^for_window \[class=.*steam_app_.*\] allow_tearing yes$', CONFIG)
