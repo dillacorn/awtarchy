@@ -24,7 +24,7 @@ def files():
     if (root.is_symlink() or not root.is_dir()
             or root.stat().st_uid != os.getuid() or root.stat().st_mode & 0o077):
         raise ValueError("Unsafe XDG_RUNTIME_DIR")
-    return (config / "umbriel/awtarchy-trial/floating-rules.toml",
+    return (config / "umbriel/awtarchy/floating-rules.toml",
             root / "awtarchy-umbriel-floating-windows-state",
             root / "awtarchy-umbriel-floating-windows.lock")
 
