@@ -390,9 +390,8 @@ numlock_toggle = true
 "submap[noalt],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
 "submap[mouse],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
 "submap[vm],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
-"submap[noalt],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
-"submap[mouse],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
-"submap[vm],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
+# Leave bare Escape to focused applications and Quickshell popups.
+# Submaps are changed only by the explicit Super+Alt+N/M/V toggles.
 "submap[vm],Super+Alt+Q" = "window-close"
 "submap[vm],Super+Alt+F" = "window-toggle-floating"
 "submap[vm],Super+Alt+P" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh launcher toggle"
