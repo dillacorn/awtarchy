@@ -17,7 +17,7 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
     dbus-update-activation-environment --systemd "${session_env[@]}" || true
 fi
 # start-umbriel has already imported graphical session values to systemd.
-trial="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial"
+trial="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy"
 # Publish the verified initial input mode before Quickshell reads bar state.
 if [[ -f "$trial/mode-control.py" && ! -L "$trial/mode-control.py" ]]; then
     python3 "$trial/mode-control.py" sync || \
