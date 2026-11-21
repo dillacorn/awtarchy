@@ -80,6 +80,11 @@ curve = "0.4,0.1,0.2,1.0"
 accel_profile = "flat"
 sensitivity = 0.0
 
+[input.focus]
+# Focus hovered windows without raising overlapping floating windows.
+follows_mouse = "sloppy"
+hover_raises = false
+
 [input.keyboard]
 numlock_toggle = true
 
@@ -160,6 +165,28 @@ numlock_toggle = true
 "Alt+Shift+Down" = "window-move-down"
 "Super+Ctrl+Shift+Down" = "workspace-move-to-output-down"
 "Alt+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+# Native Umbriel resizing: relative to each edge, 3% per key repeat.
+# Ctrl+Shift+arrows retain Hyprland's distinct workspace-transfer meaning.
+"Alt+Ctrl+Left" = "window-modify-width-left -0.03"
+"Super+Ctrl+Left" = "window-modify-width-left -0.03"
+"Alt+Ctrl+Right" = "window-modify-width-right +0.03"
+"Super+Ctrl+Right" = "window-modify-width-right +0.03"
+"Alt+Ctrl+Up" = "window-modify-height-up -0.03"
+"Super+Ctrl+Up" = "window-modify-height-up -0.03"
+"Alt+Ctrl+Down" = "window-modify-height-down +0.03"
+"Super+Ctrl+Down" = "window-modify-height-down +0.03"
+"Alt+Ctrl+h" = "window-modify-width-left -0.03"
+"Super+Ctrl+h" = "window-modify-width-left -0.03"
+"Alt+Ctrl+l" = "window-modify-width-right +0.03"
+"Super+Ctrl+l" = "window-modify-width-right +0.03"
+"Alt+Ctrl+k" = "window-modify-height-up -0.03"
+"Super+Ctrl+k" = "window-modify-height-up -0.03"
+"Alt+Ctrl+j" = "window-modify-height-down +0.03"
+"Super+Ctrl+j" = "window-modify-height-down +0.03"
+"Alt+Y" = "window-modify-width-left -0.03"
+"Alt+O" = "window-modify-width-right +0.03"
+"Alt+U" = "window-modify-height-up -0.03"
+"Alt+I" = "window-modify-height-down +0.03"
 "Super+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy-trial/workspace-nav.py previous"
 "Super+BracketRight" = "spawn python3 ~/.config/umbriel/awtarchy-trial/workspace-nav.py next"
 "Alt+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy-trial/workspace-nav.py previous"
@@ -261,6 +288,14 @@ numlock_toggle = true
 "submap[noalt],Super+Down" = "window-focus-down"
 "submap[noalt],Super+Shift+Down" = "window-move-down"
 "submap[noalt],Super+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+"submap[noalt],Super+Ctrl+Left" = "window-modify-width-left -0.03"
+"submap[noalt],Super+Ctrl+Right" = "window-modify-width-right +0.03"
+"submap[noalt],Super+Ctrl+Up" = "window-modify-height-up -0.03"
+"submap[noalt],Super+Ctrl+Down" = "window-modify-height-down +0.03"
+"submap[noalt],Super+Ctrl+h" = "window-modify-width-left -0.03"
+"submap[noalt],Super+Ctrl+l" = "window-modify-width-right +0.03"
+"submap[noalt],Super+Ctrl+k" = "window-modify-height-up -0.03"
+"submap[noalt],Super+Ctrl+j" = "window-modify-height-down +0.03"
 "submap[noalt],Super+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy-trial/workspace-nav.py previous"
 "submap[noalt],Super+BracketRight" = "spawn python3 ~/.config/umbriel/awtarchy-trial/workspace-nav.py next"
 "submap[noalt],Super+1" = "workspace-switch --name 1"
@@ -303,9 +338,9 @@ numlock_toggle = true
 "submap[noalt],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py toggle vm"
 "submap[mouse],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py toggle vm"
 "submap[vm],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py toggle vm"
-"submap[noalt],Escape" = "submap reset"
-"submap[mouse],Escape" = "submap reset"
-"submap[vm],Escape" = "submap reset"
+"submap[noalt],Escape" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py reset"
+"submap[mouse],Escape" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py reset"
+"submap[vm],Escape" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py reset"
 "submap[vm],Super+Alt+Q" = "window-close"
 "submap[vm],Super+Alt+F" = "window-toggle-floating"
 "submap[vm],Super+Alt+P" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh launcher toggle"

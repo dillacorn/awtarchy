@@ -25,6 +25,8 @@ assert 'exec_always bash $trial/mode-state.sh sync' in config
 render = (TRIAL / "render-quickshell.py").read_text()
 assert "'/sway/awtarchy-trial/mode-control.sh'" in render
 assert '[bar.mouseSubmapScript, "toggle", "mouse"]' in render
+assert 'boolean:transient:true' in (TRIAL / "mode-control.sh").read_text()
+assert 'submap: ON' in (TRIAL / "mode-control.sh").read_text()
 with tempfile.TemporaryDirectory(prefix="sway-modes-") as tmp:
     home = Path(tmp)
     runtime = home / "runtime"

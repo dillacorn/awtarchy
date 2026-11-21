@@ -33,5 +33,10 @@ fi
 }
 bash "${XDG_CONFIG_HOME:-$HOME/.config}/sway/awtarchy-trial/mode-state.sh" sync
 if [[ "$current" != "$target" ]] && command -v notify-send >/dev/null 2>&1; then
-    notify-send -a Awtarchy -t 1000 "Sway input mode: $target" >/dev/null 2>&1 || true
+    if [[ "$target" == default ]]; then
+        label="$current submap: OFF"
+    else
+        label="$target submap: ON"
+    fi
+    notify-send -a Awtarchy -h boolean:transient:true -t 1000 "$label" >/dev/null 2>&1 || true
 fi

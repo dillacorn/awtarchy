@@ -44,6 +44,20 @@ assert any(w["match"].get("title") == "^btop$"
 assert all(not chord.startswith("Mod+") and
            ",Mod+" not in chord for chord in keybinds)
 assert config["input"]["mouse"]["accel_profile"] == "flat"
+assert config["input"]["focus"] == {"follows_mouse": "sloppy", "hover_raises": False}
+for mod in ("Alt", "Super"):
+    assert keybinds[mod + "+Ctrl+Left"] == "window-modify-width-left -0.03"
+    assert keybinds[mod + "+Ctrl+Right"] == "window-modify-width-right +0.03"
+    assert keybinds[mod + "+Ctrl+Up"] == "window-modify-height-up -0.03"
+    assert keybinds[mod + "+Ctrl+Down"] == "window-modify-height-down +0.03"
+    assert keybinds[mod + "+Ctrl+Shift+Left"] == "workspace-move-to-output-left"
+assert keybinds["submap[noalt],Super+Ctrl+h"] == "window-modify-width-left -0.03"
+for mode in ("noalt", "mouse", "vm"):
+    assert keybinds["submap[" + mode + "],Escape"].endswith("mode-control.py reset")
+assert 'boolean:transient:true' in (TRIAL / "mode-control.py").read_text()
+assert "submap: ON" in (TRIAL / "mode-control.py").read_text()
+assert 'available: FloatingWindowsState.available && !root.operationBusy' in (
+    ROOT / "config/quickshell/awtarchy/FloatingWindowsCard.qml").read_text()
 assert config["general"]["autostart"] == [
     "bash ~/.config/umbriel/awtarchy-trial/session.sh"]
 assert "tearing" not in (TRIAL / "config.toml").read_text().split(

@@ -85,8 +85,11 @@ def command(action: str, name: str | None = None):
     if actual != target:
         raise ValueError("Umbriel rejected submap: expected " + target + ", got " + actual)
     if actual != current and shutil.which("notify-send"):
-        subprocess.Popen(["notify-send", "-a", "Awtarchy", "-t", "900",
-                          "Umbriel input mode: " + actual], stdin=subprocess.DEVNULL,
+        label = (current + " submap: OFF" if actual == "default"
+                 else actual + " submap: ON")
+        subprocess.Popen(["notify-send", "-a", "Awtarchy",
+                          "-h", "boolean:transient:true", "-t", "1000",
+                          label], stdin=subprocess.DEVNULL,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                          start_new_session=True)
 

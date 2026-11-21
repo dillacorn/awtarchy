@@ -96,8 +96,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
     assert "popup.dragFromRight ? -1 : 1" in flyout
     assert "popup.dragFromBottom ? -1 : 1" in flyout
     assert "popup.resizeCommitted(popup.resizePreviewWidth," in flyout
-    # Changing a layer-shell surface during a held pointer grab is unsafe;
-    # do not advertise continuous live resize as supported.
+    # Umbriel's experiment must show the resized surface as the drag moves,
+    # rather than Sway's deferred dimensions overlay.
+    assert "visible: swayResizeDrag.active" not in flyout
     assert "popup.implicitWidth = popup.resizePreviewWidth" not in flyout
 
     # Sway has the same single-flyout ownership correction, with no changes
