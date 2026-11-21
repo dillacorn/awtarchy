@@ -321,10 +321,10 @@ def render(source: Path, destination: Path, trial: Path):
                         '/sway/awtarchy-trial/mode-control.sh')
                     text = text.replace(
                         'tooltip: "Toggle mouse submap"',
-                        'tooltip: "Toggle Sway mouse mode (Alt still required to drag/resize)"')
-                    text = text.replace(
-                        'tooltip: "Current submap: " + submapFile.text().trim() + " (click to reset)"',
-                        'tooltip: "Current mode: " + submapFile.text().trim() + " (click to reset)"')
+                        'tooltip: "Mouse submap (Alt+drag still required)"')
+                    # Retain the shared "Current submap" terminology for all
+                    # supported compositors. The mouse mode cannot intercept
+                    # bare pointer buttons in Sway or Umbriel.
                     text = text.replace(
                         '[bar.mouseSubmapScript, "reset"]',
                         '[bar.mouseSubmapScript, "reset"]')

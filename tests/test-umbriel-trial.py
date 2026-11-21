@@ -155,6 +155,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "/umbriel/awtarchy-trial/floating-windows.sh" in floating
     assert "awtarchy-umbriel-floating-windows-state" in floating
     assert "awtarchy-umbriel" in (rendered / "shell.qml").read_text()
+    bar_labels = (rendered / "Bar.qml").read_text()
+    assert 'Mouse submap (Alt+drag still required)' in bar_labels
+    assert 'Current submap: ' in bar_labels
     home = root / "home"
     home.mkdir()
     hypr = home / ".config/hypr/hyprland.lua"
