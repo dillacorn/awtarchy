@@ -217,8 +217,14 @@ def render(repo: Path, destination: Path):
                     if "swaymsg " in text or "hyprctl " in text or "import Quickshell.I3" in text:
                         raise ValueError("Unported compositor-specific QML: " + source.name)
             (result / target).write_text(text, encoding="utf-8")
-        if not (result / "UmbrielBridge.qml").is_file():
+        bridge = result / "UmbrielBridge.qml"
+        if not bridge.is_file():
             raise ValueError("Umbriel bridge not generated")
+        # The bridge is copied directly from the Umbriel source, unlike the
+        # Sway-derived QML files. Keep it on the currently installed managed
+        # path; the legacy trial directory is not installed on fresh systems.
+        if "umbriel/awtarchy-trial/" in bridge.read_text(encoding="utf-8"):
+            raise ValueError("Umbriel bridge contains retired trial helper paths")
         shutil.copytree(result, destination)
 
 

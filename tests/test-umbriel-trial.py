@@ -152,6 +152,9 @@ diagnostic = (TRIAL / "diagnose-session.sh").read_text()
 assert "systemctl show ly.service --no-pager" in diagnostic
 assert "pacman -Qo --" in diagnostic
 assert "waylandsessions" in diagnostic
+assert 'umbriel config validate' in diagnostic
+assert "quickshell-umbriel.log" in diagnostic
+assert "OBSOLETE trial helper path detected" in diagnostic
 assert "awtarchy-umbriel" in (TRIAL / "render-quickshell.py").read_text()
 assert '"Install Umbriel"' in (ROOT / "local/bin/awtarchy").read_text()
 launcher = (ROOT / "local/bin/awtarchy").read_text()
@@ -240,6 +243,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert 'visible: root.quickSettingsSectionVisible("submap")' in quick
     bridge = (rendered / "UmbrielBridge.qml").read_text()
     assert "workspace-events.py" in bridge and "SplitParser" in bridge
+    assert "/umbriel/awtarchy/workspace-events.py" in bridge
+    assert "/umbriel/awtarchy/toggle-utility.py" in bridge
+    assert "/umbriel/awtarchy-trial/" not in bridge
     assert "interval: 700" not in bridge
     guard = (rendered / "ScreenShareGuardCard.qml").read_text()
     assert "/umbriel/awtarchy/screenshare-guard.sh" in guard
@@ -280,6 +286,10 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert "/usr/bin/awtwall" in awtwall_launcher.read_text()
         assert 'bash "$awtwall_launcher" --restore' in (
             home / ".config/umbriel/awtarchy/session.sh").read_text()
+        diagnostic_copy = home / ".config/umbriel/awtarchy/diagnose-session.sh"
+        assert diagnostic_copy.is_file()
+        assert diagnostic_copy.read_bytes() == (TRIAL / "diagnose-session.sh").read_bytes()
+        subprocess.run(["bash", "-n", str(diagnostic_copy)], check=True)
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
         sound = home / ".config/umbriel/awtarchy"
         assert (sound / "screenshot_sound.sh").read_bytes() == (

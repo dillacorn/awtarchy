@@ -11,7 +11,7 @@ Singleton {
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME")
         || (Quickshell.env("HOME") + "/.config")
     readonly property string eventsScript: configHome
-        + "/umbriel/awtarchy-trial/workspace-events.py"
+        + "/umbriel/awtarchy/workspace-events.py"
     property bool eventsEnabled: true
     property var workspaces: ({ values: [] })
     property var toplevels: ({ values: [] })
@@ -92,7 +92,7 @@ Singleton {
         if (!name)
             return false;
         Quickshell.execDetached([
-            "python3", root.configHome + "/umbriel/awtarchy-trial/toggle-utility.py",
+            "python3", root.configHome + "/umbriel/awtarchy/toggle-utility.py",
             name
         ]);
         return true;

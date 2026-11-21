@@ -64,3 +64,46 @@ printf '\n=== CONCLUSION BOUNDARY ===\n'
 printf 'Ly loads session directories when its interface initializes.\n'
 printf 'This report does not prove the running Ly process has re-scanned them.\n'
 printf 'Never restart Ly from an active graphical session just to refresh its list.\n'
+
+printf '\n=== INSTALLED UMBRIEL PROFILE ===\n'
+native="$HOME/.config/umbriel/config.toml"
+managed="$HOME/.config/umbriel/awtarchy"
+shell_dir="$HOME/.config/quickshell/awtarchy-umbriel"
+for file in "$native" "$managed/config.toml" "$managed/session.sh" \
+            "$managed/quickshell.sh" "$managed/workspace-events.py" \
+            "$shell_dir/shell.qml" "$shell_dir/UmbrielBridge.qml"; do
+    if [[ -f "$file" && ! -L "$file" ]]; then
+        printf 'PRESENT: %s\n' "$file"
+    else
+        printf 'MISSING/UNSAFE: %s\n' "$file"
+    fi
+done
+if [[ -f "$native" && ! -L "$native" ]]; then
+    if grep -Fq '"awtarchy/config.toml"' "$native"; then
+        printf 'Awtarchy native include: present\n'
+    else
+        printf 'Awtarchy native include: MISSING (defaults may load instead)\n'
+    fi
+fi
+if [[ -f "$shell_dir/UmbrielBridge.qml" && ! -L "$shell_dir/UmbrielBridge.qml" ]]; then
+    if grep -Fq '/umbriel/awtarchy-trial/' "$shell_dir/UmbrielBridge.qml"; then
+        printf 'Umbriel Quickshell bridge: OBSOLETE trial helper path detected\n'
+    fi
+fi
+printf '\n=== EFFECTIVE CONFIG VALIDATION (READ ONLY) ===\n'
+if command -v umbriel >/dev/null 2>&1; then
+    XDG_CONFIG_HOME="$HOME/.config" umbriel config validate 2>&1 || true
+else
+    printf 'Umbriel binary is not available\n'
+fi
+printf '\n=== MOST RECENT UMBRIEL / QUICKSHELL LOGS ===\n'
+for log_file in "${XDG_CACHE_HOME:-$HOME/.cache}/umbriel/umbriel.log" \
+                "${XDG_CACHE_HOME:-$HOME/.cache}/awtarchy/quickshell-umbriel.log"; do
+    if [[ -f "$log_file" && ! -L "$log_file" ]]; then
+        printf '\n%s\n' "$log_file"
+        tail -n 35 -- "$log_file" || true
+    else
+        printf 'MISSING: %s\n' "$log_file"
+    fi
+done
+printf '\nLog entries may contain application names or personal paths; review before sharing.\n'

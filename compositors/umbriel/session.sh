@@ -3,10 +3,21 @@
 set -euo pipefail
 [[ -n "${WAYLAND_DISPLAY:-}" ]] || { printf 'Umbriel session requires Wayland\n' >&2; false; }
 command -v umbriel >/dev/null 2>&1 || { printf 'Umbriel binary missing\n' >&2; false; }
-umbriel outputs --json >/dev/null 2>&1 || {
-    printf 'Cannot reach running Umbriel IPC; refusing shell startup\n' >&2
+# Umbriel starts configured autostart programs asynchronously. A single IPC
+# query can race the socket becoming responsive, especially on first login.
+# Retry briefly rather than permanently dropping Quickshell for the session.
+ipc_ready=0
+for _ in {1..25}; do
+    if umbriel outputs --json >/dev/null 2>&1; then
+        ipc_ready=1
+        break
+    fi
+    sleep 0.1
+done
+if (( ipc_ready == 0 )); then
+    printf 'Cannot reach running Umbriel IPC after startup retries; refusing shell startup\n' >&2
     false
-}
+fi
 export QT_QPA_PLATFORMTHEME=qt5ct:qt6ct
 export QT6CT_PLATFORM_PLUGIN=qt6ct
 export GDK_BACKEND=wayland,x11
@@ -23,8 +34,10 @@ if [[ -f "$trial/mode-control.py" && ! -L "$trial/mode-control.py" ]]; then
     python3 "$trial/mode-control.py" sync || \
         printf 'Umbriel input mode state unavailable\n' >&2
 fi
+quickshell_started=0
 if [[ ! -L "$trial/quickshell.sh" && -f "$trial/quickshell.sh" ]]; then
     if bash "$trial/quickshell.sh" start; then
+        quickshell_started=1
         # Play once on initial session startup, never on a Quickshell reload.
         if [[ -f "$trial/login-sound.sh" && ! -L "$trial/login-sound.sh" ]]; then
             bash "$trial/login-sound.sh" >/dev/null 2>&1 &
@@ -32,6 +45,8 @@ if [[ ! -L "$trial/quickshell.sh" && -f "$trial/quickshell.sh" ]]; then
     else
         printf 'Umbriel Quickshell failed; inspect ~/.cache/awtarchy/quickshell-umbriel.log\n' >&2
     fi
+else
+    printf 'Umbriel Quickshell manager missing or unsafe at %s; managed installation is incomplete\n' "$trial/quickshell.sh" >&2
 fi
 if command -v wl-paste >/dev/null && command -v cliphist >/dev/null; then
     wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
@@ -45,3 +60,6 @@ if command -v awww-daemon >/dev/null; then
         bash "$awtwall_launcher" --restore >/dev/null 2>&1 &
     fi
 fi
+# Independent clipboard/wallpaper helpers can start even if the desktop shell
+# fails, but the session launcher must not report success without Quickshell.
+(( quickshell_started == 1 )) || false
