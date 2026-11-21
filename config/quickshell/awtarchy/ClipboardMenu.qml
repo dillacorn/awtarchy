@@ -58,6 +58,37 @@ Singleton {
     property string activeThumbnailPath: ""
     property int deletingEntryIndex: -1
     property real deleteViewportY: 0
+    // Keyboard search owns the selected row until physical mouse motion.
+    // A list reflow beneath a stationary pointer is not a hover selection.
+    property bool pointerSelectionActive: false
+    property bool pointerSampleValid: false
+    property real lastPointerX: 0
+    property real lastPointerY: 0
+
+    function resetPointerTracking() {
+        pointerSelectionActive = false;
+        pointerSampleValid = false;
+    }
+
+    function selectOnPointerMotion(row, mouse) {
+        // Map from the moving delegate to the fixed clipboard panel. Local
+        // MouseArea coordinates can change while the actual mouse stays put.
+        const pos = row.mapToItem(panel, mouse.x, mouse.y);
+        if (!pointerSampleValid) {
+            lastPointerX = pos.x;
+            lastPointerY = pos.y;
+            pointerSampleValid = true;
+            return;
+        }
+        const deltaX = pos.x - lastPointerX;
+        const deltaY = pos.y - lastPointerY;
+        lastPointerX = pos.x;
+        lastPointerY = pos.y;
+        if (deltaX * deltaX + deltaY * deltaY < 4)
+            return;
+        pointerSelectionActive = true;
+        clipboardList.currentIndex = row.index;
+    }
 
     readonly property string configHome: Quickshell.env("XDG_CONFIG_HOME") || (Quickshell.env("HOME") + "/.config")
     readonly property string backend: configHome + "/hypr/scripts/quickshell_clipboard.sh"
@@ -282,6 +313,7 @@ Singleton {
         if (!target)
             return;
 
+        resetPointerTracking();
         FlyoutManager.claim("clipboard", target.name);
         flyoutScreen = target;
         if (!clipboardWindow.visible)
@@ -586,6 +618,7 @@ Singleton {
     }
 
     function startListLoadNow() {
+        resetPointerTracking();
         if (!clipboardWindow.visible) {
             listLoading = false;
             listRestartPending = false;
@@ -855,6 +888,7 @@ Singleton {
         onClosed: root.close()
         onVisibleChanged: {
             if (visible) {
+                root.resetPointerTracking();
                 Qt.callLater(() => {
                     root.positionWindow();
                     if (root.detailOpen)
@@ -935,12 +969,14 @@ Singleton {
                                     root.close();
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Down && clipboardList.count > 0) {
+                                    root.resetPointerTracking();
                                     clipboardList.currentIndex = root.bottomEdgeLayout
                                         ? Math.max(0, clipboardList.currentIndex - 1)
                                         : Math.min(clipboardList.count - 1, clipboardList.currentIndex + 1);
                                     clipboardList.positionViewAtIndex(clipboardList.currentIndex, ListView.Contain);
                                     event.accepted = true;
                                 } else if (event.key === Qt.Key_Up && clipboardList.count > 0) {
+                                    root.resetPointerTracking();
                                     clipboardList.currentIndex = root.bottomEdgeLayout
                                         ? Math.min(clipboardList.count - 1, clipboardList.currentIndex + 1)
                                         : Math.max(0, clipboardList.currentIndex - 1);
@@ -955,6 +991,7 @@ Singleton {
                             }
 
                             onTextChanged: {
+                                root.resetPointerTracking();
                                 clipboardList.currentIndex = 0;
                                 Qt.callLater(() => clipboardList.positionViewAtBeginning());
                             }
@@ -1126,7 +1163,8 @@ Singleton {
                             Math.min(160, Math.round(96 * root.effectiveIconScale / 100)))
                         readonly property color previewBackground: ListView.isCurrentItem
                             ? Theme.focus
-                            : ((rowMouse.containsMouse || viewMouse.containsMouse
+                            : (root.pointerSelectionActive
+                                && (rowMouse.containsMouse || viewMouse.containsMouse
                                     || deleteMouse.containsMouse)
                                 ? Theme.subtleHover : Theme.popupBackground)
                         height: hasThumbnail
@@ -1223,7 +1261,7 @@ Singleton {
                             id: rowMouse
                             anchors.fill: parent
                             hoverEnabled: true
-                            onEntered: clipboardList.currentIndex = row.index
+                            onPositionChanged: mouse => root.selectOnPointerMotion(row, mouse)
                             onClicked: root.choose(row.modelData)
                             onWheel: wheel => {
                                 const minY = clipboardList.originY;
@@ -1239,6 +1277,7 @@ Singleton {
                             id: viewButton
                             visible: Boolean(row.modelData)
                                 && row.modelData.binary === false
+                                && root.pointerSelectionActive
                                 && (rowMouse.containsMouse || viewMouse.containsMouse
                                     || deleteMouse.containsMouse)
                             width: 28
@@ -1275,6 +1314,7 @@ Singleton {
                         Rectangle {
                             id: deleteButton
                             visible: Boolean(row.modelData)
+                                && root.pointerSelectionActive
                                 && (rowMouse.containsMouse || viewMouse.containsMouse
                                     || deleteMouse.containsMouse)
                             width: 28

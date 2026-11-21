@@ -14,6 +14,8 @@ on:
       - 'config/quickshell/**'
       - 'local/bin/awtarchy'
       - 'tests/test-umbriel-trial.py'
+      - 'tests/test-launcher-pointer-selection.py'
+      - 'tests/test-clipboard-pointer-selection.py'
       - '.github/workflows/validate-umbriel-trial.yml'
       - '.github/scripts/validate-stable-release-notes.py'
   workflow_dispatch:
@@ -48,6 +50,8 @@ jobs:
           set -euo pipefail
           python3 tests/test-umbriel-trial.py
           python3 tests/test-umbriel-tty.py
+          python3 tests/test-launcher-pointer-selection.py
+          python3 tests/test-clipboard-pointer-selection.py
           python3 tests/test-umbriel-steam-layout.py
           python3 tests/test-umbriel-legacy-migration.py
           python3 tests/test-umbriel-workspace-events.py

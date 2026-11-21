@@ -437,6 +437,8 @@ jobs:
           bash tests/test-foot-ssh-term.sh
           python3 tests/test-foot-live-theme.py
           bash tests/test-launcher-keyboard-focus.sh
+          python3 tests/test-launcher-pointer-selection.py
+          python3 tests/test-clipboard-pointer-selection.py
           bash tests/test-quickshell-hotkey-latency.sh
           bash tests/test-desktop-candidate-validation.sh
           python3 tests/test-keyring-pam-cleanup.py

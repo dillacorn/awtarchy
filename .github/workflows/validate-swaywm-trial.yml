@@ -135,6 +135,17 @@ jobs:
           "$XDG_RUNTIME_DIR/sway-validator" -C -c "$XDG_RUNTIME_DIR/sway-monitors.config"
 
 
+  pointer-selection-regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Keep launcher and clipboard keyboard-first
+        run: |
+          python3 tests/test-launcher-pointer-selection.py
+          python3 tests/test-clipboard-pointer-selection.py
+
   patch-consistency:
     runs-on: ubuntu-latest
     timeout-minutes: 5
