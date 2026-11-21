@@ -164,11 +164,15 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
         "bindsym Mod4+Shift+1 move container to workspace number 1\n"
         "bindsym Mod1+Left focus left\n"
         "bindsym Mod4+n exec bash $trial/ipc.sh notifications toggle\n"
+        "bindsym Mod4+Shift+space exec fuzzel\n"
         "bindsym Mod1+Tab exec python3 $trial/focus-cycle.py next\n")
     (sway.parent / "outputs").write_text(
         "output DP-1 mode 1920x1080@400.002014Hz position 0 1080 scale 1\n"
         "output DP-3 mode 1920x1080@239.761002Hz position 0 0 scale 1\n"
         "output DP-3 adaptive_sync on\n")
+    # A saved Sway Fuzzel shortcut migrates to the supported Quickshell
+    # launcher, never to a package the Awtarchy updater retires.
+    assert module.sway_bindings(home)["Super+Shift+Space"] == module.COMMANDS["app_launcher"]
     with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "sway"}):
         raw, report = module.migrate(home, connected=connected)
     profile = tomllib.loads(raw.decode())
