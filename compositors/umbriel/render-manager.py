@@ -17,7 +17,7 @@ def render(repo, destination):
         ("awtarchy-sway", "awtarchy-umbriel"),
         ("quickshell-sway", "quickshell-umbriel"),
         ("need swaymsg", "need umbriel"),
-        ("/sway/awtarchy-trial/", "/umbriel/awtarchy-trial/"),
+        ("/sway/awtarchy-trial/", "/umbriel/awtarchy/"),
     )
     for old, new in replacements:
         body = body.replace(old, new)
