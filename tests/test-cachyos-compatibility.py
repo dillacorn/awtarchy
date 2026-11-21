@@ -37,7 +37,9 @@ class CompatibilityTests(unittest.TestCase):
     def test_effective_multilib(self):
         source = function("multilib_enabled")
         installer = function("install_arch_repo_apps_stage")
-        self.assertIn("pacman-conf --repo-list", installer)
+        self.assertIn("pacman-conf --repo-list", source)
+        self.assertIn("multilib_enabled", installer)
+        self.assertIn("lib32-*|steam", installer)
         self.assertNotIn('grep -q "^\\[multilib\\]"', installer)
         output = shell(source + r'''
 pacman-conf() { [[ "$1" == --repo-list ]] && printf 'core\nextra\nmultilib\n'; }
