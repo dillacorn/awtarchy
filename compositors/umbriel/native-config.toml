@@ -1,0 +1,10 @@
+# Awtarchy's only Umbriel login config. Install only if missing.
+# The official umbriel.desktop / start-umbriel entry remains package-owned.
+[include]
+files = [
+  "awtarchy/config.toml",
+  "awtarchy/theme.toml",
+  "awtarchy/migrated.toml",
+  "awtarchy/capture-rules.toml",
+  "awtarchy/floating-rules.toml",
+]

@@ -8,7 +8,7 @@ operation="$1"
 mode="$2"
 remove_deps="$3"
 case "$operation" in
-    status|install-sway|install-hyprland|remove-sway|remove-hyprland|update-sway) ;;
+    status|install-sway|install-hyprland|install-umbriel|remove-sway|remove-hyprland|remove-umbriel|update-sway) ;;
     *) printf 'Unknown compositor operation.\n' >&2; false ;;
 esac
 [[ $mode == plan || $mode == apply ]] || { printf 'Invalid mode.\n' >&2; false; }
@@ -105,7 +105,7 @@ with tarfile.open(archive, "r:gz") as reader:
 PY
 tar -xzf "$tmp/source.tar.gz" -C "$tmp"
 source="$tmp/awtarchy-$sha"
-[[ -f "$source/trials/sway/setup.sh" && -f "$source/config/hypr/hyprland.lua" ]] || {
+[[ -f "$source/compositors/sway/setup.sh" && -f "$source/config/hypr/hyprland.lua" ]] || {
     printf 'Release %s does not contain stable Sway support. Run awtarchy update first.\n' "$tag" >&2
     false
 }

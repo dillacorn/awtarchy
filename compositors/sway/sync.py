@@ -40,7 +40,7 @@ def sha(data):
     return hashlib.sha256(data).hexdigest()
 
 def expected_files(repo, home, temporary):
-    trial = repo / "trials/sway"
+    trial = repo / "compositors/sway"
     script = (trial / "setup.sh").read_text(encoding="utf-8")
     m = re.search(r"^sources=\(([^)]*)\)$", script, flags=re.MULTILINE)
     if not m:
@@ -75,14 +75,15 @@ def expected_files(repo, home, temporary):
     result[home / ".config/sway/config"] = native_source.read_bytes()
     # nwg-displays writes this Sway-only workspace file outside the trial
     # directory. Keep an initial managed stub but preserve user-edited content.
-    workspace_source = repo / "trials/workspaces"
+    workspace_source = repo / "compositors/sway/workspaces"
     if workspace_source.is_symlink() or not workspace_source.is_file():
         raise ValueError("Missing or unsafe Sway workspace stub")
     result[home / ".config/sway/workspaces"] = workspace_source.read_bytes()
     # Sway uses private copies of shared helpers (DDC and screenshot audio).
     # Active ~/.config/hypr/scripts may be personalized or from an older
     # release, so Sway updates must not depend on replacing those files.
-    for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh", "screenshot_sound.sh"):
+    for name in ("ddc_brightness.sh", "hypr-ddc-brightness.sh", "screenshot_sound.sh",
+                 "hypr_quicksettings_core.sh", "hypr_quicksettings.sh"):
         source = repo / "config/hypr/scripts" / name
         if source.is_symlink() or not source.is_file():
             raise ValueError("Unsafe shared helper source: " + str(source))
@@ -371,7 +372,7 @@ def main():
         raise ValueError("Run the Sway updater as the normal user")
     home = Path.home().resolve()
     repo = args.repo.resolve()
-    if not (repo / "trials/sway/setup.sh").is_file():
+    if not (repo / "compositors/sway/setup.sh").is_file():
         raise ValueError("Sway source checkout not found")
     state = home / ".local/state/awtarchy"
     manifest = state / "sway-managed-baseline.json"

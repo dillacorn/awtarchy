@@ -6,7 +6,7 @@ from unittest.mock import patch
 import os
 
 root = Path(__file__).resolve().parents[1]
-source = root / "trials/sway/focus-cycle.py"
+source = root / "compositors/sway/focus-cycle.py"
 spec = importlib.util.spec_from_file_location("sway_focus_cycle", source)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)

@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-HELPER = ROOT / "trials/sway/lock-capture.sh"
+HELPER = ROOT / "compositors/sway/lock-capture.sh"
 UPSTREAM = ROOT / "config/hypr/scripts/quickshell_lockscreen_capture.sh"
 
 source = HELPER.read_text()

@@ -6,7 +6,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 config = (TRIAL / "config").read_text()
 blocks = {}
 for name in ("noalt", "mouse", "vm"):
@@ -25,6 +25,13 @@ assert 'exec_always bash $trial/mode-state.sh sync' in config
 render = (TRIAL / "render-quickshell.py").read_text()
 assert "'/sway/awtarchy-trial/mode-control.sh'" in render
 assert '[bar.mouseSubmapScript, "toggle", "mouse"]' in render
+assert 'boolean:transient:true' in (TRIAL / "mode-control.sh").read_text()
+assert 'submap: ON' in (TRIAL / "mode-control.sh").read_text()
+assert 'Mouse submap (Alt+drag still required)' in render
+assert 'Current mode: ' not in render
+flyout = (TRIAL / "SwayFlyoutWindow.qml").read_text()
+assert '((cornerRole || notificationRole) && (placement === "top"' in flyout
+assert '((cornerRole || notificationRole) && (placement === "left"' in flyout
 with tempfile.TemporaryDirectory(prefix="sway-modes-") as tmp:
     home = Path(tmp)
     runtime = home / "runtime"

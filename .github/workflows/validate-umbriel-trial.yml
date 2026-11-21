@@ -1,0 +1,56 @@
+name: Validate Umbriel
+
+on:
+  push:
+    branches:
+      - main
+      - feature/umbriel-quickshell-trial
+  pull_request:
+    paths:
+      - 'compositors/umbriel/**'
+      - 'compositors/sway/render-quickshell.py'
+      - 'compositors/sway/SwayFlyoutWindow.qml'
+      - 'compositors/sway/render-manager.py'
+      - 'config/quickshell/**'
+      - 'local/bin/awtarchy'
+      - 'tests/test-umbriel-trial.py'
+      - '.github/workflows/validate-umbriel-trial.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-umbriel-contract:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Verify Bash and Python syntax
+        run: |
+          set -euo pipefail
+          bash -n local/bin/awtarchy
+          for source in compositors/umbriel/*.sh; do bash -n "$source"; done
+          python3 -m compileall -q compositors/umbriel tests/test-umbriel-trial.py
+          git diff --check HEAD^..HEAD
+      - name: Reject stale compositor source paths
+        run: |
+          set -euo pipefail
+          root='trials/'
+          if git grep -n -e "${root}sway/" -e "${root}umbriel/" -e "${root}workspaces" -- .; then
+            printf 'ERROR: Old compositor source path remains.\n' >&2
+            false
+          fi
+      - name: Validate Quickshell render and preserved state
+        run: |
+          set -euo pipefail
+          python3 tests/test-umbriel-trial.py
+          python3 tests/test-umbriel-tty.py
+          python3 tests/test-umbriel-legacy-migration.py
+          python3 tests/test-umbriel-workspace-events.py
+          python3 tests/test-umbriel-utility-toggle.py
+          python3 tests/test-umbriel-floating-mode.py
+          python3 tests/test-umbriel-appearance.py
+          python3 tests/test-compositor-migration.py
+          python3 tests/test-umbriel-ly-session.py

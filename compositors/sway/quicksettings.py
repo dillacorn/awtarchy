@@ -17,9 +17,12 @@ MANAGER = TRIAL / "quickshell.sh"
 OUTPUT_INFO = TRIAL / "monitor-info.py"
 DDC_STATUS = TRIAL / "ddc.sh"
 DDC_CONTROL = TRIAL / "hypr-ddc-brightness.sh"
+MODE_CONTROL = TRIAL / "mode-control.sh"
+TOGGLE_UTILITY = TRIAL / "toggle-utility.py"
+SCHEDULER = TRIAL / "scheduler.sh"
 
-def command(args):
-    result = subprocess.run(args, capture_output=True, text=True, timeout=5)
+def command(args, timeout=5):
+    result = subprocess.run(args, capture_output=True, text=True, timeout=timeout)
     if result.returncode != 0:
         raise RuntimeError(result.stderr.strip() or "Backend command failed")
     return result.stdout.strip()
@@ -71,6 +74,21 @@ def brightness_status(monitor, monitors):
         return {"target": monitor, "connector": "", "current": None, "max": None}
 
 
+def scheduler_status():
+    empty = {"running": "off", "mode": "", "enabled": False,
+             "last_selected": "", "restore_enabled": False,
+             "available": False, "authorized": False, "schedulers": []}
+    if not SCHEDULER.is_file() or SCHEDULER.is_symlink():
+        return empty
+    try:
+        data = json.loads(command(["bash", str(SCHEDULER), "--status-json"], timeout=15))
+        if not isinstance(data, dict) or not isinstance(data.get("schedulers"), list):
+            raise ValueError("Malformed scheduler inventory")
+        return data
+    except (RuntimeError, ValueError, OSError, subprocess.TimeoutExpired) as error:
+        print("Sway sched-ext: " + str(error), file=sys.stderr)
+        return empty
+
 def status(args):
     panel = args[0] if len(args) > 0 else ""
     brightness = args[1] if len(args) > 1 else "Focused display"
@@ -103,9 +121,7 @@ def status(args):
                         "schedule_temperature": None, "schedule_next_day": False},
         "vibrance": {"value": None, "enabled": False},
         "submap": mode,
-        "sched_ext": {"running": "off", "mode": "", "enabled": False,
-                      "last_selected": "", "restore_enabled": False,
-                      "available": False, "authorized": False, "schedulers": []}
+        "sched_ext": scheduler_status()
     }, separators=(",", ":")))
 
 def action(args):
@@ -141,8 +157,33 @@ def action(args):
             raise RuntimeError("Awtarchy DDC controller unavailable")
         command([str(DDC_CONTROL), "--monitor", mon, "set-percent", percent])
         return
+    if name == "submap":
+        if len(rest) != 1 or rest[0] not in ("reset", "noalt", "mouse", "vm"):
+            raise ValueError("Invalid Sway submap")
+        if not MODE_CONTROL.is_file() or MODE_CONTROL.is_symlink():
+            raise RuntimeError("Sway input-mode controller unavailable")
+        argv = ["reset"] if rest[0] == "reset" else ["toggle", rest[0]]
+        # A direct mode request should select that mode rather than toggle it
+        # off when already active; the existing mode control is toggle-based.
+        state = Path(os.environ.get("XDG_RUNTIME_DIR",
+            os.environ.get("XDG_CACHE_HOME", str(Path.home() / ".cache")))) / "awtarchy-sway-submap"
+        current = state.read_text().strip() if state.is_file() and not state.is_symlink() else ""
+        if rest[0] == "reset" or current == rest[0]:
+            if rest[0] != "reset":
+                return
+            argv = ["reset"]
+        command(["bash", str(MODE_CONTROL), *argv])
+        return
+    if name in ("scheduler-start", "scheduler-stop", "scheduler-profile",
+                "scheduler-args", "scheduler-autopower", "scheduler-reset"):
+        if not SCHEDULER.is_file() or SCHEDULER.is_symlink():
+            raise RuntimeError("Sway scheduler bridge unavailable")
+        command(["bash", str(SCHEDULER), "--action", name, *rest], timeout=35)
+        return
     if name == "wallpaper" and not rest:
-        command(["awtwall"])
+        if not TOGGLE_UTILITY.is_file() or TOGGLE_UTILITY.is_symlink():
+            raise RuntimeError("Sway wallpaper toggle unavailable")
+        command(["python3", str(TOGGLE_UTILITY), "wallpicker"])
         return
     raise RuntimeError(f"Sway setting '{name}' is not supported; nothing was changed")
 
@@ -157,7 +198,16 @@ def main():
     elif mode == "--action":
         action(args)
     elif mode in ("--restore-scheduler", "--authorize-scheduler-stdin"):
-        raise RuntimeError("Sway sched-ext integration has not been verified")
+        if not SCHEDULER.is_file() or SCHEDULER.is_symlink():
+            raise RuntimeError("Sway scheduler bridge unavailable")
+        if mode == "--authorize-scheduler-stdin":
+            # Do not log, copy or buffer the entered password in Python.
+            result = subprocess.run(["bash", str(SCHEDULER), mode],
+                                    stdin=sys.stdin.buffer, timeout=90)
+            if result.returncode:
+                raise RuntimeError("Scheduler authorization rejected")
+        else:
+            command(["bash", str(SCHEDULER), mode], timeout=35)
     else:
         raise ValueError(f"Unknown Quick Settings command: {mode}")
 

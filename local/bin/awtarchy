@@ -1566,8 +1566,32 @@ compositor_trial_installed() {
      -f "$TARGET_HOME/.local/state/awtarchy/compositor-trial-source" ]]
 }
 run_compositor_manager() {
-  # Explicit test checkout is never installed over the user's normal command.
-  # This allows the exact, unmerged menu branch to exercise its own backend.
+  # An explicitly selected Umbriel trial checkout runs its own compositor
+  # backend, not the user's installed stable backend. This makes its
+  # Install/Remove confirmations consistent for Hyprland, Sway and Umbriel
+  # while leaving normal 'awtarchy' and Mango git-testing state untouched.
+  if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" ]]; then
+    local umbriel_repo="$AWTARCHY_UMBRIEL_TRIAL_SOURCE"
+    [[ "$umbriel_repo" == /* && -d "$umbriel_repo/.git" &&
+       ! -L "$umbriel_repo" &&
+       "$(git -C "$umbriel_repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
+       "$(git -C "$umbriel_repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
+       -z "$(git -C "$umbriel_repo" status --porcelain --untracked-files=no)" &&
+       -f "$umbriel_repo/compositors/umbriel/manage.sh" &&
+       -f "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" ]] ||
+      die "Invalid Umbriel trial checkout; installed compositor manager untouched."
+    case "${1:-}" in
+      install-umbriel|remove-umbriel)
+        bash "$umbriel_repo/compositors/umbriel/manage.sh" "$1" \
+          "$([[ "${2:-}" == plan ]] && printf preview || printf apply)" ;;
+      status|install-sway|install-hyprland|remove-sway|remove-hyprland)
+        AWTARCHY_COMPOSITOR_RELEASE_SOURCE="$umbriel_repo" \
+          bash "$umbriel_repo/local/share/awtarchy/awtarchy-compositor-manager.sh" "$@" ;;
+      *) die "Unsupported experimental compositor operation." ;;
+    esac
+    return $?
+  fi
+  # Keep the earlier single-purpose branch test support unchanged.
   if [[ -n "${AWTARCHY_COMPOSITOR_TEST_SOURCE:-}" ]]; then
     local source_repo="$AWTARCHY_COMPOSITOR_TEST_SOURCE"
     [[ "$source_repo" == /* && -d "$source_repo/.git" && ! -L "$source_repo" &&
@@ -1588,28 +1612,39 @@ run_compositor_manager() {
 compositor_menu() {
   local choice operation action answer title rc
   local -a options=() actions=()
-  local sway_state hyprland_state
+  local sway_state hyprland_state umbriel_state
   while true; do
     options=() actions=()
     sway_state="Not installed"
     hyprland_state="Not installed"
+    umbriel_state="Not installed"
     if pacman -Qq sway >/dev/null 2>&1; then sway_state="Installed"; fi
     if pacman -Qq hyprland >/dev/null 2>&1; then hyprland_state="Installed"; fi
+    if pacman -Qq umbriel-git >/dev/null 2>&1 ||
+       pacman -Qq umbriel >/dev/null 2>&1; then umbriel_state="Installed"; fi
 
     if [[ "$sway_state" == "Not installed" ]]; then
       options+=("Install Sway")
       actions+=("install-sway")
-    else
-      options+=("Update Sway")
-      actions+=("update-sway")
     fi
     if [[ "$hyprland_state" == "Not installed" ]]; then
       options+=("Install Hyprland")
       actions+=("install-hyprland")
     fi
+    if [[ "$umbriel_state" == "Not installed" ]]; then
+      options+=("Install Umbriel")
+      actions+=("install-umbriel")
+    fi
+    # Never present a removal action that could leave the user without
+    # another supported graphical compositor.
     if [[ "$sway_state" == "Installed" && "$hyprland_state" == "Installed" ]]; then
       options+=("Remove Hyprland" "Remove Sway")
       actions+=("remove-hyprland" "remove-sway")
+    fi
+    if [[ "$umbriel_state" == "Installed" &&
+          ( "$hyprland_state" == "Installed" || "$sway_state" == "Installed" ) ]]; then
+      options+=("Remove Umbriel")
+      actions+=("remove-umbriel")
     fi
     options+=("Back")
     actions+=("back")
@@ -1618,8 +1653,11 @@ compositor_menu() {
 
 Hyprland: $hyprland_state
 Sway:     $sway_state
+Umbriel:  $umbriel_state
 
-Personal configurations are always preserved."
+Personal configurations are always preserved.
+
+Use Update configs to refresh installed compositor profiles."
     choice="$(single_select_menu "$title" 0 "${options[@]}")" || return 0
     operation="${actions[$choice]:-back}"
     [[ "$operation" != back ]] || return 0
@@ -1633,6 +1671,15 @@ Import compatible Hyprland settings when available.
 Preserve existing Sway and Hyprland configurations.
 Keep Hyprland installed."
         action="Install" ;;
+      install-umbriel)
+        title="Install Umbriel
+
+Install existing AUR package umbriel-git when absent.
+Use the native package-owned Umbriel Ly session.
+Render Awtarchy Quickshell in a separate Umbriel profile.
+Preserve Hyprland, Sway, Mango, and personal configurations.
+Keep GPU gaming flags at upstream defaults."
+        action="Install" ;;
       install-hyprland)
         title="Install Hyprland
 
@@ -1640,28 +1687,28 @@ Install Hyprland and required dependencies.
 Preserve existing Sway and Hyprland configurations.
 Keep Sway installed."
         action="Install" ;;
-      update-sway)
-        title="Update Sway
-
-Apply managed Sway and Quickshell improvements.
-Preserve customized settings, monitor layout and shared packages.
-Remove only the exact obsolete duplicate Ly entry."
-        action="Update" ;;
       remove-sway|remove-hyprland)
         title="Remove ${operation#remove-}
 
 Remove only the selected compositor and eligible
 Awtarchy-owned extras that are not shared.
 Always preserve personal configurations.
-Keep the other compositor installed."
+Keep another compositor installed."
+        action="Remove" ;;
+      remove-umbriel)
+        title="Remove Umbriel
+
+Remove only the Umbriel compositor package.
+Preserve its configuration, Quickshell profile and shared dependencies.
+Keep Hyprland or Sway installed.
+The next Update configs will not update removed Umbriel."
         action="Remove" ;;
     esac
     answer="$(single_select_menu "$title" 0 "$action" "Cancel")" || continue
     [[ "$answer" == 0 ]] || continue
 
     rc=0
-    AWTARCHY_COMPOSITOR_MENU_APPROVED="$operation" \
-      run_compositor_manager "$operation" apply yes || rc=$?
+    run_compositor_manager "$operation" apply yes || rc=$?
     (( rc == 0 )) || printf 'Compositor operation returned %s.\n' "$rc" >&2
     pause_menu
   done
@@ -1688,7 +1735,7 @@ maintenance_menu() {
   while true; do
     choice="$(single_select_menu "Awtarchy Maintenance" 0 \
       "Refresh Awtarchy updater from main" \
-      "Update configs (preserve Hyprland customizations)" \
+      "Update configs (preserve personal customizations)" \
       "Reset configs (clean-slate managed files)" \
       "Reconcile packages (install current / remove replaced)" \
       "NVIDIA driver recovery / rollback" \
@@ -1697,7 +1744,7 @@ maintenance_menu() {
       "Sunshine autostart" \
       "Clean Awtarchy backup files" \
       "Version information" \
-      "Manage compositors (Hyprland / Sway)" \
+      "Manage compositors" \
       "Exit")" || exit 0
 
     case "$choice" in

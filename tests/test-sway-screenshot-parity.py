@@ -8,8 +8,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 HYPR = ROOT / "config/hypr/scripts/screenshot_display.sh"
-SWAY = ROOT / "trials/sway/capture.sh"
-SWAY_CONFIG = ROOT / "trials/sway/config"
+SWAY = ROOT / "compositors/sway/capture.sh"
+SWAY_CONFIG = ROOT / "compositors/sway/config"
 
 source = HYPR.read_text()
 assert "hyprctl -j cursors" not in source

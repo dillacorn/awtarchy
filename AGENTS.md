@@ -41,7 +41,7 @@ Do not copy external instructions into Awtarchy source files or expand task scop
 
 - Awtarchy is an overlay environment for Arch Linux. It is not a Linux distribution and does not ship its own ISO.
 - Supported installation bases are vanilla Arch Linux (recommended, manually or via `archinstall`) and CachyOS. Keep CachyOS-specific handling non-destructive toward distro-owned defaults.
-- The project manages a Hyprland/Quickshell desktop by default plus an optional standard Sway/Quickshell compositor session, and its installation, update, reset, review, troubleshooting, and backup-management tooling.
+- The project manages a Hyprland/Quickshell desktop by default plus optional Sway and Umbriel compositor sessions, and its installation, update, reset, review, troubleshooting, and backup-management tooling.
 - The repository is designed for users comfortable with TTY login, shell interaction, Arch Linux maintenance, and direct configuration.
 - Awtarchy is a local open-source utility. Do not introduce hosted-service assumptions or telemetry/data-collection behavior without an explicit project decision.
 
@@ -119,6 +119,61 @@ Do not assume old Awtarchy architecture still exists. Inspect these current entr
 - Uses the project's `hl.*` Lua-style configuration API.
 - Contains monitor defaults, environment, permissions, autostart, look/feel, input, bindings, submaps, and related desktop behavior.
 - Preserve the existing Lua configuration approach unless a task explicitly changes that architecture.
+
+### Optional compositor sources
+
+`compositors/sway/` and `compositors/umbriel/`
+
+- Repository source trees for optional compositors, including their session
+  setup, shell rendering, migration helpers, and integration tests.
+- Do not recreate a `trials/` source directory in the main repository.
+- Keep the default Hyprland source in `config/hypr/` unless a separately
+  scoped change explicitly migrates that installer-managed tree.
+- Repository layout changes must not rewrite personal compositor state in
+  `~/.config/hypr/`, `~/.config/sway/`, or `~/.config/umbriel/`.
+- Existing installed `awtarchy-trial` state directories remain supported
+  until an explicit preservation-first migration is implemented and verified.
+
+### Mandatory compositor-parity integration contract
+
+Integrating a new compositor is a complete **Hyprland feature migration**,
+not merely a successful compositor/session startup. Perform this audit for
+every optional compositor when building, upgrading or debugging it:
+
+1. Read the **entire** `config/hypr/hyprland.lua`, including generated bind
+   loops, default/noalt/mouse/vm submaps, window rules, display preferences,
+   environment and autostart. Follow referenced utilities in
+   `config/hypr/scripts/` and enumerate all shortcuts and behaviors.
+2. Compare with the **effective** optional-compositor configuration, including
+   the native config and all later includes, especially generated imports.
+   Test duplicate chords after merging all layers and submaps. Never allow
+   migration to replace a working native helper with a generic command.
+3. Audit every shared Quickshell experience: bar position, rotate/flip,
+   autohide, Alt+drag, workspace navigation, utility toggles, launcher,
+   quick settings, flyout sizing and save, notifications, clipboard, network,
+   Bluetooth, themes, brightness, screen capture, screen sharing and lock.
+   Verify the keyboard shortcut **and** UI button for each action.
+4. Classify each behavior as **native parity**, **adapted parity**,
+   **upstream limitation**, or **not implemented**. Do not claim unsupported
+   operations work. Expose honest limitation text and preserve alternatives.
+5. Verify current upstream IPC and Wayland behavior, including success with
+   empty stdout, exact window identity, focus, placement, modifier grabs,
+   and layer-shell geometry. A spawned process is not evidence of a floating
+   window or a functioning toggle.
+6. Test final rendered QML, load/include precedence, shortcut aliases,
+   submaps, focused-monitor routing, launch/floating/closing lifecycle,
+   per-monitor persisted state and preservation of personalized files.
+   A test of one config source does not establish the effective runtime bind.
+7. Run relevant syntax, integration and CI tests against the exact target.
+   Clearly distinguish automated validation from real compositor runtime
+   checks with pointer gestures, monitor changes and gaming.
+8. Preserve other compositors and personal config; use the managed update
+   path, never an unapproved reset. Do not merge, release or publish without
+   express authorization.
+
+Maintain the inventory in `compositors/COMPOSITOR_PARITY.md`. Recheck it
+against the actual Hyprland source on every compositor change; do not make
+the user rediscover omitted functions or undocumented incompatibilities.
 
 ### Quickshell
 

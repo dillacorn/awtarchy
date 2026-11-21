@@ -89,6 +89,15 @@ PanelWindow {
     readonly property bool cornerRole: surfaceRole === "network"
         || surfaceRole === "bluetooth" || surfaceRole === "battery"
     readonly property bool notificationRole: surfaceRole === "notifications"
+    // A flyout anchored to the right/bottom stretches inward. Reverse the
+    // drag direction for that edge; otherwise pulling its inside corner
+    // reduces the panel when the user intended to enlarge it.
+    readonly property bool dragFromRight: placement === "right"
+        || placement === "right-center"
+        || ((cornerRole || notificationRole) && (placement === "top" || placement === "bottom"))
+    readonly property bool dragFromBottom: placement === "bottom"
+        || placement === "bottom-center"
+        || ((cornerRole || notificationRole) && (placement === "left" || placement === "right"))
     readonly property int notificationAnchorX: edgeAnchor >= 0
         ? Math.round(edgeAnchor) : outputWidth - 40
     readonly property int notificationAnchorY: edgeAnchor >= 0
@@ -171,9 +180,11 @@ PanelWindow {
                 const minW = Math.min(maxW, Math.max(1, popup.minimumSize.width));
                 const minH = Math.min(maxH, Math.max(1, popup.minimumSize.height));
                 popup.resizePreviewWidth = Math.max(minW, Math.min(maxW,
-                    Math.round(popup.resizeStartWidth + activeTranslation.x)));
+                    Math.round(popup.resizeStartWidth + activeTranslation.x
+                        * (popup.dragFromRight ? -1 : 1))));
                 popup.resizePreviewHeight = Math.max(minH, Math.min(maxH,
-                    Math.round(popup.resizeStartHeight + activeTranslation.y)));
+                    Math.round(popup.resizeStartHeight + activeTranslation.y
+                        * (popup.dragFromBottom ? -1 : 1))));
             }
         }
 

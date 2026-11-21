@@ -10,12 +10,12 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 PREFS = ROOT / "config/hypr/scripts/screenshot_sound.sh"
 HYPR = ROOT / "config/hypr/scripts/quickshell_ready_sound.sh"
-SWAY = ROOT / "trials/sway/login-sound.sh"
+SWAY = ROOT / "compositors/sway/login-sound.sh"
 SOUND = ROOT / "config/hypr/sounds/awtarchy-login.mp3"
-SESSION = (ROOT / "trials/sway/session.sh").read_text()
-CONFIG = (ROOT / "trials/sway/config").read_text()
-SETUP = (ROOT / "trials/sway/setup.sh").read_text()
-SYNC = (ROOT / "trials/sway/sync.py").read_text()
+SESSION = (ROOT / "compositors/sway/session.sh").read_text()
+CONFIG = (ROOT / "compositors/sway/config").read_text()
+SETUP = (ROOT / "compositors/sway/setup.sh").read_text()
+SYNC = (ROOT / "compositors/sway/sync.py").read_text()
 QML = (ROOT / "config/quickshell/awtarchy/ScreenshotSoundSettings.qml").read_text()
 
 assert SOUND.is_file() and SOUND.stat().st_size > 100

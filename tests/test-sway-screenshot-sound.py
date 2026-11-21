@@ -11,8 +11,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[1]
 HELPER = ROOT / "config/hypr/scripts/screenshot_sound.sh"
-SWAY_SETUP = ROOT / "trials/sway/setup.sh"
-SWAY_SYNC = ROOT / "trials/sway/sync.py"
+SWAY_SETUP = ROOT / "compositors/sway/setup.sh"
+SWAY_SYNC = ROOT / "compositors/sway/sync.py"
 HYPR_AREA = ROOT / "config/hypr/scripts/screenshot_area.sh"
 HYPR_FULL = ROOT / "config/hypr/scripts/screenshot_fullscreen.sh"
 EXPECTED_HASH = "baaa25535f97d7d3d870c0f7daa1d59d7e225b42cc6bb8945f5a87285bfa692c"

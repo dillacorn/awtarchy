@@ -1,0 +1,546 @@
+# Awtarchy Umbriel profile, installed only if the user has no
+# pre-existing ~/.config/umbriel/config.toml. Never change other compositors.
+# Outputs (mode, position, VRR, HDR, tearing) remain at upstream defaults until
+# tested on this exact GPU/display combination.
+[general]
+autostart = ["bash ~/.config/umbriel/awtarchy/session.sh"]
+show_cheatsheet = false
+# Umbriel has a single native modifier for mouse-move and mouse-resize.
+# Use Alt for both drags; bind desktop keyboard actions explicitly to Super.
+mod_key = "Alt"
+
+[layout]
+mode = "dwindle"
+gap = 6
+
+# Match Awtarchy Hyprland's square, thin window borders.
+[appearance]
+border_width = 1
+outer_border_width = 0
+corner_radius = 0
+drag_opacity = 1.0
+
+# Native Umbriel decorations follow client requests; never load hyprbars here.
+[appearance.title_bar]
+mode = "negotiated"
+height = 28
+buttons = ["minimize", "maximize", "close"]
+
+[appearance.shadow]
+enabled = false
+
+# Umbriel supports different timing primitives from Hyprland. These are a
+# conservative translation of Awtarchy's fast pop-in, fade and window motion
+# profile; no heavy animation effects or forced workspace slide.
+[animation]
+enabled = true
+duration_ms = 160
+curve = "0.23,1.0,0.32,1.0"
+
+[animation.windows_in]
+enabled = true
+style = "popin"
+scale = 0.87
+duration_ms = 125
+
+[animation.windows_out]
+enabled = true
+style = "popin"
+scale = 0.87
+duration_ms = 95
+curve = "linear"
+
+[animation.windows_move]
+enabled = true
+duration_ms = 165
+
+[animation.windows_resize]
+enabled = true
+duration_ms = 145
+
+[animation.windows_opacity]
+enabled = true
+duration_ms = 125
+curve = "0.2,0.5,0.3,1.0"
+
+[animation.border]
+enabled = true
+duration_ms = 130
+
+[animation.workspaces]
+enabled = false
+
+[animation.layers]
+enabled = true
+duration_ms = 130
+curve = "0.4,0.1,0.2,1.0"
+
+[input.mouse]
+# Match Awtarchy Hyprland/Sway: no libinput acceleration or speed offset.
+accel_profile = "flat"
+sensitivity = 0.0
+
+[input.focus]
+# Focus hovered windows without raising overlapping floating windows.
+follows_mouse = "sloppy"
+hover_raises = false
+
+[input.keyboard]
+numlock_toggle = true
+
+[keybinds]
+# Bar hotkeys dispatch to the same Quickshell state owner as Quick Settings.
+"Super+Alt+B" = "spawn qs -c awtarchy-umbriel ipc call control rotateBarFocused"
+"Super+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control flipBarFocused"
+"Super+Alt+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control toggleBarAutoHideFocused"
+"Super+Return" = "spawn foot"
+"Alt+Shift+Return" = "spawn foot"
+"Super+Shift+Return" = "spawn foot"
+"Alt+Return" = "spawn foot"
+"Super+D" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh launcher toggle"
+"Alt+P" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh launcher toggle"
+"Super+P" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh powermenu begin"
+"Super+N" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications toggle"
+"Super+C" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh clipboard toggle"
+"Super+Alt+BackSpace" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh quicksettings toggle"
+"Super+T" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh themes toggle"
+"Super+Ctrl+M" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py displays"
+"Super+Shift+Space" = "spawn fuzzel"
+"Super+E" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
+"Super+Shift+E" = "spawn foot yazi"
+"Super+B" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch browser"
+"Super+Alt+A" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py default-apps"
+"Super+W" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wallpicker"
+"Super+Shift+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-current"
+"Super+Ctrl+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-all"
+"Super+Alt+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-all-different"
+"Alt+Shift+B" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py btop"
+"Super+Shift+B" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py btop"
+"Alt+Shift+M" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py maccel"
+"Super+Shift+M" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py maccel"
+"Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wiremix"
+"Super+V" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wiremix"
+"Super+Alt+G" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py smtty"
+"Super+Alt+L" = "spawn smtty -S -l"
+"Super+Alt+O" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py smtty-O"
+"Super+Alt+K" = "spawn smtty -k"
+"Alt+Shift+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"Super+Shift+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"Super+Shift+X" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh area"
+"Super+Shift+S" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh window"
+"Super+Shift+F" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh display"
+"Super+Shift+D" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh display-copy"
+"Print" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh print"
+"Super+Q" = "window-close"
+"Super+Shift+Q" = "window-close"
+"Alt+Shift+Q" = "window-close"
+"Alt+F4" = "window-close"
+"Super+Escape" = "session-quit"
+"Alt+Tab" = "window-focus-next"
+"Alt+Shift+Tab" = "window-focus-previous"
+"Super+F" = "window-toggle-floating"
+"Alt+F" = "window-toggle-floating"
+"Super+Ctrl+F" = "window-toggle-fullscreen"
+"Alt+Ctrl+F" = "window-toggle-fullscreen"
+"Super+Y" = "window-toggle-pinned"
+"Super+X" = "scratchpad-toggle"
+"Super+Ctrl+X" = "window-toggle-scratchpad"
+# H/J/K/L aliases match Hyprland's generated directional movement tables.
+"Alt+h" = "window-focus-left"
+"Alt+Shift+h" = "window-move-left"
+"Super+h" = "window-focus-left"
+"Super+Shift+h" = "window-move-left"
+"Alt+j" = "window-focus-down"
+"Alt+Shift+j" = "window-move-down"
+"Super+j" = "window-focus-down"
+"Super+Shift+j" = "window-move-down"
+"Alt+k" = "window-focus-up"
+"Alt+Shift+k" = "window-move-up"
+"Super+k" = "window-focus-up"
+"Super+Shift+k" = "window-move-up"
+"Alt+l" = "window-focus-right"
+"Alt+Shift+l" = "window-move-right"
+"Super+l" = "window-focus-right"
+"Super+Shift+l" = "window-move-right"
+# Dismiss the first notification popup; do not substitute the launcher.
+"Alt+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"Alt+Ctrl+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"Alt+Shift+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"Alt+Ctrl+Shift+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"Super+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"Super+Left" = "window-focus-left"
+"Alt+Left" = "window-focus-left"
+"Super+Shift+Left" = "window-move-left"
+"Alt+Shift+Left" = "window-move-left"
+"Alt+Ctrl+Shift+BracketLeft" = "workspace-move-to-output-left"
+"Super+Ctrl+Shift+BracketLeft" = "workspace-move-to-output-left"
+"Alt+Ctrl+Shift+BracketRight" = "workspace-move-to-output-right"
+"Super+Ctrl+Shift+BracketRight" = "workspace-move-to-output-right"
+"Super+Ctrl+Shift+Left" = "workspace-move-to-output-left"
+"Alt+Ctrl+Shift+Left" = "workspace-move-to-output-left"
+"Super+Right" = "window-focus-right"
+"Alt+Right" = "window-focus-right"
+"Super+Shift+Right" = "window-move-right"
+"Alt+Shift+Right" = "window-move-right"
+"Super+Ctrl+Shift+Right" = "workspace-move-to-output-right"
+"Alt+Ctrl+Shift+Right" = "workspace-move-to-output-right"
+"Super+Up" = "window-focus-up"
+"Alt+Up" = "window-focus-up"
+"Super+Shift+Up" = "window-move-up"
+"Alt+Shift+Up" = "window-move-up"
+"Super+Ctrl+Shift+Up" = "workspace-move-to-output-up"
+"Alt+Ctrl+Shift+Up" = "workspace-move-to-output-up"
+"Super+Down" = "window-focus-down"
+"Alt+Down" = "window-focus-down"
+"Super+Shift+Down" = "window-move-down"
+"Alt+Shift+Down" = "window-move-down"
+"Super+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+"Alt+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+# Native Umbriel resizing: relative to each edge, 3% per key repeat.
+# Ctrl+Shift+arrows retain Hyprland's distinct workspace-transfer meaning.
+"Alt+Ctrl+Left" = "window-modify-width-left -0.03"
+"Super+Ctrl+Left" = "window-modify-width-left -0.03"
+"Alt+Ctrl+Right" = "window-modify-width-right +0.03"
+"Super+Ctrl+Right" = "window-modify-width-right +0.03"
+"Alt+Ctrl+Up" = "window-modify-height-up -0.03"
+"Super+Ctrl+Up" = "window-modify-height-up -0.03"
+"Alt+Ctrl+Down" = "window-modify-height-down +0.03"
+"Super+Ctrl+Down" = "window-modify-height-down +0.03"
+"Alt+Ctrl+h" = "window-modify-width-left -0.03"
+"Super+Ctrl+h" = "window-modify-width-left -0.03"
+"Alt+Ctrl+l" = "window-modify-width-right +0.03"
+"Super+Ctrl+l" = "window-modify-width-right +0.03"
+"Alt+Ctrl+k" = "window-modify-height-up -0.03"
+"Super+Ctrl+k" = "window-modify-height-up -0.03"
+"Alt+Ctrl+j" = "window-modify-height-down +0.03"
+"Super+Ctrl+j" = "window-modify-height-down +0.03"
+"Alt+Y" = "window-modify-width-left -0.03"
+"Alt+O" = "window-modify-width-right +0.03"
+"Alt+U" = "window-modify-height-up -0.03"
+"Alt+I" = "window-modify-height-down +0.03"
+"Super+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py previous"
+"Super+BracketRight" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py next"
+"Alt+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py previous"
+"Alt+BracketRight" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py next"
+"Super+1" = "workspace-switch --name 1"
+"Super+Shift+1" = "window-move-to-workspace --name 1"
+"Alt+1" = "workspace-switch --name 1"
+"Alt+Shift+1" = "window-move-to-workspace --name 1"
+"Super+2" = "workspace-switch --name 2"
+"Super+Shift+2" = "window-move-to-workspace --name 2"
+"Alt+2" = "workspace-switch --name 2"
+"Alt+Shift+2" = "window-move-to-workspace --name 2"
+"Super+3" = "workspace-switch --name 3"
+"Super+Shift+3" = "window-move-to-workspace --name 3"
+"Alt+3" = "workspace-switch --name 3"
+"Alt+Shift+3" = "window-move-to-workspace --name 3"
+"Super+4" = "workspace-switch --name 4"
+"Super+Shift+4" = "window-move-to-workspace --name 4"
+"Alt+4" = "workspace-switch --name 4"
+"Alt+Shift+4" = "window-move-to-workspace --name 4"
+"Super+5" = "workspace-switch --name 5"
+"Super+Shift+5" = "window-move-to-workspace --name 5"
+"Alt+5" = "workspace-switch --name 5"
+"Alt+Shift+5" = "window-move-to-workspace --name 5"
+"Super+6" = "workspace-switch --name 6"
+"Super+Shift+6" = "window-move-to-workspace --name 6"
+"Alt+6" = "workspace-switch --name 6"
+"Alt+Shift+6" = "window-move-to-workspace --name 6"
+"Super+7" = "workspace-switch --name 7"
+"Super+Shift+7" = "window-move-to-workspace --name 7"
+"Alt+7" = "workspace-switch --name 7"
+"Alt+Shift+7" = "window-move-to-workspace --name 7"
+"Super+8" = "workspace-switch --name 8"
+"Super+Shift+8" = "window-move-to-workspace --name 8"
+"Alt+8" = "workspace-switch --name 8"
+"Alt+Shift+8" = "window-move-to-workspace --name 8"
+"Super+9" = "workspace-switch --name 9"
+"Super+Shift+9" = "window-move-to-workspace --name 9"
+"Alt+9" = "workspace-switch --name 9"
+"Alt+Shift+9" = "window-move-to-workspace --name 9"
+"Super+0" = "workspace-switch --name 10"
+"Super+Shift+0" = "window-move-to-workspace --name 10"
+"Alt+0" = "workspace-switch --name 10"
+"Alt+Shift+0" = "window-move-to-workspace --name 10"
+"XF86AudioRaiseVolume" = "spawn wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"
+"XF86AudioLowerVolume" = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+"XF86AudioMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"XF86AudioMicMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"
+"XF86MonBrightnessUp" = "spawn brightnessctl -e4 -n2 set 5%+"
+"XF86MonBrightnessDown" = "spawn brightnessctl -e4 -n2 set 5%-"
+"XF86AudioPlay" = "spawn playerctl play-pause"
+"XF86AudioNext" = "spawn playerctl next"
+"XF86AudioPrev" = "spawn playerctl previous"
+"Super+A" = "spawn bash ~/.config/umbriel/awtarchy/animations.sh"
+"Super+Alt+N" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle noalt"
+"Super+Alt+M" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle mouse"
+"Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
+"Super+M" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"submap[noalt],Super+Alt+B" = "spawn qs -c awtarchy-umbriel ipc call control rotateBarFocused"
+"submap[noalt],Super+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control flipBarFocused"
+"submap[noalt],Super+Alt+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control toggleBarAutoHideFocused"
+"submap[noalt],Super+Alt+BackSpace" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh quicksettings toggle"
+"submap[noalt],Super+Alt+A" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py default-apps"
+"submap[noalt],Super+Alt+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-all-different"
+"submap[noalt],Super+Alt+G" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py smtty"
+"submap[noalt],Super+Alt+L" = "spawn smtty -S -l"
+"submap[noalt],Super+Alt+O" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py smtty-O"
+"submap[noalt],Super+Alt+K" = "spawn smtty -k"
+"submap[noalt],Super+Return" = "spawn foot"
+"submap[noalt],Super+Shift+Return" = "spawn foot"
+"submap[noalt],Super+D" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh launcher toggle"
+"submap[noalt],Super+P" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh powermenu begin"
+"submap[noalt],Super+N" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications toggle"
+"submap[noalt],Super+C" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh clipboard toggle"
+"submap[noalt],Super+T" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh themes toggle"
+"submap[noalt],Super+Ctrl+M" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py displays"
+"submap[noalt],Super+Shift+Space" = "spawn fuzzel"
+"submap[noalt],Super+E" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
+"submap[noalt],Super+Shift+E" = "spawn foot yazi"
+"submap[noalt],Super+B" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch browser"
+"submap[noalt],Super+W" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wallpicker"
+"submap[noalt],Super+Shift+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-current"
+"submap[noalt],Super+Ctrl+W" = "spawn bash ~/.config/umbriel/awtarchy/awtwall.sh --random-all"
+"submap[noalt],Super+Shift+B" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py btop"
+"submap[noalt],Super+Shift+M" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py maccel"
+"submap[noalt],Super+V" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wiremix"
+"submap[noalt],Super+Shift+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"submap[noalt],Super+Shift+X" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh area"
+"submap[noalt],Super+Shift+S" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh window"
+"submap[noalt],Super+Shift+F" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh display"
+"submap[noalt],Super+Shift+D" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh display-copy"
+"submap[noalt],Print" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh print"
+"submap[noalt],Super+Q" = "window-close"
+"submap[noalt],Super+Shift+Q" = "window-close"
+"submap[noalt],Super+F" = "window-toggle-floating"
+"submap[noalt],Super+Ctrl+F" = "window-toggle-fullscreen"
+"submap[noalt],Super+Y" = "window-toggle-pinned"
+"submap[noalt],Super+X" = "scratchpad-toggle"
+"submap[noalt],Super+Ctrl+X" = "window-toggle-scratchpad"
+"submap[noalt],Super+h" = "window-focus-left"
+"submap[noalt],Super+Shift+h" = "window-move-left"
+"submap[noalt],Super+j" = "window-focus-down"
+"submap[noalt],Super+Shift+j" = "window-move-down"
+"submap[noalt],Super+k" = "window-focus-up"
+"submap[noalt],Super+Shift+k" = "window-move-up"
+"submap[noalt],Super+l" = "window-focus-right"
+"submap[noalt],Super+Shift+l" = "window-move-right"
+"submap[noalt],Super+Space" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh notifications hideFirstPopup"
+"submap[noalt],Super+Left" = "window-focus-left"
+"submap[noalt],Super+Shift+Left" = "window-move-left"
+"submap[noalt],Super+Ctrl+Shift+BracketLeft" = "workspace-move-to-output-left"
+"submap[noalt],Super+Ctrl+Shift+BracketRight" = "workspace-move-to-output-right"
+"submap[noalt],Super+Ctrl+Shift+Left" = "workspace-move-to-output-left"
+"submap[noalt],Super+Right" = "window-focus-right"
+"submap[noalt],Super+Shift+Right" = "window-move-right"
+"submap[noalt],Super+Ctrl+Shift+Right" = "workspace-move-to-output-right"
+"submap[noalt],Super+Up" = "window-focus-up"
+"submap[noalt],Super+Shift+Up" = "window-move-up"
+"submap[noalt],Super+Ctrl+Shift+Up" = "workspace-move-to-output-up"
+"submap[noalt],Super+Down" = "window-focus-down"
+"submap[noalt],Super+Shift+Down" = "window-move-down"
+"submap[noalt],Super+Ctrl+Shift+Down" = "workspace-move-to-output-down"
+"submap[noalt],Super+Ctrl+Left" = "window-modify-width-left -0.03"
+"submap[noalt],Super+Ctrl+Right" = "window-modify-width-right +0.03"
+"submap[noalt],Super+Ctrl+Up" = "window-modify-height-up -0.03"
+"submap[noalt],Super+Ctrl+Down" = "window-modify-height-down +0.03"
+"submap[noalt],Super+Ctrl+h" = "window-modify-width-left -0.03"
+"submap[noalt],Super+Ctrl+l" = "window-modify-width-right +0.03"
+"submap[noalt],Super+Ctrl+k" = "window-modify-height-up -0.03"
+"submap[noalt],Super+Ctrl+j" = "window-modify-height-down +0.03"
+"submap[noalt],Super+BracketLeft" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py previous"
+"submap[noalt],Super+BracketRight" = "spawn python3 ~/.config/umbriel/awtarchy/workspace-nav.py next"
+"submap[noalt],Super+1" = "workspace-switch --name 1"
+"submap[noalt],Super+Shift+1" = "window-move-to-workspace --name 1"
+"submap[noalt],Super+2" = "workspace-switch --name 2"
+"submap[noalt],Super+Shift+2" = "window-move-to-workspace --name 2"
+"submap[noalt],Super+3" = "workspace-switch --name 3"
+"submap[noalt],Super+Shift+3" = "window-move-to-workspace --name 3"
+"submap[noalt],Super+4" = "workspace-switch --name 4"
+"submap[noalt],Super+Shift+4" = "window-move-to-workspace --name 4"
+"submap[noalt],Super+5" = "workspace-switch --name 5"
+"submap[noalt],Super+Shift+5" = "window-move-to-workspace --name 5"
+"submap[noalt],Super+6" = "workspace-switch --name 6"
+"submap[noalt],Super+Shift+6" = "window-move-to-workspace --name 6"
+"submap[noalt],Super+7" = "workspace-switch --name 7"
+"submap[noalt],Super+Shift+7" = "window-move-to-workspace --name 7"
+"submap[noalt],Super+8" = "workspace-switch --name 8"
+"submap[noalt],Super+Shift+8" = "window-move-to-workspace --name 8"
+"submap[noalt],Super+9" = "workspace-switch --name 9"
+"submap[noalt],Super+Shift+9" = "window-move-to-workspace --name 9"
+"submap[noalt],Super+0" = "workspace-switch --name 10"
+"submap[noalt],Super+Shift+0" = "window-move-to-workspace --name 10"
+"submap[noalt],XF86AudioRaiseVolume" = "spawn wpctl set-volume -l 1 @DEFAULT_AUDIO_SINK@ 5%+"
+"submap[noalt],XF86AudioLowerVolume" = "spawn wpctl set-volume @DEFAULT_AUDIO_SINK@ 5%-"
+"submap[noalt],XF86AudioMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"submap[noalt],XF86AudioMicMute" = "spawn wpctl set-mute @DEFAULT_AUDIO_SOURCE@ toggle"
+"submap[noalt],XF86MonBrightnessUp" = "spawn brightnessctl -e4 -n2 set 5%+"
+"submap[noalt],XF86MonBrightnessDown" = "spawn brightnessctl -e4 -n2 set 5%-"
+"submap[noalt],XF86AudioPlay" = "spawn playerctl play-pause"
+"submap[noalt],XF86AudioNext" = "spawn playerctl next"
+"submap[noalt],XF86AudioPrev" = "spawn playerctl previous"
+"submap[noalt],Super+A" = "spawn bash ~/.config/umbriel/awtarchy/animations.sh"
+"submap[noalt],Super+M" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"submap[noalt],Super+Alt+N" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle noalt"
+"submap[mouse],Super+Alt+N" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle noalt"
+"submap[vm],Super+Alt+N" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle noalt"
+"submap[noalt],Super+Alt+M" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle mouse"
+"submap[mouse],Super+Alt+M" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle mouse"
+"submap[vm],Super+Alt+M" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle mouse"
+"submap[noalt],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
+"submap[mouse],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
+"submap[vm],Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py toggle vm"
+"submap[noalt],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
+"submap[mouse],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
+"submap[vm],Escape" = "spawn python3 ~/.config/umbriel/awtarchy/mode-control.py reset"
+"submap[vm],Super+Alt+Q" = "window-close"
+"submap[vm],Super+Alt+F" = "window-toggle-floating"
+"submap[vm],Super+Alt+P" = "spawn bash ~/.config/umbriel/awtarchy/ipc.sh launcher toggle"
+"submap[vm],Super+Alt+A" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py default-apps"
+"submap[vm],Super+Alt+C" = "spawn foot --app-id awtarchy-qalc qalc"
+"submap[vm],Super+Alt+Return" = "spawn foot"
+"submap[vm],Super+Alt+X" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh area"
+"submap[vm],Super+Alt+S" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh window"
+"submap[vm],Super+Alt+D" = "spawn bash ~/.config/umbriel/awtarchy/capture.sh display-copy"
+"submap[vm],Super+Alt+Ctrl+F" = "window-toggle-fullscreen"
+"submap[vm],Super+Alt+Ctrl+V" = "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py wiremix"
+"submap[vm],Super+Alt+1" = "workspace-switch --name 1"
+"submap[vm],Super+Alt+Shift+1" = "window-move-to-workspace --name 1"
+"submap[vm],Super+Alt+2" = "workspace-switch --name 2"
+"submap[vm],Super+Alt+Shift+2" = "window-move-to-workspace --name 2"
+"submap[vm],Super+Alt+3" = "workspace-switch --name 3"
+"submap[vm],Super+Alt+Shift+3" = "window-move-to-workspace --name 3"
+"submap[vm],Super+Alt+4" = "workspace-switch --name 4"
+"submap[vm],Super+Alt+Shift+4" = "window-move-to-workspace --name 4"
+"submap[vm],Super+Alt+5" = "workspace-switch --name 5"
+"submap[vm],Super+Alt+Shift+5" = "window-move-to-workspace --name 5"
+"submap[vm],Super+Alt+6" = "workspace-switch --name 6"
+"submap[vm],Super+Alt+Shift+6" = "window-move-to-workspace --name 6"
+"submap[vm],Super+Alt+7" = "workspace-switch --name 7"
+"submap[vm],Super+Alt+Shift+7" = "window-move-to-workspace --name 7"
+"submap[vm],Super+Alt+8" = "workspace-switch --name 8"
+"submap[vm],Super+Alt+Shift+8" = "window-move-to-workspace --name 8"
+"submap[vm],Super+Alt+9" = "workspace-switch --name 9"
+"submap[vm],Super+Alt+Shift+9" = "window-move-to-workspace --name 9"
+"submap[vm],Super+Alt+0" = "workspace-switch --name 10"
+"submap[vm],Super+Alt+Shift+0" = "window-move-to-workspace --name 10"
+
+[[window_rule]]
+match.app_id = "^(btop)$"
+default_floating = true
+default_floating_size = { width = 0.80, height = 0.85 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+# Some Foot wrappers retain their generic app-id. Match the exact terminal
+# title instead of floating every Foot terminal; never affect normal shells.
+[[window_rule]]
+match.title = "^btop$"
+default_floating = true
+default_floating_size = { width = 0.80, height = 0.85 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(maccel)$"
+default_floating = true
+default_floating_size = { width = 0.90, height = 0.96 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(Wiremix)$"
+default_floating = true
+default_floating_size = { width = 0.65, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.title = "^Wiremix$"
+default_floating = true
+default_floating_size = { width = 0.65, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+# Modern wdisplays identifies itself as network.cycles.wdisplays.
+match.app_id = "^(wdisplays|network[.]cycles[.]wdisplays)$"
+default_floating = true
+default_floating_size = { width = 0.85, height = 0.90 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(wallpicker)$"
+default_floating = true
+default_floating_size = { width = 0.85, height = 0.90 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(smtty|smtty-O)$"
+default_floating = true
+default_floating_size = { width = 0.50, height = 0.65 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-default-apps)$"
+default_floating = true
+default_floating_size = { width = 0.68, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-tips-tui)$"
+default_floating = true
+default_floating_size = { width = 0.50, height = 0.50 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+match.app_id = "^(awtarchy-qalc)$"
+default_floating = true
+default_floating_size = { width = 0.45, height = 0.50 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+# A fullscreen game can request asynchronous presentation only on an output
+# explicitly configured for tearing in the machine-specific migrated include.
+[[window_rule]]
+match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|.*[.]exe)$"
+tearing = true
+
+# AWTARCHY-APPLICATION-WORKSPACE-ROUTING
+# Match Sway/Hyprland's normal app placement using GLOBAL named workspaces.
+# A quoted number is a stable identity after transfer; an integer would be
+# a new output-local position and repeat the wrong-monitor bug.
+
+[[window_rule]]
+match.app_id = "^(gamescope|steam_app_.*|lutris_game_class|minigalaxy|playnite_game_class|chiaki|moonlight|com[.]moonlight_stream[.]Moonlight|.*[.]exe)$"
+default_workspace = "1"
+
+[[window_rule]]
+match.app_id = "^(firefox|librewolf|Mullvad Browser|Cromite|brave-browser|io[.]github[.]ungoogled_software[.]ungoogled_chromium)$"
+default_workspace = "2"
+
+[[window_rule]]
+match.app_id = "^(discord|com[.]discordapp[.]Discord|vesktop|dev[.]vencord[.]Vesktop|chat[.]revolt[.]RevoltDesktop|info[.]mumble[.]Mumble|fluxer|Fluxer)$"
+default_workspace = "3"
+
+[[window_rule]]
+match.app_id = "^(steam|com[.]valvesoftware[.]Steam|SteamChat|net[.]lutris[.]Lutris|itch|io[.]itch[.]itch|heroic|com[.]heroicgameslauncher[.]hgl|r2modman)$"
+default_workspace = "4"
+
+[[window_rule]]
+match.app_id = "^(Spotify|com[.]spotify[.]Client)$"
+default_workspace = "5"
+
+[[window_rule]]
+match.app_id = "^(org[.]telegram[.]desktop|Telegram|Messages)$"
+default_workspace = "6"
+
+[[window_rule]]
+match.app_id = "^(Vncviewer|rustdesk)$"
+default_workspace = "7"
+
+[[window_rule]]
+match.app_id = "^(com[.]github[.]IsmaelMartinez[.]teams_for_linux)$"
+default_workspace = "8"
+
+[[window_rule]]
+match.app_id = "^(kdenlive|org[.]kde[.]kdenlive|org[.]shotcut[.]Shotcut|krita|org[.]kde[.]krita)$"
+default_workspace = "9"
+
+[[window_rule]]
+match.app_id = "^(obs|com[.]obsproject[.]Studio|gpu-screen-recorder|gpu-screen-recorder-gtk|gpu-screen-recorder-ui|gsr-ui|com[.]dec05eba[.]gpu_screen_recorder)$"
+default_workspace = "10"

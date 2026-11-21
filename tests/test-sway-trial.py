@@ -9,7 +9,7 @@ import sys
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 CONFIG = (TRIAL / "config").read_text(encoding="utf-8")
 RUNTIME = (ROOT / "local/share/awtarchy/awtarchy-runtime.sh").read_text(encoding="utf-8")
 MANAGER = (ROOT / "local/share/awtarchy/awtarchy-compositor-manager.sh").read_text(encoding="utf-8")
@@ -67,6 +67,9 @@ for key, expected in {
     "Mod4+p": "ipc.sh powermenu begin",
     "Mod1+Shift+b": "toggle-utility.py btop",
     "Mod4+Shift+b": "toggle-utility.py btop",
+    "Mod4+Mod1+b": "control rotateBarFocused",
+    "Mod4+Control+b": "control flipBarFocused",
+    "Mod4+Mod1+Control+b": "control toggleBarAutoHideFocused",
     "Mod4+t": "ipc.sh themes toggle",
     "Mod4+w": "toggle-utility.py wallpicker",
     "Mod4+Control+m": "toggle-utility.py displays",
@@ -114,6 +117,12 @@ assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
 assert "nwg-displays" in (TRIAL / "setup.sh").read_text()
+assert "scheduler.sh" in (TRIAL / "setup.sh").read_text()
+assert "hypr_quicksettings_core.sh" in (TRIAL / "setup.sh").read_text()
+assert "hypr_quicksettings.sh" in (TRIAL / "sync.py").read_text()
+assert "SCHEDULER = TRIAL / \"scheduler.sh\"" in (TRIAL / "quicksettings.py").read_text()
+assert "scheduler_status()" in (TRIAL / "quicksettings.py").read_text()
+assert '--authorize-scheduler-stdin' in (TRIAL / "quicksettings.py").read_text()
 assert "tty-launch.sh" in (TRIAL / "setup.sh").read_text()
 assert "/usr/local/bin/awtarchy-sway-session" in (TRIAL / "tty-launch.sh").read_text()
 assert '/usr/bin/sway "$@"' in (TRIAL / "tty-launch.sh").read_text()
@@ -191,6 +200,14 @@ for line in CONFIG.splitlines():
 # Immediate page flips need output AND application permission; a fullscreen
 # window remains required and ordinary desktop apps are not opted in.
 assert "output * allow_tearing yes" in CONFIG
+for mod in ("Mod1", "Mod4"):
+    for key, expected in (
+        ("h", "resize shrink width 30 px"),
+        ("l", "resize grow width 30 px"),
+        ("k", "resize shrink height 30 px"),
+        ("j", "resize grow height 30 px")
+    ):
+        assert f"bindsym {mod}+Control+{key} {expected}" in CONFIG
 assert "output * max_render_time off" in CONFIG
 assert re.search(r'(?m)^for_window \[app_id=.*steam_app_.*\] allow_tearing yes$', CONFIG)
 assert re.search(r'(?m)^for_window \[class=.*steam_app_.*\] allow_tearing yes$', CONFIG)

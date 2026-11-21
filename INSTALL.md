@@ -10,7 +10,7 @@ For a new machine:
 2. **Alternatively:** install [CachyOS](https://cachyos.org/) using its official installer. A minimal setup is preferable, but an existing working CachyOS desktop can be used.
 3. Boot into your installed system and log in before running Awtarchy.
 
-Awtarchy overlays its own Quickshell desktop and managed configuration. Hyprland is the default compositor; standard Sway is an optional second session. CachyOS-specific safeguards preserve existing driver/network/display-manager state where practical, but installed desktop configuration may still be updated by Awtarchy. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
+Awtarchy overlays its own Quickshell desktop and managed configuration. Hyprland is the default compositor; Sway and Umbriel are optional sessions. CachyOS-specific safeguards preserve existing driver/network/display-manager state where practical, but installed desktop configuration may still be updated by Awtarchy. See [CachyOS compatibility notes](docs/cachyos-compatibility.md).
 
 ## Install Awtarchy
 
@@ -30,6 +30,8 @@ Sway uses `nwg-displays` (`Super+Ctrl+M`) for monitor settings; Hyprland
 continues using Hyprmoncfg. Adding Sway from an active Hyprland session
 imports the current display layout once when safe, but never overwrites a
 personalized Sway layout. SwayFX is not part of this release.
+After installation, `awtarchy compositor` can install Umbriel alongside
+Hyprland or Sway, keeping the compositor and Quickshell configurations separate.
 
 The installer collects the relevant hardware/package choices before applying the overlay. Dependencies required by managed Awtarchy features are installed automatically and are kept separate from optional package choices.
 
@@ -39,8 +41,8 @@ After installation, use:
 awtarchy
 ```
 
-Ly is optional. From a TTY, type `hypr` for Awtarchy Hyprland or `sway`
-for Awtarchy Sway if each compositor is installed. Awtarchy creates a
+Ly is optional. From a TTY, use `hypr`, `sway`, or `umbriel` for an installed
+Awtarchy compositor. Awtarchy creates a
 user-local `~/.local/bin/sway` entry only when installing Sway. With no
 arguments from a TTY, it launches the same Sway session as Ly; native
 `/usr/bin/sway` is never replaced, and Sway CLI arguments still use its

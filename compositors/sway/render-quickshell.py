@@ -259,6 +259,42 @@ def render(source: Path, destination: Path, trial: Path):
                         '    }\\n'
                         '}\\n'
                     ).replace('\\n', '\n')
+                if path.name == "FlyoutManager.qml":
+                    # Hyprland's activewindow event does not exist on wlroots
+                    # compositors. A stale event gate left competing layer-shell
+                    # flyouts visible together. Close previous flyouts at the
+                    # moment a different surface is claimed, inside Quickshell.
+                    marker = "    property Connections hyprEventConnection: Connections {"
+                    ending = "    function titleForSurface(surface) {"
+                    if text.count(marker) != 1 or text.count(ending) != 1:
+                        raise ValueError("Flyout focus ownership changed")
+                    start = text.index(marker)
+                    end = text.index(ending, start)
+                    text = text[:start] + text[end:]
+                    for old, new in (
+                        ("        activeSurface = surface;",
+                         "        closeRequested(surface);\n        activeSurface = surface;"),
+                        ("        overlaySurface = key;",
+                         '        closeRequested(key);\n        overlaySurface = key;'),
+                    ):
+                        if text.count(old) != 1:
+                            raise ValueError("Flyout ownership protocol changed")
+                        text = text.replace(old, new, 1)
+                if path.name == "ThemePicker.qml":
+                    # Overlay picker is a real layer-shell flyout too. Closing
+                    # all other flyouts must also close an older theme picker.
+                    marker = '    IpcHandler {\n        target: "themes"'
+                    if text.count(marker) != 1:
+                        raise ValueError("Theme picker IPC source changed")
+                    text = text.replace(marker, '''    Connections {
+        target: FlyoutManager
+        function onCloseRequested(exceptSurface) {
+            if (exceptSurface !== "themes" && pickerWindow.visible)
+                root.close();
+        }
+    }
+
+''' + marker, 1)
                 if path.name == "BarButton.qml":
                     text = prefer_sway_discrete_wheel(text)
                 if path.name == "Bar.qml":
@@ -285,10 +321,10 @@ def render(source: Path, destination: Path, trial: Path):
                         '/sway/awtarchy-trial/mode-control.sh')
                     text = text.replace(
                         'tooltip: "Toggle mouse submap"',
-                        'tooltip: "Toggle Sway mouse mode (Alt still required to drag/resize)"')
-                    text = text.replace(
-                        'tooltip: "Current submap: " + submapFile.text().trim() + " (click to reset)"',
-                        'tooltip: "Current mode: " + submapFile.text().trim() + " (click to reset)"')
+                        'tooltip: "Mouse submap (Alt+drag still required)"')
+                    # Retain the shared "Current submap" terminology for all
+                    # supported compositors. The mouse mode cannot intercept
+                    # bare pointer buttons in Sway or Umbriel.
                     text = text.replace(
                         '[bar.mouseSubmapScript, "reset"]',
                         '[bar.mouseSubmapScript, "reset"]')
@@ -499,6 +535,109 @@ Qs.Singleton {
                         raise ValueError("CaptureEyeButton changed")
                     text = text.replace('enabled: !root.locked', 'enabled: false')
                 if path.name == "QuickSettings.qml":
+                    # The status adapter is asynchronous and may momentarily
+                    # provide a missing/stale bar.enabled value during startup.
+                    # It must not override Quickshell's authoritative in-process
+                    # per-output BarState and center a previously edge-anchored
+                    # popup. This is shared by Sway and Umbriel renderers.
+                    before = (
+                        '                    const nextPlacement = '
+                        'String((root.statusData.bar || ({})).position || "");\\n'
+                        '                    if (!Boolean((root.statusData.bar || ({})).enabled))\\n'
+                        '                        root.placement = "center";\\n'
+                        '                    else if (["top", "bottom", "left", "right"].indexOf(nextPlacement) >= 0)\\n'
+                        '                        root.placement = nextPlacement;'
+                    ).replace('\\n', '\n')
+                    after = (
+                        '                    if (root.activeScreen)\\n'
+                        '                        root.placement = root.placementForScreen(root.activeScreen);'
+                    ).replace('\\n', '\n')
+                    if text.count(before) != 1:
+                        raise ValueError("Quick Settings placement status source changed")
+                    text = text.replace(before, after, 1)
+
+                    old_revision = (
+                        '        function onRevisionChanged() {\\n'
+                        '            if (root.prewarmEnabled && !quickSettingsWindow.visible && !root.openPreparing)\\n'
+                        '                quickSettingsPrewarmRefresh.restart();\\n'
+                        '        }'
+                    ).replace('\\n', '\n')
+                    new_revision = (
+                        '        function onRevisionChanged() {\\n'
+                        '            if (quickSettingsWindow.visible && root.activeScreen)\\n'
+                        '                root.placement = root.placementForScreen(root.activeScreen);\\n'
+                        '            else if (root.prewarmEnabled && !root.openPreparing)\\n'
+                        '                quickSettingsPrewarmRefresh.restart();\\n'
+                        '        }'
+                    ).replace('\\n', '\n')
+                    if text.count(old_revision) != 1:
+                        raise ValueError("Quick Settings bar state revision source changed")
+                    text = text.replace(old_revision, new_revision, 1)
+
+                    # A child process exiting nonzero is a failure even if
+                    # stderr was silent. Never tell the user "Updated" after a
+                    # failed wallpaper, brightness, bar or input-mode action.
+                    old_result = (
+                        '        onExited: {\\n'
+                        '            const finishedKind = root.runningActionKind;\\n'
+                        '            root.runningActionKind = "";\\n'
+                        '            if (root.actionError.length > 0)\\n'
+                        '                root.actionMessage = root.actionError;\\n'
+                        '            else\\n'
+                        '                root.actionMessage = "Updated";'
+                    ).replace('\\n', '\n')
+                    new_result = (
+                        '        onExited: (exitCode, exitStatus) => {\\n'
+                        '            const finishedKind = root.runningActionKind;\\n'
+                        '            root.runningActionKind = "";\\n'
+                        '            if (root.actionError.length > 0)\\n'
+                        '                root.actionMessage = root.actionError;\\n'
+                        '            else if (exitCode !== 0)\\n'
+                        '                root.actionMessage = "Action failed (" + exitCode + ")";\\n'
+                        '            else\\n'
+                        '                root.actionMessage = "Updated";'
+                    ).replace('\\n', '\n')
+                    if text.count(old_result) != 1:
+                        raise ValueError("Quick Settings action-result handler changed")
+                    text = text.replace(old_result, new_result, 1)
+
+                    # Preserve the user's saved state on a failed write.
+                    # An optimistic UI refresh previously claimed that Save/
+                    # Copy had succeeded even if the backend exited nonzero.
+                    old_writer = (
+                        '    Process {\\n'
+                        '        id: stateWriter\\n'
+                        '        onExited: {\\n'
+                        '            BarState.refresh();\\n'
+                        '            privacyRuleUpdater.exec([root.configHome + "/hypr/scripts/quickshell_runtime_rules.sh"]);\\n'
+                        '            Qt.callLater(() => root.runNextStateCommand());\\n'
+                        '        }\\n'
+                        '    }'
+                    ).replace('\\n', '\n')
+                    # The renderer translates the runtime rule script path
+                    # before this pass, so match the translated destination.
+                    old_writer = old_writer.replace(
+                        '/hypr/scripts/quickshell_runtime_rules.sh',
+                        '/sway/awtarchy-trial/runtime-rules.sh')
+                    new_writer = (
+                        '    Process {\\n'
+                        '        id: stateWriter\\n'
+                        '        onExited: (exitCode, exitStatus) => {\\n'
+                        '            if (exitCode === 0) {\\n'
+                        '                BarState.refresh();\\n'
+                        '                privacyRuleUpdater.exec([root.configHome + "/sway/awtarchy-trial/runtime-rules.sh"]);\\n'
+                        '            } else {\\n'
+                        '                root.settingsMessage = "Settings write failed (" + exitCode + ")";\\n'
+                        '                root.stateCommandQueue = [];\\n'
+                        '            }\\n'
+                        '            Qt.callLater(() => root.runNextStateCommand());\\n'
+                        '        }\\n'
+                        '    }'
+                    ).replace('\\n', '\n')
+                    if text.count(old_writer) != 1:
+                        raise ValueError("Quick Settings persistent-state writer changed")
+                    text = text.replace(old_writer, new_writer, 1)
+
                     # The Sway backend accepts panel output and selected
                     # brightness output separately. The shared QML originally
                     # sends the panel name twice; that makes the brightness
@@ -522,14 +661,13 @@ Qs.Singleton {
                     text = text.replace(
                         '/hypr/scripts/default_applications.sh',
                         '/sway/awtarchy-trial/default-apps.sh')
-                    # Preserve supported bar + audio state. Do not offer
-                    # nonfunctional night-light, vibrance or input-mode toggles.
+                    # Preserve supported bar + audio and native input-mode
+                    # controls. Night-light/vibrance remain unsupported.
                     text = text.replace(
                         'visible: root.quickSettingsSectionVisible("display-effects")',
                         'visible: false')
-                    text = text.replace(
-                        'visible: root.quickSettingsSectionVisible("submap")',
-                        'visible: false')
+                    # Both Sway and Umbriel now implement the native mode
+                    # transition in Quick Settings; do not hide this control.
                     text = text.replace(
                         'visible: root.quickSettingsSectionVisible("numlock")',
                         'visible: false')

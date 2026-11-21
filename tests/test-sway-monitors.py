@@ -8,7 +8,7 @@ from unittest.mock import patch
 import subprocess
 
 ROOT = Path(__file__).resolve().parents[1]
-TRIAL = ROOT / "trials/sway"
+TRIAL = ROOT / "compositors/sway"
 spec = importlib.util.spec_from_file_location(
     "sway_monitor_import", TRIAL / "import-hypr-monitors.py")
 module = importlib.util.module_from_spec(spec)

@@ -5,7 +5,7 @@ on:
     branches: [main, SwayWM_Migration_Trial_Investigation]
     paths:
       - ".github/workflows/validate-swaywm-trial.yml"
-      - "trials/sway/**"
+      - "compositors/sway/**"
       - "tests/test-sway-*.py"
       - "tests/test-hybrid-brightness.sh"
       - "config/hypr/hyprland.lua"
@@ -21,7 +21,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/validate-swaywm-trial.yml"
-      - "trials/sway/**"
+      - "compositors/sway/**"
       - "tests/test-sway-*.py"
       - "tests/test-hybrid-brightness.sh"
       - "config/hypr/hyprland.lua"
@@ -84,10 +84,10 @@ jobs:
       - name: Parse generated Sway Quickshell layer-shell QML
         run: |
           generated="$(mktemp -d)"
-          python3 trials/sway/render-quickshell.py \
+          python3 compositors/sway/render-quickshell.py \
             --source config/quickshell/awtarchy \
             --dest "$generated/awtarchy-sway" \
-            --bridge-dir trials/sway
+            --bridge-dir compositors/sway
           for filename in \
               SwayFlyoutWindow.qml ScreenSharePicker.qml Launcher.qml ClipboardMenu.qml \
               Notifications.qml QuickSettings.qml ScreenshotSoundSettings.qml NetworkMenu.qml \
@@ -105,11 +105,11 @@ jobs:
           # Arch Sway carries file capabilities that GitHub container policy
           # cannot grant. A non-capability copy can still validate config.
           install -m 0755 "$(command -v sway)" "$XDG_RUNTIME_DIR/sway-validator"
-          "$XDG_RUNTIME_DIR/sway-validator" -C -c trials/sway/config
+          "$XDG_RUNTIME_DIR/sway-validator" -C -c compositors/sway/config
           # The one native Ly session must resolve the same Awtarchy profile.
           mkdir -p "$XDG_RUNTIME_DIR/sway/awtarchy-trial"
-          cp trials/sway/native-config "$XDG_RUNTIME_DIR/sway/config"
-          cp trials/sway/config "$XDG_RUNTIME_DIR/sway/awtarchy-trial/config"
+          cp compositors/sway/native-config "$XDG_RUNTIME_DIR/sway/config"
+          cp compositors/sway/config "$XDG_RUNTIME_DIR/sway/awtarchy-trial/config"
           : >"$XDG_RUNTIME_DIR/sway/awtarchy-trial/outputs"
           : >"$XDG_RUNTIME_DIR/sway/workspaces"
           "$XDG_RUNTIME_DIR/sway-validator" -C -c "$XDG_RUNTIME_DIR/sway/config"
@@ -119,11 +119,11 @@ jobs:
           from pathlib import Path
           import sys
           root = Path.cwd()
-          module_path = root / "trials/sway/import-hypr-monitors.py"
+          module_path = root / "compositors/sway/import-hypr-monitors.py"
           spec = importlib.util.spec_from_file_location("sway_import", module_path)
           mod = importlib.util.module_from_spec(spec)
           spec.loader.exec_module(mod)
-          base = (root / "trials/sway/config").read_text(encoding="utf-8")
+          base = (root / "compositors/sway/config").read_text(encoding="utf-8")
           modes = [
               "output DP-1 mode 1920x1080@400.002Hz position 0 1080 scale 1.0",
               "output DP-3 mode 1920x1080@239.761Hz position 0 0 scale 1.0",

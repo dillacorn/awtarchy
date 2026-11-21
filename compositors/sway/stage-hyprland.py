@@ -94,7 +94,7 @@ def main():
         raise ValueError("Run as your normal desktop user")
     home = Path.home().resolve()
     repo = args.repo.resolve()
-    if not (repo / "trials/sway/setup.sh").is_file():
+    if not (repo / "compositors/sway/setup.sh").is_file():
         raise ValueError("Missing exact Sway trial checkout")
     stage(repo, home, apply=args.apply)
 

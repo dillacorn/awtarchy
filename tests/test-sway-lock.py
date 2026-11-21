@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
-LOCK = ROOT / "trials/sway/lock.sh"
+LOCK = ROOT / "compositors/sway/lock.sh"
 SOURCE_LOCK = ROOT / "config/quickshell/awtarchy-lock/shell.qml"
 AUTH = ROOT / "config/quickshell/awtarchy-lock/LockAuth.qml"
 
@@ -19,9 +19,9 @@ assert "WlSessionLock {" in SOURCE_LOCK.read_text()
 assert "return sessionLock.secure" in SOURCE_LOCK.read_text()
 assert "PamContext {" in AUTH.read_text()
 assert "password.conf" in AUTH.read_text()
-manager_source = (ROOT / "trials/sway/lock-manager.sh").read_text()
+manager_source = (ROOT / "compositors/sway/lock-manager.sh").read_text()
 upstream_manager = (ROOT / "config/hypr/scripts/awtarchy_lock.sh").read_text()
-capture_source = (ROOT / "trials/sway/lock-capture.sh").read_text()
+capture_source = (ROOT / "compositors/sway/lock-capture.sh").read_text()
 assert manager_source.replace('CAPTURE_HELPER="${SCRIPT_DIR}/lock-capture.sh"',
     'CAPTURE_HELPER="${SCRIPT_DIR}/quickshell_lockscreen_capture.sh"').splitlines()[3:] == (
         upstream_manager.splitlines()[2:]), (

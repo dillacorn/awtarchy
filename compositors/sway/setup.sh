@@ -6,7 +6,7 @@ fail() { printf 'Sway trial setup: %s\n' "$*" >&2; return 1; }
 case "$1" in --check|--install) action="$1" ;; *) fail 'Unknown action'; exit 2 ;; esac
 [[ "$(id -u)" != 0 && -f /etc/arch-release ]] || { fail 'Use a normal Arch/CachyOS user'; exit 1; }
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-src="$repo/trials/sway"
+src="$repo/compositors/sway"
 tty_source="$src/tty-launch.sh"
 tty_dir="$HOME/.local/bin"
 tty_launcher="$tty_dir/sway"
@@ -41,7 +41,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf outputs)
+sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh scheduler.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf outputs)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }
@@ -58,7 +58,7 @@ for name in "${sources[@]}"; do
         fi
     fi
 done
-workspace_source="$repo/trials/workspaces"
+workspace_source="$repo/compositors/sway/workspaces"
 workspace_target="$config/sway/workspaces"
 [[ -f "$workspace_source" && ! -L "$workspace_source" ]] || {
     fail "Missing Sway workspace source"; exit 1;
@@ -80,7 +80,7 @@ login_audio_target="$trial/awtarchy-login.mp3"
 }
 # Stage exact branch-matched controller sources into the isolated Sway tree.
 # Never overwrite installed Hyprland helper scripts or unknown Sway files.
-ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh screenshot_sound.sh)
+ddc_sources=(ddc_brightness.sh hypr-ddc-brightness.sh screenshot_sound.sh hypr_quicksettings_core.sh hypr_quicksettings.sh)
 for name in "${ddc_sources[@]}"; do
     source="$repo/config/hypr/scripts/$name"
     target="$trial/$name"

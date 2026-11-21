@@ -14,11 +14,12 @@ is reviewed and updated from the same published release. Personalized Sway
 settings, monitor layouts and shell files are preserved. Any unsuccessful
 Sway-specific update is reported, and can be retried separately.
 
-Use `awtarchy compositor` to manage Hyprland and Sway (including installing
-either beside the other, review, Sway managed updates, or removal of eligible
-Awtarchy-owned packages). The stable manager uses the exact published
+Use `awtarchy compositor` to manage Hyprland, Sway and Umbriel (including
+optional installation, review and removal of eligible compositor packages). The stable manager uses the exact published
 configuration release instead of requiring the old experimental checkout.
-Hyprland remains the default and is not removed when Sway is added.
+Hyprland remains the default. Adding Sway or Umbriel does not remove another compositor.
+Umbriel's managed configuration lives at `~/.config/umbriel/awtarchy`; legacy
+`awtarchy-trial` files are preserved during the upgrade.
 
 ### Migrating an existing Sway trial
 

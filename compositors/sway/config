@@ -73,6 +73,11 @@ exec_always bash $trial/mode-state.sh sync
 # One validated swayidle per Sway socket; no session logout/restart required.
 exec_always python3 $trial/idle-manager.py start
 
+# Bar controls use the same state owner as the Quickshell UI.
+bindsym Mod4+Mod1+b exec qs -c awtarchy-sway ipc call control rotateBarFocused
+bindsym Mod4+Control+b exec qs -c awtarchy-sway ipc call control flipBarFocused
+bindsym Mod4+Mod1+Control+b exec qs -c awtarchy-sway ipc call control toggleBarAutoHideFocused
+
 # App shortcuts (match the existing Hyprland combinations).
 bindsym Mod1+p exec bash $trial/ipc.sh launcher toggle
 bindsym Mod4+d exec bash $trial/ipc.sh launcher toggle
@@ -195,6 +200,14 @@ bindsym Mod4+Control+Left resize shrink width 30 px
 bindsym Mod4+Control+Right resize grow width 30 px
 bindsym Mod4+Control+Up resize shrink height 30 px
 bindsym Mod4+Control+Down resize grow height 30 px
+bindsym Mod1+Control+h resize shrink width 30 px
+bindsym Mod4+Control+h resize shrink width 30 px
+bindsym Mod1+Control+l resize grow width 30 px
+bindsym Mod4+Control+l resize grow width 30 px
+bindsym Mod1+Control+k resize shrink height 30 px
+bindsym Mod4+Control+k resize shrink height 30 px
+bindsym Mod1+Control+j resize grow height 30 px
+bindsym Mod4+Control+j resize grow height 30 px
 
 # Global numbered workspaces, independent of output/tag.
 bindsym Mod1+1 workspace number 1
@@ -372,6 +385,9 @@ mode "noalt" {
     bindsym Mod4+n exec bash $trial/ipc.sh notifications toggle
     bindsym Mod4+c exec bash $trial/ipc.sh clipboard toggle
     bindsym Mod4+Mod1+BackSpace exec bash $trial/ipc.sh quicksettings toggle
+    bindsym Mod4+Mod1+b exec qs -c awtarchy-sway ipc call control rotateBarFocused
+    bindsym Mod4+Control+b exec qs -c awtarchy-sway ipc call control flipBarFocused
+    bindsym Mod4+Mod1+Control+b exec qs -c awtarchy-sway ipc call control toggleBarAutoHideFocused
     bindsym Mod4+Return exec foot
     bindsym Mod1+Shift+Return exec foot
     bindsym Mod4+Shift+Return exec foot
@@ -436,6 +452,10 @@ mode "noalt" {
     bindsym Mod4+Control+Right resize grow width 30 px
     bindsym Mod4+Control+Up resize shrink height 30 px
     bindsym Mod4+Control+Down resize grow height 30 px
+    bindsym Mod4+Control+h resize shrink width 30 px
+    bindsym Mod4+Control+l resize grow width 30 px
+    bindsym Mod4+Control+k resize shrink height 30 px
+    bindsym Mod4+Control+j resize grow height 30 px
     bindsym Mod4+1 workspace number 1
     bindsym Mod4+Shift+1 move container to workspace number 1
     bindsym Mod4+2 workspace number 2

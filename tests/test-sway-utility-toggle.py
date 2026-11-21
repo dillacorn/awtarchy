@@ -6,7 +6,7 @@ from unittest.mock import patch
 import os
 
 root = Path(__file__).resolve().parents[1]
-source = root / "trials/sway/toggle-utility.py"
+source = root / "compositors/sway/toggle-utility.py"
 spec = importlib.util.spec_from_file_location("sway_toggle_utility", source)
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -29,6 +29,8 @@ assert module.classify(floating_remote, focused, ("maccel",), False) == ((20, 21
 tiled_here = {"type": "root", "nodes": [ws("1", nodes=[window("maccel", 31, tiled=True)])]}
 assert module.classify(tiled_here, focused, ("maccel",), False) == ((), True)
 assert module.classify(tiled_here, focused, ("maccel",), True) == ((), False)
+assert module.UTILITIES["btop"][2] is True
+assert module.UTILITIES["wiremix"][2] is True
 assert module.classify(tiled_here, focused, ("Wiremix",), False) == ((), True)
 assert "hyprmoncfg" not in module.UTILITIES
 assert module.UTILITIES["displays"][1][0] == "nwg-displays"
