@@ -3,7 +3,7 @@
 
 Reuse the maintained Sway layer-shell conversion, then substitute only the
 Umbriel compositor bridge. Hyprland and Sway source/config files are read-only.
-The shell is EXPERIMENTAL: compositor-specific operations need live verification.
+Compositor-specific operations require separate runtime validation.
 """
 import argparse
 import importlib.util
