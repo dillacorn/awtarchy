@@ -5,7 +5,7 @@ set -euo pipefail
     printf 'Umbriel session required\n' >&2
     false
 }
-script="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/floating-windows.py"
+script="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy/floating-windows.py"
 [[ -f "$script" && ! -L "$script" ]] || {
     printf 'Umbriel floating helper missing\n' >&2
     false
