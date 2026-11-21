@@ -52,6 +52,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
     assert loaded["colors"]["border"]["focused"] == "#2A55CCFF"
     assert loaded["colors"]["border"]["unfocused"] == "#3B3B3BFF"
     assert loaded["colors"]["background"] == "#111111FF"
+    assert loaded["colors"]["insert_hint"] == "#2A55CC80"
+    assert tomllib.loads(theme.render_toml(theme.palette(home, "catppuccin-frappé")).decode())["colors"]["insert_hint"] == "#AABBCC80"
+    # Preview follows the active theme, and preview alpha stays 50%.
     assert loaded["colors"]["text_primary"] == "#EEEEEEFF"
     assert theme.quickshell_palette(selected).decode().count("#424242") == 1
     theme.save_theme(home, "steel")
