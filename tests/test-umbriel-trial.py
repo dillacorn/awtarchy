@@ -74,8 +74,14 @@ for mod in ("Alt", "Super"):
     assert keybinds[mod + "+Ctrl+Down"] == "window-modify-height-down +0.03"
     assert keybinds[mod + "+Ctrl+Shift+Left"] == "workspace-move-to-output-left"
 assert keybinds["submap[noalt],Super+Ctrl+h"] == "window-modify-width-left -0.03"
+# Plain Escape belongs to the focused application, even within a submap.
+# Explicit mode chords remain usable in every mode.
+assert "Escape" not in keybinds
 for mode in ("noalt", "mouse", "vm"):
-    assert keybinds["submap[" + mode + "],Escape"].endswith("mode-control.py reset")
+    assert f"submap[{mode}],Escape" not in keybinds
+    for chord, target in (("N", "noalt"), ("M", "mouse"), ("V", "vm")):
+        binding = keybinds[f"submap[{mode}],Super+Alt+{chord}"]
+        assert binding.endswith(f"mode-control.py toggle {target}")
 assert 'boolean:transient:true' in (TRIAL / "mode-control.py").read_text()
 assert "submap: ON" in (TRIAL / "mode-control.py").read_text()
 assert config["general"]["autostart"] == [
