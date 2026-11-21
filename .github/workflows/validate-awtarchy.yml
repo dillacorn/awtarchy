@@ -119,6 +119,7 @@ jobs:
           bash -n tests/test-awtarchy-command.sh
           bash -n tests/test-installer-version-state-permissions.sh
           bash -n tests/test-installer-incomplete-recovery.sh
+          bash -n tests/test-installer-package-safety.sh
           bash -n tests/test-awtarchy-git-mode.sh
           bash -n tests/test-awtarchy-command-shim.sh
           bash -n tests/test-awtarchy-legacy-cleanup.sh
@@ -381,6 +382,7 @@ jobs:
           rm -rf -- "$no_sudo_bin"
           sudo bash tests/test-installer-version-state-permissions.sh
           bash tests/test-installer-incomplete-recovery.sh
+          bash tests/test-installer-package-safety.sh
           bash tests/test-awtarchy-git-mode.sh
           bash tests/test-awtarchy-command-shim.sh
           bash tests/test-awtarchy-legacy-cleanup.sh

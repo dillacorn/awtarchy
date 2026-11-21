@@ -227,6 +227,7 @@ legacy_dry_bin="${TMP}/legacy-dry-system-bin"
 mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_home/.config/hypr" "$legacy_dry_bin"
 : >"$legacy_dry_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\n' >"$legacy_dry_home/.cache/awtarchy/version"
+PATH="$existing_bin:$PATH" \
 HOME="$legacy_dry_home" \
 USER="$(id -un)" \
 AWTARCHY_SYSTEM_BIN_DIR="$legacy_dry_bin" \

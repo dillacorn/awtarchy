@@ -413,7 +413,7 @@ mkdir -p "$legacy_home/.cache/awtarchy" "$legacy_home/.config/hypr"
 printf 'tag=v0.8.0\nupdated_at=2000-01-01T00:00:00Z\n' \
   >"$legacy_home/.cache/awtarchy/version"
 legacy_output="$(
-  env "${common_test_env[@]}" HOME="$legacy_home" USER="$(id -un)" \
+  env "${common_test_env[@]}" "PATH=$installer_pacman_bin:$fakebin:$PATH" HOME="$legacy_home" USER="$(id -un)" \
     AWTARCHY_SYSTEM_BIN_DIR="${TMP}/legacy-system-bin" \
     AWTARCHY_INSTALL_TAG=v9.9.9 bash "$STABLE_INSTALLER"
 )"
@@ -435,7 +435,7 @@ mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_home/.config/hypr"
 : >"$legacy_dry_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\n' >"$legacy_dry_home/.cache/awtarchy/version"
 legacy_dry_output="$(
-  HOME="$legacy_dry_home" USER="$(id -un)" \
+  PATH="$installer_pacman_bin:$fakebin:$PATH" HOME="$legacy_dry_home" USER="$(id -un)" \
     bash "$STABLE_INSTALLER" --dry-run
 )"
 [[ ! -e "$legacy_dry_home/.local/bin/awtarchy" ]] \
