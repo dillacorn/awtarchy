@@ -35,6 +35,22 @@ for chord, method in (("Super+Alt+B", "rotateBarFocused"),
     assert keybinds[chord] == "spawn qs -c awtarchy-umbriel ipc call control " + method
     assert keybinds["submap[noalt]," + chord] == keybinds[chord]
 assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
+for key, direction in (("h", "left"), ("j", "down"),
+                       ("k", "up"), ("l", "right")):
+    for mod in ("Alt", "Super"):
+        assert keybinds[f"{mod}+{key}"] == "window-focus-" + direction
+        assert keybinds[f"{mod}+Shift+{key}"] == "window-move-" + direction
+    assert keybinds[f"submap[noalt],Super+{key}"] == "window-focus-" + direction
+    assert keybinds[f"submap[noalt],Super+Shift+{key}"] == "window-move-" + direction
+for chord in ("Alt+Space", "Alt+Ctrl+Space", "Alt+Shift+Space",
+              "Alt+Ctrl+Shift+Space", "Super+Space", "submap[noalt],Super+Space"):
+    assert keybinds[chord].endswith("ipc.sh notifications hideFirstPopup")
+for chord in ("Alt+Ctrl+Shift+BracketLeft", "Super+Ctrl+Shift+BracketLeft",
+              "submap[noalt],Super+Ctrl+Shift+BracketLeft"):
+    assert keybinds[chord] == "workspace-move-to-output-left"
+for chord in ("Alt+Ctrl+Shift+BracketRight", "Super+Ctrl+Shift+BracketRight",
+              "submap[noalt],Super+Ctrl+Shift+BracketRight"):
+    assert keybinds[chord] == "workspace-move-to-output-right"
 assert keybinds["Super+Ctrl+M"].endswith("toggle-utility.py displays")
 assert keybinds["Super+Shift+W"].endswith("awtwall.sh --random-current")
 assert keybinds["Super+Alt+W"].endswith("awtwall.sh --random-all-different")
