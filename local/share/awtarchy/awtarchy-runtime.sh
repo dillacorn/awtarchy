@@ -4211,6 +4211,26 @@ install_sway_session_stage() {
   fi
 }
 
+verify_installed_desktop_config_stage() {
+  # Optional config directories may be absent from an incomplete checkout,
+  # but the core desktop cannot be declared installed without these files.
+  local -a required=(
+    "${HOME_DIR}/.config/foot/foot.ini"
+    "${HOME_DIR}/.config/quickshell/awtarchy/shell.qml"
+  )
+  if compositor_has_hyprland; then
+    required+=("${HOME_DIR}/.config/hypr/hyprland.lua")
+  fi
+  if compositor_has_sway; then
+    required+=("${HOME_DIR}/.config/sway/awtarchy-trial/config")
+  fi
+
+  local file
+  for file in "${required[@]}"; do
+    [[ -f "$file" ]] || die "Required desktop configuration was not installed: $file"
+  done
+}
+
 copy_awtarchy_configs_stage() {
   log "Copying Awtarchy configuration files..."
   create_directory "${HOME_DIR}/.config"
@@ -4588,6 +4608,7 @@ run_install() {
   fi
   copy_awtarchy_configs_stage
   install_sway_session_stage
+  verify_installed_desktop_config_stage
   # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
   # The installer checkout may be root-owned; pass the trusted helper via stdin.
   local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"
