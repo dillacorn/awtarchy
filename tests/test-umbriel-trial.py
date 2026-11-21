@@ -152,6 +152,9 @@ diagnostic = (TRIAL / "diagnose-session.sh").read_text()
 assert "systemctl show ly.service --no-pager" in diagnostic
 assert "pacman -Qo --" in diagnostic
 assert "waylandsessions" in diagnostic
+assert 'umbriel config validate' in diagnostic
+assert "quickshell-umbriel.log" in diagnostic
+assert "OBSOLETE trial helper path detected" in diagnostic
 assert "awtarchy-umbriel" in (TRIAL / "render-quickshell.py").read_text()
 assert '"Install Umbriel"' in (ROOT / "local/bin/awtarchy").read_text()
 launcher = (ROOT / "local/bin/awtarchy").read_text()
