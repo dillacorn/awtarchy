@@ -112,7 +112,7 @@ def render(repo: Path, destination: Path):
                         # before the original Sway DragHandler crosses threshold.
                         # Animate content, not layer-shell margins: changing
                         # margins mid-grab can interrupt the Wayland gesture.
-                        guard = "    function beginSwayDrag() {\n"
+                        guard = "    function beginUmbrielDrag() {\n"
                         if text.count(guard) != 1:
                             raise ValueError("Umbriel bar drag function drift")
                         text = text.replace(guard, guard +
@@ -130,9 +130,9 @@ def render(repo: Path, destination: Path):
                                 "            acceptedModifiers: Qt.AltModifier\n"
                                 "            gesturePolicy: TapHandler.DragThreshold\n"
                                 "            onPressedChanged: {\n"
-                                "                if (pressed) bar.beginSwayDrag();\n"
+                                "                if (pressed) bar.beginUmbrielDrag();\n"
                                 "                else if (!swayBarDrag" + orient + ".active)\n"
-                                "                    bar.finishSwayDrag();\n"
+                                "                    bar.finishUmbrielDrag();\n"
                                 "            }\n"
                                 "        }\n\n"
                             )

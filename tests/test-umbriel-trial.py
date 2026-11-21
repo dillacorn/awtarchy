@@ -146,7 +146,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "awtarchy-umbriel-submap" in bar
     assert "id: umbrielBarPressHorizontal" in bar
     assert "id: umbrielBarPressVertical" in bar
-    assert "if (pressed) bar.beginSwayDrag();" in bar
+    assert "if (pressed) bar.beginUmbrielDrag();" in bar
     assert "opacity: bar.swayDragActive ? 0.84 : 1" in bar
     assert "scale: bar.swayDragActive ? 0.992 : 1" in bar
     assert "if (swayDragActive) return;" in bar
