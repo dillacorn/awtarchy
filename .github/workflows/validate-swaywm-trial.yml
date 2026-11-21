@@ -5,6 +5,7 @@ on:
     branches: [main, SwayWM_Migration_Trial_Investigation]
     paths:
       - ".github/workflows/validate-swaywm-trial.yml"
+      - ".github/workflows/publish-v4.3.1.yml"
       - ".github/scripts/validate-stable-release-notes.py"
       - "compositors/sway/**"
       - "tests/test-sway-*.py"
@@ -22,6 +23,7 @@ on:
     branches: [main]
     paths:
       - ".github/workflows/validate-swaywm-trial.yml"
+      - ".github/workflows/publish-v4.3.1.yml"
       - ".github/scripts/validate-stable-release-notes.py"
       - "compositors/sway/**"
       - "tests/test-sway-*.py"
