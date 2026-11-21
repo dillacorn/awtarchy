@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import fcntl
-import json
 import os
 from pathlib import Path
 import subprocess
@@ -79,17 +78,17 @@ def run(args):
         if previous != target:
             atomic_write(file, ON if target == "enabled" else OFF)
             try:
-                validate = subprocess.run(["umbriel", "config", "validate"],
-                                          capture_output=True, text=True,
-                                          timeout=12, check=True)
-                result = subprocess.run(["umbriel", "msg", "config-reload"],
-                                        capture_output=True, text=True,
-                                        timeout=12, check=True)
-                reply = json.loads(result.stdout)
-                if not isinstance(reply, dict) or "err" in reply or "ok" not in reply:
-                    raise ValueError("Umbriel refused floating rule reload")
+                subprocess.run(["umbriel", "config", "validate"],
+                               capture_output=True, text=True,
+                               timeout=12, check=True)
+                # Umbriel's CLI prints nothing for successful msg actions.
+                # The client already validates the IPC reply and exits nonzero
+                # if the compositor rejects the reload. Do not decode stdout.
+                subprocess.run(["umbriel", "msg", "config-reload"],
+                               capture_output=True, text=True,
+                               timeout=12, check=True)
             except (OSError, ValueError, subprocess.TimeoutExpired,
-                    subprocess.CalledProcessError, json.JSONDecodeError):
+                    subprocess.CalledProcessError):
                 atomic_write(file, ON if previous == "enabled" else OFF)
                 subprocess.run(["umbriel", "msg", "config-reload"],
                                capture_output=True, text=True, timeout=12)
@@ -104,6 +103,6 @@ if __name__ == "__main__":
     try:
         run(sys.argv[1:])
     except (OSError, ValueError, subprocess.CalledProcessError,
-            subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+            subprocess.TimeoutExpired) as error:
         print("Umbriel floating mode: " + str(error), file=sys.stderr)
         sys.exit(1)

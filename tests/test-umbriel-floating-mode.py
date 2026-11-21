@@ -2,6 +2,7 @@
 """Exercise Umbriel's persisted floating preference without compositor writes."""
 import importlib.util
 import os
+import subprocess
 from pathlib import Path
 import tempfile
 from types import SimpleNamespace
@@ -23,7 +24,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-floating-check-") as tmp:
     target.write_bytes(mod.OFF)
     env = {"XDG_CONFIG_HOME": str(cfg), "XDG_RUNTIME_DIR": str(runtime),
            "XDG_CURRENT_DESKTOP": "Umbriel", "WAYLAND_DISPLAY": "wayland-1"}
-    reply = SimpleNamespace(stdout='{"ok":null}', returncode=0)
+    # The CLI (without --json) reports a successful reload with no stdout.
+    # Prior code incorrectly tried json.loads("") and rolled back every time.
+    reply = SimpleNamespace(stdout="", returncode=0)
     with patch.dict(os.environ, env), \
          patch.object(mod.os, "geteuid", return_value=1000), \
          patch.object(mod.subprocess, "run", return_value=reply) as run:
@@ -37,6 +40,25 @@ with tempfile.TemporaryDirectory(prefix="umbriel-floating-check-") as tmp:
         mod.run(["set", "off"])
         assert target.read_bytes() == mod.OFF
         assert len(run.call_args_list) == 2
+        # A genuinely rejected reload must still restore the old file, and
+        # must not publish "enabled" into Quickshell's runtime state.
+        def reject_reload(argv, **kwargs):
+            if argv == ["umbriel", "msg", "config-reload"] and kwargs.get("check"):
+                raise subprocess.CalledProcessError(1, argv, stderr="reload refused")
+            return reply
+
+        with patch.object(mod.subprocess, "run", side_effect=reject_reload) as rejected:
+            try:
+                mod.run(["set", "on"])
+            except subprocess.CalledProcessError:
+                pass
+            else:
+                raise AssertionError("Rejected Umbriel reload was reported as success")
+            assert [args.args[0][1:] for args in rejected.call_args_list] == [
+                ["config", "validate"], ["msg", "config-reload"],
+                ["msg", "config-reload"]]
+        assert target.read_bytes() == mod.OFF
+        assert (runtime / "awtarchy-umbriel-floating-windows-state").read_text() == "disabled\n"
         # A personalized file is never silently rewritten.
         target.write_text("# personal floating policy\n")
         try:
