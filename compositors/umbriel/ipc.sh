@@ -11,7 +11,7 @@ case "$1:$2" in
     *) printf 'Unsupported Umbriel Quickshell call: %s/%s\n' "$1" "$2" >&2; false ;;
 esac
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"
-manager="$config_home/umbriel/awtarchy-trial/quickshell.sh"
+manager="$config_home/umbriel/awtarchy/quickshell.sh"
 [[ -f "$manager" && ! -L "$manager" ]] || {
     printf 'Missing Umbriel Quickshell manager\n' >&2; false;
 }
