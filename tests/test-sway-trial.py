@@ -117,6 +117,12 @@ assert "swaylock -f" not in CONFIG
 assert "Mod4+Control+l exec swaylock" not in CONFIG
 assert "swaylock" not in (TRIAL / "setup.sh").read_text()
 assert "nwg-displays" in (TRIAL / "setup.sh").read_text()
+assert "scheduler.sh" in (TRIAL / "setup.sh").read_text()
+assert "hypr_quicksettings_core.sh" in (TRIAL / "setup.sh").read_text()
+assert "hypr_quicksettings.sh" in (TRIAL / "sync.py").read_text()
+assert "SCHEDULER = TRIAL / \"scheduler.sh\"" in (TRIAL / "quicksettings.py").read_text()
+assert "scheduler_status()" in (TRIAL / "quicksettings.py").read_text()
+assert '--authorize-scheduler-stdin' in (TRIAL / "quicksettings.py").read_text()
 assert "tty-launch.sh" in (TRIAL / "setup.sh").read_text()
 assert "/usr/local/bin/awtarchy-sway-session" in (TRIAL / "tty-launch.sh").read_text()
 assert '/usr/bin/sway "$@"' in (TRIAL / "tty-launch.sh").read_text()
