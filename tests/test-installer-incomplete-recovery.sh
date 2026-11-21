@@ -177,7 +177,7 @@ for compositor in hyprland sway both; do
   core_calls=()
   fake_packages=()
   install_desktop_core_dependencies_stage || fail "Required desktop rejected: $compositor"
-  for pkg in quickshell qt6-multimedia qt6-multimedia-ffmpeg foot; do
+  for pkg in quickshell qt6-multimedia qt6-multimedia-ffmpeg foot upower; do
     [[ " ${core_calls[*]} " == *" $pkg "* ]] ||
       fail "Required $pkg was skipped for $compositor"
   done
@@ -185,7 +185,7 @@ for compositor in hyprland sway both; do
     [[ " ${core_calls[*]} " != *" hyprland "* ]] ||
       fail "Sway-only pulled in Hyprland"
   else
-    for pkg in hyprland hypridle hyprsunset xdg-desktop-portal-hyprland; do
+    for pkg in hyprland hypridle hyprsunset xdg-desktop-portal-hyprland polkit python-gobject; do
       [[ " ${core_calls[*]} " == *" $pkg "* ]] ||
         fail "Required $pkg was skipped for $compositor"
     done
