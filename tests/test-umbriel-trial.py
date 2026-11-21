@@ -56,6 +56,45 @@ assert keybinds["Super+Shift+W"].endswith("awtwall.sh --random-current")
 assert keybinds["Super+Alt+W"].endswith("awtwall.sh --random-all-different")
 assert keybinds["submap[noalt],Super+Ctrl+W"].endswith("awtwall.sh --random-all")
 assert keybinds["Super+Alt+M"].endswith("mode-control.py toggle mouse")
+# Explicit Hyprland bindings must remain callable from the corresponding
+# compositor modes. Retired Fuzzel must never shadow Quickshell launch.
+for mode in ("", "submap[noalt],"):
+    assert keybinds[mode + "Super+Shift+Space"].endswith(
+        "ipc.sh launcher toggle")
+    assert keybinds[mode + "Super+Alt+E"].endswith(
+        "ipc.sh control toggleLockscreenEditor")
+    for chord, argument in (("Super+Alt+Equal", "up 5"),
+                            ("Super+Alt+Minus", "down 5")):
+        assert keybinds[mode + chord].endswith(
+            "hypr-ddc-brightness.sh " + argument)
+assert keybinds["Alt+Shift+R"] == "layout-toggle-split"
+assert keybinds["Super+Shift+R"] == "layout-toggle-split"
+assert keybinds["submap[noalt],Super+Shift+R"] == "layout-toggle-split"
+assert keybinds["submap[vm],Super+Alt+Space"].endswith(
+    "ipc.sh notifications hideFirstPopup")
+noalt_aliases = {
+    "Alt+P": "ipc.sh launcher toggle",
+    "Alt+Shift+Return": "spawn foot",
+    "Alt+Shift+B": "toggle-utility.py btop",
+    "Alt+Shift+M": "toggle-utility.py maccel",
+    "Alt+Shift+C": "foot --app-id awtarchy-qalc qalc",
+    "Alt+V": "toggle-utility.py wiremix",
+    "Alt+Tab": "window-focus-next",
+    "Alt+Shift+Tab": "window-focus-previous",
+    "Alt+F4": "window-close",
+    "Alt+Space": "ipc.sh notifications hideFirstPopup",
+    "Alt+Ctrl+Space": "ipc.sh notifications hideFirstPopup",
+    "Alt+Shift+Space": "ipc.sh notifications hideFirstPopup",
+    "Alt+Ctrl+Shift+Space": "ipc.sh notifications hideFirstPopup",
+}
+for chord, expected in noalt_aliases.items():
+    assert keybinds["submap[noalt]," + chord].endswith(expected), chord
+assert not any("fuzzel" in action for action in keybinds.values())
+assert "fuzzel" not in (TRIAL / "manage.sh").read_text()
+assert "control:toggleLockscreenEditor" in (TRIAL / "ipc.sh").read_text()
+assert "toggleLockscreenEditor" in (
+    ROOT / "config/quickshell/awtarchy/shell.qml").read_text()
+
 routing = {w["match"].get("app_id"): w.get("default_workspace")
            for w in config["window_rule"]}
 assert any("firefox" in (rule or "") and target == "2" for rule, target in routing.items())
