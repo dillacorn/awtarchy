@@ -119,7 +119,7 @@ bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Control+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
-# Fuzzel remains available from the App Launcher and a dedicated fallback.
+# Super+Shift+Space is a Quickshell launcher alias; retired Fuzzel is not used.
 bindsym Mod4+Shift+space exec bash $trial/ipc.sh launcher toggle
 bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
