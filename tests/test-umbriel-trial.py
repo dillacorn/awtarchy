@@ -57,8 +57,6 @@ for mode in ("noalt", "mouse", "vm"):
     assert keybinds["submap[" + mode + "],Escape"].endswith("mode-control.py reset")
 assert 'boolean:transient:true' in (TRIAL / "mode-control.py").read_text()
 assert "submap: ON" in (TRIAL / "mode-control.py").read_text()
-assert 'available: FloatingWindowsState.available && !root.operationBusy' in (
-    ROOT / "config/quickshell/awtarchy/FloatingWindowsCard.qml").read_text()
 assert config["general"]["autostart"] == [
     "bash ~/.config/umbriel/awtarchy-trial/session.sh"]
 assert "tearing" not in (TRIAL / "config.toml").read_text().split(

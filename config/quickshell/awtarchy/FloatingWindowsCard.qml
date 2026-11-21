@@ -87,7 +87,7 @@ Rectangle {
                 label: root.floatingState === "enabled" ? "Restore tiling" : "Enable floating"
                 active: root.floatingState === "enabled"
                 textSize: root.scaledText(9)
-                available: FloatingWindowsState.available && !root.operationBusy
+                enabled: FloatingWindowsState.available && !root.operationBusy
                 onClicked: root.requestToggle()
             }
         }
