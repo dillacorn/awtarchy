@@ -2,9 +2,9 @@
 # The official umbriel.desktop / start-umbriel entry remains package-owned.
 [include]
 files = [
-  "awtarchy-trial/config.toml",
-  "awtarchy-trial/theme.toml",
-  "awtarchy-trial/migrated.toml",
-  "awtarchy-trial/capture-rules.toml",
-  "awtarchy-trial/floating-rules.toml",
+  "awtarchy/config.toml",
+  "awtarchy/theme.toml",
+  "awtarchy/migrated.toml",
+  "awtarchy/capture-rules.toml",
+  "awtarchy/floating-rules.toml",
 ]
