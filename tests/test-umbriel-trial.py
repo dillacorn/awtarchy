@@ -240,6 +240,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert 'visible: root.quickSettingsSectionVisible("submap")' in quick
     bridge = (rendered / "UmbrielBridge.qml").read_text()
     assert "workspace-events.py" in bridge and "SplitParser" in bridge
+    assert "/umbriel/awtarchy/workspace-events.py" in bridge
+    assert "/umbriel/awtarchy/toggle-utility.py" in bridge
+    assert "/umbriel/awtarchy-trial/" not in bridge
     assert "interval: 700" not in bridge
     guard = (rendered / "ScreenShareGuardCard.qml").read_text()
     assert "/umbriel/awtarchy/screenshare-guard.sh" in guard
