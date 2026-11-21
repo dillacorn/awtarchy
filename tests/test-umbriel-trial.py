@@ -79,7 +79,7 @@ for mode in ("noalt", "mouse", "vm"):
 assert 'boolean:transient:true' in (TRIAL / "mode-control.py").read_text()
 assert "submap: ON" in (TRIAL / "mode-control.py").read_text()
 assert config["general"]["autostart"] == [
-    "bash ~/.config/umbriel/awtarchy-trial/session.sh"]
+    "bash ~/.config/umbriel/awtarchy/session.sh"]
 assert "tearing" not in (TRIAL / "config.toml").read_text().split(
     "[general]", 1)[1].split("[layout]", 1)[0]
 assert "umbriel-git" in (TRIAL / "manage.sh").read_text()
@@ -180,9 +180,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "workspace-events.py" in bridge and "SplitParser" in bridge
     assert "interval: 700" not in bridge
     guard = (rendered / "ScreenShareGuardCard.qml").read_text()
-    assert "/umbriel/awtarchy-trial/screenshare-guard.sh" in guard
+    assert "/umbriel/awtarchy/screenshare-guard.sh" in guard
     floating = (rendered / "FloatingWindowsState.qml").read_text()
-    assert "/umbriel/awtarchy-trial/floating-windows.sh" in floating
+    assert "/umbriel/awtarchy/floating-windows.sh" in floating
     assert "awtarchy-umbriel-floating-windows-state" in floating
     assert "awtarchy-umbriel" in (rendered / "shell.qml").read_text()
     bar_labels = (rendered / "Bar.qml").read_text()
@@ -213,13 +213,13 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert not (home / ".config/umbriel").exists()
         sync.reconcile(ROOT, home, "apply")
         assert (home / ".config/umbriel/config.toml").exists()
-        awtwall_launcher = home / ".config/umbriel/awtarchy-trial/awtwall.sh"
+        awtwall_launcher = home / ".config/umbriel/awtarchy/awtwall.sh"
         assert awtwall_launcher.is_file()
         assert "/usr/bin/awtwall" in awtwall_launcher.read_text()
         assert 'bash "$awtwall_launcher" --restore' in (
-            home / ".config/umbriel/awtarchy-trial/session.sh").read_text()
+            home / ".config/umbriel/awtarchy/session.sh").read_text()
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
-        sound = home / ".config/umbriel/awtarchy-trial"
+        sound = home / ".config/umbriel/awtarchy"
         assert (sound / "screenshot_sound.sh").read_bytes() == (
             ROOT / "config/hypr/scripts/screenshot_sound.sh").read_bytes()
         assert (sound / "awtarchy-login.mp3").read_bytes() == (
@@ -252,15 +252,15 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
                                   "bar-position", "DP-1", "top"],
                                   env=env, capture_output=True, text=True, timeout=10)
         assert rejected.returncode != 0
-        helper = home / ".config/umbriel/awtarchy-trial/application-state.sh"
+        helper = home / ".config/umbriel/awtarchy/application-state.sh"
         assert helper.is_file()
         assert "quickshell-state.json" in helper.read_text()
-        assert "/umbriel/awtarchy-trial/quickshell.sh" in helper.read_text()
-        settings = home / ".config/umbriel/awtarchy-trial/quicksettings.py"
+        assert "/umbriel/awtarchy/quickshell.sh" in helper.read_text()
+        settings = home / ".config/umbriel/awtarchy/quicksettings.py"
         assert "mode-control.py" in settings.read_text()
         assert "toggle-utility.py" in settings.read_text()
         assert ".casefold() != \"umbriel\"" in settings.read_text()
-        wrapper = home / ".config/umbriel/awtarchy-trial/quicksettings.sh"
+        wrapper = home / ".config/umbriel/awtarchy/quicksettings.sh"
         assert '== umbriel' in wrapper.read_text()
         assert "${XDG_CURRENT_DESKTOP,,}" in wrapper.read_text()
         personal = home / ".config/quickshell/awtarchy-umbriel/Bar.qml"
@@ -276,7 +276,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         # Simulate an updated immutable release: preview must be read-only,
         # apply must back up the exact old managed file, and a customized
         # Quickshell component must remain untouched.
-        session = home / ".config/umbriel/awtarchy-trial/session.sh"
+        session = home / ".config/umbriel/awtarchy/session.sh"
         original_session = session.read_bytes()
         desired_original = sync.desired_files
 
