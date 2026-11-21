@@ -34,8 +34,10 @@ if [[ -f "$trial/mode-control.py" && ! -L "$trial/mode-control.py" ]]; then
     python3 "$trial/mode-control.py" sync || \
         printf 'Umbriel input mode state unavailable\n' >&2
 fi
+quickshell_started=0
 if [[ ! -L "$trial/quickshell.sh" && -f "$trial/quickshell.sh" ]]; then
     if bash "$trial/quickshell.sh" start; then
+        quickshell_started=1
         # Play once on initial session startup, never on a Quickshell reload.
         if [[ -f "$trial/login-sound.sh" && ! -L "$trial/login-sound.sh" ]]; then
             bash "$trial/login-sound.sh" >/dev/null 2>&1 &
@@ -58,3 +60,6 @@ if command -v awww-daemon >/dev/null; then
         bash "$awtwall_launcher" --restore >/dev/null 2>&1 &
     fi
 fi
+# Independent clipboard/wallpaper helpers can start even if the desktop shell
+# fails, but the session launcher must not report success without Quickshell.
+(( quickshell_started == 1 )) || false
