@@ -13,7 +13,7 @@ extract() {
   local func="$1" file="$2"
   sed -n "/^${func}() {/,/^}/p" "$file"
 }
-for func in installed_command_exists installed_desktop_ready legacy_install_exists; do
+for func in installed_command_exists installed_desktop_ready legacy_install_evidence_present legacy_install_exists; do
   eval "$(extract "$func" "$INSTALLER")"
 done
 for func in pacman_install_one install_arch_repo_apps_stage install_desktop_core_dependencies_stage verify_installed_desktop_config_stage compositor_has_hyprland compositor_has_sway; do
@@ -65,7 +65,17 @@ mkdir -p "$TARGET_HOME/.cache/awtarchy"
 if legacy_install_exists; then fail "Legacy marker without desktop was accepted"; fi
 mkdir -p "$TARGET_HOME/.config/hypr"
 : >"$TARGET_HOME/.config/hypr/hyprland.lua"
-legacy_install_exists || fail "Valid user-local legacy desktop was rejected"
+legacy_install_evidence_present || fail "Legacy marker with desktop configuration was not detected"
+if legacy_install_exists; then
+  fail "Partial legacy desktop without installed compositor was accepted"
+fi
+fake_packages=(hyprland)
+legacy_install_exists || fail "Installed Hyprland legacy desktop was rejected"
+fake_packages=(sway)
+if legacy_install_exists; then
+  fail "Sway package alone accepted a Hyprland-only legacy config"
+fi
+fake_packages=(hyprland)
 rm -f -- "$TARGET_HOME/.cache/awtarchy/version"
 
 mkdir -p "$TARGET_HOME/.local/bin" "$TARGET_HOME/.local/share/awtarchy"
@@ -96,6 +106,38 @@ if installed_desktop_ready; then fail "Missing Quickshell configuration accepted
 : >"$TARGET_HOME/.config/quickshell/awtarchy/shell.qml"
 rm -f -- "$TARGET_HOME/.local/state/awtarchy/config-version"
 if installed_desktop_ready; then fail "Missing configuration version accepted"; fi
+
+# A partial installation must fail before *any* user or privileged helper
+# installation. Exercise the installer entrypoint with a command-only home.
+installer_home="$TMP/incomplete-installer-home"
+mkdir -p "$installer_home/.local/bin" "$installer_home/.local/share/awtarchy"
+: >"$installer_home/.local/bin/awtarchy"
+chmod 0755 "$installer_home/.local/bin/awtarchy"
+: >"$installer_home/.local/share/awtarchy/awtarchy-runtime.sh"
+installer_bin="$TMP/no-installer-writes"
+if HOME="$installer_home" USER="$(id -un)" AWTARCHY_SYSTEM_BIN_DIR="$installer_bin" \
+  bash "$INSTALLER" >"$TMP/partial-install.log" 2>&1; then
+  fail "Installer accepted command-only partial desktop"
+fi
+grep -Fq 'desktop installation is incomplete' "$TMP/partial-install.log" ||
+  fail "Partial install rejection did not explain recovery"
+[[ ! -e "$installer_home/vpn" && ! -e "$installer_bin" ]] ||
+  fail "Partial-install rejection made changes before preflight"
+
+# A legacy version record and copied Hyprland configuration without the
+# compositor package must fail, not silently enter full installation.
+legacy_preflight_home="$TMP/partial-legacy-home"
+mkdir -p "$legacy_preflight_home/.cache/awtarchy" "$legacy_preflight_home/.config/hypr"
+: >"$legacy_preflight_home/.cache/awtarchy/version"
+: >"$legacy_preflight_home/.config/hypr/hyprland.lua"
+if HOME="$legacy_preflight_home" USER="$(id -un)" AWTARCHY_SYSTEM_BIN_DIR="$installer_bin" \
+  bash "$INSTALLER" >"$TMP/partial-legacy.log" 2>&1; then
+  fail "Installer accepted legacy desktop without compositor package"
+fi
+grep -Fq 'compositor package is missing' "$TMP/partial-legacy.log" ||
+  fail "Legacy preflight did not explain the missing package"
+[[ ! -e "$legacy_preflight_home/vpn" && ! -e "$installer_bin" ]] ||
+  fail "Legacy-install rejection made changes before preflight"
 
 # The old helper returned zero when pacman failed or a package stayed missing.
 mock_installed=0
