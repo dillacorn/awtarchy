@@ -134,6 +134,47 @@ Do not assume old Awtarchy architecture still exists. Inspect these current entr
 - Existing installed `awtarchy-trial` state directories remain supported
   until an explicit preservation-first migration is implemented and verified.
 
+### Mandatory compositor-parity integration contract
+
+Integrating a new compositor is a complete **Hyprland feature migration**,
+not merely a successful compositor/session startup. Perform this audit for
+every optional compositor when building, upgrading or debugging it:
+
+1. Read the **entire** `config/hypr/hyprland.lua`, including generated bind
+   loops, default/noalt/mouse/vm submaps, window rules, display preferences,
+   environment and autostart. Follow referenced utilities in
+   `config/hypr/scripts/` and enumerate all shortcuts and behaviors.
+2. Compare with the **effective** optional-compositor configuration, including
+   the native config and all later includes, especially generated imports.
+   Test duplicate chords after merging all layers and submaps. Never allow
+   migration to replace a working native helper with a generic command.
+3. Audit every shared Quickshell experience: bar position, rotate/flip,
+   autohide, Alt+drag, workspace navigation, utility toggles, launcher,
+   quick settings, flyout sizing and save, notifications, clipboard, network,
+   Bluetooth, themes, brightness, screen capture, screen sharing and lock.
+   Verify the keyboard shortcut **and** UI button for each action.
+4. Classify each behavior as **native parity**, **adapted parity**,
+   **upstream limitation**, or **not implemented**. Do not claim unsupported
+   operations work. Expose honest limitation text and preserve alternatives.
+5. Verify current upstream IPC and Wayland behavior, including success with
+   empty stdout, exact window identity, focus, placement, modifier grabs,
+   and layer-shell geometry. A spawned process is not evidence of a floating
+   window or a functioning toggle.
+6. Test final rendered QML, load/include precedence, shortcut aliases,
+   submaps, focused-monitor routing, launch/floating/closing lifecycle,
+   per-monitor persisted state and preservation of personalized files.
+   A test of one config source does not establish the effective runtime bind.
+7. Run relevant syntax, integration and CI tests against the exact target.
+   Clearly distinguish automated validation from real compositor runtime
+   checks with pointer gestures, monitor changes and gaming.
+8. Preserve other compositors and personal config; use the managed update
+   path, never an unapproved reset. Do not merge, release or publish without
+   express authorization.
+
+Maintain the inventory in `compositors/COMPOSITOR_PARITY.md`. Recheck it
+against the actual Hyprland source on every compositor change; do not make
+the user rediscover omitted functions or undocumented incompatibilities.
+
 ### Quickshell
 
 `config/quickshell/awtarchy/`

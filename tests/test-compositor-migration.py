@@ -120,6 +120,13 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     assert current["Super+Y"] == "window-toggle-pinned"
     assert current["Super+N"].endswith("notifications toggle")
     assert current["Alt+P"].endswith("launcher toggle")
+    assert current["Alt+Shift+B"] == "spawn foot btop"
+    assert current["Alt+V"] == "spawn foot wiremix"
+    imported, _ = module.migrate(home, "hyprland", connected)
+    overwritten = tomllib.loads(imported.decode()).get("keybinds", {})
+    for chord in ("Alt+Shift+B", "Super+Shift+B", "Alt+V", "Super+V",
+                  "Super+Alt+B", "Super+Ctrl+B", "Super+Alt+Ctrl+B"):
+        assert chord not in overwritten, (chord, overwritten)
 
     # Restore the explicit-display fixture for subsequent migration checks.
     hypr.write_text(

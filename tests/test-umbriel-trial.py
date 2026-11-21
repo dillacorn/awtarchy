@@ -29,6 +29,11 @@ assert keybinds["Super+F"] == "window-toggle-floating"
 assert keybinds["Super+Alt+A"].endswith("toggle-utility.py default-apps")
 assert keybinds["Alt+1"] == "workspace-switch --name 1"
 assert keybinds["Alt+Shift+B"].endswith("toggle-utility.py btop")
+for chord, method in (("Super+Alt+B", "rotateBarFocused"),
+                      ("Super+Ctrl+B", "flipBarFocused"),
+                      ("Super+Alt+Ctrl+B", "toggleBarAutoHideFocused")):
+    assert keybinds[chord] == "spawn qs -c awtarchy-umbriel ipc call control " + method
+    assert keybinds["submap[noalt]," + chord] == keybinds[chord]
 assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
 assert keybinds["Super+Ctrl+M"].endswith("toggle-utility.py displays")
 assert keybinds["Super+Shift+W"].endswith("awtwall.sh --random-current")

@@ -89,6 +89,10 @@ hover_raises = false
 numlock_toggle = true
 
 [keybinds]
+# Bar hotkeys dispatch to the same Quickshell state owner as Quick Settings.
+"Super+Alt+B" = "spawn qs -c awtarchy-umbriel ipc call control rotateBarFocused"
+"Super+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control flipBarFocused"
+"Super+Alt+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control toggleBarAutoHideFocused"
 "Super+Return" = "spawn foot"
 "Alt+Shift+Return" = "spawn foot"
 "Super+Shift+Return" = "spawn foot"
@@ -245,6 +249,9 @@ numlock_toggle = true
 "Super+Alt+M" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py toggle mouse"
 "Super+Alt+V" = "spawn python3 ~/.config/umbriel/awtarchy-trial/mode-control.py toggle vm"
 "Super+M" = "spawn wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle"
+"submap[noalt],Super+Alt+B" = "spawn qs -c awtarchy-umbriel ipc call control rotateBarFocused"
+"submap[noalt],Super+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control flipBarFocused"
+"submap[noalt],Super+Alt+Ctrl+B" = "spawn qs -c awtarchy-umbriel ipc call control toggleBarAutoHideFocused"
 "submap[noalt],Super+Return" = "spawn foot"
 "submap[noalt],Super+Shift+Return" = "spawn foot"
 "submap[noalt],Super+D" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh launcher toggle"

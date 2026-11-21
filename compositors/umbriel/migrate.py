@@ -571,6 +571,13 @@ def migrate(home: Path, source: str = "auto",
         for field, value in settings.items():
             lines.append(field + " = " + json.dumps(value, ensure_ascii=True))
         lines.append("")
+    # migrated.toml loads after the native Awtarchy config. Do not import
+    # source bindings at chords already owned by native Umbriel handlers:
+    # otherwise a generic 'foot btop' shadows the floating toggle helper.
+    defaults = tomllib.loads(Path(__file__).with_name("config.toml").read_text(encoding="utf-8"))
+    reserved = set(defaults["keybinds"])
+    bindings = {chord: action for chord, action in bindings.items()
+                if chord not in reserved}
     if bindings:
         lines.append("[keybinds]")
         for chord, command in sorted(bindings.items()):
