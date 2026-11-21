@@ -2683,6 +2683,9 @@ install_arch_repo_apps_stage() {
   # it with dependency checks disabled to install the optional PipeWire JACK
   # compatibility provider.
   if pacman -Qi jack2 >/dev/null 2>&1; then
+    if array_contains_exact pipewire-jack "${ARCH_SELECTED[@]}"; then
+      die "Selected pipewire-jack conflicts with installed jack2. Resolve the JACK provider manually; existing jack2 was preserved."
+    fi
     warn "Existing jack2 package preserved; skipping optional pipewire-jack."
   elif ! pacman_install_one pipewire-jack; then
     warn "Optional pipewire-jack installation failed; other desktop packages will continue."
