@@ -47,6 +47,7 @@ jobs:
           set -euo pipefail
           python3 tests/test-umbriel-trial.py
           python3 tests/test-umbriel-tty.py
+          python3 tests/test-umbriel-legacy-migration.py
           python3 tests/test-umbriel-workspace-events.py
           python3 tests/test-umbriel-utility-toggle.py
           python3 tests/test-umbriel-floating-mode.py
