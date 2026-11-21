@@ -15,6 +15,7 @@ on:
       - 'local/bin/awtarchy'
       - 'tests/test-umbriel-trial.py'
       - '.github/workflows/validate-umbriel-trial.yml'
+      - '.github/scripts/validate-stable-release-notes.py'
   workflow_dispatch:
 
 permissions:
