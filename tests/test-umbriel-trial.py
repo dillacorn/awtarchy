@@ -252,6 +252,9 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
                                   "bar-position", "DP-1", "top"],
                                   env=env, capture_output=True, text=True, timeout=10)
         assert rejected.returncode != 0
+        steam_helper = home / ".config/umbriel/awtarchy/steam-layout.sh"
+        assert steam_helper.read_bytes() == (TRIAL / "steam-layout.sh").read_bytes()
+        assert os.access(steam_helper, os.X_OK)
         helper = home / ".config/umbriel/awtarchy/application-state.sh"
         assert helper.is_file()
         assert "quickshell-state.json" in helper.read_text()

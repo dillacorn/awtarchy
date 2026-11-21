@@ -171,7 +171,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     for name in ("session.sh", "awtwall.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
                  "workspace-events.py", "capture.sh", "toggle-utility.py",
                  "mode-control.py", "animations.sh",
-                 "default-apps.sh", "workspace-nav.py",
+                 "default-apps.sh", "steam-layout.sh", "workspace-nav.py",
                  "screenshare-guard.sh", "screenshare-guard.py",
                  "floating-windows.sh", "floating-windows.py", "position.sh", "runtime-rules.sh", "theme-apply.sh", "theme-colors.py"):
         sources[target / name] = src / name
