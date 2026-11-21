@@ -2667,10 +2667,18 @@ install_desktop_core_dependencies_stage() {
 install_arch_repo_apps_stage() {
   (( INSTALL_ARCH == 1 )) || { warn "Skipping additional Arch repo applications; required desktop packages will still install."; return 0; }
 
-  # Do not demand multilib for unrelated packages. If a selected package
-  # actually requires that repository, pacman will report the unavailable
-  # target and the selected-package loop will fail with its name.
-  #
+  # Require multilib only for explicitly selected multilib packages.
+  # Unrelated desktop packages must not be blocked on minimal Arch installs.
+  # The existing helper checks pacman's *effective* repository configuration.
+  local selected_package
+  for selected_package in "${ARCH_SELECTED[@]}"; do
+    case "$selected_package" in
+      lib32-*|steam)
+        multilib_enabled || die "Selected package $selected_package requires the enabled multilib repository."
+        ;;
+    esac
+  done
+
   # jack2 may be in use by applications outside Awtarchy. Never force-remove
   # it with dependency checks disabled to install the optional PipeWire JACK
   # compatibility provider.
