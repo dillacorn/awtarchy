@@ -67,13 +67,34 @@ assert all(not chord.startswith("Mod+") and
            ",Mod+" not in chord for chord in keybinds)
 assert config["input"]["mouse"]["accel_profile"] == "flat"
 assert config["input"]["focus"] == {"follows_mouse": "sloppy", "hover_raises": False}
+# Keep resize keys axis-based, not edge-based: both opposite directions
+# must have inverse effects on the focused tile/floating window. Umbriel's
+# documented primary/secondary extents map to width/height in Dwindle.
+resize_actions = {
+    "Left": "window-modify-primary-extent -0.03",
+    "Right": "window-modify-primary-extent +0.03",
+    "Up": "window-modify-secondary-extent -0.03",
+    "Down": "window-modify-secondary-extent +0.03",
+    "h": "window-modify-primary-extent -0.03",
+    "l": "window-modify-primary-extent +0.03",
+    "k": "window-modify-secondary-extent -0.03",
+    "j": "window-modify-secondary-extent +0.03",
+}
 for mod in ("Alt", "Super"):
-    assert keybinds[mod + "+Ctrl+Left"] == "window-modify-width-left -0.03"
-    assert keybinds[mod + "+Ctrl+Right"] == "window-modify-width-right +0.03"
-    assert keybinds[mod + "+Ctrl+Up"] == "window-modify-height-up -0.03"
-    assert keybinds[mod + "+Ctrl+Down"] == "window-modify-height-down +0.03"
-    assert keybinds[mod + "+Ctrl+Shift+Left"] == "workspace-move-to-output-left"
-assert keybinds["submap[noalt],Super+Ctrl+h"] == "window-modify-width-left -0.03"
+    for key, action in resize_actions.items():
+        assert keybinds[f"{mod}+Ctrl+{key}"] == action
+    for direction in ("Left", "Right", "Up", "Down"):
+        assert keybinds[mod + "+Ctrl+Shift+" + direction] == (
+            "workspace-move-to-output-" + direction.lower())
+for key, action in resize_actions.items():
+    assert keybinds[f"submap[noalt],Super+Ctrl+{key}"] == action
+for key, action in {
+    "Y": resize_actions["Left"], "O": resize_actions["Right"],
+    "U": resize_actions["Up"], "I": resize_actions["Down"]
+}.items():
+    assert keybinds[f"Alt+{key}"] == action
+assert not any(action.startswith(("window-modify-width-", "window-modify-height-"))
+               for action in keybinds.values())
 # Plain Escape belongs to the focused application, even within a submap.
 # Explicit mode chords remain usable in every mode.
 assert "Escape" not in keybinds
