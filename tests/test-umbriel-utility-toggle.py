@@ -3,6 +3,8 @@
 import importlib.util
 import os
 from pathlib import Path
+import subprocess
+from types import SimpleNamespace
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,10 +82,50 @@ with patch.object(mod, "query", side_effect=[
          [window("created", floating=True)]]), \
      patch.object(mod.subprocess, "run") as ipc, \
      patch.object(mod.time, "sleep") as delay:
-    ipc.return_value.stdout = '{"ok":null}'
+    # Upstream Umbriel prints *nothing* when an action succeeds.
+    ipc.return_value = SimpleNamespace(stdout="", returncode=0)
     mod.ensure_new_floating([], ("btop",))
+    ipc.assert_called_once()
     assert ipc.call_args.args[0] == [
         "umbriel", "msg", "window-toggle-floating", "created"]
+    assert ipc.call_args.kwargs["check"] is True
     assert delay.call_count == 1
+
+# A new window that already floats needs no toggle.
+with patch.object(mod, "query", return_value=[window("new", floating=True)]), \
+     patch.object(mod.subprocess, "run") as ipc, \
+     patch.object(mod.time, "sleep") as delay:
+    mod.ensure_new_floating([], ("btop",))
+    ipc.assert_not_called()
+    delay.assert_not_called()
+
+# Do not change an existing tiled window even when its app ID matches.
+with patch.object(mod, "query", return_value=[window("old", floating=False)]), \
+     patch.object(mod.subprocess, "run") as ipc, \
+     patch.object(mod.time, "sleep") as delay:
+    try:
+        mod.ensure_new_floating([window("old", floating=False)], ("btop",))
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Unexpected conversion of an existing tiled window")
+    ipc.assert_not_called()
+    assert delay.call_count == 60
+
+# An actual action failure is never reported as a successful float.
+def rejected_action(argv, **kwargs):
+    raise subprocess.CalledProcessError(1, argv, stderr="no such window")
+
+with patch.object(mod, "query", return_value=[window("new", floating=False)]), \
+     patch.object(mod.subprocess, "run", side_effect=rejected_action) as ipc, \
+     patch.object(mod.time, "sleep") as delay:
+    try:
+        mod.ensure_new_floating([], ("btop",))
+    except subprocess.CalledProcessError:
+        pass
+    else:
+        raise AssertionError("Rejected Umbriel action reported as success")
+    ipc.assert_called_once()
+    delay.assert_not_called()
 
 print("PASS: Umbriel exact utility toggles, newly floated utility verification, and tiled preservation")

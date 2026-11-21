@@ -71,12 +71,12 @@ def ensure_new_floating(previous: list, identities: tuple) -> None:
             if window.get("floating") is True:
                 return
             if window_id not in converted:
-                reply = subprocess.run(
+                # The CLI verifies the compositor's IPC response and exits
+                # nonzero on rejection. Successful msg actions have no stdout,
+                # so JSON decoding here would always interrupt the toggle.
+                subprocess.run(
                     ["umbriel", "msg", "window-toggle-floating", window_id],
                     check=True, capture_output=True, text=True, timeout=6)
-                data = json.loads(reply.stdout)
-                if not isinstance(data, dict) or "err" in data or "ok" not in data:
-                    raise RuntimeError("Umbriel refused floating for utility " + window_id)
                 converted.add(window_id)
         time.sleep(0.1)
     raise RuntimeError("The launched utility did not report a floating window")
