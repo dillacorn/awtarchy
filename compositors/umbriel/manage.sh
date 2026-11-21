@@ -141,6 +141,11 @@ trap 'rm -rf -- "$check"' EXIT
 mkdir -p "$check/umbriel/awtarchy"
 cp -- "$repo/compositors/umbriel/native-config.toml" "$check/umbriel/config.toml"
 cp -- "$repo/compositors/umbriel/config.toml" "$check/umbriel/awtarchy/config.toml"
+# Validate all included TOML paths, not just the main config. Other source
+# profiles are tested by sync.py; these stubs only let native parsing proceed.
+for include in theme.toml migrated.toml capture-rules.toml floating-rules.toml; do
+    : >"$check/umbriel/awtarchy/$include"
+done
 if ! XDG_CONFIG_HOME="$check" umbriel config validate; then
     printf 'Umbriel rejected the managed config. No user config applied.\n' >&2
     false
