@@ -240,12 +240,13 @@ pacman_install_one() {
       printf 'ERROR: Package is still missing after installation: %s\n' "$package" >&2
       return 1
     fi
-    install -d -m 0755 /var/lib/awtarchy
-      touch /var/lib/awtarchy/managed-packages
-      grep -Fxq "$package" /var/lib/awtarchy/managed-packages \
-        || printf '%s\n' "$package" >>/var/lib/awtarchy/managed-packages
-      LC_ALL=C sort -u -o /var/lib/awtarchy/managed-packages /var/lib/awtarchy/managed-packages
-      chmod 0644 /var/lib/awtarchy/managed-packages
+    install -d -m 0755 /var/lib/awtarchy || return 1
+    touch /var/lib/awtarchy/managed-packages || return 1
+    if ! grep -Fxq "$package" /var/lib/awtarchy/managed-packages; then
+      printf '%s\n' "$package" >>/var/lib/awtarchy/managed-packages || return 1
+    fi
+    LC_ALL=C sort -u -o /var/lib/awtarchy/managed-packages /var/lib/awtarchy/managed-packages || return 1
+    chmod 0644 /var/lib/awtarchy/managed-packages || return 1
   else
     printf '%s\n' "${COLOR_YELLOW}${package} already installed. Skipping...${COLOR_RESET}"
   fi
