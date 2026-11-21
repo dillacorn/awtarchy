@@ -166,6 +166,10 @@ fakebin="${TMPD}/fakebin"
 mkdir -p \
   "$installer_home/.local/bin" \
   "$installer_home/.local/share/awtarchy" \
+  "$installer_home/.local/state/awtarchy" \
+  "$installer_home/.config/foot" \
+  "$installer_home/.config/quickshell/awtarchy" \
+  "$installer_home/.config/hypr" \
   "$system_root/etc/sudoers.d" \
   "$fakebin"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 0' >"$installer_home/.local/bin/awtarchy"
@@ -174,6 +178,12 @@ printf '%s\n' '#!/usr/bin/env bash' 'exit 0' \
 chmod 0755 \
   "$installer_home/.local/bin/awtarchy" \
   "$installer_home/.local/share/awtarchy/awtarchy-runtime.sh"
+# This tests system helper migration on an already installed desktop, not
+# recovery from an incomplete first install.
+: >"$installer_home/.local/state/awtarchy/config-version"
+: >"$installer_home/.config/foot/foot.ini"
+: >"$installer_home/.config/quickshell/awtarchy/shell.qml"
+: >"$installer_home/.config/hypr/hyprland.lua"
 printf '%s\n' \
   'awtarchytest ALL=(root) NOPASSWD: /home/awtarchytest/.config/hypr/scripts/usb_refresh_fixer.sh' \
   >"$system_root/etc/sudoers.d/usb_refresh_fixer-awtarchytest"
@@ -223,13 +233,21 @@ grep -Fq '/usr/local/libexec/awtarchy/usb-refresh-fixer refresh-all' "$2"
 ! grep -Fq '/usr/local/libexec/awtarchy/usb-refresh-fixer map' "$2"
 ! grep -Fxq 'awtarchytest ALL=(root) NOPASSWD: /usr/local/libexec/awtarchy/usb-refresh-fixer' "$2"
 EOF_VISUDO
+cat >"$fakebin/pacman" <<'EOF_PACMAN'
+#!/usr/bin/env bash
+[[ "${1:-}" == -Qq ]] || exit 1
+shift
+for pkg in "$@"; do
+  case "$pkg" in foot|quickshell|hyprland) ;; *) exit 1 ;; esac
+done
+EOF_PACMAN
 cat >"$fakebin/chown" <<'EOF_CHOWN'
 #!/usr/bin/env bash
 # The fixture's synthetic user has no host passwd entry. User-home writes are
 # already exercised through the runuser shim; retain real root ownership here.
 exit 0
 EOF_CHOWN
-chmod 0755 "$fakebin/getent" "$fakebin/git" "$fakebin/runuser" "$fakebin/visudo" "$fakebin/chown"
+chmod 0755 "$fakebin/getent" "$fakebin/git" "$fakebin/runuser" "$fakebin/visudo" "$fakebin/chown" "$fakebin/pacman"
 
 # Redirect intentionally remains owned by the invoking test user.
 # shellcheck disable=SC2024

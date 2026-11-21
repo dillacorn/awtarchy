@@ -48,8 +48,9 @@ if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
 fi
 require "$RUNTIME" 'if (rel.startswith(".config/alacritty/")'
 require "$RUNTIME" 'or rel.startswith(".local/share/SpeedCrunch/")) and ni is None:'
-require "$RUNTIME" 'if ! pacman -Qq foot >/dev/null 2>&1; then'
-require "$RUNTIME" 'pacman_install_one foot'
+require "$RUNTIME" 'local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot)'
+require "$RUNTIME" 'install_desktop_core_dependencies_stage'
+require "$RUNTIME" 'pacman_install_one "$package" || die "Required desktop package failed: $package"'
 require "$CONFIG" 'alpha=0.85'
 require "$ROOT/config/hypr/scripts/quickshell_theme_apply.sh" 'FOOT_CONF="$CONFIG_HOME/foot/foot.ini"'
 require "$ROOT/config/hypr/scripts/quickshell_theme_catalog.sh" '"foot": path.name,'

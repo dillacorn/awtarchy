@@ -62,9 +62,9 @@ The dry-run path shows the installer questionnaire and planned work without appl
 
 ## Running the installer again
 
-On an existing Awtarchy installation, running the installer normally repairs/refreshes the installed maintenance command and runtime without intentionally performing a full reinstall or replacing release-managed configuration.
+On an existing **complete** Awtarchy installation, running the installer normally repairs/refreshes the installed maintenance command and runtime without intentionally performing a full reinstall or replacing release-managed configuration. If the command exists but the desktop is incomplete, the installer reports an error rather than claiming the desktop was successfully installed. It does not silently overwrite partially installed or personalized configuration.
 
-Use the full reinstall path only when that is actually intended:
+The selected compositor, Quickshell and Foot are mandatory desktop dependencies even when additional Arch repository packages are unchecked. A failed required or selected Arch package install, or missing required managed desktop configuration, stops the installer instead of reporting success. If a prior install was interrupted, use the full reinstall path only when that is actually intended:
 
 ```bash
 sudo ./awtarchy-install.sh --reinstall

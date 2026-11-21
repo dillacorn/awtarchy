@@ -56,6 +56,10 @@ existing_bin="${TMP}/existing-system-bin"
 mkdir -p \
   "$existing_home/.local/bin" \
   "$existing_home/.local/share/awtarchy" \
+  "$existing_home/.local/state/awtarchy" \
+  "$existing_home/.config/foot" \
+  "$existing_home/.config/quickshell/awtarchy" \
+  "$existing_home/.config/hypr" \
   "$existing_bin"
 cp -- "$repo/local/bin/awtarchy" "$existing_home/.local/bin/awtarchy"
 cp -- "$repo/local/share/awtarchy/awtarchy-runtime.sh" \
@@ -63,8 +67,23 @@ cp -- "$repo/local/share/awtarchy/awtarchy-runtime.sh" \
 chmod 0755 \
   "$existing_home/.local/bin/awtarchy" \
   "$existing_home/.local/share/awtarchy/awtarchy-runtime.sh"
+# This fixture is a genuinely completed desktop, not merely a launcher.
+: >"$existing_home/.local/state/awtarchy/config-version"
+: >"$existing_home/.config/foot/foot.ini"
+: >"$existing_home/.config/quickshell/awtarchy/shell.qml"
+: >"$existing_home/.config/hypr/hyprland.lua"
+cat >"$existing_bin/pacman" <<'EOF_PACKAGES'
+#!/usr/bin/env bash
+[[ "${1:-}" == -Qq ]] || exit 1
+shift
+for pkg in "$@"; do
+  case "$pkg" in foot|quickshell|hyprland) ;; *) exit 1 ;; esac
+done
+EOF_PACKAGES
+chmod 0755 "$existing_bin/pacman"
 
 existing_output="$(
+  PATH="$existing_bin:$PATH" \
   HOME="$existing_home" \
   USER="$(id -un)" \
   AWTARCHY_SYSTEM_BIN_DIR="$existing_bin" \
@@ -176,6 +195,7 @@ grep -Fq 'Awtarchy local launcher reached: version' <<<"$shim_output" \
   || fail 'system shim did not dispatch a non-root call to the user-local command'
 
 shim_hash_before="$(sha256sum "$existing_bin/awtarchy" | awk '{print $1}')"
+PATH="$existing_bin:$PATH" \
 HOME="$existing_home" \
 USER="$(id -un)" \
 AWTARCHY_SYSTEM_BIN_DIR="$existing_bin" \
@@ -190,6 +210,7 @@ printf '%s\n' '#!/usr/bin/env bash' 'exit 42' >"$conflict_bin/awtarchy"
 chmod 0755 "$conflict_bin/awtarchy"
 conflict_hash_before="$(sha256sum "$conflict_bin/awtarchy" | awk '{print $1}')"
 conflict_output="$(
+  PATH="$existing_bin:$PATH" \
   HOME="$existing_home" \
   USER="$(id -un)" \
   AWTARCHY_SYSTEM_BIN_DIR="$conflict_bin" \
@@ -203,7 +224,8 @@ grep -Fq 'Refusing to replace an existing non-Awtarchy command' <<<"$conflict_ou
 
 legacy_dry_home="${TMP}/legacy-dry-home"
 legacy_dry_bin="${TMP}/legacy-dry-system-bin"
-mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_bin"
+mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_home/.config/hypr" "$legacy_dry_bin"
+: >"$legacy_dry_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\n' >"$legacy_dry_home/.cache/awtarchy/version"
 HOME="$legacy_dry_home" \
 USER="$(id -un)" \

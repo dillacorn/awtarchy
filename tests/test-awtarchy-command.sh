@@ -300,6 +300,20 @@ common_test_env=(
   "AWTARCHY_TEST_RELEASE_ARCHIVE=${TMP}/release.tar.gz"
 )
 
+# Only these installer maintenance-mode tests model a completed desktop.
+# Other updater cases retain their original fake command/runtime state.
+installer_pacman_bin="${TMP}/installer-pacman-bin"
+mkdir -p "$installer_pacman_bin"
+cat >"$installer_pacman_bin/pacman" <<'EOF_INSTALLER_PACMAN'
+#!/usr/bin/env bash
+[[ "${1:-}" == -Qq ]] || exit 1
+shift
+for pkg in "$@"; do
+  case "$pkg" in foot|quickshell|hyprland) ;; *) exit 1 ;; esac
+done
+EOF_INSTALLER_PACMAN
+chmod 0755 "$installer_pacman_bin/pacman"
+
 home="${TMP}/home"
 mkdir -p "$home/.local/bin" "$home/.local/share/awtarchy" "$home/.local/state/awtarchy"
 cp "$LAUNCHER_SOURCE" "$home/.local/bin/awtarchy"
@@ -307,6 +321,10 @@ cp "$RUNTIME_SOURCE" "$home/.local/share/awtarchy/awtarchy-runtime.sh"
 chmod 0755 "$home/.local/bin/awtarchy" "$home/.local/share/awtarchy/awtarchy-runtime.sh"
 printf 'tag=v0.0.0\nupdated_at=2000-01-01T00:00:00Z\n' >"$home/.local/state/awtarchy/command-version"
 printf 'tag=v0.0.1\nupdated_at=2000-01-01T00:00:00Z\n' >"$home/.local/state/awtarchy/config-version"
+mkdir -p "$home/.config/foot" "$home/.config/quickshell/awtarchy" "$home/.config/hypr"
+: >"$home/.config/foot/foot.ini"
+: >"$home/.config/quickshell/awtarchy/shell.qml"
+: >"$home/.config/hypr/hyprland.lua"
 
 version_output="$(
   env "${common_test_env[@]}" HOME="$home" USER="$(id -un)" \
@@ -366,7 +384,7 @@ printf 'tag=v0.0.0\nupdated_at=2000-01-01T00:00:00Z\n' \
   >"$home/.local/state/awtarchy/command-version"
 
 existing_output="$(
-  env "${common_test_env[@]}" HOME="$home" USER="$(id -un)" \
+  env "${common_test_env[@]}" "PATH=$installer_pacman_bin:$fakebin:$PATH" HOME="$home" USER="$(id -un)" \
     AWTARCHY_SYSTEM_BIN_DIR="${TMP}/existing-system-bin" \
     bash "$STABLE_INSTALLER"
 )"
@@ -390,7 +408,8 @@ grep -Fxq 'tag=v0.0.1' "$home/.local/state/awtarchy/config-version" \
   || fail "command refresh changed the installed config release"
 
 legacy_home="${TMP}/legacy-home"
-mkdir -p "$legacy_home/.cache/awtarchy"
+mkdir -p "$legacy_home/.cache/awtarchy" "$legacy_home/.config/hypr"
+: >"$legacy_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\nupdated_at=2000-01-01T00:00:00Z\n' \
   >"$legacy_home/.cache/awtarchy/version"
 legacy_output="$(
@@ -408,11 +427,12 @@ grep -Fxq 'tag=v0.8.0' "$legacy_home/.local/state/awtarchy/config-version" \
   || fail "legacy migration did not preserve the prior config release"
 grep -Fq 'No packages or managed configs were changed' <<<"$legacy_output" \
   || fail "legacy migration did not explain its safe scope"
-[[ ! -d "$legacy_home/.config" ]] \
-  || fail "legacy migration unexpectedly created managed config files"
+[[ -f "$legacy_home/.config/hypr/hyprland.lua" && ! -e "$legacy_home/.config/foot/foot.ini" ]] \
+  || fail "legacy migration modified existing desktop config or installed new managed files"
 
 legacy_dry_home="${TMP}/legacy-dry-home"
-mkdir -p "$legacy_dry_home/.cache/awtarchy"
+mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_home/.config/hypr"
+: >"$legacy_dry_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\n' >"$legacy_dry_home/.cache/awtarchy/version"
 legacy_dry_output="$(
   HOME="$legacy_dry_home" USER="$(id -un)" \
@@ -448,11 +468,16 @@ chmod 0755 \
   "$branch_home/.local/share/awtarchy/awtarchy-runtime.sh"
 printf 'tag=v2.0.0-1\nupdated_at=2000-01-01T00:00:00Z\n' \
   >"$branch_home/.local/state/awtarchy/config-version"
+mkdir -p "$branch_home/.config/foot" "$branch_home/.config/quickshell/awtarchy" "$branch_home/.config/hypr"
+: >"$branch_home/.config/foot/foot.ini"
+: >"$branch_home/.config/quickshell/awtarchy/shell.qml"
+: >"$branch_home/.config/hypr/hyprland.lua"
 branch_curl_log="${TMP}/branch-curl.log"
 : >"$branch_curl_log"
 branch_output="$(
   env \
     "${common_test_env[@]}" \
+    "PATH=$installer_pacman_bin:$fakebin:$PATH" \
     "HOME=$branch_home" \
     "USER=$(id -un)" \
     "LOGNAME=$(id -un)" \

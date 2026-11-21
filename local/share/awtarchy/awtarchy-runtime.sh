@@ -232,18 +232,25 @@ pacman_install_one() {
 
   if (( was_installed == 0 )); then
     printf '%s\n' "${COLOR_CYAN}Installing ${package}...${COLOR_RESET}"
-    pacman -S --needed --noconfirm "$package"
-    if pacman -Qi "$package" >/dev/null 2>&1; then
-      install -d -m 0755 /var/lib/awtarchy
-      touch /var/lib/awtarchy/managed-packages
-      grep -Fxq "$package" /var/lib/awtarchy/managed-packages \
-        || printf '%s\n' "$package" >>/var/lib/awtarchy/managed-packages
-      LC_ALL=C sort -u -o /var/lib/awtarchy/managed-packages /var/lib/awtarchy/managed-packages
-      chmod 0644 /var/lib/awtarchy/managed-packages
+    if ! pacman -S --needed --noconfirm "$package"; then
+      printf 'ERROR: Package installation failed: %s\n' "$package" >&2
+      return 1
     fi
+    if ! pacman -Qi "$package" >/dev/null 2>&1; then
+      printf 'ERROR: Package is still missing after installation: %s\n' "$package" >&2
+      return 1
+    fi
+    install -d -m 0755 /var/lib/awtarchy || return 1
+    touch /var/lib/awtarchy/managed-packages || return 1
+    if ! grep -Fxq "$package" /var/lib/awtarchy/managed-packages; then
+      printf '%s\n' "$package" >>/var/lib/awtarchy/managed-packages || return 1
+    fi
+    LC_ALL=C sort -u -o /var/lib/awtarchy/managed-packages /var/lib/awtarchy/managed-packages || return 1
+    chmod 0644 /var/lib/awtarchy/managed-packages || return 1
   else
     printf '%s\n' "${COLOR_YELLOW}${package} already installed. Skipping...${COLOR_RESET}"
   fi
+  return 0
 }
 
 array_contains_exact() {
@@ -2276,7 +2283,8 @@ print_install_review() {
   printf '  - Check disk space and install bootstrap packages\n'
   if compositor_has_sway; then printf '  - Install Sway from official Arch packages\n'; fi
   printf '  - Clone/update ~/awtarchy if missing\n'
-  if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip Arch repo packages\n'; fi
+  if (( INSTALL_ARCH == 1 )); then printf '  - Install selected Arch repo packages\n'; else printf '  - Skip additional Arch repo packages\n'; fi
+  printf '  - Always ensure the selected compositor, Quickshell and Foot\n'
   printf '  - Install required AUR feature dependencies\n'
   if (( INSTALL_AUR == 1 )); then printf '  - Install selected additional AUR packages\n'; else printf '  - Skip additional AUR packages\n'; fi
   if (( INSTALL_FLATPAK == 1 )); then printf '  - Install selected Flatpak apps\n'; else printf '  - Skip Flatpak apps\n'; fi
@@ -2635,8 +2643,27 @@ install_sway_repo_dependencies_stage() {
   done
 }
 
+install_desktop_core_dependencies_stage() {
+  # The chosen compositor, Quickshell and Foot are required even when the
+  # additional Arch package section is unchecked. Fail before deploying
+  # desktop configuration if any required dependency is unavailable.
+  local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot)
+  if compositor_has_hyprland; then
+    required+=(hyprland hypridle hyprsunset xdg-desktop-portal-hyprland)
+  fi
+
+  local package
+  for package in "${required[@]}"; do
+    pacman_install_one "$package" || die "Required desktop package failed: $package"
+  done
+  for package in "${required[@]}"; do
+    pacman -Qq "$package" >/dev/null 2>&1 ||
+      die "Required desktop package is still missing: $package"
+  done
+}
+
 install_arch_repo_apps_stage() {
-  (( INSTALL_ARCH == 1 )) || { warn "Skipping Arch repo application install."; return 0; }
+  (( INSTALL_ARCH == 1 )) || { warn "Skipping additional Arch repo applications; required desktop packages will still install."; return 0; }
 
   if ! command -v pacman-conf >/dev/null 2>&1 || ! pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib; then
     die "Multilib repository is not enabled in effective pacman configuration. Enable it, then rerun."
@@ -2665,7 +2692,7 @@ install_arch_repo_apps_stage() {
       (( ${#group_selected[@]} )) || continue
       printf '\n%s\n' "${COLOR_CYAN}Installing ${group_name}...${COLOR_RESET}"
       for pkg in "${group_selected[@]}"; do
-        pacman_install_one "$pkg" || warn "Continuing despite failure: $pkg"
+        pacman_install_one "$pkg" || die "Selected Arch repository package failed: $pkg"
       done
     done
 
@@ -2680,7 +2707,7 @@ install_arch_repo_apps_stage() {
         done < <(split_pkg_words "$packages")
       done
       (( found == 1 )) && continue
-      pacman_install_one "$pkg" || warn "Continuing despite failure: $pkg"
+      pacman_install_one "$pkg" || die "Selected Arch repository package failed: $pkg"
     done
   fi
 
@@ -4184,6 +4211,26 @@ install_sway_session_stage() {
   fi
 }
 
+verify_installed_desktop_config_stage() {
+  # Optional config directories may be absent from an incomplete checkout,
+  # but the core desktop cannot be declared installed without these files.
+  local -a required=(
+    "${HOME_DIR}/.config/foot/foot.ini"
+    "${HOME_DIR}/.config/quickshell/awtarchy/shell.qml"
+  )
+  if compositor_has_hyprland; then
+    required+=("${HOME_DIR}/.config/hypr/hyprland.lua")
+  fi
+  if compositor_has_sway; then
+    required+=("${HOME_DIR}/.config/sway/awtarchy-trial/config")
+  fi
+
+  local file
+  for file in "${required[@]}"; do
+    [[ -f "$file" ]] || die "Required desktop configuration was not installed: $file"
+  done
+}
+
 copy_awtarchy_configs_stage() {
   log "Copying Awtarchy configuration files..."
   create_directory "${HOME_DIR}/.config"
@@ -4539,11 +4586,7 @@ run_install() {
   fi
   install_arch_repo_apps_stage
   install_sway_repo_dependencies_stage
-  if ! pacman -Qq foot >/dev/null 2>&1; then
-    log "Installing required Foot terminal..."
-    pacman_install_one foot || die "Foot is required before installing the Awtarchy desktop."
-  fi
-  pacman -Qq foot >/dev/null 2>&1 || die "Required Foot package is still missing."
+  install_desktop_core_dependencies_stage
   migrate_cheese_to_snapshot_stage \
     "${REPO_DIR}/local/share/awtarchy/awtarchy-package-reconcile.sh" \
     "${BASH_SOURCE[0]}"
@@ -4565,6 +4608,7 @@ run_install() {
   fi
   copy_awtarchy_configs_stage
   install_sway_session_stage
+  verify_installed_desktop_config_stage
   # Apply the GPU-specific cursor policy to the installed managed Hyprland file.
   # The installer checkout may be root-owned; pass the trusted helper via stdin.
   local gpu_cursor_helper="${REPO_DIR}/local/share/awtarchy/awtarchy-gpu-cursor.py"

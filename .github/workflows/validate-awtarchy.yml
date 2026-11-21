@@ -118,6 +118,7 @@ jobs:
           bash -n config/hypr/scripts/toggle_resize_if_ok.sh
           bash -n tests/test-awtarchy-command.sh
           bash -n tests/test-installer-version-state-permissions.sh
+          bash -n tests/test-installer-incomplete-recovery.sh
           bash -n tests/test-awtarchy-git-mode.sh
           bash -n tests/test-awtarchy-command-shim.sh
           bash -n tests/test-awtarchy-legacy-cleanup.sh
@@ -379,6 +380,7 @@ jobs:
           PATH="${no_sudo_bin}:$PATH" bash tests/test-awtarchy-command.sh
           rm -rf -- "$no_sudo_bin"
           sudo bash tests/test-installer-version-state-permissions.sh
+          bash tests/test-installer-incomplete-recovery.sh
           bash tests/test-awtarchy-git-mode.sh
           bash tests/test-awtarchy-command-shim.sh
           bash tests/test-awtarchy-legacy-cleanup.sh
