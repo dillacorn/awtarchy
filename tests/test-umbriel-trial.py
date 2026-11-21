@@ -230,7 +230,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert "is-enabled login" in login_script
         assert "pw-play" in login_script
         assert 'bash "$trial/login-sound.sh"' in (sound / "session.sh").read_text()
-        assert '"/screenshot_sound.sh"' in (TRIAL / "capture.sh").read_text()
+        assert 'dirname -- "${BASH_SOURCE[0]}"' in (TRIAL / "capture.sh").read_text()
         assert '$HOME/.config/hypr/scripts/screenshot_sound.sh' not in (TRIAL / "capture.sh").read_text()
         subprocess.run(["bash", "-n", str(sound / "login-sound.sh")], check=True)
         scheduler = sound / "scheduler.sh"
