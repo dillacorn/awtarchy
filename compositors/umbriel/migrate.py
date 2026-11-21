@@ -24,7 +24,7 @@ TRANSFORMS = ("normal", "90", "180", "270", "flipped",
 GLOBAL_WORKSPACE_NAMES = [str(number) for number in range(1, 11)]
 
 # Only these source application actions have known Umbriel-safe replacements.
-IPC = "bash ~/.config/umbriel/awtarchy-trial/ipc.sh "
+IPC = "bash ~/.config/umbriel/awtarchy/ipc.sh "
 COMMANDS = {
     "app_launcher": "spawn " + IPC + "launcher toggle",
     "notifications_toggle": "spawn " + IPC + "notifications toggle",
@@ -39,7 +39,7 @@ COMMANDS = {
     "file_manager": "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager",
     "web_browser": "spawn python3 ~/.config/hypr/scripts/default_applications.py launch browser",
     "power_menu": "spawn " + IPC + "powermenu begin",
-    "default_apps": "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py default-apps",
+    "default_apps": "spawn python3 ~/.config/umbriel/awtarchy/toggle-utility.py default-apps",
 }
 NATIVE = {
     "hl.dsp.window.close()": "window-close",
@@ -502,7 +502,7 @@ def workspace_home_output(home: Path, connected: set[str]) -> str:
         if not CONNECTOR.fullmatch(preference) or preference not in connected:
             raise ValueError("Invalid or disconnected workspace home output")
         return preference
-    saved = safe_read(home / ".config/umbriel/awtarchy-trial/workspace-home", 128)
+    saved = safe_read(home / ".config/umbriel/awtarchy/workspace-home", 128)
     if saved is not None:
         preference = saved.strip()
         if not CONNECTOR.fullmatch(preference):
