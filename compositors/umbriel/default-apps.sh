@@ -5,7 +5,7 @@ set -euo pipefail
     printf 'Umbriel session required\n' >&2
     false
 }
-script="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/toggle-utility.py"
+script="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy/toggle-utility.py"
 [[ -f "$script" && ! -L "$script" ]] || {
     printf 'Missing native default-app selector helper\n' >&2
     false
