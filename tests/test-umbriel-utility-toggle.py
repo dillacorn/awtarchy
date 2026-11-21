@@ -46,7 +46,7 @@ assert mod.matches_identity(window("wd", identity="network.cycles.wdisplays"),
                             {"wdisplays", "network.cycles.wdisplays"})
 wallpicker = mod.UTILITIES["wallpicker"][1]
 assert wallpicker[:4] == ("foot", "--app-id", "wallpicker", "bash")
-assert wallpicker[-2:] == (str(mod.CONFIG / "umbriel/awtarchy-trial/awtwall.sh"), "--resume")
+assert wallpicker[-2:] == (str(mod.CONFIG / "umbriel/awtarchy/awtwall.sh"), "--resume")
 
 with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel",
                               "WAYLAND_DISPLAY": "wayland-1"}):
