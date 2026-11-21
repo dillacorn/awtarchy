@@ -24,9 +24,14 @@ if [[ -f "$trial/mode-control.py" && ! -L "$trial/mode-control.py" ]]; then
         printf 'Umbriel input mode state unavailable\n' >&2
 fi
 if [[ ! -L "$trial/quickshell.sh" && -f "$trial/quickshell.sh" ]]; then
-    bash "$trial/quickshell.sh" start || {
+    if bash "$trial/quickshell.sh" start; then
+        # Play once on initial session startup, never on a Quickshell reload.
+        if [[ -f "$trial/login-sound.sh" && ! -L "$trial/login-sound.sh" ]]; then
+            bash "$trial/login-sound.sh" >/dev/null 2>&1 &
+        fi
+    else
         printf 'Umbriel Quickshell failed; inspect ~/.cache/awtarchy/quickshell-umbriel.log\n' >&2
-    }
+    fi
 fi
 if command -v wl-paste >/dev/null && command -v cliphist >/dev/null; then
     wl-paste --type text --watch cliphist store >/dev/null 2>&1 &
