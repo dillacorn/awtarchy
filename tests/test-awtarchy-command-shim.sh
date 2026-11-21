@@ -224,7 +224,8 @@ grep -Fq 'Refusing to replace an existing non-Awtarchy command' <<<"$conflict_ou
 
 legacy_dry_home="${TMP}/legacy-dry-home"
 legacy_dry_bin="${TMP}/legacy-dry-system-bin"
-mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_bin"
+mkdir -p "$legacy_dry_home/.cache/awtarchy" "$legacy_dry_home/.config/hypr" "$legacy_dry_bin"
+: >"$legacy_dry_home/.config/hypr/hyprland.lua"
 printf 'tag=v0.8.0\n' >"$legacy_dry_home/.cache/awtarchy/version"
 HOME="$legacy_dry_home" \
 USER="$(id -un)" \
