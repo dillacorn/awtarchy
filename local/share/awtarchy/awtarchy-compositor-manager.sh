@@ -16,9 +16,12 @@ fail() { printf 'Awtarchy compositor: %s\n' "$*" >&2; return 1; }
 installed() { pacman -Qq "$1" >/dev/null 2>&1; }
 owned() { [[ -f "$ledger" && ! -L "$ledger" ]] && grep -Fxq -- "$1" "$ledger"; }
 status() {
-  for pkg in hyprland sway; do
+  for pkg in hyprland sway umbriel-git; do
     if installed "$pkg"; then printf '%s: installed\n' "$pkg"; else printf '%s: absent\n' "$pkg"; fi
   done
+  if [[ -f /usr/share/wayland-sessions/umbriel.desktop ]]; then
+    printf 'Umbriel Ly entry: native package session\n'
+  fi
   if [[ -f /usr/share/wayland-sessions/sway.desktop ]]; then
     printf 'Sway Ly entry: native (one session)\n'
   else
@@ -34,7 +37,7 @@ status() {
 }
 if [[ "$operation" == status ]]; then status; exit 0; fi
 case "$operation" in
-  install-sway|install-hyprland|remove-sway|remove-hyprland|update-sway) ;;
+  install-sway|install-hyprland|install-umbriel|remove-sway|remove-hyprland|remove-umbriel|update-sway ;;
   *) fail 'Unknown operation'; exit 2 ;;
 esac
 if [[ -n "$release_source" ]]; then
@@ -53,6 +56,18 @@ fi
 [[ -f "$repo/compositors/sway/setup.sh" && -f "$repo/config/hypr/hyprland.lua" ]] ||
   { fail 'Compositor source incomplete'; exit 1; }
 printf 'Action: %s\n' "$operation"
+# Umbriel has its own package-ownership and native Ly session guards.
+# This source is the exact release archive already verified by the caller.
+if [[ "$operation" == install-umbriel || "$operation" == remove-umbriel ]]; then
+  [[ -f "$repo/compositors/umbriel/manage.sh" && ! -L "$repo/compositors/umbriel/manage.sh" ]] ||
+    { fail 'Umbriel release manager missing'; exit 1; }
+  if [[ "$mode" == plan ]]; then
+    bash "$repo/compositors/umbriel/manage.sh" "$operation" preview
+  else
+    bash "$repo/compositors/umbriel/manage.sh" "$operation" apply
+  fi
+  exit $?
+fi
 printf 'Personal configs are preserved. Shared packages are preserved.\n'
 if [[ "$operation" == update-sway ]]; then
   printf 'Review/apply Sway managed helper and Quickshell updates; personal TOML and modified files remain preserved.\n'
