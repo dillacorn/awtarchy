@@ -147,7 +147,9 @@ def ipc(path, request):
 def main(args):
     if len(args) not in (1, 2):
         raise ValueError("Usage: resize.py [--plan] left|right|up|down")
-    preview = args[0] == "--plan" if len(args) == 2 else False
+    if len(args) == 2 and args[0] != "--plan":
+        raise ValueError("Only --plan is supported before a direction")
+    preview = len(args) == 2
     direction = args[-1].lower()
     if direction not in (*AXES, *ALIASES):
         raise ValueError("Unknown resize direction")
