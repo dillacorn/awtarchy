@@ -8,6 +8,7 @@ Entries below distinguish implementation from hardware/session confirmation.
 | --- | --- | --- |
 | Optional session/install | Adapted | Adapted; experimental |
 | Default/noalt/mouse/vm shortcuts | Native modes, adapted | Native submaps, adapted |
+| Alt/Super+Ctrl window resize (arrows/hjkl) | Native 30px width/height shrink-grows in default/noalt modes; split-dependent, runtime verify | Primary width / secondary height extent ±3% in default/noalt; no edge-dependent resize, split-dependent, runtime verify |
 | btop, Wiremix and wdisplays floating/toggle | Sway IPC; runtime verify | Umbriel IPC; fixed imported-chord collision; runtime verify |
 | Bar rotate/flip/autohide shortcuts | Quickshell control IPC; verify | Quickshell control IPC; verify |
 | Bar Alt+left drag | Layer-shell; no continuous lift | Layer-shell, visual press feedback; verify |
