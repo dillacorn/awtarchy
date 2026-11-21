@@ -65,6 +65,14 @@ EOF
 run_validator "${TMP_DIR}/valid.md" "${TMP_DIR}/previous.md" >/dev/null \
   || fail "canonical-guide stable release notes were rejected"
 
+sed '1s/v3\.5\.6 Yazi/v3.5.6: Yazi/' "${TMP_DIR}/valid.md" >"${TMP_DIR}/colon-title.md"
+python3 "$VALIDATOR" --version v3.5.6 --title "Awtarchy v3.5.6: Yazi" \
+  --notes "${TMP_DIR}/colon-title.md" --previous "${TMP_DIR}/previous.md" >/dev/null \
+  || fail "valid colon-separated stable release title was rejected"
+python3 "$VALIDATOR" --version v3.5.6 \
+  --notes "${TMP_DIR}/colon-title.md" --previous "${TMP_DIR}/previous.md" >/dev/null \
+  || fail "valid colon-separated release heading without --title was rejected"
+
 sed '1s/Yazi/Quickshell/' "${TMP_DIR}/valid.md" >"${TMP_DIR}/wrong-title.md"
 if run_validator "${TMP_DIR}/wrong-title.md" "${TMP_DIR}/previous.md" >/dev/null 2>&1; then
   fail "release body title that does not match the supplied release title was accepted"

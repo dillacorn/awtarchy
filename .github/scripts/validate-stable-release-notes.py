@@ -56,17 +56,19 @@ def validate(
     first_line = body.partition("\n")[0]
 
     if release_title is not None:
-        if release_title != title_prefix and not release_title.startswith(title_prefix + " "):
+        if (release_title != title_prefix
+                and not release_title.startswith((title_prefix + " ", title_prefix + ": "))):
             fail(
                 f"release title must be {title_prefix!r} or begin with "
-                f"{(title_prefix + ' ')!r}"
+                f"{(title_prefix + ' ')!r} or {(title_prefix + ': ')!r}"
             )
         expected_heading = f"# {release_title}"
         if first_line != expected_heading:
             fail(f"release must start with {expected_heading!r}")
     else:
         expected_heading = f"# {title_prefix}"
-        if first_line != expected_heading and not first_line.startswith(expected_heading + " "):
+        if first_line != expected_heading and not first_line.startswith(
+                (expected_heading + " ", expected_heading + ": ")):
             fail(
                 f"release must start with {expected_heading!r} or a themed "
                 f"suffix such as {expected_heading + ' Yazi'!r}"
