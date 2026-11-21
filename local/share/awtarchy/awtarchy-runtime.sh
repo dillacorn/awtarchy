@@ -10465,12 +10465,14 @@ main() {
           warn "Unrecognized Sway Ly session entry will be preserved."
       fi
     fi
-    # The Umbriel trial has an independent exact-hash ownership baseline.
+    # Umbriel has an independent exact-hash managed ownership baseline.
     # Review only installations that actually staged this Awtarchy profile.
     if { pacman -Qq umbriel-git >/dev/null 2>&1 ||
          pacman -Qq umbriel >/dev/null 2>&1; } &&
-       [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
-          ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+       { [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-managed-baseline.json" &&
+            ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-managed-baseline.json" ]] ||
+         [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+            ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" ]]; } &&
           -f "$repo_dir/compositors/umbriel/sync.py" &&
           ! -L "$repo_dir/compositors/umbriel/sync.py" ]]; then
       log "Reviewing Umbriel managed changes from the same immutable release..."
@@ -10666,8 +10668,10 @@ main() {
   # A failure here must not roll back accepted Hyprland changes.
   if { pacman -Qq umbriel-git >/dev/null 2>&1 ||
        pacman -Qq umbriel >/dev/null 2>&1; } &&
-     [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
-        ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" ]]; then
+     { [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-managed-baseline.json" &&
+          ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-managed-baseline.json" ]] ||
+       [[ -f "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" &&
+          ! -L "${HOME_DIR}/.local/state/awtarchy/umbriel-trial-baseline.json" ]]; }; then
     if [[ -f "$repo_dir/compositors/umbriel/sync.py" &&
           ! -L "$repo_dir/compositors/umbriel/sync.py" ]]; then
       log "Updating separately managed Umbriel configuration from ${source_label}..."
