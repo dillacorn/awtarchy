@@ -1631,8 +1631,7 @@ compositor_menu() {
       options+=("Install Hyprland")
       actions+=("install-hyprland")
     fi
-    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" &&
-          "$umbriel_state" == "Not installed" ]]; then
+    if [[ "$umbriel_state" == "Not installed" ]]; then
       options+=("Install Umbriel")
       actions+=("install-umbriel")
     fi
@@ -1642,8 +1641,7 @@ compositor_menu() {
       options+=("Remove Hyprland" "Remove Sway")
       actions+=("remove-hyprland" "remove-sway")
     fi
-    if [[ -n "${AWTARCHY_UMBRIEL_TRIAL_SOURCE:-}" &&
-          "$umbriel_state" == "Installed" &&
+    if [[ "$umbriel_state" == "Installed" &&
           ( "$hyprland_state" == "Installed" || "$sway_state" == "Installed" ) ]]; then
       options+=("Remove Umbriel")
       actions+=("remove-umbriel")
@@ -1674,7 +1672,7 @@ Preserve existing Sway and Hyprland configurations.
 Keep Hyprland installed."
         action="Install" ;;
       install-umbriel)
-        title="Install Umbriel (experimental)
+        title="Install Umbriel
 
 Install existing AUR package umbriel-git when absent.
 Use the native package-owned Umbriel Ly session.
