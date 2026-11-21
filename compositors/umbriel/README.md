@@ -131,6 +131,10 @@ replace custom Umbriel layout files to force an import.
 - The Sway and Umbriel rendered Quickshell flyout managers close competing
   flyouts immediately when another is claimed. The newly opened theme
   picker is exempt from its own close signal.
+- Umbriel wallpaper shortcuts, Quick Settings, and login restoration use a
+  private launcher that prefers the packaged `/usr/bin/awtwall` over any older
+  `~/.local/bin/awtwall`. The user-local executable is never modified;
+  other compositor launch behavior is unchanged.
 - `Super+Ctrl+M` opens **wdisplays**, an upstream-supported wlr-output-
   management GUI. It manages connected displays, modes, scale and arrangement;
   it is **not** a workspace editor. Live changes made in wdisplays are not

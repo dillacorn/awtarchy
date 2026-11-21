@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 TRIAL = ROOT / "compositors/umbriel"
-for script in (TRIAL / "session.sh", TRIAL / "ipc.sh",
+for script in (TRIAL / "session.sh", TRIAL / "awtwall.sh", TRIAL / "ipc.sh",
                TRIAL / "manage.sh", TRIAL / "position.sh",
                TRIAL / "runtime-rules.sh", TRIAL / "diagnose-session.sh",
                ROOT / "local/bin/awtarchy"):
@@ -30,6 +30,9 @@ assert keybinds["Super+Alt+A"].endswith("toggle-utility.py default-apps")
 assert keybinds["Alt+1"] == "workspace-switch --name 1"
 assert keybinds["Alt+Shift+B"].endswith("toggle-utility.py btop")
 assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
+assert keybinds["Super+Shift+W"].endswith("awtwall.sh --random-current")
+assert keybinds["Super+Alt+W"].endswith("awtwall.sh --random-all-different")
+assert keybinds["submap[noalt],Super+Ctrl+W"].endswith("awtwall.sh --random-all")
 assert keybinds["Super+Alt+M"].endswith("mode-control.py toggle mouse")
 routing = {w["match"].get("app_id"): w.get("default_workspace")
            for w in config["window_rule"]}
@@ -159,6 +162,11 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert not (home / ".config/umbriel").exists()
         sync.reconcile(ROOT, home, "apply")
         assert (home / ".config/umbriel/config.toml").exists()
+        awtwall_launcher = home / ".config/umbriel/awtarchy-trial/awtwall.sh"
+        assert awtwall_launcher.is_file()
+        assert "/usr/bin/awtwall" in awtwall_launcher.read_text()
+        assert 'bash "$awtwall_launcher" --restore' in (
+            home / ".config/umbriel/awtarchy-trial/session.sh").read_text()
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
         helper = home / ".config/umbriel/awtarchy-trial/application-state.sh"
         assert helper.is_file()

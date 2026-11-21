@@ -34,7 +34,9 @@ if command -v wl-paste >/dev/null && command -v cliphist >/dev/null; then
 fi
 if command -v awww-daemon >/dev/null; then
     awww-daemon >/dev/null 2>&1 &
-    if command -v awtwall >/dev/null && [[ -s "$HOME/.config/awtwall/backend_state.tsv" ]]; then
-        awtwall --restore >/dev/null 2>&1 &
+    awtwall_launcher="$trial/awtwall.sh"
+    if [[ -f "$awtwall_launcher" && ! -L "$awtwall_launcher" &&
+          -s "$HOME/.config/awtwall/backend_state.tsv" ]]; then
+        bash "$awtwall_launcher" --restore >/dev/null 2>&1 &
     fi
 fi

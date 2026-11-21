@@ -35,6 +35,9 @@ assert mod.UTILITIES["btop"][1][0:5] == (
     "foot", "--app-id", "btop", "--title", "btop")
 assert mod.UTILITIES["wiremix"][1][-5:] == (
     "wiremix", "-p", "auto", "-f", "30")
+wallpicker = mod.UTILITIES["wallpicker"][1]
+assert wallpicker[:4] == ("foot", "--app-id", "wallpicker", "bash")
+assert wallpicker[-2:] == (str(mod.CONFIG / "umbriel/awtarchy-trial/awtwall.sh"), "--resume")
 
 with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel",
                               "WAYLAND_DISPLAY": "wayland-1"}):

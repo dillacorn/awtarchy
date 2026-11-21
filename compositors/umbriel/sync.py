@@ -168,7 +168,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
             else:
                 result[home / ".local/state/awtarchy/active-theme-umbriel"] = (
                     name + "\n").encode()
-    for name in ("session.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
+    for name in ("session.sh", "awtwall.sh", "ipc.sh", "monitor-info.py", "workspace-state.py",
                  "workspace-events.py", "capture.sh", "toggle-utility.py",
                  "mode-control.py", "animations.sh",
                  "default-apps.sh", "workspace-nav.py",
