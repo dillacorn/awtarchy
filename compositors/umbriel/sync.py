@@ -192,6 +192,11 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     # Screenshot preferences are shared; stage the known-good helper without
     # writing into any source compositor's installed configuration.
     sources[target / "screenshot_sound.sh"] = repo / "config/hypr/scripts/screenshot_sound.sh"
+    # Sched-ext uses the same restricted Awtarchy core and authorization
+    # across compositors, staged privately rather than calling Hyprland.
+    sources[target / "scheduler.sh"] = repo / "compositors/sway/scheduler.sh"
+    for name in ("hypr_quicksettings_core.sh", "hypr_quicksettings.sh"):
+        sources[target / name] = repo / "config/hypr/scripts" / name
     # Carry Sway's tested, isolated login sound without touching installed
     # Hyprland, compositor configuration, or the shared sound preferences.
     audio = repo / "config/hypr/sounds/awtarchy-login.mp3"
