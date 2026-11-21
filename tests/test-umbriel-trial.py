@@ -219,6 +219,20 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert 'bash "$awtwall_launcher" --restore' in (
             home / ".config/umbriel/awtarchy-trial/session.sh").read_text()
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
+        sound = home / ".config/umbriel/awtarchy-trial"
+        assert (sound / "screenshot_sound.sh").read_bytes() == (
+            ROOT / "config/hypr/scripts/screenshot_sound.sh").read_bytes()
+        assert (sound / "awtarchy-login.mp3").read_bytes() == (
+            ROOT / "config/hypr/sounds/awtarchy-login.mp3").read_bytes()
+        login_script = (sound / "login-sound.sh").read_text()
+        assert '${XDG_CURRENT_DESKTOP,,}" == umbriel' in login_script
+        assert "awtarchy-umbriel-login-sound.lock" in login_script
+        assert "is-enabled login" in login_script
+        assert "pw-play" in login_script
+        assert 'bash "$trial/login-sound.sh"' in (sound / "session.sh").read_text()
+        assert '"/screenshot_sound.sh"' in (TRIAL / "capture.sh").read_text()
+        assert '$HOME/.config/hypr/scripts/screenshot_sound.sh' not in (TRIAL / "capture.sh").read_text()
+        subprocess.run(["bash", "-n", str(sound / "login-sound.sh")], check=True)
         helper = home / ".config/umbriel/awtarchy-trial/application-state.sh"
         assert helper.is_file()
         assert "quickshell-state.json" in helper.read_text()
