@@ -35,6 +35,13 @@ assert mod.UTILITIES["btop"][1][0:5] == (
     "foot", "--app-id", "btop", "--title", "btop")
 assert mod.UTILITIES["wiremix"][1][-5:] == (
     "wiremix", "-p", "auto", "-f", "30")
+assert mod.UTILITIES["btop"][2] is True
+assert mod.UTILITIES["wiremix"][2] is True
+assert mod.UTILITIES["displays"] == (
+    ("wdisplays", "network.cycles.wdisplays"), ("wdisplays",), True)
+assert mod.classify(tiled, focused, ("btop",), True) == ((), False)
+assert mod.matches_identity(window("wd", identity="network.cycles.wdisplays"),
+                            {"wdisplays", "network.cycles.wdisplays"})
 wallpicker = mod.UTILITIES["wallpicker"][1]
 assert wallpicker[:4] == ("foot", "--app-id", "wallpicker", "bash")
 assert wallpicker[-2:] == (str(mod.CONFIG / "umbriel/awtarchy-trial/awtwall.sh"), "--resume")
@@ -51,10 +58,12 @@ with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel",
 
     with patch.object(mod, "query", side_effect=[remote, focused]), \
          patch.object(mod.subprocess, "run") as ipc, \
-         patch.object(mod.subprocess, "Popen") as process:
+         patch.object(mod.subprocess, "Popen") as process, \
+         patch.object(mod, "ensure_new_floating") as verify:
         mod.toggle("btop")
         ipc.assert_called_once()
         process.assert_called_once()
+        verify.assert_called_once()
         assert process.call_args.args[0] == mod.UTILITIES["btop"][1]
 
     with patch.object(mod, "query", side_effect=[tiled, focused]), \
@@ -64,4 +73,17 @@ with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel",
         ipc.assert_not_called()
         process.assert_called_once()
 
-print("PASS: Umbriel exact utility toggles, Foot title fallback and tiled preservation")
+# A new utility window is converted by its exact fresh ID; existing tiled
+# windows are excluded and never passed to the compositor floating action.
+with patch.object(mod, "query", side_effect=[
+         [window("created", floating=False)],
+         [window("created", floating=True)]]), \
+     patch.object(mod.subprocess, "run") as ipc, \
+     patch.object(mod.time, "sleep") as delay:
+    ipc.return_value.stdout = '{"ok":null}'
+    mod.ensure_new_floating([], ("btop",))
+    assert ipc.call_args.args[0] == [
+        "umbriel", "msg", "window-toggle-floating", "created"]
+    assert delay.call_count == 1
+
+print("PASS: Umbriel exact utility toggles, newly floated utility verification, and tiled preservation")

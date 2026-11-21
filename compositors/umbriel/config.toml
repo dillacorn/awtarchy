@@ -100,7 +100,7 @@ numlock_toggle = true
 "Super+C" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh clipboard toggle"
 "Super+Alt+BackSpace" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh quicksettings toggle"
 "Super+T" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh themes toggle"
-"Super+Ctrl+M" = "spawn wdisplays"
+"Super+Ctrl+M" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py displays"
 "Super+Shift+Space" = "spawn fuzzel"
 "Super+E" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
 "Super+Shift+E" = "spawn foot yazi"
@@ -252,7 +252,7 @@ numlock_toggle = true
 "submap[noalt],Super+N" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh notifications toggle"
 "submap[noalt],Super+C" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh clipboard toggle"
 "submap[noalt],Super+T" = "spawn bash ~/.config/umbriel/awtarchy-trial/ipc.sh themes toggle"
-"submap[noalt],Super+Ctrl+M" = "spawn wdisplays"
+"submap[noalt],Super+Ctrl+M" = "spawn python3 ~/.config/umbriel/awtarchy-trial/toggle-utility.py displays"
 "submap[noalt],Super+Shift+Space" = "spawn fuzzel"
 "submap[noalt],Super+E" = "spawn python3 ~/.config/hypr/scripts/default_applications.py launch file-manager"
 "submap[noalt],Super+Shift+E" = "spawn foot yazi"
@@ -403,6 +403,13 @@ default_position = { x = 0, y = 0, anchor = "center" }
 match.title = "^Wiremix$"
 default_floating = true
 default_floating_size = { width = 0.65, height = 0.70 }
+default_position = { x = 0, y = 0, anchor = "center" }
+
+[[window_rule]]
+# Modern wdisplays identifies itself as network.cycles.wdisplays.
+match.app_id = "^(wdisplays|network[.]cycles[.]wdisplays)$"
+default_floating = true
+default_floating_size = { width = 0.85, height = 0.90 }
 default_position = { x = 0, y = 0, anchor = "center" }
 
 [[window_rule]]

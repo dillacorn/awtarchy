@@ -135,17 +135,20 @@ replace custom Umbriel layout files to force an import.
   private launcher that prefers the packaged `/usr/bin/awtwall` over any older
   `~/.local/bin/awtwall`. The user-local executable is never modified;
   other compositor launch behavior is unchanged.
-- `Super+Ctrl+M` opens **wdisplays**, an upstream-supported wlr-output-
-  management GUI. It manages connected displays, modes, scale and arrangement;
+- `Super+Ctrl+M` toggles **wdisplays** through Umbriel's exact-window utility
+  handler. The GUI defaults to floating and centered, with modern
+  `network.cycles.wdisplays` and legacy `wdisplays` app IDs.
+  It manages connected displays, modes, scale and arrangement;
   it is **not** a workspace editor. Live changes made in wdisplays are not
   automatically written into Awtarchy's `migrated.toml` and may not survive
   a compositor restart. Do not misrepresent them as saved.
 - Umbriel and Sway use layer-shell panels to avoid tiling and preserve their
   output-local positions. Resizing the layer-shell surface during an active
   pointer grab can break the gesture. The current ALT+right drag previews a
-  size and commits once on release; it is not Hyprland's continuous floating-
-  window resize. Right/bottom edge handling is corrected so inward dragging
-  enlarges the panel.
+  size during the drag in the Umbriel-only rendered panel. Sway retains its
+  release-to-commit workaround. Right/bottom edge handling makes inward
+  dragging enlarge the panel. Continuous Wayland pointer-grab behavior must
+  still be confirmed on real Umbriel hardware.
 
 ## Native window mouse controls and global workspace identity
 

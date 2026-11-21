@@ -30,6 +30,7 @@ assert keybinds["Super+Alt+A"].endswith("toggle-utility.py default-apps")
 assert keybinds["Alt+1"] == "workspace-switch --name 1"
 assert keybinds["Alt+Shift+B"].endswith("toggle-utility.py btop")
 assert keybinds["Alt+V"].endswith("toggle-utility.py wiremix")
+assert keybinds["Super+Ctrl+M"].endswith("toggle-utility.py displays")
 assert keybinds["Super+Shift+W"].endswith("awtwall.sh --random-current")
 assert keybinds["Super+Alt+W"].endswith("awtwall.sh --random-all-different")
 assert keybinds["submap[noalt],Super+Ctrl+W"].endswith("awtwall.sh --random-all")

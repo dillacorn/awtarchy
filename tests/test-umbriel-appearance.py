@@ -20,7 +20,9 @@ assert config["animation"]["windows_in"]["style"] == "popin"
 assert config["animation"]["windows_in"]["scale"] == .87
 assert config["animation"]["workspaces"]["enabled"] is False
 assert config["animation"]["layers"]["enabled"] is True
-assert config["keybinds"]["Super+Ctrl+M"] == "spawn wdisplays"
+assert config["keybinds"]["Super+Ctrl+M"].endswith("toggle-utility.py displays")
+assert any(w["match"].get("app_id") == "^(wdisplays|network[.]cycles[.]wdisplays)$"
+           and w.get("default_floating") is True for w in config["window_rule"])
 assert "wdisplays" in (UMBRIEL / "manage.sh").read_text()
 assert "awtarchy-trial/theme.toml" in native["include"]["files"]
 assert native["include"]["files"].index("awtarchy-trial/theme.toml") < (

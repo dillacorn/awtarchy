@@ -7,14 +7,16 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 
 CONFIG = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
 SCRIPTS = CONFIG / "hypr/scripts"
 UTILITIES = {
-    "btop": (("btop",), ("foot", "--app-id", "btop", "--title", "btop", "btop"), False),
+    "btop": (("btop",), ("foot", "--app-id", "btop", "--title", "btop", "btop"), True),
     "maccel": (("maccel",), ("foot", "--app-id", "maccel", "maccel", "tui"), False),
     "wiremix": (("Wiremix",), ("foot", "--app-id", "Wiremix", "--title", "Wiremix",
-                           "wiremix", "-p", "auto", "-f", "30"), False),
+                           "wiremix", "-p", "auto", "-f", "30"), True),
+    "displays": (("wdisplays", "network.cycles.wdisplays"), ("wdisplays",), True),
     "default-apps": (("awtarchy-default-apps",),
         ("foot", "--app-id", "awtarchy-default-apps", "--title",
          "awtarchy-default-apps", "python3", str(SCRIPTS / "default_applications.py"), "tui"), True),
@@ -43,6 +45,43 @@ def query(kind: str) -> list:
     return body
 
 
+def matches_identity(window: dict, names: set[str]) -> bool:
+    """Match exact utility app IDs; permit title fallback only for Foot."""
+    app_id = window.get("app_id")
+    title = window.get("title")
+    return ((isinstance(app_id, str) and app_id.casefold() in names) or
+            (isinstance(title, str) and title.casefold() in names and
+             isinstance(app_id, str) and
+             app_id.casefold() in ("foot", "footclient", "org.codeberg.dnkl.foot")))
+
+
+def ensure_new_floating(previous: list, identities: tuple) -> None:
+    """Verify the just-launched utility floats, without changing old tiled apps."""
+    known_ids = {w.get("id") for w in previous if isinstance(w, dict)}
+    names = {name.casefold() for name in identities}
+    converted = set()
+    for _ in range(60):
+        for window in query("windows"):
+            if not isinstance(window, dict):
+                continue
+            window_id = window.get("id")
+            if (not isinstance(window_id, str) or not window_id or
+                    window_id in known_ids or not matches_identity(window, names)):
+                continue
+            if window.get("floating") is True:
+                return
+            if window_id not in converted:
+                reply = subprocess.run(
+                    ["umbriel", "msg", "window-toggle-floating", window_id],
+                    check=True, capture_output=True, text=True, timeout=6)
+                data = json.loads(reply.stdout)
+                if not isinstance(data, dict) or "err" in data or "ok" not in data:
+                    raise RuntimeError("Umbriel refused floating for utility " + window_id)
+                converted.add(window_id)
+        time.sleep(0.1)
+    raise RuntimeError("The launched utility did not report a floating window")
+
+
 def classify(windows: list, workspaces: list, identities: tuple,
              protect_tiled: bool) -> tuple[tuple[str, ...], bool]:
     focused = [w for w in workspaces
@@ -59,18 +98,7 @@ def classify(windows: list, workspaces: list, identities: tuple,
     for window in windows:
         if not isinstance(window, dict):
             continue
-        app_id = window.get("app_id")
-        title = window.get("title")
-        # Foot/Footclient installations can expose their generic app-id while
-        # honoring the explicit terminal title. Restrict this fallback to
-        # known terminal identities and an exact utility title, never an
-        # arbitrary window title or a substring match.
-        id_match = isinstance(app_id, str) and app_id.casefold() in names
-        title_match = (isinstance(title, str) and title.casefold() in names
-                       and isinstance(app_id, str)
-                       and app_id.casefold() in ("foot", "footclient",
-                                                "org.codeberg.dnkl.foot"))
-        if not (id_match or title_match):
+        if not matches_identity(window, names):
             continue
         if window.get("floating") is not True:
             tiled = True
@@ -96,7 +124,8 @@ def toggle(name: str):
             or not os.environ.get("WAYLAND_DISPLAY")):
         raise ValueError("An active Umbriel session is required")
     identities, command, protect = UTILITIES[name]
-    targets, launch = classify(query("windows"), query("workspaces"),
+    before = query("windows")
+    targets, launch = classify(before, query("workspaces"),
                                identities, protect)
     for window_id in targets:
         subprocess.run(["umbriel", "msg", "window-close", window_id],
@@ -104,6 +133,8 @@ def toggle(name: str):
     if launch:
         subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
                          stderr=subprocess.DEVNULL, start_new_session=True)
+        if name in ("btop", "wiremix", "displays"):
+            ensure_new_floating(before, identities)
 
 
 if __name__ == "__main__":
