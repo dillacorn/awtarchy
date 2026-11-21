@@ -24,9 +24,9 @@ assert config["keybinds"]["Super+Ctrl+M"].endswith("toggle-utility.py displays")
 assert any(w["match"].get("app_id") == "^(wdisplays|network[.]cycles[.]wdisplays)$"
            and w.get("default_floating") is True for w in config["window_rule"])
 assert "wdisplays" in (UMBRIEL / "manage.sh").read_text()
-assert "awtarchy-trial/theme.toml" in native["include"]["files"]
-assert native["include"]["files"].index("awtarchy-trial/theme.toml") < (
-    native["include"]["files"].index("awtarchy-trial/migrated.toml"))
+assert "awtarchy/theme.toml" in native["include"]["files"]
+assert native["include"]["files"].index("awtarchy/theme.toml") < (
+    native["include"]["files"].index("awtarchy/migrated.toml"))
 subprocess.run(["bash", "-n", str(UMBRIEL / "theme-apply.sh")], check=True)
 
 spec = importlib.util.spec_from_file_location("umbriel_theme", UMBRIEL / "theme-colors.py")
@@ -58,7 +58,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
     assert loaded["colors"]["text_primary"] == "#EEEEEEFF"
     assert theme.quickshell_palette(selected).decode().count("#424242") == 1
     theme.save_theme(home, "steel")
-    assert (home / ".config/umbriel/awtarchy-trial/theme.toml").read_bytes() == rendered
+    assert (home / ".config/umbriel/awtarchy/theme.toml").read_bytes() == rendered
     assert (home / ".local/state/awtarchy/active-theme-umbriel").read_text() == "steel\n"
     for invalid in ("../steel", ".", "foo/bar", "steel\nbad"):
         try:
@@ -91,7 +91,7 @@ with tempfile.TemporaryDirectory(prefix="umbriel-theme-test-") as temporary:
     assert 'activeSurface = surface;' in owner
     picker = (rendered_dir / "ThemePicker.qml").read_text()
     assert "onCloseRequested(exceptSurface)" in picker
-    assert "/umbriel/awtarchy-trial/theme-apply.sh" in picker
+    assert "/umbriel/awtarchy/theme-apply.sh" in picker
     assert "active-theme-umbriel" in picker
     assert "/sway/awtarchy-trial/" not in picker
     assert "/hypr/scripts/quickshell_theme_apply.sh" not in picker
