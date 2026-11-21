@@ -8,7 +8,7 @@ operation="$1"
 mode="$2"
 remove_deps="$3"
 case "$operation" in
-    status|install-sway|install-hyprland|remove-sway|remove-hyprland|update-sway) ;;
+    status|install-sway|install-hyprland|install-umbriel|remove-sway|remove-hyprland|remove-umbriel|update-sway ;;
     *) printf 'Unknown compositor operation.\n' >&2; false ;;
 esac
 [[ $mode == plan || $mode == apply ]] || { printf 'Invalid mode.\n' >&2; false; }
