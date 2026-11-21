@@ -49,7 +49,7 @@ monitor_under_cursor() {
     bar = once(bar,
         '  if [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then',
         '  if [[ "${XDG_CURRENT_DESKTOP,,}" == "umbriel" ]]; then\n'
-        '    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/quickshell.sh"\n'
+        '    quickshell_manager="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy/quickshell.sh"\n'
         '    profile="awtarchy-umbriel"\n'
         '  elif [[ "${XDG_CURRENT_DESKTOP:-}" == "sway" && -n "${SWAYSOCK:-}" ]]; then')
 
@@ -80,7 +80,7 @@ def port_quicksettings(repo: Path) -> dict[str, bytes]:
         if path.is_symlink() or not path.is_file():
             raise ValueError("Missing or unsafe shared Quick Settings adapter " + str(path))
         body = path.read_text(encoding="utf-8")
-        body = body.replace("Sway", "Umbriel").replace("sway/awtarchy-trial", "umbriel/awtarchy-trial")
+        body = body.replace("Sway", "Umbriel").replace("sway/awtarchy-trial", "umbriel/awtarchy")
         body = body.replace("awtarchy-sway-submap", "awtarchy-umbriel-submap")
         if name == "ddc.sh":
             body = body.replace('"${SWAYSOCK:-}"', '"${WAYLAND_DISPLAY:-}"')
@@ -112,7 +112,7 @@ def digest(data: bytes) -> str:
 def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     src = repo / "compositors/umbriel"
     config = home / ".config"
-    target = config / "umbriel/awtarchy-trial"
+    target = config / "umbriel/awtarchy"
     sources = {
         config / "umbriel/config.toml": src / "native-config.toml",
         target / "config.toml": src / "config.toml",
@@ -186,7 +186,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     if state_body.count(old_state) != 1:
         raise ValueError("Shared Quickshell state manager source changed")
     state_body = state_body.replace(
-        old_state, '/umbriel/awtarchy-trial/quickshell.sh', 1)
+        old_state, '/umbriel/awtarchy/quickshell.sh', 1)
     result[target / "application-state.sh"] = state_body.encode()
 
     # Screenshot preferences are shared; stage the known-good helper without
@@ -213,7 +213,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     if login.count(old_session) != 1:
         raise ValueError("Sway login sound session guard changed")
     login = login.replace(old_session, new_session, 1)
-    login = login.replace("sway/awtarchy-trial", "umbriel/awtarchy-trial")
+    login = login.replace("sway/awtarchy-trial", "umbriel/awtarchy")
     login = login.replace("awtarchy-sway-login-sound.lock",
                           "awtarchy-umbriel-login-sound.lock")
     result[target / "login-sound.sh"] = login.encode("utf-8")
@@ -230,12 +230,12 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
         testroot.mkdir(parents=True, exist_ok=True)
         for name, data in (
             ("config.toml", result[config / "umbriel/config.toml"]),
-            ("awtarchy-trial/config.toml", result[target / "config.toml"]),
-            ("awtarchy-trial/migrated.toml", result[target / "migrated.toml"]),
-            ("awtarchy-trial/theme.toml", result[target / "theme.toml"]),
-            ("awtarchy-trial/capture-rules.toml",
+            ("awtarchy/config.toml", result[target / "config.toml"]),
+            ("awtarchy/migrated.toml", result[target / "migrated.toml"]),
+            ("awtarchy/theme.toml", result[target / "theme.toml"]),
+            ("awtarchy/capture-rules.toml",
              result[target / "capture-rules.toml"]),
-            ("awtarchy-trial/floating-rules.toml",
+            ("awtarchy/floating-rules.toml",
              result[target / "floating-rules.toml"]),
         ):
             dest = testroot / name
@@ -273,7 +273,7 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
 
 def safe_directories(home: Path):
     for relative in (".config", ".config/umbriel",
-                     ".config/umbriel/awtarchy-trial",
+                     ".config/umbriel/awtarchy",
                      ".config/quickshell", ".config/quickshell/awtarchy-umbriel",
                      ".local", ".local/state", ".local/state/awtarchy"):
         item = home / relative
