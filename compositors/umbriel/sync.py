@@ -264,6 +264,11 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
             initial_quickshell_palette if asset.name == "theme.json"
             else asset.read_bytes())
     result[target / "quickshell.sh"] = manager.read_bytes()
+    # Keep native Umbriel IPC intact by forwarding every non-TTY/argument call.
+    launcher = src / "tty-launch.sh"
+    if launcher.is_symlink() or not launcher.is_file():
+        raise ValueError("Missing safe Umbriel TTY launcher")
+    result[home / ".local/bin/umbriel"] = launcher.read_bytes()
     for name, content in port_brightness(repo).items():
         result[target / name] = content
     for name, content in port_quicksettings(repo).items():
@@ -275,7 +280,7 @@ def safe_directories(home: Path):
     for relative in (".config", ".config/umbriel",
                      ".config/umbriel/awtarchy",
                      ".config/quickshell", ".config/quickshell/awtarchy-umbriel",
-                     ".local", ".local/state", ".local/state/awtarchy"):
+                     ".local", ".local/bin", ".local/state", ".local/state/awtarchy"):
         item = home / relative
         if item.is_symlink() or (item.exists() and not item.is_dir()):
             raise ValueError("Unsafe Umbriel destination directory " + str(item))
@@ -292,7 +297,8 @@ def atomic_write(path: Path, data: bytes, backup: bool):
             staged.write(data)
             staged.flush()
             os.fsync(staged.fileno())
-        os.chmod(staged_name, 0o755 if path.suffix == ".sh" else 0o644)
+        os.chmod(staged_name, 0o755 if path.suffix == ".sh" or
+                 path == Path.home() / ".local/bin/umbriel" else 0o644)
         if backup:
             import datetime
             tag = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -318,13 +324,17 @@ def reconcile(repo: Path, home: Path, mode: str):
     if home.is_symlink() or not home.is_dir():
         raise ValueError("Unsafe home directory")
     safe_directories(home)
-    state = home / ".local/state/awtarchy/umbriel-trial-baseline.json"
-    if state.is_symlink() or (state.exists() and (not state.is_file()
-            or state.stat().st_uid != os.geteuid())):
-        raise ValueError("Unsafe Umbriel managed baseline")
+    state = home / ".local/state/awtarchy/umbriel-managed-baseline.json"
+    previous_state = home / ".local/state/awtarchy/umbriel-trial-baseline.json"
+    for candidate in (state, previous_state):
+        if candidate.is_symlink() or (candidate.exists() and (
+                not candidate.is_file() or candidate.stat().st_uid != os.geteuid())):
+            raise ValueError("Unsafe Umbriel managed baseline")
     baseline = {}
-    if state.is_file():
-        contents = json.loads(state.read_text(encoding="utf-8"))
+    # Adopt the existing exact-hash manifest; retain it as rollback evidence.
+    source_state = state if state.is_file() else previous_state
+    if source_state.is_file():
+        contents = json.loads(source_state.read_text(encoding="utf-8"))
         if (not isinstance(contents, dict) or contents.get("version") != 1
                 or not isinstance(contents.get("hashes"), dict)):
             raise ValueError("Invalid Umbriel baseline manifest")
@@ -349,6 +359,31 @@ def reconcile(repo: Path, home: Path, mode: str):
         if target.is_symlink() or (target.exists() and (
                 not target.is_file() or target.stat().st_uid != os.geteuid())):
             raise ValueError("Unsafe or unowned Umbriel file " + str(target))
+    # Preserve genuine personal edits in the legacy Umbriel profile as well
+    # as its exact checksum history. New managed paths are never linked to the
+    # old directory, and the original directory is never removed implicitly.
+    legacy_root = home / ".config/umbriel/awtarchy-trial"
+    target_root = home / ".config/umbriel/awtarchy"
+    personalized = {}
+    if legacy_root.exists() or legacy_root.is_symlink():
+        if (legacy_root.is_symlink() or not legacy_root.is_dir()
+                or legacy_root.stat().st_uid != os.geteuid()):
+            raise ValueError("Unsafe legacy Umbriel config directory")
+        for target in desired:
+            if not target.is_relative_to(target_root):
+                continue
+            old = legacy_root / target.relative_to(target_root)
+            if not old.exists() and not old.is_symlink():
+                continue
+            if old.is_symlink() or not old.is_file() or old.stat().st_uid != os.geteuid():
+                raise ValueError("Unsafe legacy Umbriel file " + str(old))
+            old_key = str(old.relative_to(home))
+            data = old.read_bytes()
+            if baseline.get(old_key) != digest(data):
+                if target.exists():
+                    raise ValueError("Both legacy and new personalized Umbriel files exist: " + str(target))
+                personalized[target] = data.replace(b"umbriel/awtarchy-trial",
+                                                    b"umbriel/awtarchy")
     updated = dict(baseline)
     new_files = changes = preserved = 0
     # Install migration data before publishing an include that references it.
@@ -357,21 +392,24 @@ def reconcile(repo: Path, home: Path, mode: str):
     ordered = sorted(desired, key=lambda path: (
         path == native, str(path)))
     for target in ordered:
-        content = desired[target]
+        content = personalized.get(target, desired[target])
         key = str(target.relative_to(home))
+        is_personal_migration = target in personalized
         expected = digest(content)
         existing = target.read_bytes() if target.exists() else None
         if existing == content:
-            if mode == "apply":
+            if mode == "apply" and not is_personal_migration:
                 updated[key] = expected
             continue
         if existing is None:
             new_files += 1
-            print(("INSTALL " if mode == "apply" else "WOULD INSTALL ") + key)
+            print(("MIGRATE PERSONAL " if is_personal_migration else
+                   "INSTALL " if mode == "apply" else "WOULD INSTALL ") + key)
             if mode == "apply":
                 target.parent.mkdir(parents=True, exist_ok=True)
                 atomic_write(target, content, False)
-                updated[key] = expected
+                if not is_personal_migration:
+                    updated[key] = expected
             continue
         if baseline.get(key) != digest(existing):
             preserved += 1
