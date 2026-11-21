@@ -5,7 +5,7 @@ set -euo pipefail
     printf 'Umbriel Screen Share Guard requires an active session\n' >&2
     false
 }
-helper="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy-trial/screenshare-guard.py"
+helper="${XDG_CONFIG_HOME:-$HOME/.config}/umbriel/awtarchy/screenshare-guard.py"
 [[ -f "$helper" && ! -L "$helper" ]] || {
     printf 'Missing Umbriel Screen Share Guard backend\n' >&2
     false
