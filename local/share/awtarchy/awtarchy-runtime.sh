@@ -2647,9 +2647,11 @@ install_desktop_core_dependencies_stage() {
   # The chosen compositor, Quickshell and Foot are required even when the
   # additional Arch package section is unchecked. Fail before deploying
   # desktop configuration if any required dependency is unavailable.
-  local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot)
+  local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot upower)
   if compositor_has_hyprland; then
-    required+=(hyprland hypridle hyprsunset xdg-desktop-portal-hyprland)
+    # The managed headless authentication agent requires Python GObject and
+    # PolicyKit even when the optional Arch package group is deselected.
+    required+=(hyprland hypridle hyprsunset xdg-desktop-portal-hyprland polkit python-gobject)
   fi
 
   local package
@@ -2665,15 +2667,18 @@ install_desktop_core_dependencies_stage() {
 install_arch_repo_apps_stage() {
   (( INSTALL_ARCH == 1 )) || { warn "Skipping additional Arch repo applications; required desktop packages will still install."; return 0; }
 
-  if ! command -v pacman-conf >/dev/null 2>&1 || ! pacman-conf --repo-list 2>/dev/null | grep -Fxq multilib; then
-    die "Multilib repository is not enabled in effective pacman configuration. Enable it, then rerun."
-  fi
-
+  # Do not demand multilib for unrelated packages. If a selected package
+  # actually requires that repository, pacman will report the unavailable
+  # target and the selected-package loop will fail with its name.
+  #
+  # jack2 may be in use by applications outside Awtarchy. Never force-remove
+  # it with dependency checks disabled to install the optional PipeWire JACK
+  # compatibility provider.
   if pacman -Qi jack2 >/dev/null 2>&1; then
-    warn "Removing conflicting jack2 package before pipewire-jack..."
-    pacman -Rdd --noconfirm jack2 || die "Failed to remove jack2. Remove manually and retry."
+    warn "Existing jack2 package preserved; skipping optional pipewire-jack."
+  elif ! pacman_install_one pipewire-jack; then
+    warn "Optional pipewire-jack installation failed; other desktop packages will continue."
   fi
-  pacman_install_one pipewire-jack || true
 
   if (( ${#ARCH_SELECTED[@]} == 0 )); then
     warn "No Arch repo packages selected. Skipping package loop."
@@ -2732,16 +2737,32 @@ install_arch_repo_apps_stage() {
       fi
     fi
 
-    log "Configuring virtualization..."
-    systemctl enable --now libvirtd || true
-    for _ in {1..10}; do systemctl is-active --quiet libvirtd && break; sleep 1; done
-    virsh net-destroy default || true
-    virsh net-start default || true
-    virsh net-autostart default || true
-    if have ufw; then
-      ufw allow in on virbr0 || true
-      ufw allow out on virbr0 || true
-      ufw reload || true
+    # Do not touch existing VM networks on ordinary desktop installs.
+    # Only an explicit virt-manager selection opts into libvirt setup.
+    if array_contains_exact virt-manager "${ARCH_SELECTED[@]}"; then
+      if pacman -Qq libvirt >/dev/null 2>&1; then
+        log "Configuring selected virtualization tools..."
+        if systemctl enable --now libvirtd; then
+          # Never destroy or restart an already-active guest network.
+          if have virsh && virsh net-info default >/dev/null 2>&1; then
+            if ! virsh net-list --name | grep -Fxq default; then
+              virsh net-start default || warn "Could not start the inactive default libvirt network."
+            fi
+            virsh net-autostart default || warn "Could not enable default libvirt network autostart."
+          else
+            warn "No default libvirt network found; leaving existing networks unchanged."
+          fi
+          if have ufw; then
+            ufw allow in on virbr0 || warn "Could not allow incoming traffic on virbr0."
+            ufw allow out on virbr0 || warn "Could not allow outgoing traffic on virbr0."
+            ufw reload || warn "Could not reload UFW."
+          fi
+        else
+          warn "Could not enable libvirtd for the selected virtualization stack."
+        fi
+      else
+        warn "virt-manager was selected, but libvirt is missing; skipping service/network setup."
+      fi
     fi
   fi
 
