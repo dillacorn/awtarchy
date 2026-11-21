@@ -88,6 +88,39 @@ Singleton {
     property bool privacyRemapPending: false
     property bool resetResizePending: false
     property var launchCounts: ({})
+    // Keyboard selection wins until a genuine pointer movement occurs. Moving
+    // results under a stationary cursor must not re-select a hovered row.
+    property bool pointerSelectionActive: false
+    property bool pointerSampleValid: false
+    property real lastPointerX: 0
+    property real lastPointerY: 0
+
+    function resetPointerTracking() {
+        pointerSelectionActive = false;
+        pointerSampleValid = false;
+    }
+
+    function selectOnPointerMotion(row, mouse) {
+        // Map from the moving delegate into the fixed launcher panel. Qt can
+        // emit hover updates when the result list reflows beneath the cursor;
+        // local MouseArea coordinates alone cannot distinguish that motion.
+        const pos = row.mapToItem(launcherPanel, mouse.x, mouse.y);
+        if (!pointerSampleValid) {
+            lastPointerX = pos.x;
+            lastPointerY = pos.y;
+            pointerSampleValid = true;
+            return;
+        }
+        const deltaX = pos.x - lastPointerX;
+        const deltaY = pos.y - lastPointerY;
+        lastPointerX = pos.x;
+        lastPointerY = pos.y;
+        // Ignore synthetic/rounding jitter when layouts resize or scroll.
+        if (deltaX * deltaX + deltaY * deltaY < 4)
+            return;
+        pointerSelectionActive = true;
+        appList.currentIndex = row.index;
+    }
 
     function focusedScreen() {
         const name = Hyprland.focusedMonitor ? Hyprland.focusedMonitor.name : "";
@@ -129,6 +162,7 @@ Singleton {
     }
 
     function resetSelection() {
+        resetPointerTracking();
         appList.currentIndex = 0;
         Qt.callLater(() => {
             appList.currentIndex = 0;
@@ -983,6 +1017,7 @@ Singleton {
 
         onVisibleChanged: {
             if (visible) {
+                root.resetPointerTracking();
                 positionTimer.restart();
             } else {
                 focusGrab.active = false;
@@ -1084,6 +1119,9 @@ Singleton {
                             focus: launcherWindow.visible && root.launcherPositioned
 
                             Keys.onPressed: event => {
+                                if (event.key === Qt.Key_Down || event.key === Qt.Key_Up
+                                    || event.key === Qt.Key_Left || event.key === Qt.Key_Right)
+                                    root.resetPointerTracking();
                                 if (event.key === Qt.Key_Escape) {
                                     if (root.copySettingsOpen) {
                                         root.copySettingsOpen = false;
@@ -1694,7 +1732,8 @@ Singleton {
 
                         width: GridView.view.cellWidth
                         height: GridView.view.cellHeight
-                        color: GridView.isCurrentItem ? Theme.focus : (hover.containsMouse ? Theme.subtleHover : "transparent")
+                        color: GridView.isCurrentItem ? Theme.focus
+                            : (root.pointerSelectionActive && hover.containsMouse ? Theme.subtleHover : "transparent")
                         border.width: 0
 
                         RowLayout {
@@ -1727,9 +1766,7 @@ Singleton {
                             id: hover
                             anchors.fill: parent
                             hoverEnabled: true
-                            onPositionChanged: mouse => {
-                                appList.currentIndex = row.index;
-                            }
+                            onPositionChanged: mouse => root.selectOnPointerMotion(row, mouse)
                             onClicked: root.launchEntry(row.entry)
                             onWheel: wheel => {
                                 const minY = appList.originY;
