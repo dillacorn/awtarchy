@@ -118,7 +118,7 @@ def quickshell_palette(colors: dict, name: str | None = None) -> bytes:
 
 def save_theme(home: Path, name: str):
     colors = palette(home, name)
-    target = home / ".config/umbriel/awtarchy-trial/theme.toml"
+    target = home / ".config/umbriel/awtarchy/theme.toml"
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.is_symlink() or (target.exists() and (
             not target.is_file() or target.stat().st_uid != os.geteuid())):
