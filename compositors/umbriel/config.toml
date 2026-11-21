@@ -1,4 +1,4 @@
-# Awtarchy Umbriel experimental profile, included only if the user has no
+# Awtarchy Umbriel profile, installed only if the user has no
 # pre-existing ~/.config/umbriel/config.toml. Never change other compositors.
 # Outputs (mode, position, VRR, HDR, tearing) remain at upstream defaults until
 # tested on this exact GPU/display combination.
