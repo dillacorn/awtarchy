@@ -130,8 +130,19 @@ installed_desktop_ready() {
   [[ -f "${TARGET_HOME}/.local/state/awtarchy/config-version" \
     && -f "${config_dir}/foot/foot.ini" \
     && -f "${config_dir}/quickshell/awtarchy/shell.qml" ]] || return 1
-  [[ -f "${config_dir}/hypr/hyprland.lua" \
-    || -f "${config_dir}/sway/awtarchy-trial/config" ]]
+  # An interrupted install may have copied configuration but never
+  # installed the required desktop packages. Reject that as maintenance-only.
+  command -v pacman >/dev/null 2>&1 || return 1
+  pacman -Qq foot quickshell >/dev/null 2>&1 || return 1
+  if [[ -f "${config_dir}/hypr/hyprland.lua" ]] \
+    && pacman -Qq hyprland >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ -f "${config_dir}/sway/awtarchy-trial/config" ]] \
+    && pacman -Qq sway >/dev/null 2>&1; then
+    return 0
+  fi
+  return 1
 }
 
 legacy_install_exists() {
