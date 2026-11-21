@@ -67,34 +67,30 @@ assert all(not chord.startswith("Mod+") and
            ",Mod+" not in chord for chord in keybinds)
 assert config["input"]["mouse"]["accel_profile"] == "flat"
 assert config["input"]["focus"] == {"follows_mouse": "sloppy", "hover_raises": False}
-# Keep resize keys axis-based, not edge-based: both opposite directions
-# must have inverse effects on the focused tile/floating window. Umbriel's
-# documented primary/secondary extents map to width/height in Dwindle.
+# Keyboard directions drive the real split boundary. Focus may be on either
+# side; the helper picks a valid inner edge from current Umbriel IPC geometry.
 resize_actions = {
-    "Left": "window-modify-primary-extent -0.03",
-    "Right": "window-modify-primary-extent +0.03",
-    "Up": "window-modify-secondary-extent -0.03",
-    "Down": "window-modify-secondary-extent +0.03",
-    "h": "window-modify-primary-extent -0.03",
-    "l": "window-modify-primary-extent +0.03",
-    "k": "window-modify-secondary-extent -0.03",
-    "j": "window-modify-secondary-extent +0.03",
+    "Left": "left", "Right": "right", "Up": "up", "Down": "down",
+    "h": "left", "l": "right", "k": "up", "j": "down",
 }
 for mod in ("Alt", "Super"):
-    for key, action in resize_actions.items():
-        assert keybinds[f"{mod}+Ctrl+{key}"] == action
+    for key, direction in resize_actions.items():
+        assert keybinds[f"{mod}+Ctrl+{key}"] == (
+            "spawn python3 ~/.config/umbriel/awtarchy/resize.py " + direction)
     for direction in ("Left", "Right", "Up", "Down"):
         assert keybinds[mod + "+Ctrl+Shift+" + direction] == (
             "workspace-move-to-output-" + direction.lower())
-for key, action in resize_actions.items():
-    assert keybinds[f"submap[noalt],Super+Ctrl+{key}"] == action
-for key, action in {
-    "Y": resize_actions["Left"], "O": resize_actions["Right"],
-    "U": resize_actions["Up"], "I": resize_actions["Down"]
-}.items():
-    assert keybinds[f"Alt+{key}"] == action
-assert not any(action.startswith(("window-modify-width-", "window-modify-height-"))
+for key, direction in resize_actions.items():
+    assert keybinds[f"submap[noalt],Super+Ctrl+{key}"] == (
+        "spawn python3 ~/.config/umbriel/awtarchy/resize.py " + direction)
+for key, direction in {"Y": "left", "O": "right",
+                       "U": "up", "I": "down"}.items():
+    assert keybinds[f"Alt+{key}"] == (
+        "spawn python3 ~/.config/umbriel/awtarchy/resize.py " + direction)
+assert not any(action.startswith(("window-modify-width-", "window-modify-height-",
+                                  "window-modify-primary-", "window-modify-secondary-"))
                for action in keybinds.values())
+assert '"resize.py"' in (TRIAL / "sync.py").read_text()
 # Plain Escape belongs to the focused application, even within a submap.
 # Explicit mode chords remain usable in every mode.
 assert "Escape" not in keybinds
