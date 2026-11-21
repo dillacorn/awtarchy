@@ -146,10 +146,27 @@ check_present 'libvirt is missing'
 check_absent 'systemctl enable --now libvirtd'
 check_absent 'virsh '
 
-# Multilib must not be an unconditional precondition for installing ordinary
-# Arch packages. A selected unavailable package is rejected by pacman itself.
+# Only explicitly selected multilib packages require that repository.
+# Other package choices must not trigger an unconditional multilib probe.
 if extract install_arch_repo_apps_stage | grep -Eq 'pacman-conf|pacman -Rdd'; then
   fail "Unconditional multilib gate or unsafe dependency-bypassing removal returned"
+fi
+if (
+  ARCH_SELECTED=(lib32-optional-test)
+  multilib_enabled() { return 1; }
+  die() { exit 97; }
+  install_arch_repo_apps_stage
+) >"$TMP/multilib-missing.log" 2>&1; then
+  fail "Selected lib32 package bypassed multilib validation"
+fi
+grep -Fq 'requires the enabled multilib repository' "$TMP/multilib-missing.log" ||
+  fail "Required multilib error did not identify the selected package"
+if ! (
+  ARCH_SELECTED=(steam)
+  multilib_enabled() { return 0; }
+  install_arch_repo_apps_stage
+); then
+  fail "A selected multilib package was rejected despite an enabled repository"
 fi
 
 # Real required desktop dependencies must include the managed Hyprland
