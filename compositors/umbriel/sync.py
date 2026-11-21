@@ -298,7 +298,8 @@ def atomic_write(path: Path, data: bytes, backup: bool):
             staged.flush()
             os.fsync(staged.fileno())
         os.chmod(staged_name, 0o755 if path.suffix == ".sh" or
-                 path == Path.home() / ".local/bin/umbriel" else 0o644)
+                 path.name == "umbriel" and path.parent.name == "bin" and
+                 path.parent.parent.name == ".local" else 0o644)
         if backup:
             import datetime
             tag = datetime.datetime.now(datetime.timezone.utc).strftime(
@@ -365,7 +366,7 @@ def reconcile(repo: Path, home: Path, mode: str):
     legacy_root = home / ".config/umbriel/awtarchy-trial"
     target_root = home / ".config/umbriel/awtarchy"
     personalized = {}
-    if legacy_root.exists() or legacy_root.is_symlink():
+    if not state.is_file() and (legacy_root.exists() or legacy_root.is_symlink()):
         if (legacy_root.is_symlink() or not legacy_root.is_dir()
                 or legacy_root.stat().st_uid != os.geteuid()):
             raise ValueError("Unsafe legacy Umbriel config directory")
