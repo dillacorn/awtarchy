@@ -117,7 +117,7 @@ if ! pacman -Qq umbriel-git >/dev/null 2>&1 &&
         false
     }
 fi
-for app in quickshell foot fuzzel wdisplays jq python wl-clipboard cliphist xdg-desktop-portal-gtk grim slurp satty; do
+for app in quickshell foot wdisplays jq python wl-clipboard cliphist xdg-desktop-portal-gtk grim slurp satty; do
     if ! pacman -Qq "$app" >/dev/null 2>&1; then
         sudo pacman -S --needed -- "$app"
     fi
