@@ -145,11 +145,10 @@ installed_desktop_ready() {
   return 1
 }
 
-legacy_install_exists() {
-  # Evidence must belong to this user and include a real desktop config.
-  # /var/lib/awtarchy/managed-packages is system-wide and may be created
-  # during a *failed first install* (or for an entirely different user).
-  # It must never make a fresh machine look like a completed legacy install.
+legacy_install_evidence_present() {
+  # Evidence must belong to this user and include a desktop config.
+  # A system-wide package record must never establish that a first install
+  # completed, or that another account has Awtarchy installed.
   [[ -f "${TARGET_HOME}/.config/hypr/hyprland.lua" \
     || -f "${TARGET_HOME}/.config/sway/awtarchy-trial/config" ]] || return 1
 
@@ -164,7 +163,23 @@ legacy_install_exists() {
   then
     return 0
   fi
+  return 1
+}
 
+legacy_install_exists() {
+  legacy_install_evidence_present || return 1
+  # Legacy releases may predate Foot and Quickshell. Require the actual
+  # compositor package instead; do not misclassify a partially copied
+  # configuration as a complete legacy desktop.
+  command -v pacman >/dev/null 2>&1 || return 1
+  if [[ -f "${TARGET_HOME}/.config/hypr/hyprland.lua" ]] \
+    && pacman -Qq hyprland >/dev/null 2>&1; then
+    return 0
+  fi
+  if [[ -f "${TARGET_HOME}/.config/sway/awtarchy-trial/config" ]] \
+    && pacman -Qq sway >/dev/null 2>&1; then
+    return 0
+  fi
   return 1
 }
 
@@ -715,6 +730,24 @@ resolve_target
 configure_test_system_root
 confirm_full_reinstall
 
+# Reject partial installs BEFORE creating VPN directories, system launchers,
+# privileged helper binaries, or a sudoers policy. Never silently overwrite
+# user configuration to recover a partial first installation.
+if (( REINSTALL == 0 )); then
+  if installed_command_exists && ! installed_desktop_ready; then
+    printf 'ERROR: Awtarchy command exists, but the desktop installation is incomplete.\n' >&2
+    printf 'No files were changed. To complete a full install, run:\n' >&2
+    printf '  sudo ./awtarchy-install.sh --reinstall\n' >&2
+    exit 1
+  fi
+  if ! installed_command_exists && legacy_install_evidence_present && ! legacy_install_exists; then
+    printf 'ERROR: Legacy Awtarchy state exists, but the compositor package is missing.\n' >&2
+    printf 'No files were changed. Review personal configs before choosing a full reinstall:\n' >&2
+    printf '  sudo ./awtarchy-install.sh --reinstall\n' >&2
+    exit 1
+  fi
+fi
+
 if (( DRY_RUN_REQUESTED == 0 )); then
   ensure_vpn_directory
   install_system_launcher
@@ -723,12 +756,6 @@ fi
 
 if (( REINSTALL == 0 )); then
   if installed_command_exists; then
-    if ! installed_desktop_ready; then
-      printf 'ERROR: Awtarchy command exists, but the desktop installation is incomplete.\n' >&2
-      printf 'No packages or managed configs were changed. To complete a full install, run:\n' >&2
-      printf '  sudo ./awtarchy-install.sh --reinstall\n' >&2
-      exit 1
-    fi
     if (( DRY_RUN_REQUESTED == 1 )); then
       printf 'Awtarchy is already installed for %s. No files were changed because --dry-run was used.\n' \
         "$TARGET_USER"
