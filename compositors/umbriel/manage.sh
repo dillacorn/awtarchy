@@ -135,9 +135,9 @@ entry=/usr/share/wayland-sessions/umbriel.desktop
 # rather than applying config and hoping Umbriel will parse it at login.
 check="$(mktemp -d)"
 trap 'rm -rf -- "$check"' EXIT
-mkdir -p "$check/umbriel/awtarchy-trial"
+mkdir -p "$check/umbriel/awtarchy"
 cp -- "$repo/compositors/umbriel/native-config.toml" "$check/umbriel/config.toml"
-cp -- "$repo/compositors/umbriel/config.toml" "$check/umbriel/awtarchy-trial/config.toml"
+cp -- "$repo/compositors/umbriel/config.toml" "$check/umbriel/awtarchy/config.toml"
 if ! XDG_CONFIG_HOME="$check" umbriel config validate; then
     printf 'Umbriel rejected the trial config. No user config applied.\n' >&2
     false
