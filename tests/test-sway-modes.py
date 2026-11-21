@@ -16,6 +16,39 @@ for name in ("noalt", "mouse", "vm"):
     for key, target in (("n", "noalt"), ("m", "mouse"), ("v", "vm")):
         assert (f"bindsym --inhibited Mod4+Mod1+{key} exec bash "
                 f"$trial/mode-control.sh toggle {target}") in blocks[name]
+# In noalt mode Alt is deliberately released to applications;
+# Super+Ctrl resize must still provide all eight inverse width/height actions.
+resize_actions = {
+    "Left": "resize shrink width 30 px",
+    "Right": "resize grow width 30 px",
+    "Up": "resize shrink height 30 px",
+    "Down": "resize grow height 30 px",
+    "h": "resize shrink width 30 px",
+    "l": "resize grow width 30 px",
+    "k": "resize shrink height 30 px",
+    "j": "resize grow height 30 px",
+}
+for key, action in resize_actions.items():
+    binding = f"bindsym Mod4+Control+{key} {action}"
+    assert blocks["noalt"].splitlines().count("    " + binding) == 1, binding
+    assert ("bindsym Mod1+Control+" + key) not in blocks["noalt"]
+# The noalt mode keeps Hyprland's explicitly allowed Alt shortcuts
+# plus Super wallpaper, monitor-transfer, editor and brightness aliases.
+for line in (
+    "bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup",
+    "bindsym Mod4+Shift+space exec bash $trial/ipc.sh launcher toggle",
+    "bindsym Mod4+Shift+w exec bash $trial/awtwall.sh --random-current",
+    "bindsym Mod4+Control+w exec bash $trial/awtwall.sh --random-all",
+    "bindsym Mod4+Mod1+w exec bash $trial/awtwall.sh --random-all-different",
+    "bindsym Mod4+Mod1+e exec bash $trial/ipc.sh control toggleLockscreenEditor",
+    "bindsym Mod4+Mod1+equal exec bash $trial/hypr-ddc-brightness.sh up 5",
+    "bindsym Mod4+Mod1+minus exec bash $trial/hypr-ddc-brightness.sh down 5",
+    "bindsym Mod4+Mod1+Shift+r reload",
+    "bindsym Mod4+Control+Shift+bracketleft move workspace to output left",
+    "bindsym Mod4+Control+Shift+bracketright move workspace to output right",
+):
+    assert blocks["noalt"].splitlines().count("    " + line) == 1, line
+assert "fuzzel" not in config
 assert "Mod4+2 workspace number 2" in blocks["noalt"]
 assert "Mod1+Tab exec python3 $trial/focus-cycle.py next" in blocks["noalt"]
 assert "Mod4+Mod1+2 workspace number 2" in blocks["vm"]

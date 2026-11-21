@@ -7,7 +7,7 @@ umbriel outputs --json >/dev/null 2>&1 || {
 }
 [[ $# -eq 2 ]] || { printf 'Usage: ipc.sh TARGET METHOD\n' >&2; false; }
 case "$1:$2" in
-    launcher:toggle|powermenu:begin|clipboard:toggle|notifications:toggle|notifications:hideFirstPopup|quicksettings:toggle|themes:toggle) ;;
+    launcher:toggle|powermenu:begin|clipboard:toggle|notifications:toggle|notifications:hideFirstPopup|quicksettings:toggle|themes:toggle|control:toggleLockscreenEditor) ;;
     *) printf 'Unsupported Umbriel Quickshell call: %s/%s\n' "$1" "$2" >&2; false ;;
 esac
 config_home="${XDG_CONFIG_HOME:-$HOME/.config}"

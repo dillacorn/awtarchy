@@ -2629,7 +2629,7 @@ reconcile_power_profile_backend() {
 install_sway_repo_dependencies_stage() {
   compositor_has_sway || return 0
   local package
-  for package in sway swaybg swayidle nwg-displays xdg-desktop-portal-wlr quickshell qt6-multimedia qt6-multimedia-ffmpeg foot fuzzel grim slurp satty wl-clipboard cliphist \
+  for package in sway swaybg swayidle nwg-displays xdg-desktop-portal-wlr quickshell qt6-multimedia qt6-multimedia-ffmpeg foot grim slurp satty wl-clipboard cliphist \
       xdg-desktop-portal-gtk libnotify jq python pipewire lxqt-policykit playerctl; do
     pacman_install_one "$package" || die "Sway required Arch package failed: $package"
   done

@@ -78,6 +78,36 @@ for key, expected in {
 }.items():
     assert key in bindings, f"Missing {key}"
     assert any(expected in action for action in bindings[key]), key
+# Hyprland hotkey parity: no retired Fuzzel dependency or accidental
+# compositor reload on the split-orientation shortcut.
+expected_parity = {
+    "Mod4+Shift+space": "exec bash $trial/ipc.sh launcher toggle",
+    "Mod4+Shift+w": "exec bash $trial/awtwall.sh --random-current",
+    "Mod4+Control+w": "exec bash $trial/awtwall.sh --random-all",
+    "Mod4+Mod1+w": "exec bash $trial/awtwall.sh --random-all-different",
+    "Mod4+Mod1+e": "exec bash $trial/ipc.sh control toggleLockscreenEditor",
+    "Mod4+Mod1+equal": "exec bash $trial/hypr-ddc-brightness.sh up 5",
+    "Mod4+Mod1+minus": "exec bash $trial/hypr-ddc-brightness.sh down 5",
+    "Mod1+Shift+r": "split toggle",
+    "Mod4+Mod1+Shift+r": "reload",
+    "Mod4+Control+Shift+bracketleft": "move workspace to output left",
+    "Mod4+Control+Shift+bracketright": "move workspace to output right",
+}
+for chord, action in expected_parity.items():
+    assert bindings.get(chord) == [action], (chord, bindings.get(chord))
+assert "exec fuzzel" not in CONFIG
+setup = (TRIAL / "setup.sh").read_text(encoding="utf-8")
+assert "foot fuzzel" not in setup
+assert "sources=(config awtwall.sh session.sh" in setup
+assert "foot fuzzel" not in RUNTIME.split(
+    "install_sway_repo_dependencies_stage() {", 1)[1].split(
+        "\n}", 1)[0]
+assert 'str(CONFIG / "sway/awtarchy-trial/awtwall.sh"), "--resume"' in (
+    TRIAL / "toggle-utility.py").read_text(encoding="utf-8")
+assert "control:toggleLockscreenEditor" in (TRIAL / "ipc.sh").read_text()
+assert "toggleLockscreenEditor" in (
+    ROOT / "config/quickshell/awtarchy/shell.qml").read_text()
+
 for rule in (
     "floating_modifier Mod1 normal",
     "seat seat0 xcursor_theme Bibata-Modern-Ice 24",
@@ -200,14 +230,26 @@ for line in CONFIG.splitlines():
 # Immediate page flips need output AND application permission; a fullscreen
 # window remains required and ordinary desktop apps are not opted in.
 assert "output * allow_tearing yes" in CONFIG
+# Sway already has the correct native shrink/grow semantics. Verify
+# *every* Alt/Super arrow and hjkl alias matches Hyprland's resize vector.
+resize_actions = {
+    "Left": "resize shrink width 30 px",
+    "Right": "resize grow width 30 px",
+    "Up": "resize shrink height 30 px",
+    "Down": "resize grow height 30 px",
+    "h": "resize shrink width 30 px",
+    "l": "resize grow width 30 px",
+    "k": "resize shrink height 30 px",
+    "j": "resize grow height 30 px",
+}
 for mod in ("Mod1", "Mod4"):
-    for key, expected in (
-        ("h", "resize shrink width 30 px"),
-        ("l", "resize grow width 30 px"),
-        ("k", "resize shrink height 30 px"),
-        ("j", "resize grow height 30 px")
-    ):
-        assert f"bindsym {mod}+Control+{key} {expected}" in CONFIG
+    for key, action in resize_actions.items():
+        assert bindings[f"{mod}+Control+{key}"] == [action], (mod, key)
+for key, action in {
+    "y": resize_actions["Left"], "o": resize_actions["Right"],
+    "u": resize_actions["Up"], "i": resize_actions["Down"],
+}.items():
+    assert bindings[f"Mod1+{key}"] == [action], key
 assert "output * max_render_time off" in CONFIG
 assert re.search(r'(?m)^for_window \[app_id=.*steam_app_.*\] allow_tearing yes$', CONFIG)
 assert re.search(r'(?m)^for_window \[class=.*steam_app_.*\] allow_tearing yes$', CONFIG)

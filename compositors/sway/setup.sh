@@ -32,7 +32,7 @@ for directory in "$HOME/.local" "$tty_dir"; do
         { fail "Unsafe user launcher directory: $directory"; exit 1; }
 done
 [[ -x /usr/bin/sway ]] || { fail "Native /usr/bin/sway is unavailable"; exit 1; }
-for bin in sway swaymsg qs foot fuzzel nwg-displays python3 jq flock grim slurp wl-copy; do
+for bin in sway swaymsg qs foot nwg-displays python3 jq flock grim slurp wl-copy; do
     command -v "$bin" >/dev/null 2>&1 || { fail "Missing package tool $bin"; exit 1; }
 done
 temp="$(mktemp -d)"
@@ -41,7 +41,7 @@ python3 "$src/render-quickshell.py" --source "$repo/config/quickshell/awtarchy" 
 python3 "$src/render-manager.py" --source "$repo/config/hypr/scripts/quickshell.sh" --dest "$temp/quickshell.sh" || { fail 'Quickshell manager render failed'; exit 1; }
 bash -n "$temp/quickshell.sh" || { fail 'Rendered manager syntax invalid'; exit 1; }
 sway -C -c "$src/config" || { fail 'Sway configuration rejected; nothing changed'; exit 1; }
-sources=(config session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh scheduler.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf outputs)
+sources=(config awtwall.sh session.sh ipc.sh launcher.sh power.sh clipboard.sh notifications.sh quick-settings.sh application-state.sh cursor-theme.sh default-apps.sh mode-state.sh mode-help.sh mode-control.sh portal-chooser.py idle-manager.py idle-action.sh swayidle.conf lock.sh lock-manager.sh lock-capture.sh sensitive-capture.sh runtime-rules.sh position.sh capture.sh keyboard-state.py mime-parity.py login-sound.sh scheduler.sh quicksettings.sh quicksettings.py monitor-info.py workspace-state.py theme-apply.sh theme-colors.sh toggle-utility.py diagnose.sh ddc.sh sway-portals.conf focus-cycle.py screencast-chooser.conf outputs)
 targets=()
 for name in "${sources[@]}"; do
     [[ -f "$src/$name" && ! -L "$src/$name" ]] || { fail "Missing source $name"; exit 1; }

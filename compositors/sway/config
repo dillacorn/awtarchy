@@ -97,11 +97,17 @@ bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
 bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
+bindsym Mod4+Mod1+e exec bash $trial/ipc.sh control toggleLockscreenEditor
+bindsym Mod4+Mod1+equal exec bash $trial/hypr-ddc-brightness.sh up 5
+bindsym Mod4+Mod1+minus exec bash $trial/hypr-ddc-brightness.sh down 5
 bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
 bindsym Mod4+Mod1+l exec smtty -S -l
 bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
 bindsym Mod4+Mod1+k exec smtty -k
 bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
+bindsym Mod4+Shift+w exec bash $trial/awtwall.sh --random-current
+bindsym Mod4+Control+w exec bash $trial/awtwall.sh --random-all
+bindsym Mod4+Mod1+w exec bash $trial/awtwall.sh --random-all-different
 bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
 bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
 bindsym Mod4+e exec env QT_QPA_PLATFORMTHEME=qt5ct:qt6ct python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
@@ -113,8 +119,8 @@ bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Control+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
 bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
-# Fuzzel remains available from the App Launcher and a dedicated fallback.
-bindsym Mod4+Shift+space exec fuzzel
+# Super+Shift+Space is a Quickshell launcher alias; retired Fuzzel is not used.
+bindsym Mod4+Shift+space exec bash $trial/ipc.sh launcher toggle
 bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
 
@@ -135,9 +141,12 @@ bindsym Mod1+f floating toggle
 bindsym Mod4+f floating toggle
 bindsym Mod1+Control+f fullscreen toggle
 bindsym Mod4+Control+f fullscreen toggle
+# Sway toggles split orientation but lacks Hyprland's distinct swapsplit.
+# Alt+Shift+R must not unexpectedly reload the compositor.
 bindsym Mod1+r split toggle
 bindsym Mod4+r split toggle
-bindsym Mod1+Shift+r reload
+bindsym Mod1+Shift+r split toggle
+bindsym Mod4+Mod1+Shift+r reload
 bindsym Mod4+Shift+r split toggle
 
 # Scratchpad: Sway's native scratchpad, not Hyprland's special workspace.
@@ -258,6 +267,8 @@ bindsym Mod4+bracketleft workspace prev
 bindsym Mod4+bracketright workspace next
 bindsym Mod1+Control+Shift+bracketleft move workspace to output left
 bindsym Mod1+Control+Shift+bracketright move workspace to output right
+bindsym Mod4+Control+Shift+bracketleft move workspace to output left
+bindsym Mod4+Control+Shift+bracketright move workspace to output right
 
 # Keyboard layouts, microphone and audio.
 bindsym Mod4+m exec wpctl set-mute @DEFAULT_AUDIO_SINK@ toggle
@@ -398,21 +409,28 @@ mode "noalt" {
     bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
     bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
     bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
+    bindsym Mod4+Mod1+e exec bash $trial/ipc.sh control toggleLockscreenEditor
+    bindsym Mod4+Mod1+equal exec bash $trial/hypr-ddc-brightness.sh up 5
+    bindsym Mod4+Mod1+minus exec bash $trial/hypr-ddc-brightness.sh down 5
     bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
     bindsym Mod4+Mod1+l exec smtty -S -l
     bindsym Mod4+Mod1+o exec python3 $trial/toggle-utility.py smtty-O
     bindsym Mod4+Mod1+k exec smtty -k
     bindsym Mod4+w exec python3 $trial/toggle-utility.py wallpicker
+    bindsym Mod4+Shift+w exec bash $trial/awtwall.sh --random-current
+    bindsym Mod4+Control+w exec bash $trial/awtwall.sh --random-all
+    bindsym Mod4+Mod1+w exec bash $trial/awtwall.sh --random-all-different
     bindsym Mod4+t exec bash $trial/ipc.sh themes toggle
     bindsym Mod4+b exec python3 $HOME/.config/hypr/scripts/default_applications.py launch browser
     bindsym Mod4+e exec env QT_QPA_PLATFORMTHEME=qt5ct:qt6ct python3 $HOME/.config/hypr/scripts/default_applications.py launch file-manager
     bindsym Mod4+Shift+e exec foot yazi
     bindsym Mod4+Mod1+a exec python3 $trial/toggle-utility.py default-apps
     bindsym Mod4+space exec bash $trial/ipc.sh notifications hideFirstPopup
+    bindsym Mod1+space exec bash $trial/ipc.sh notifications hideFirstPopup
     bindsym Mod1+Control+space exec bash $trial/ipc.sh notifications hideFirstPopup
     bindsym Mod1+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
     bindsym Mod1+Control+Shift+space exec bash $trial/ipc.sh notifications hideFirstPopup
-    bindsym Mod4+Shift+space exec fuzzel
+    bindsym Mod4+Shift+space exec bash $trial/ipc.sh launcher toggle
     bindsym Mod1+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
     bindsym Mod4+Shift+c exec foot --app-id awtarchy-qalc --title Qalc bash $HOME/.config/hypr/scripts/qalc-terminal.sh
     bindsym Mod1+Tab exec python3 $trial/focus-cycle.py next
@@ -425,6 +443,7 @@ mode "noalt" {
     bindsym Mod4+Control+f fullscreen toggle
     bindsym Mod4+r split toggle
     bindsym Mod4+Shift+r split toggle
+    bindsym Mod4+Mod1+Shift+r reload
     bindsym Mod4+x scratchpad show
     bindsym Mod4+Control+x move scratchpad
     bindsym Mod4+y sticky toggle
@@ -433,6 +452,8 @@ mode "noalt" {
     bindsym Mod4+Shift+Left move left
     bindsym Mod4+Shift+h move left
     bindsym Mod4+Control+Shift+Left move workspace to output left
+    bindsym Mod4+Control+Shift+bracketleft move workspace to output left
+    bindsym Mod4+Control+Shift+bracketright move workspace to output right
     bindsym Mod4+Down focus down
     bindsym Mod4+j focus down
     bindsym Mod4+Shift+Down move down
