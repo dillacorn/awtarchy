@@ -137,8 +137,8 @@ def render(repo: Path, destination: Path):
                                 "        }\n\n"
                             )
                             text = text.replace(start, press + start, 1)
-                            root = "    Item {\n        id: " + layout + "\n"
-                            if text.count(root) != 1:
+                            visual_anchor = "    Item {\n        id: " + layout + "\n"
+                            if text.count(visual_anchor) != 1:
                                 raise ValueError("Umbriel bar visual anchor drift")
                             visual = (
                                 "        opacity: bar.swayDragActive ? 0.84 : 1\n"
@@ -146,7 +146,7 @@ def render(repo: Path, destination: Path):
                                 "        Behavior on opacity { NumberAnimation { duration: 125; easing.type: Easing.OutCubic } }\n"
                                 "        Behavior on scale { NumberAnimation { duration: 125; easing.type: Easing.OutCubic } }\n"
                             )
-                            text = text.replace(root, root + visual, 1)
+                            text = text.replace(visual_anchor, visual_anchor + visual, 1)
                         # The visual press feedback does not affect native
                         # Quickshell buttons or modifier-free clicks.
                         cursor = "    property bool wsDrawerOpen: false"
