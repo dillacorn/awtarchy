@@ -192,6 +192,26 @@ def desired_files(repo: Path, home: Path, stage: Path) -> dict[Path, bytes]:
     # Screenshot preferences are shared; stage the known-good helper without
     # writing into any source compositor's installed configuration.
     sources[target / "screenshot_sound.sh"] = repo / "config/hypr/scripts/screenshot_sound.sh"
+    # Carry Sway's tested, isolated login sound without touching installed
+    # Hyprland, compositor configuration, or the shared sound preferences.
+    audio = repo / "config/hypr/sounds/awtarchy-login.mp3"
+    login_source = repo / "compositors/sway/login-sound.sh"
+    if (not audio.is_file() or audio.is_symlink() or audio.stat().st_size < 100
+            or not login_source.is_file() or login_source.is_symlink()):
+        raise ValueError("Unsafe Awtarchy login audio source")
+    result[target / "awtarchy-login.mp3"] = audio.read_bytes()
+    login = login_source.read_text(encoding="utf-8")
+    old_session = ('[[ "${XDG_CURRENT_DESKTOP:-}" == sway && -n "${SWAYSOCK:-}" &&\n'
+                   '   -n "${WAYLAND_DISPLAY:-}" ]] || exit 0')
+    new_session = ('[[ "${XDG_CURRENT_DESKTOP,,}" == umbriel &&\n'
+                   '   -n "${WAYLAND_DISPLAY:-}" ]] || exit 0')
+    if login.count(old_session) != 1:
+        raise ValueError("Sway login sound session guard changed")
+    login = login.replace(old_session, new_session, 1)
+    login = login.replace("sway/awtarchy-trial", "umbriel/awtarchy-trial")
+    login = login.replace("awtarchy-sway-login-sound.lock",
+                          "awtarchy-umbriel-login-sound.lock")
+    result[target / "login-sound.sh"] = login.encode("utf-8")
     for dst, origin in sources.items():
         if origin.is_symlink() or not origin.is_file():
             raise ValueError("Unsafe Umbriel source " + str(origin))
