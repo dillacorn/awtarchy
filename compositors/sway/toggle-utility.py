@@ -34,7 +34,8 @@ UTILITIES = {
         ("smtty-O",), (str(HYPR_SCRIPTS / "default_terminal.sh"),
                       "--class", "smtty-O", "--hold", "--", "smtty", "-O"), False),
     "wallpicker": (
-        ("wallpicker",), ("foot", "--app-id", "wallpicker", "awtwall", "--resume"), False),
+        ("wallpicker",), ("foot", "--app-id", "wallpicker", "bash",
+                          str(CONFIG / "sway/awtarchy-trial/awtwall.sh"), "--resume"), False),
     "pavucontrol": (
         ("pavucontrol", "org.pulseaudio.pavucontrol"), ("pavucontrol",), False),
     "pulsemixer": (
