@@ -1,32 +1,35 @@
 #!/usr/bin/env bash
-# Isolated Umbriel trial. Never updates another compositor or the release state.
+# Awtarchy Umbriel compositor manager. Preserve all other desktop configurations.
 set -euo pipefail
 
 [[ $# -eq 2 ]] || { printf 'Usage: manage.sh install-umbriel|remove-umbriel preview|apply\n' >&2; false; }
 operation="$1"
 mode="$2"
 [[ "$operation" == install-umbriel || "$operation" == remove-umbriel ]] || {
-    printf 'Unsupported Umbriel trial action\n' >&2; false;
+    printf 'Unsupported Umbriel action\n' >&2; false;
 }
 [[ "$mode" == preview || "$mode" == apply ]] || {
-    printf 'Invalid Umbriel trial mode\n' >&2; false;
+    printf 'Invalid Umbriel mode\n' >&2; false;
 }
 [[ "$(id -u)" -ne 0 ]] || { printf 'Use a normal user, not root\n' >&2; false; }
 [[ -f /etc/arch-release ]] || { printf 'Arch/CachyOS host required\n' >&2; false; }
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-[[ -d "$repo/.git" && ! -L "$repo" &&
-   "$(git -C "$repo" branch --show-current)" == feature/umbriel-quickshell-trial &&
-   "$(git -C "$repo" remote get-url origin)" == https://github.com/dillacorn/awtarchy.git &&
-   -z "$(git -C "$repo" status --porcelain --untracked-files=no)" ]] || {
-    printf 'Expected clean, exact Awtarchy Umbriel trial checkout\n' >&2; false;
+[[ -f "$repo/compositors/umbriel/sync.py" &&
+   -f "$repo/compositors/umbriel/native-config.toml" &&
+   -f "$repo/compositors/umbriel/tty-launch.sh" &&
+   ! -L "$repo/compositors/umbriel/sync.py" &&
+   ! -L "$repo/compositors/umbriel/native-config.toml" &&
+   ! -L "$repo/compositors/umbriel/tty-launch.sh" ]] || {
+    printf 'Incomplete or unsafe Awtarchy Umbriel release source\n' >&2
+    false
 }
 [[ "${XDG_CONFIG_HOME:-$HOME/.config}" == "$HOME/.config" ]] || {
-    printf 'Custom XDG_CONFIG_HOME is not yet supported by this isolated trial\n' >&2; false;
+    printf 'Umbriel setup requires the default XDG_CONFIG_HOME\n' >&2; false;
 }
 for command in pacman python3 git; do
     command -v "$command" >/dev/null || { printf 'Missing %s\n' "$command" >&2; false; }
 done
-printf '\nUmbriel trial: %s\n' "$operation"
+printf '\nUmbriel: %s\n' "$operation"
 printf 'Never removes or overwrites Hyprland, Sway, Mango or KWin settings.\n'
 if [[ "$operation" == remove-umbriel ]]; then
     # A compositor removal is an explicitly selected and confirmed action.
@@ -139,7 +142,7 @@ mkdir -p "$check/umbriel/awtarchy"
 cp -- "$repo/compositors/umbriel/native-config.toml" "$check/umbriel/config.toml"
 cp -- "$repo/compositors/umbriel/config.toml" "$check/umbriel/awtarchy/config.toml"
 if ! XDG_CONFIG_HOME="$check" umbriel config validate; then
-    printf 'Umbriel rejected the trial config. No user config applied.\n' >&2
+    printf 'Umbriel rejected the managed config. No user config applied.\n' >&2
     false
 fi
 python3 "$repo/compositors/umbriel/sync.py" apply --repo "$repo"
@@ -151,7 +154,7 @@ if ! bash "$repo/compositors/umbriel/register-ly-session.sh" apply; then
     printf 'Review safely: bash %s/compositors/umbriel/register-ly-session.sh plan\n' "$repo" >&2
     false
 fi
-printf 'Umbriel trial files staged; Ly visibility is not yet verified.\n'
+printf 'Umbriel managed files staged; Ly visibility is not yet verified.\n'
 printf 'Ly reads session entries when it starts. A reboot may be necessary\n'
 printf 'before Umbriel appears; do not restart Ly from an active desktop.\n'
 printf 'If Umbriel remains absent, run: bash %s/compositors/umbriel/diagnose-session.sh\n' "$repo"
