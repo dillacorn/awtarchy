@@ -89,6 +89,9 @@ def render_toml(colors: dict) -> bytes:
         "# Awtarchy Umbriel theme: auto-generated; owned by the selected theme.\n"
         "[colors]\n"
         f'accent_primary = "{active}"\n'
+        # Use the active-border RGB with a translucent overlay, matching
+        # Umbriel's native drop/insertion preview rather than a fixed blue.
+        f'insert_hint = "#{colors["active_border"][:6].upper()}80"\n'
         f'background = "{colors["background"].upper()}FF"\n'
         f'text_primary = "{colors["foreground"].upper()}FF"\n\n'
         "[colors.border]\n"
