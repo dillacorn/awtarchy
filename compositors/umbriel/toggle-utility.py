@@ -26,7 +26,7 @@ UTILITIES = {
         "--class", "smtty-O", "--hold", "--", "smtty", "-O"), False),
     "wallpicker": (("wallpicker",),
         ("foot", "--app-id", "wallpicker", "bash",
-         str(CONFIG / "umbriel/awtarchy-trial/awtwall.sh"), "--resume"), False),
+         str(CONFIG / "umbriel/awtarchy/awtwall.sh"), "--resume"), False),
     "awtarchy-tips-tui": (("awtarchy-tips-tui",), ("foot", "--app-id",
         "awtarchy-tips-tui", str(SCRIPTS / "awtarchy-tips-tui.sh")), False),
 }
