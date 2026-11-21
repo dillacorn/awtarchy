@@ -286,6 +286,10 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
         assert "/usr/bin/awtwall" in awtwall_launcher.read_text()
         assert 'bash "$awtwall_launcher" --restore' in (
             home / ".config/umbriel/awtarchy/session.sh").read_text()
+        diagnostic_copy = home / ".config/umbriel/awtarchy/diagnose-session.sh"
+        assert diagnostic_copy.is_file()
+        assert diagnostic_copy.read_bytes() == (TRIAL / "diagnose-session.sh").read_bytes()
+        subprocess.run(["bash", "-n", str(diagnostic_copy)], check=True)
         assert (home / ".config/quickshell/awtarchy-umbriel/shell.qml").exists()
         sound = home / ".config/umbriel/awtarchy"
         assert (sound / "screenshot_sound.sh").read_bytes() == (
