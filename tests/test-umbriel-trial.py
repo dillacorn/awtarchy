@@ -144,6 +144,15 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "return workspace.active || workspace.toplevels.values.length > 0;" in bar
     assert bar.count('modelData.active ? Theme.subtleActive : "transparent"') >= 2
     assert "awtarchy-umbriel-submap" in bar
+    assert "id: umbrielBarPressHorizontal" in bar
+    assert "id: umbrielBarPressVertical" in bar
+    assert "if (pressed) bar.beginSwayDrag();" in bar
+    assert "opacity: bar.swayDragActive ? 0.84 : 1" in bar
+    assert "scale: bar.swayDragActive ? 0.992 : 1" in bar
+    assert "if (swayDragActive) return;" in bar
+    popup = (rendered / "UmbrielFlyoutWindow.qml").read_text()
+    assert "((cornerRole || notificationRole) && (placement === \"top\"" in popup
+    assert "((cornerRole || notificationRole) && (placement === \"left\"" in popup
     assert bar.count('["python3", bar.mouseSubmapScript, "toggle", "mouse"]') >= 2
     assert '["python3", bar.mouseSubmapScript, "reset"]' in bar
     quick = (rendered / "QuickSettings.qml").read_text()

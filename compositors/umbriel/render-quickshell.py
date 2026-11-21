@@ -108,6 +108,51 @@ def render(repo: Path, destination: Path):
                     text = text.replace("active-theme-sway", "active-theme-umbriel")
                     text = text.replace("Sway", "Umbriel")
                     if source.name == "Bar.qml":
+                        # Umbriel panel drag feedback starts on Alt+left PRESS,
+                        # before the original Sway DragHandler crosses threshold.
+                        # Animate content, not layer-shell margins: changing
+                        # margins mid-grab can interrupt the Wayland gesture.
+                        guard = "    function beginSwayDrag() {\n"
+                        if text.count(guard) != 1:
+                            raise ValueError("Umbriel bar drag function drift")
+                        text = text.replace(guard, guard +
+                            "        if (swayDragActive) return;\n", 1)
+                        for orient, layout in (("Horizontal", "horizontalLayout"),
+                                               ("Vertical", "verticalLayout")):
+                            start = ("        DragHandler {\n"
+                                     "            id: swayBarDrag" + orient + "\n")
+                            if text.count(start) != 1:
+                                raise ValueError("Umbriel bar pointer handler drift")
+                            press = (
+                                "        TapHandler {\n"
+                                "            id: umbrielBarPress" + orient + "\n"
+                                "            acceptedButtons: Qt.LeftButton\n"
+                                "            acceptedModifiers: Qt.AltModifier\n"
+                                "            gesturePolicy: TapHandler.DragThreshold\n"
+                                "            onPressedChanged: {\n"
+                                "                if (pressed) bar.beginSwayDrag();\n"
+                                "                else if (!swayBarDrag" + orient + ".active)\n"
+                                "                    bar.finishSwayDrag();\n"
+                                "            }\n"
+                                "        }\n\n"
+                            )
+                            text = text.replace(start, press + start, 1)
+                            root = "    Item {\n        id: " + layout + "\n"
+                            if text.count(root) != 1:
+                                raise ValueError("Umbriel bar visual anchor drift")
+                            visual = (
+                                "        opacity: bar.swayDragActive ? 0.84 : 1\n"
+                                "        scale: bar.swayDragActive ? 0.992 : 1\n"
+                                "        Behavior on opacity { NumberAnimation { duration: 125; easing.type: Easing.OutCubic } }\n"
+                                "        Behavior on scale { NumberAnimation { duration: 125; easing.type: Easing.OutCubic } }\n"
+                            )
+                            text = text.replace(root, root + visual, 1)
+                        # The visual press feedback does not affect native
+                        # Quickshell buttons or modifier-free clicks.
+                        cursor = "    property bool wsDrawerOpen: false"
+                        if text.count(cursor) != 1:
+                            raise ValueError("Umbriel bar state anchor drift")
+                    if source.name == "Bar.qml":
                         # The compositor's native drag modifier is Alt; the
                         # Super keyboard chords are bound explicitly.
                         text = text.replace(

@@ -95,7 +95,12 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     temporarily_absent, missing = module.migrate(home, "hyprland", {"DP-3"})
     assert missing["workspace_home"] == "DP-1"
     assert temporarily_absent
-    keys = profile["keybinds"]
+    # Check the effective config: the generated include is intentionally
+    # forbidden from overriding a native Awtarchy-owned chord.
+    native_binds = tomllib.loads((ROOT / "compositors/umbriel/config.toml").read_text())["keybinds"]
+    keys = {**native_binds, **profile.get("keybinds", {})}
+    for chord in native_binds:
+        assert chord not in profile.get("keybinds", {}), chord
     assert keys["Super+F"] == "window-toggle-floating", keys
     assert keys["Super+Ctrl+F"] == "window-toggle-fullscreen"
     assert keys["Super+Q"] == "window-close"
@@ -169,11 +174,12 @@ with tempfile.TemporaryDirectory(prefix="awtarchy-migration-") as d:
     profile = tomllib.loads(raw.decode())
     assert report["source"] == "sway"
     assert profile["output"]["DP-3"]["vrr"] == "always"
-    assert profile["keybinds"]["Super+F"] == "window-toggle-floating"
-    assert profile["keybinds"]["Super+Ctrl+F"] == "window-toggle-fullscreen"
-    assert profile["keybinds"]["Super+D"].endswith("launcher toggle")
-    assert profile["keybinds"]["Alt+1"] == "workspace-switch --name 1"
-    assert "Alt+Tab" not in profile["keybinds"]  # Sway-specific focus-cycle utility
+    effective = {**native_binds, **profile.get("keybinds", {})}
+    assert effective["Super+F"] == "window-toggle-floating"
+    assert effective["Super+Ctrl+F"] == "window-toggle-fullscreen"
+    assert effective["Super+D"].endswith("launcher toggle")
+    assert effective["Alt+1"] == "workspace-switch --name 1"
+    assert "Alt+Tab" not in profile.get("keybinds", {})  # Sway-specific focus-cycle utility
 
     with patch.dict(os.environ, {"XDG_CURRENT_DESKTOP": "Umbriel"}):
         _, report = module.migrate(home, connected=connected)

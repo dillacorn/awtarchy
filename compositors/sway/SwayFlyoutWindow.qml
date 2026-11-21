@@ -94,10 +94,10 @@ PanelWindow {
     // reduces the panel when the user intended to enlarge it.
     readonly property bool dragFromRight: placement === "right"
         || placement === "right-center"
-        || (cornerRole && (placement === "top" || placement === "bottom"))
+        || ((cornerRole || notificationRole) && (placement === "top" || placement === "bottom"))
     readonly property bool dragFromBottom: placement === "bottom"
         || placement === "bottom-center"
-        || (cornerRole && (placement === "left" || placement === "right"))
+        || ((cornerRole || notificationRole) && (placement === "left" || placement === "right"))
     readonly property int notificationAnchorX: edgeAnchor >= 0
         ? Math.round(edgeAnchor) : outputWidth - 40
     readonly property int notificationAnchorY: edgeAnchor >= 0

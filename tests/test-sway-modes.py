@@ -29,6 +29,9 @@ assert 'boolean:transient:true' in (TRIAL / "mode-control.sh").read_text()
 assert 'submap: ON' in (TRIAL / "mode-control.sh").read_text()
 assert 'Mouse submap (Alt+drag still required)' in render
 assert 'Current mode: ' not in render
+flyout = (TRIAL / "SwayFlyoutWindow.qml").read_text()
+assert '((cornerRole || notificationRole) && (placement === "top"' in flyout
+assert '((cornerRole || notificationRole) && (placement === "left"' in flyout
 with tempfile.TemporaryDirectory(prefix="sway-modes-") as tmp:
     home = Path(tmp)
     runtime = home / "runtime"
