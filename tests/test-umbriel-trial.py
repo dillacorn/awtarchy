@@ -112,6 +112,11 @@ with tempfile.TemporaryDirectory(prefix="umbriel-trial-test-") as temp:
     assert "native portal" in (rendered / "ScreenSharePicker.qml").read_text()
     assert "/sway/awtarchy-trial/" not in (rendered / "ScreenSharePicker.qml").read_text()
     assert (rendered / "UmbrielFlyoutWindow.qml").is_file()
+    live_flyout = (rendered / "UmbrielFlyoutWindow.qml").read_text()
+    assert "popup.resizeCommitted(popup.resizePreviewWidth," in live_flyout
+    assert "visible: swayResizeDrag.active" not in live_flyout
+    assert "Commit only on release" not in live_flyout
+    assert "popup.resizeInProgress = false;" in live_flyout
     for source in rendered.glob("*.qml"):
         text = source.read_text()
         assert "import Quickshell.I3" not in text, source

@@ -61,6 +61,43 @@ def render(repo: Path, destination: Path):
                     shutil.copyfile(source, result / target)
                     continue
                 if source.suffix == ".qml":
+                    if source.name == "SwayFlyoutWindow.qml":
+                        # Live-resize Umbriel layer-shell panels throughout the
+                        # pointer drag. Leave the Sway profile untouched.
+                        release = """                } else if (popup.resizeInProgress) {
+                    popup.resizeInProgress = false;
+                    // Tell the original flyout owner to update its dimension
+                    // overrides; this preserves the normal Save/Restore path.
+                    // Commit only on release to keep the Wayland pointer grab.
+                    popup.resizeCommitted(popup.resizePreviewWidth,
+                        popup.resizePreviewHeight);
+                }
+"""
+                        live_release = """                } else if (popup.resizeInProgress) {
+                    popup.resizeInProgress = false;
+                }
+"""
+                        movement = """                    Math.round(popup.resizeStartHeight + activeTranslation.y
+                        * (popup.dragFromBottom ? -1 : 1))));
+"""
+                        live_movement = movement + """                // Show the new dimensions during the drag and preserve
+                // the existing Save/Restore flow for persistent preferences.
+                popup.resizeCommitted(popup.resizePreviewWidth,
+                    popup.resizePreviewHeight);
+"""
+                        overlay = """        Rectangle {
+            visible: swayResizeDrag.active
+"""
+                        if (text.count(release) != 1 or text.count(movement) != 1
+                                or text.count(overlay) != 1):
+                            raise ValueError("Umbriel live flyout resize source changed")
+                        text = text.replace(release, live_release, 1)
+                        text = text.replace(movement, live_movement, 1)
+                        start = text.index(overlay)
+                        end = text.find("\n        }\n    }\n\n}\n", start)
+                        if end < 0:
+                            raise ValueError("Umbriel resize overlay boundary changed")
+                        text = text[:start] + text[end + len("\n        }"):]
                     text = text.replace("SwayBridge", "UmbrielBridge")
                     text = text.replace("SwayFocusGrab", "UmbrielFocusGrab")
                     text = text.replace("SwayDragBridge", "UmbrielDragBridge")
