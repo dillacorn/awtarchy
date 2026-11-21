@@ -45,7 +45,7 @@ def state_root() -> Path:
 
 
 def paths() -> tuple[Path, Path, Path, Path]:
-    root = config_root() / "umbriel/awtarchy-trial"
+    root = config_root() / "umbriel/awtarchy"
     runtime = os.environ.get("XDG_RUNTIME_DIR")
     if not runtime:
         raise ValueError("XDG_RUNTIME_DIR required")
