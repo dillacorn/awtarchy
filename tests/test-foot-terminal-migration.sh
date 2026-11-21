@@ -48,7 +48,7 @@ if grep -Fq 'remove_retired_alacritty_packages' "$RUNTIME"; then
 fi
 require "$RUNTIME" 'if (rel.startswith(".config/alacritty/")'
 require "$RUNTIME" 'or rel.startswith(".local/share/SpeedCrunch/")) and ni is None:'
-require "$RUNTIME" 'local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot)'
+require "$RUNTIME" 'local -a required=(quickshell qt6-multimedia qt6-multimedia-ffmpeg foot upower)'
 require "$RUNTIME" 'install_desktop_core_dependencies_stage'
 require "$RUNTIME" 'pacman_install_one "$package" || die "Required desktop package failed: $package"'
 require "$CONFIG" 'alpha=0.85'
