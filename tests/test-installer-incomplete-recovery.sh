@@ -16,10 +16,10 @@ extract() {
 for func in installed_command_exists installed_desktop_ready legacy_install_exists; do
   eval "$(extract "$func" "$INSTALLER")"
 done
-for func in pacman_install_one install_arch_repo_apps_stage install_desktop_core_dependencies_stage compositor_has_hyprland; do
+for func in pacman_install_one install_arch_repo_apps_stage install_desktop_core_dependencies_stage verify_installed_desktop_config_stage compositor_has_hyprland compositor_has_sway; do
   eval "$(extract "$func" "$RUNTIME")"
 done
-for func in installed_command_exists installed_desktop_ready legacy_install_exists pacman_install_one install_desktop_core_dependencies_stage; do
+for func in installed_command_exists installed_desktop_ready legacy_install_exists pacman_install_one install_desktop_core_dependencies_stage verify_installed_desktop_config_stage; do
   declare -F "$func" >/dev/null || fail "Missing installer function: $func"
 done
 
@@ -165,13 +165,42 @@ if (
   fail "Missing post-install core dependency did not halt installation"
 fi
 
+# A full install must never report success when the selected desktop's
+# managed configuration was not deployed.
+HOME_DIR="$TMP/config-home"
+COMPOSITOR_SELECTION=hyprland
+if (verify_installed_desktop_config_stage); then
+  fail "Missing desktop configuration was accepted"
+fi
+mkdir -p "$HOME_DIR/.config/foot" "$HOME_DIR/.config/quickshell/awtarchy" "$HOME_DIR/.config/hypr"
+: >"$HOME_DIR/.config/foot/foot.ini"
+: >"$HOME_DIR/.config/quickshell/awtarchy/shell.qml"
+: >"$HOME_DIR/.config/hypr/hyprland.lua"
+verify_installed_desktop_config_stage || fail "Complete Hyprland config rejected"
+COMPOSITOR_SELECTION=both
+if (verify_installed_desktop_config_stage); then
+  fail "Both compositors accepted without Sway config"
+fi
+mkdir -p "$HOME_DIR/.config/sway/awtarchy-trial"
+: >"$HOME_DIR/.config/sway/awtarchy-trial/config"
+verify_installed_desktop_config_stage || fail "Complete dual-compositor config rejected"
+COMPOSITOR_SELECTION=sway
+rm -f -- "$HOME_DIR/.config/hypr/hyprland.lua"
+verify_installed_desktop_config_stage || fail "Complete Sway-only config rejected"
+rm -f -- "$HOME_DIR/.config/foot/foot.ini"
+if (verify_installed_desktop_config_stage); then
+  fail "Missing Foot config was accepted"
+fi
+
 run_install_source="$(extract run_install "$RUNTIME")"
 [[ "$run_install_source" == *'  install_arch_repo_apps_stage
   install_sway_repo_dependencies_stage
   install_desktop_core_dependencies_stage'* ]] ||
   fail "Required core stage not reached by installer"
-[[ "$run_install_source" == *'  copy_awtarchy_configs_stage'* ]] ||
-  fail "Installer config stage disappeared"
+[[ "$run_install_source" == *'  copy_awtarchy_configs_stage
+  install_sway_session_stage
+  verify_installed_desktop_config_stage'* ]] ||
+  fail "Required desktop config verification is missing from installer"
 [[ "$(grep -Fc 'pacman_install_one "$pkg" || die "Selected Arch repository package failed: $pkg"' "$RUNTIME")" -eq 2 ]] ||
   fail "A selected package loop still ignores failed installs"
 printf 'PASS: Incomplete install and required desktop package regressions\n'
