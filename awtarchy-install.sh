@@ -121,11 +121,30 @@ installed_command_exists() {
     && -f "${TARGET_HOME}/.local/share/awtarchy/awtarchy-runtime.sh" ]]
 }
 
+installed_desktop_ready() {
+  # A maintenance command is not proof that the desktop was installed.
+  # Older completed installations have these managed files even before a
+  # dedicated completion marker existed. Do not silently reinstall a
+  # partially configured desktop and overwrite the user's dotfiles.
+  local config_dir="${TARGET_HOME}/.config"
+  [[ -f "${TARGET_HOME}/.local/state/awtarchy/config-version" \
+    && -f "${config_dir}/foot/foot.ini" \
+    && -f "${config_dir}/quickshell/awtarchy/shell.qml" ]] || return 1
+  [[ -f "${config_dir}/hypr/hyprland.lua" \
+    || -f "${config_dir}/sway/awtarchy-trial/config" ]]
+}
+
 legacy_install_exists() {
+  # Evidence must belong to this user and include a real desktop config.
+  # /var/lib/awtarchy/managed-packages is system-wide and may be created
+  # during a *failed first install* (or for an entirely different user).
+  # It must never make a fresh machine look like a completed legacy install.
+  [[ -f "${TARGET_HOME}/.config/hypr/hyprland.lua" \
+    || -f "${TARGET_HOME}/.config/sway/awtarchy-trial/config" ]] || return 1
+
   [[ -f "${TARGET_HOME}/.cache/awtarchy/version" ]] && return 0
   [[ -d "${TARGET_HOME}/.local/state/awtarchy/baseline" ]] && return 0
   [[ -f "${TARGET_HOME}/.local/state/awtarchy/hardware-state" ]] && return 0
-  [[ -f /var/lib/awtarchy/managed-packages ]] && return 0
 
   if [[ -f "${TARGET_HOME}/.bashrc" \
     && -f "${TARGET_HOME}/.config/hypr/hyprland.lua" \
@@ -693,6 +712,12 @@ fi
 
 if (( REINSTALL == 0 )); then
   if installed_command_exists; then
+    if ! installed_desktop_ready; then
+      printf 'ERROR: Awtarchy command exists, but the desktop installation is incomplete.\n' >&2
+      printf 'No packages or managed configs were changed. To complete a full install, run:\n' >&2
+      printf '  sudo ./awtarchy-install.sh --reinstall\n' >&2
+      exit 1
+    fi
     if (( DRY_RUN_REQUESTED == 1 )); then
       printf 'Awtarchy is already installed for %s. No files were changed because --dry-run was used.\n' \
         "$TARGET_USER"
