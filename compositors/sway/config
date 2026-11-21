@@ -97,7 +97,7 @@ bindsym Mod4+Shift+m exec python3 $trial/toggle-utility.py maccel
 bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
 bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
-bindsym Mod4+Mod1+e exec qs -c awtarchy-sway ipc call control toggleLockscreenEditor
+bindsym Mod4+Mod1+e exec bash $trial/ipc.sh control toggleLockscreenEditor
 bindsym Mod4+Mod1+equal exec bash $trial/hypr-ddc-brightness.sh up 5
 bindsym Mod4+Mod1+minus exec bash $trial/hypr-ddc-brightness.sh down 5
 bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
@@ -408,7 +408,7 @@ mode "noalt" {
     bindsym Mod1+v exec python3 $trial/toggle-utility.py wiremix
     bindsym Mod4+v exec python3 $trial/toggle-utility.py wiremix
     bindsym Mod4+Control+m exec python3 $trial/toggle-utility.py displays
-    bindsym Mod4+Mod1+e exec qs -c awtarchy-sway ipc call control toggleLockscreenEditor
+    bindsym Mod4+Mod1+e exec bash $trial/ipc.sh control toggleLockscreenEditor
     bindsym Mod4+Mod1+equal exec bash $trial/hypr-ddc-brightness.sh up 5
     bindsym Mod4+Mod1+minus exec bash $trial/hypr-ddc-brightness.sh down 5
     bindsym Mod4+Mod1+g exec python3 $trial/toggle-utility.py smtty
