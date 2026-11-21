@@ -37,7 +37,7 @@ status() {
 }
 if [[ "$operation" == status ]]; then status; exit 0; fi
 case "$operation" in
-  install-sway|install-hyprland|install-umbriel|remove-sway|remove-hyprland|remove-umbriel|update-sway ;;
+  install-sway|install-hyprland|install-umbriel|remove-sway|remove-hyprland|remove-umbriel|update-sway) ;;
   *) fail 'Unknown operation'; exit 2 ;;
 esac
 if [[ -n "$release_source" ]]; then
