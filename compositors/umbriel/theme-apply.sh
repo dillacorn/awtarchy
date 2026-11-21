@@ -173,7 +173,7 @@ printf '%s\n' "$name" >"$STATE_DIR/active-theme-umbriel"
 # Its separate TOML include reloads automatically when the file changes.
 # Reject an absent or modified helper rather than silently pretending that
 # window colors were applied.
-THEME_HELPER="$CONFIG_HOME/umbriel/awtarchy-trial/theme-colors.py"
+THEME_HELPER="$CONFIG_HOME/umbriel/awtarchy/theme-colors.py"
 [[ -f "$THEME_HELPER" && ! -L "$THEME_HELPER" ]] || {
     printf 'Umbriel theme helper unavailable: %s\n' "$THEME_HELPER" >&2
     exit 1
