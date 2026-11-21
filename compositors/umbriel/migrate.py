@@ -503,6 +503,9 @@ def workspace_home_output(home: Path, connected: set[str]) -> str:
             raise ValueError("Invalid or disconnected workspace home output")
         return preference
     saved = safe_read(home / ".config/umbriel/awtarchy/workspace-home", 128)
+    if saved is None:
+        # One-time supported migration: retain the recorded workspace home.
+        saved = safe_read(home / ".config/umbriel/awtarchy-trial/workspace-home", 128)
     if saved is not None:
         preference = saved.strip()
         if not CONNECTOR.fullmatch(preference):
